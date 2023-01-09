@@ -1,1 +1,1 @@
-test-switch-repo
+https://github.com/jwallet/spy-spotify
