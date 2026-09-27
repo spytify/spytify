@@ -19,8 +19,10 @@ namespace EspionSpotify.AudioSessions
         private bool _disposed;
         private const int DETECTED_SILENCE_MS = 500;
         private readonly object _lockObject;
-        
+
         private const int BUFFER_TOTAL_SIZE_IN_SECOND = 4;
+        private const int BYTES_PER_SAMPLE = 2;
+        private const short SILENCE_RMS_THRESHOLD = 8;
         
         private readonly IMainAudioSession _audioSession;
 
@@ -31,7 +33,11 @@ namespace EspionSpotify.AudioSessions
         private int WaveAverageShortPerSecond => (int) (_waveIn.WaveFormat.AverageBytesPerSecond / 2.0);
         private int BufferReadOffset => (int)(_waveIn.WaveFormat.AverageBytesPerSecond * (BUFFER_TOTAL_SIZE_IN_SECOND / 4.0));
         private int BufferMaxLength => _waveIn.WaveFormat.AverageBytesPerSecond * BUFFER_TOTAL_SIZE_IN_SECOND;
-        private int SilenceAverageShortLength => (int)(DETECTED_SILENCE_MS / 1_000.0 * WaveAverageShortPerSecond);
+
+        // Length in bytes of the analysis window used to decide whether a region is silent.
+        private int SilenceAverageShortLength =>
+            Math.Max(BYTES_PER_SAMPLE, (int)(DETECTED_SILENCE_MS / 1_000.0 * _waveIn.WaveFormat.AverageBytesPerSecond) -
+                                    (BYTES_PER_SAMPLE - 1));
         
         public bool Running { get; set; }
         public WaveFormat WaveFormat => _waveIn.WaveFormat;
@@ -115,19 +121,10 @@ namespace EspionSpotify.AudioSessions
                 {
                     lock (_lockObject)
                     {
-                        // temporary push
-                        _buffer.Advance(_buffer.Count);
-
-                        // var readPeek = _buffer.Peek(out var dataPeek, 0, _buffer.Count);
-                        // var readPosition = BufferPositionWithoutSilence(dataPeek, readPeek, recursive: true);
-                        // if (readPosition > 0)
-                        // {
-                        //     _buffer.Advance(readPosition);
-                        // }
-                        var read = _buffer.Read(out var data, 0, _waveIn.WaveFormat.AverageBytesPerSecond);
-                        if (read > 0)
+                        var readStart = TrimLeadingBufferUntilNewTrack(out var data);
+                        if (readStart > 0)
                         {
-                            result = ToAudioWaveBuffer(data, read);
+                            result = ToAudioWaveBuffer(data, readStart);
                         }
                     }
 
@@ -176,6 +173,51 @@ namespace EspionSpotify.AudioSessions
             return result;
         }
 
+        /// <summary>
+        /// Aligns a new recording with the start of the new track.
+        /// Spotify updates the window title slightly before the previous track actually ends, so the
+        /// audio that is still in the buffer (or still in flight) can belong to the previous track.
+        /// We locate the last sustained silence inside the buffer (the gap that separates the outgoing
+        /// track from the incoming one) and cut there, so the new track keeps its true beginning.
+        /// When no such gap exists the previous audio cannot be told apart from the incoming one, so we
+        /// fall back to flushing the whole buffer, which never records leftover audio of the old track.
+        /// </summary>
+        private int TrimLeadingBufferUntilNewTrack(out byte[] data)
+        {
+            data = null;
+
+            if (_buffer.Count > 0)
+            {
+                var readPeek = _buffer.Peek(out var peeked, 0, _buffer.Count);
+                if (readPeek > 0)
+                {
+                    var boundary = BufferPositionWithoutSilence(peeked, readPeek, SilenceAverageShortLength, recursive: true);
+                    if (boundary > 0)
+                    {
+                        _buffer.Advance(boundary);
+                    }
+                    else
+                    {
+                        // no gap found: discard everything that is still buffered
+                        _buffer.Advance(_buffer.Count);
+                    }
+                }
+                else
+                {
+                    _buffer.Advance(_buffer.Count);
+                }
+            }
+
+            var read = _buffer.Read(out var readData, 0, _waveIn.WaveFormat.AverageBytesPerSecond);
+            if (read > 0)
+            {
+                data = readData;
+                return read;
+            }
+
+            return 0;
+        }
+
         public async Task WaitBufferReady()
         {
             var timeout = BUFFER_TOTAL_SIZE_IN_SECOND;
@@ -219,32 +261,47 @@ namespace EspionSpotify.AudioSessions
         //     return received.TakeWhile(x => x == 0).Count() > SilenceAverageByteLength;
         // }
 
-        private int BufferPositionWithoutSilence(byte[] buffer, int count, bool recursive = false)
+        /// <summary>
+        /// Finds the offset (in bytes) of a silent region inside the given audio window.
+        /// Audio is handled as 16-bit PCM samples; a region is considered silent when the RMS of
+        /// its samples stays at or below <see cref="SILENCE_RMS_THRESHOLD"/>.
+        /// With <paramref name="recursive"/> set the last silent region is returned (used to keep the
+        /// incoming track intact), otherwise the first one (used to drop trailing silence).
+        /// Returns -1 when no silent region is found.
+        /// </summary>
+        public static int BufferPositionWithoutSilence(byte[] buffer, int count, int windowLength, bool recursive = false)
         {
-            var received = new byte[count];
-            Array.Copy(buffer, 0, received, 0, count);
-            var atPositionList = new List<int>();
-            
-            var bouncePerSample = (int) (SilenceAverageShortLength / 2.0);
-            for (var i = 0; i < received.Length; i += bouncePerSample)
+            if (buffer == null || count <= 0) return -1;
+
+            var window = Math.Max(BYTES_PER_SAMPLE, windowLength);
+            var step = Math.Max(BYTES_PER_SAMPLE, window / 2);
+            var lastSilence = -1;
+            var firstSilence = -1;
+
+            for (var i = 0; i + BYTES_PER_SAMPLE <= count; i += step)
             {
-                var sample = new short[SilenceAverageShortLength];
-                var readCount = Math.Min(SilenceAverageShortLength, received.Length - i);
-                Array.Copy(received, i, sample, 0, readCount);
+                var windowLengthToRead = Math.Min(window, count - i);
+                windowLengthToRead -= windowLengthToRead % BYTES_PER_SAMPLE;
+                if (windowLengthToRead < BYTES_PER_SAMPLE) break;
 
-                var average = sample.Average(x => x);
-                if (average > 0) continue;
+                var sampleCount = windowLengthToRead / BYTES_PER_SAMPLE;
+                double sumOfSquares = 0;
+                for (var j = 0; j < sampleCount; j++)
+                {
+                    var sample = BitConverter.ToInt16(buffer, i + j * BYTES_PER_SAMPLE);
+                    sumOfSquares += sample * (double)sample;
+                }
 
-                atPositionList.Add(i);
+                var rms = Math.Sqrt(sumOfSquares / sampleCount);
+                if (rms > SILENCE_RMS_THRESHOLD) continue;
+
+                if (firstSilence < 0) firstSilence = i;
+                lastSilence = i;
+
                 if (!recursive) break;
             }
 
-            if (atPositionList.Any())
-            {
-                return recursive ? atPositionList.Last() : atPositionList.First();
-            }
-
-            return BufferReadOffset;
+            return recursive ? lastSilence : firstSilence;
         }
 
         #region Dispose
