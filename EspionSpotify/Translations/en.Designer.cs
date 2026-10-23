@@ -483,6 +483,15 @@ namespace EspionSpotify.Translations {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Playlist updated: added {0} to {1}.
+        /// </summary>
+        internal static string logPlaylistUpdated {
+            get {
+                return ResourceManager.GetString("logPlaylistUpdated", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to // Error: The recorded file was lost in the process.
         /// </summary>
         internal static string logRecordedFileNotFound {
