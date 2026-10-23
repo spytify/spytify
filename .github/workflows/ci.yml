@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# The default player of the builds lives in repository variables, so the
+# source names none (Settings > Secrets and variables > Actions > Variables).
+env:
+  SPYTIFY_DEFAULT_PROCESS: ${{ vars.SPYTIFY_DEFAULT_PROCESS }}
+  SPYTIFY_DEFAULT_BUNDLE_ID: ${{ vars.SPYTIFY_DEFAULT_BUNDLE_ID }}
+
 jobs:
   unit:
     strategy:
@@ -31,9 +37,42 @@ jobs:
       - name: Schema is generated
         run: go generate ./pkg/proto && git diff --exit-code pkg/proto/schema.json
       - name: Unit, scenario, UI and end-to-end tests
-        run: go test -race ./...
+        run: go run gotest.tools/gotestsum@v1.12.3 --format testname --jsonfile test.jsonl -- -race ./...
+      - name: Keep the results for the test badge
+        if: always() && matrix.os == 'ubuntu-24.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test.jsonl
       - name: Desktop UI builds
         run: go build -o /dev/null ./cmd/spytify-ui
+
+  # The README's "x/y passed" badge: shields.io reads tests.json from the
+  # badges branch, which holds nothing else.
+  badges:
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: unit
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-results
+      - name: Publish the test count
+        run: |
+          passed=$(jq -s '[.[] | select(.Test != null and .Action == "pass")] | length' test.jsonl)
+          failed=$(jq -s '[.[] | select(.Test != null and .Action == "fail")] | length' test.jsonl)
+          color=brightgreen
+          [ "$failed" -gt 0 ] && color=red
+          mkdir badge && cd badge
+          printf '{"schemaVersion":1,"label":"tests","message":"%s/%s passed","color":"%s"}\n' "$passed" "$((passed + failed))" "$color" > tests.json
+          git init -q -b badges
+          git config user.name github-actions
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tests.json
+          git commit -qm "Test count of ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" badges
 
   cross-build:
     runs-on: ubuntu-24.04

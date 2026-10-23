@@ -4,3 +4,5 @@
 .env
 .serena/
 .DS_Store
+build.env
+PLAN.md

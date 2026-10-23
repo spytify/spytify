@@ -1,98 +1,107 @@
-<p align="center"><img src="assets/logo.png" alt="Spytify logo" width="96"></p>
+[![Spytify](https://user-images.githubusercontent.com/23088305/29906214-6daad21c-8de1-11e7-80f5-ef6791cc7825.png)](https://spytify.github.io/spytify/)
 
-# Spytify v2 (alpha)
+[![Build](https://github.com/spytify/spytify/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/spytify/spytify/actions/workflows/ci.yml?query=branch%3Amaster)
+[![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspytify%2Fspytify%2Fbadges%2Ftests.json)](https://github.com/spytify/spytify/actions/workflows/ci.yml?query=branch%3Amaster)
+[![Latest release](https://img.shields.io/github/v/release/spytify/spytify?include_prereleases&label=version)](https://github.com/spytify/spytify/releases)
+[![Downloads](https://img.shields.io/github/downloads/spytify/spytify/total.svg?color=yellow&label=downloads)](https://github.com/spytify/spytify/releases)
+[![Sub Reddit](https://img.shields.io/reddit/subreddit-subscribers/spytify.svg?label=r%2Fspytify)](https://www.reddit.com/r/spytify)
+[![Donate](https://img.shields.io/badge/support-donate-ff69b4)](https://spytify.github.io/spytify/donate.html)
 
-**Records any application's audio, splits it into tracks and tags them.**
+**Records an application's audio, splits it into tracks and tags them.**
 
-> **Alpha.** Linux and macOS 14.2 or later, with a desktop app (`Spytify.app` on macOS, `spytify-ui` on Linux) or the command line. The Windows backend comes next (milestone M5 of [the plan](PLAN.md)). Settings, file names and the protocol may still change.
+![Spytify recording a session: the current track with its progress and level, and the files already saved](assets/recording.png)
 
-Spytify v2 is a rewrite in Go of [Spytify v1](https://github.com/jwallet/spy-spotify), the Windows recorder. You name the process to record; Spytify captures that process's audio stream only, cuts it into one file per track at a computed sample position, encodes with ffmpeg and writes tags. It never downloads anything and never names a player in its code: the player is whatever you put in `SPYTIFY_TARGET_PROCESS`.
+Spytify records the sound one application sends to your speakers, nothing else, and saves each track it plays as its own file: cut at the right sample, encoded with ffmpeg, and tagged with the title, artist, album and cover the application itself reports. It runs on Linux and macOS 14.2 or later; Windows is in progress.
+
+This page is for people who want to build Spytify from source or contribute to it.
 
 ## How it works
 
-```
-spytify-cli  ──actions──▶  spytifyd  ◀── PCM ── pw-record ◀── the player's stream (PipeWire)
-             ◀──events───            ◀── now playing ────── MPRIS (D-Bus)
-                                      ──▶ ffmpeg ──▶ tagged files
+```text
+Spytify app ─┐                ┌── capture ◀── the application's own audio stream
+spytify-cli ─┴─ JSON-RPC ──▶ spytifyd ◀── now playing ◀── the application's media interface
+                                  └──▶ ffmpeg ──▶ tagged files
 ```
 
-- **Two processes, one bus.** `spytifyd` does all capture, splitting, encoding and tagging, and keeps running without a window. Clients (`spytify-cli` today, a UI later) talk to it over newline-delimited JSON-RPC 2.0 on a Unix socket.
-- **Per-process capture.** On PipeWire the daemon finds the player's output stream with `pw-dump` and records that stream alone with `pw-record`, so no other application can bleed in and no virtual cable is needed. PulseAudio falls back to `parec --monitor-stream`. On macOS a small helper, `spytify-tap`, records the player's processes with a Core Audio process tap.
-- **Now playing.** MPRIS on Linux; on macOS the player's AppleScript interface (current track, player state, player position), polled every 250 ms.
-- **Sample-accurate boundaries.** The player's MPRIS notification only says roughly when a track changed. The cut is placed from the audio: the declared track length gives the expected end, and the quietest 20 ms inside a ±300 ms window decides the exact sample. Gapless transitions fall back to the declared length. This fixes v1's split jitter (issue #359).
-- **Two-pass finishing.** Each track goes to a temp WAV first; it is then checked against the minimum length, trimmed, loudness-normalised, encoded by ffmpeg to `<name>.part`, tagged and renamed. A half-written file never carries the final name.
+- **Two processes.** `spytifyd` does the capture, splitting, encoding and tagging, and keeps recording when no window is open. The desktop app and `spytify-cli` are clients; they speak newline-delimited JSON-RPC 2.0 to it on a local socket.
+- **One application only.** Only the chosen process is recorded, so notifications or other apps never end up in a file, and no virtual audio device is needed.
+  - Linux: the daemon finds the application's PipeWire stream with `pw-dump` and records it with `pw-record` (PulseAudio: `parec --monitor-stream`).
+  - macOS: a small helper, `spytify-tap`, uses a Core Audio process tap.
+- **Now playing.** Title, artist, album, track number, length and cover come from the application: MPRIS on Linux, its AppleScript interface on macOS. Nothing is looked up on the web.
+- **Sample-accurate cuts.** A track-change notification only says roughly when a track ended. The track length gives the expected end, and the quietest 20 ms around it decides the exact sample, so a file holds one whole track and nothing of its neighbours.
+- **Whole tracks only.** A track that was skipped, stopped early, or moved along its track bar is not kept, even when it played for its full length. A track already playing when you press Record is skipped too, unless you choose **Record this track from the start**.
+- **Two-pass finishing.** Each track is written to a temporary WAV, checked, trimmed, loudness-normalised, encoded to `<name>.part`, tagged, then renamed. A half-written file never carries the final name.
 
 ## Requirements
 
-Everywhere:
-
-- `ffmpeg` on `PATH` (or `SPYTIFY_FFMPEG`), built with `libmp3lame` for MP3 output. It is the only runtime dependency.
-- Crossfade and gapless playback turned off in the player: two mixed tracks cannot be un-mixed.
+- `ffmpeg` on `PATH` (or `SPYTIFY_FFMPEG`), with `libmp3lame` for MP3 output.
+- Crossfade and gapless playback turned off in the recorded application: two mixed tracks cannot be separated again.
 
 Linux:
 
 - PipeWire 0.3.40 or later (`pw-record`, `pw-dump`), or PulseAudio (`parec`, `pactl`).
-- A D-Bus session bus, and a player that exposes MPRIS (most Linux players do).
+- A D-Bus session bus, and an application that exposes MPRIS.
+- On PipeWire, allow the graph to run at 44.1 kHz as well as 48 kHz, or 44.1 kHz audio is resampled before it is recorded. Create `~/.config/pipewire/pipewire.conf.d/10-rates.conf` with the content below, then run `systemctl --user restart pipewire`:
 
-macOS:
-
-- macOS 14.2 or later (process taps), and a player with an AppleScript dictionary (`current track`, `player state`, `next track`).
-- `spytify-tap` next to `spytifyd` (the build script puts it there).
-- Two permissions, asked once by macOS for the app you run `spytifyd` from (Terminal, iTerm, …): **System Audio Recording** (Privacy & Security > Screen & System Audio Recording) for the capture, and **Automation** for reading the player's now-playing. If you denied one, turn it on in System Settings and restart `spytifyd`.
-- With `player.mute_output = true` the player is silent on your speakers while it is recorded.
-- On PipeWire, let the graph run at 44.1 kHz as well as 48 kHz, or 44.1 kHz audio is resampled before it reaches the recorder. `spytify-cli info` checks it. Create `~/.config/pipewire/pipewire.conf.d/10-rates.conf` with:
-
-  ```
+  ```text
   context.properties = {
       default.clock.allowed-rates = [ 44100 48000 ]
   }
   ```
 
-  then restart PipeWire (`systemctl --user restart pipewire`).
-- To build: Go 1.26 or later.
+macOS:
 
-## Legal
+- macOS 14.2 or later, and an application with an AppleScript dictionary (`current track`, `player state`, `next track`).
+- `spytify-tap` next to `spytifyd`; the build script puts it there.
+- macOS asks once for two permissions: **System Audio Recording** for the capture, and **Automation** to read what is playing. If you denied one, turn it on in System Settings > Privacy & Security and restart Spytify.
 
-Spytify is a general-purpose application audio recorder, in the same category as Audio Hijack, Loopback or OBS. This is not legal advice; it is how the project is built:
+## Legal and your account
 
-1. The name stays Spytify, but nothing in the code, the tagline or these docs names a player. You choose the process.
-2. Spytify does not download, does not emulate any streaming protocol and does not circumvent DRM. It only records audio the operating system already delivers to your speakers.
-3. The Spotify Web API tag source is optional, off by default, and uses keys you create. The default tag source is Last.fm.
-4. There is no ad-blocking switch. A generic rule skips short items that carry no album (`recorder.skip_short_untitled`); `recorder.record_everything` turns it off for podcasts and radio.
-5. You bring your own accounts. Recording may breach a service's terms, and an account ban is the realistic consequence; a throwaway account is recommended, as v1 already said.
-6. Private-copy exceptions vary by country. Spytify does not promise that recording is legal where you live.
+Spytify is a general-purpose application audio recorder, like Audio Hijack, Loopback or OBS. This is not legal advice.
 
-**For personal use of content you are entitled to listen to; you are responsible for the terms of the services you record.**
+- Spytify downloads nothing, emulates no streaming protocol and circumvents no DRM. It records audio the operating system already plays on your speakers.
+- You bring your own account for the application you record. Recording may break that service's terms, and the service can suspend or close accounts that do. Use a separate free account, not one you would mind losing.
+- Private-copy rules differ from country to country. Spytify does not promise that recording is legal where you live.
+
+**For personal use of content you are entitled to listen to. You are responsible for the terms of the services you record.**
 
 ## Build
 
+Go 1.26 or later.
+
 ```sh
 go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli ./cmd/spytify-ui   # Linux
-scripts/build-macos.sh                                               # macOS: bin/Spytify.app, plus the command-line tools
+scripts/build-macos.sh                                               # macOS: bin/Spytify.app and the command-line tools
 ```
 
-`spytifyd` and `spytify-cli` are static Go (`CGO_ENABLED=0` works); the Linux backends call the PipeWire, PulseAudio and D-Bus tools at run time. The desktop app is built with [Fyne](https://fyne.io) and needs cgo: on Linux `gcc`, `libgl1-mesa-dev`, `xorg-dev`, `libwayland-dev`, `libxkbcommon-dev` and `wayland-protocols` (Debian names); on macOS the Xcode command line tools, which also build `spytify-tap`, written in Swift.
+- `spytifyd` and `spytify-cli` are pure Go (`CGO_ENABLED=0` works).
+- The desktop app uses [Fyne](https://fyne.io) and needs cgo:
+  - Linux: `gcc`, `libgl1-mesa-dev`, `xorg-dev`, `libwayland-dev`, `libxkbcommon-dev` and `wayland-protocols` (Debian names).
+  - macOS: the Xcode command line tools, which also build the Swift helper `spytify-tap`.
+
+A build of your own records nothing until you choose the application. In the app, go to **Settings > App > Advanced > Player**, enter its process name (and its bundle id on macOS), then press **Save and restart spytifyd**. Without the app, set `SPYTIFY_TARGET_PROCESS` (see [Configuration](#configuration)).
+
+Packagers can set a default application with the build variables `SPYTIFY_DEFAULT_PROCESS` and `SPYTIFY_DEFAULT_BUNDLE_ID`. `scripts/build-macos.sh` reads them from the environment or from an untracked `build.env`; the project's CI takes them from repository variables.
+
+The macOS app is ad-hoc signed. macOS asks for the permissions again after every rebuild, and another Mac refuses to open it until it is signed and notarised. Opened from Finder, the app still finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ## Desktop app
 
-The app is a client of `spytifyd`, like the CLI: closing the window does not stop a recording, and the tray menu (Start recording, Stop, Open window) keeps working while it is hidden (`app.minimize_to_tray`).
+The app is a client of `spytifyd`. Closing the window does not stop a recording, and the tray menu (Start recording, Stop, Open window) keeps working while the window is hidden.
 
-The app bar holds the only Record button, which turns into Stop (and Stop now while the last track finishes), the player and format status, and Donate; an Update button appears there when a newer release is out (`app.check_updates`). The screens are tabs under it:
+The app bar holds the Record button, which becomes Stop while recording and Stop now while the last track finishes. It also shows the application's state, the output format, Donate, and an Update button when a newer release is out.
 
-- **Record**: the track being recorded (cover, progress, level, Skip), then every file of the session with its status, Reveal and Play, and the session totals with Open folder. A track already playing when you press Record is not recorded; **Record this track from the start** replays it from 0:00 so it is.
-- **Library**: every audio file in the output folder, newest first, with a search box.
-- **Settings**: one section per group, the TOML key under each field, a search box, Reset per group, and a **Player** section that sets `SPYTIFY_TARGET_*` in your user `.env` and restarts the daemon.
-- **Logs**: the checks from `core.info` (folded while they all pass, open when one fails; the Record screen links here then), and the daemon's log by level.
-- **About**: versions, the resolved target, Check for updates and Donate.
+- **Record**: the current track (cover, progress, level, Skip), then every file of the session with its status, Reveal and Play, and the session totals.
+- **Library**: every audio file in the output folder, newest first, with a search box. It reads the folder again each time you open the tab.
+- **Settings**: App, Output, Encoding, Recording and Ads. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button. A search box finds any setting.
+- **Logs**: the startup checks, folded while they all pass, then the daemon's log, filtered by level.
+- **About**: versions, the project page, the source code, Check for updates and Donate.
 
-On macOS, open `bin/Spytify.app`. The first time, set the player in the Player card (process name and bundle id) and press **Save and restart spytifyd**; macOS then asks, once each, to let Spytify record system audio and to control the player. The app finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin` even though apps opened from Finder have no shell `PATH`. The build is ad-hoc signed: macOS asks for the permissions again after each rebuild, and another Mac will refuse to open it until it is signed and notarised.
-
-## Quick start
+## Command line
 
 ```sh
-cp .env.example bin/.env      # then set SPYTIFY_TARGET_PROCESS to your player's process name
-bin/spytifyd &                # logs the resolved target on its first line
-bin/spytify-cli info          # versions and a checklist: player running, ffmpeg, capture, D-Bus, keyring
+bin/spytifyd &                # logs the recorded application on its first line
+bin/spytify-cli info          # versions and the startup checks
 bin/spytify-cli set encode.format=flac output.dir=~/Music/Recordings
 bin/spytify-cli start         # recording starts with the next track
 bin/spytify-cli status
@@ -100,61 +109,46 @@ bin/spytify-cli tail -f       # follow the log
 bin/spytify-cli stop          # the current track finishes first; --now discards it
 ```
 
-On macOS, also set the player's bundle id in `.env`; `osascript -e 'id of app "<Player name>"'` prints it:
+| `spytify-cli` | What it does |
+| --- | --- |
+| `info` | versions, recorded application, startup checks |
+| `start [--single-track]` / `stop [--now]` / `status` | the recording session |
+| `set key=value...` / `get [key...]` / `reset [prefix]` | settings, validated by the daemon |
+| `tail [-n N] [-f]` / `events` | log lines / every event as JSON lines |
+| `control play\|pause\|next\|previous\|restart` | transport; `restart` plays the current track again from 0:00 |
+| `shutdown` | stops the daemon |
 
-```sh
-SPYTIFY_TARGET_PROCESS=<Player name>
-SPYTIFY_TARGET_BUNDLE_ID=<bundle id>
-```
-
-The bundle id selects the player's processes, helpers included, and names it for AppleScript. Players report track lengths in milliseconds or in seconds; Spytify reads an integer as milliseconds and a fraction as seconds, and `SPYTIFY_TARGET_DURATION_UNIT=ms` or `s` overrides it.
-
-Headless one-shot run, no socket, until the player stops or goes idle:
+Headless one-shot run, without a socket, until the application stops or stays idle:
 
 ```sh
 bin/spytifyd --once --set output.dir=/srv/rec --set encode.format=flac
 ```
 
-`spytifyd --fake testdata/timelines/basic.json` plays a scripted timeline through the in-process fake player, on any OS, to try the CLI without a player.
-
-### Commands
-
-| `spytify-cli` | Action |
-| --- | --- |
-| `info` | `core.info`: versions, target, capability checklist |
-| `start [--single-track]` | `session.start` |
-| `stop [--now]` | `session.stop` |
-| `status` | `session.status`: state, current track, counters |
-| `set key=value...` / `get [key...]` / `reset [prefix]` | settings, validated by the daemon |
-| `tail [-n N] [-f]` | log lines |
-| `events` | every event as JSON lines |
-| `control play\|pause\|next\|previous\|restart` | `player.control` through MPRIS or AppleScript; `restart` replays the current track from 0:00 |
-| `spotify-connect` | OAuth for `tags.source = spotify_api` |
-| `shutdown` | `core.shutdown` |
+`spytifyd --fake testdata/timelines/basic.json` plays a scripted timeline through a built-in fake player, on any OS, to try everything without a real application.
 
 ## Configuration
 
-The player is identified by environment variables, read once at daemon start and logged on the first line. A `.env` file next to the binary, in the working directory, or in your user configuration folder (`~/.config/spytify/.env`, `~/Library/Application Support/spytify/.env` on macOS; the desktop app writes this one) is loaded if present.
+The recorded application is set with environment variables, read when the daemon starts. A `.env` file next to the binary, in the working directory, or in your user configuration folder (`~/.config/spytify/.env`, or `~/Library/Application Support/spytify/.env` on macOS, which the desktop app writes) is loaded if present.
 
 | Variable | Used for | Default |
 | --- | --- | --- |
-| `SPYTIFY_TARGET_PROCESS` | process to record; a comma list for several packagings | none: the daemon refuses to start |
-| `SPYTIFY_TARGET_MPRIS` | D-Bus name of the player (Linux) | `org.mpris.MediaPlayer2.<process>` |
-| `SPYTIFY_TARGET_BUNDLE_ID` | bundle id of the player (macOS) | none: the process name is used |
+| `SPYTIFY_TARGET_PROCESS` | process to record; a comma list for several packagings | the build's default, if any |
+| `SPYTIFY_TARGET_MPRIS` | D-Bus name of the application (Linux) | `org.mpris.MediaPlayer2.<process>` |
+| `SPYTIFY_TARGET_BUNDLE_ID` | bundle id of the application (macOS) | the process name is used |
 | `SPYTIFY_TARGET_DURATION_UNIT` | `ms` or `s`, unit of the AppleScript track length (macOS) | guessed |
+| `SPYTIFY_TARGET_LAUNCH` | command that starts the application when a session starts | none |
 | `SPYTIFY_TAP` | path of `spytify-tap` (macOS) | next to `spytifyd`, then `PATH` |
-| `SPYTIFY_TARGET_LAUNCH` | command that starts the player when a session starts | none |
 | `SPYTIFY_CONFIG` | settings file | `~/.config/spytify/config.toml` |
 | `SPYTIFY_SOCKET` | daemon socket | `$XDG_RUNTIME_DIR/spytify.sock` |
 | `SPYTIFY_FFMPEG` | ffmpeg binary | `ffmpeg` on `PATH` |
 
-Everything else is a setting in `config.toml`, changed with `spytify-cli set` and validated by the daemon; `spytify-cli get` lists them all. Secrets (Spotify client secret, Last.fm key) go to the OS keyring, never to `config.toml`. The full table, with the v1 setting each one replaces, is in [PLAN.md](PLAN.md#settings-carried-over-from-v1).
+Everything else is a setting in `config.toml`, changed in the app or with `spytify-cli set`; `spytify-cli get` lists them all.
 
-Snap and Flatpak builds of a player can run under a different process name and expose MPRIS only through their sandbox interfaces. List every process name in `SPYTIFY_TARGET_PROCESS`, and if `spytify-cli info` finds the process but no MPRIS name, check the sandbox's D-Bus permissions (`snap connections <snap>`, `flatpak info --show-permissions <app>`).
+Snap and Flatpak builds of an application can run under another process name and expose MPRIS only through their sandbox. List every process name in `SPYTIFY_TARGET_PROCESS`. If `spytify-cli info` finds the process but no MPRIS name, check the sandbox's D-Bus permissions (`snap connections <snap>`, `flatpak info --show-permissions <app>`).
 
 ## Protocol
 
-Clients speak newline-delimited JSON-RPC 2.0 on the socket (and on TCP with `spytifyd --listen 127.0.0.1:7811`). Actions are requests; events are notifications broadcast to every client.
+Clients speak newline-delimited JSON-RPC 2.0 on the socket, and on TCP with `spytifyd --listen 127.0.0.1:7811`. Actions are requests; events are notifications sent to every client.
 
 ```json
 {"jsonrpc":"2.0","id":7,"method":"settings.set","params":{"values":{"encode.format":"flac"}}}
@@ -162,28 +156,43 @@ Clients speak newline-delimited JSON-RPC 2.0 on the socket (and on TCP with `spy
 {"jsonrpc":"2.0","method":"settings.changed","params":{"values":{"encode.format":"flac"}}}
 ```
 
-Go clients import `github.com/spytify/spytify/pkg/proto`; others use [`pkg/proto/schema.json`](pkg/proto/schema.json), generated from the same types (`go generate ./pkg/proto`). The methods and events are listed in [PLAN.md](PLAN.md#messaging-contract).
+Go clients import `github.com/spytify/spytify/pkg/proto`. Others use [`pkg/proto/schema.json`](pkg/proto/schema.json), which lists every method and event and is generated from the same types (`go generate ./pkg/proto`).
 
 ## Tests
 
 ```sh
-go test ./...                      # unit tests, the eight fake-player scenarios, the CLI end to end
+go test ./...    # unit tests, the fake-player scenarios, the CLI end to end
 ```
 
-The scenarios in [`testdata/timelines`](testdata/timelines) drive the real core with a scripted player: notifications from 300 ms early to 800 ms late, gapless albums, adverts, a sample-rate change, a pause, duplicates and a skip. Every file is compared with its source by cross-correlation: peak within 2 ms of zero and residual under −50 dBFS.
+The scenarios in [`testdata/timelines`](testdata/timelines) drive the real core with a scripted player. They cover:
 
-The same timelines run against real PipeWire and MPRIS with `cmd/fakeplayer`, which is what CI's gate job does:
+- notifications from 300 ms early to 800 ms late;
+- gapless albums;
+- ads;
+- a sample-rate change;
+- a pause;
+- duplicates;
+- skips;
+- seeks.
+
+Each file is compared with its source by cross-correlation: the peak must be within 2 ms of zero and the residual under −50 dBFS.
+
+The same timelines run against real PipeWire and MPRIS through `cmd/fakeplayer`. CI does this in a container with no sound card:
 
 ```sh
-. scripts/pipewire-session.sh      # D-Bus, PipeWire, WirePlumber and a null sink, no sound card needed
+. scripts/pipewire-session.sh      # D-Bus, PipeWire, WirePlumber and a null sink
 go test -tags integration -v ./test/integration/
 ```
 
-On macOS, the capture helper is checked against what `afplay` plays (it needs the System Audio Recording permission, so it does not run in CI):
+On macOS, the capture helper is checked against what `afplay` plays. It needs the System Audio Recording permission, so it does not run in CI:
 
 ```sh
 go test -tags macos_capture -v ./test/macos/
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. Run `gofmt` and `go test ./...` before you push; CI also builds every platform and runs the PipeWire scenarios.
 
 ## License
 
