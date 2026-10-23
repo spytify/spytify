@@ -15,7 +15,7 @@ const (
 )
 
 // SplitArtistTitle splits "Artist - Title - Extra" on the first " - ", as
-// v1's SpotifyStatus did with the window title. ok is false when there is
+// v1 did with the window title. ok is false when there is
 // no artist part, which v1 treated as an advert or an unknown item.
 func SplitArtistTitle(s string) (artist, title string, ok bool) {
 	parts := splitNonEmpty(s, " - ", 2)

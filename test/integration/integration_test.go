@@ -57,7 +57,7 @@ func requireSession(t *testing.T) {
 }
 
 var quiet = map[string]any{
-	"encode.format": "wav", "recorder.normalize": false, "tags.source": "none",
+	"encode.format": "wav", "recorder.normalize": false,
 	"recorder.min_seconds": 1, "output.group_by": "none", "tags.cover": false,
 }
 
@@ -65,7 +65,7 @@ func timelines(t *testing.T) []string {
 	if only := os.Getenv("SPYTIFY_TIMELINES"); only != "" {
 		return strings.Split(only, ",")
 	}
-	return []string{"basic", "jitter", "gapless", "ads", "format-change", "pause-resume", "duplicate", "control"}
+	return []string{"basic", "jitter", "gapless", "ads", "format-change", "pause-resume", "duplicate", "control", "seek"}
 }
 
 func TestRecordFakePlayer(t *testing.T) {

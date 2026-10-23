@@ -7,6 +7,8 @@ import (
 	"syscall"
 )
 
+const exeSuffix = ""
+
 func detach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }

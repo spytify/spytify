@@ -22,17 +22,18 @@ type aboutScreen struct {
 	app      *App
 	root     fyne.CanvasObject
 	versions *widget.RichText
-	target   *widget.RichText
 }
 
 func newAboutScreen(a *App) *aboutScreen {
-	s := &aboutScreen{app: a, versions: caption(""), target: caption("")}
+	s := &aboutScreen{app: a, versions: caption("")}
 	logo := canvas.NewImageFromResource(Logo)
 	logo.FillMode = canvas.ImageFillContain
 	logo.SetMinSize(fyne.NewSize(96, 96))
 	tagline := widget.NewLabelWithStyle("Records any application's audio, splits it into tracks and tags them.", fyne.TextAlignCenter, fyne.TextStyle{})
 	tagline.Wrapping = fyne.TextWrapWord
-	project := widget.NewButtonWithIcon("Project page", theme.HomeIcon(), func() { a.openURL(projectURL) })
+	source := widget.NewHyperlink("Source code on GitHub", nil)
+	source.OnTapped = func() { a.openURL(sourceURL) }
+	project := widget.NewButtonWithIcon("Project page", theme.HomeIcon(), func() { a.openURL(siteURL) })
 	donate := widget.NewButton("♥ Donate", func() { a.openURL(donateURL) })
 	donate.Importance = widget.HighImportance
 	updates := widget.NewButtonWithIcon("Check for updates", theme.DownloadIcon(), s.checkNow)
@@ -44,7 +45,7 @@ func newAboutScreen(a *App) *aboutScreen {
 		widget.NewLabelWithStyle("Spytify", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		tagline,
 		container.NewCenter(s.versions),
-		container.NewCenter(s.target),
+		container.NewCenter(source),
 		container.NewCenter(container.NewHBox(project, updates, donate)),
 		layout.NewSpacer(),
 		legal,
@@ -60,12 +61,6 @@ func (s *aboutScreen) render(st model.State) {
 		core = fmt.Sprintf("%s on %s", st.Info.Version, st.Info.Platform)
 	}
 	setCaption(s.versions, fmt.Sprintf("App %s · recorder %s · protocol %d", proto.Version, core, proto.Protocol))
-	t := st.Info.Target
-	text := "Records " + t.Process
-	if t.BundleID != "" {
-		text += " (" + t.BundleID + ")"
-	}
-	setCaption(s.target, text)
 }
 
 func (s *aboutScreen) checkNow() {

@@ -40,7 +40,6 @@ type finishJob struct {
 type finisher struct {
 	values func() settings.Values
 	ffmpeg *encode.FFmpeg
-	tags   *tagService
 	emit   func(method string, payload any)
 	log    *Logger
 
@@ -54,12 +53,11 @@ type finisher struct {
 	index   *recordIndex
 }
 
-func newFinisher(values func() settings.Values, ff *encode.FFmpeg, tags *tagService, emit func(string, any), log *Logger) *finisher {
+func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(string, any), log *Logger) *finisher {
 	v := values()
 	f := &finisher{
 		values:  values,
 		ffmpeg:  ff,
-		tags:    tags,
 		emit:    emit,
 		log:     log,
 		jobs:    make(chan finishJob, 256),
@@ -224,8 +222,7 @@ func (f *finisher) process(j finishJob) {
 	topts := tagOptions(v)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	local := tag.FromLocal(j.info, topts)
-	tags := f.tags.lookup(ctx, j.id, local)
+	tags := tag.FromLocal(j.info, topts)
 	if topts.Cover && tags.CoverURL != "" {
 		if data, mime, err := tag.FetchCover(ctx, nil, tags.CoverURL); err == nil {
 			tags.Cover, tags.CoverMIME = data, mime

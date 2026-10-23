@@ -17,19 +17,18 @@ var Version = "v2.0.0-alpha.dev"
 
 // Actions (client to core).
 const (
-	MethodCoreInfo       = "core.info"
-	MethodCoreShutdown   = "core.shutdown"
-	MethodSessionStart   = "session.start"
-	MethodSessionStop    = "session.stop"
-	MethodSessionStatus  = "session.status"
-	MethodSettingsGet    = "settings.get"
-	MethodSettingsSet    = "settings.set"
-	MethodSettingsReset  = "settings.reset"
-	MethodPlayerControl  = "player.control"
-	MethodSpotifyConnect = "tags.spotify.connect"
-	MethodTagsRetag      = "tags.retag"
-	MethodLogTail        = "log.tail"
-	MethodEventsRecent   = "events.recent"
+	MethodCoreInfo      = "core.info"
+	MethodCoreShutdown  = "core.shutdown"
+	MethodSessionStart  = "session.start"
+	MethodSessionStop   = "session.stop"
+	MethodSessionStatus = "session.status"
+	MethodSettingsGet   = "settings.get"
+	MethodSettingsSet   = "settings.set"
+	MethodSettingsReset = "settings.reset"
+	MethodPlayerControl = "player.control"
+	MethodTagsRetag     = "tags.retag"
+	MethodLogTail       = "log.tail"
+	MethodEventsRecent  = "events.recent"
 )
 
 // Events (core to clients).
@@ -65,6 +64,9 @@ const (
 	SkipTooShort   SkipReason = "too_short"
 	SkipAd         SkipReason = "ad"
 	SkipIncomplete SkipReason = "incomplete"
+	// SkipSeeked is a track whose position jumped while it played: the
+	// audio no longer matches the published track, whatever its length.
+	SkipSeeked SkipReason = "seeked"
 )
 
 // Player transport commands accepted by player.control.
@@ -164,16 +166,12 @@ type SettingsSetResult struct {
 }
 
 type SettingsResetParams struct {
-	// Prefix limits the reset to keys under it, such as "output" or "tags.spotify".
+	// Prefix limits the reset to keys under it, such as "output" or "recorder".
 	Prefix string `json:"prefix,omitempty"`
 }
 
 type PlayerControlParams struct {
 	Cmd string `json:"cmd"`
-}
-
-type SpotifyConnectResult struct {
-	AuthURL string `json:"auth_url"`
 }
 
 type RetagParams struct {

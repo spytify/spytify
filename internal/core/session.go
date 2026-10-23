@@ -111,12 +111,13 @@ type change struct {
 
 // sessionDeps is what a session needs from the core.
 type sessionDeps struct {
-	values   func() settings.Values
-	emit     func(method string, payload any)
-	log      *Logger
-	fin      *finisher
-	control  func(cmd string) error
-	identify func(key string)
+	values  func() settings.Values
+	emit    func(method string, payload any)
+	log     *Logger
+	fin     *finisher
+	control func(cmd string) error
+	// mute silences the player (true) or gives it back its volume.
+	mute func(on bool) error
 }
 
 // Session turns a stream of frames and now-playing events into track files.
@@ -158,6 +159,7 @@ type Session struct {
 	peak, sum float64
 	count     int64
 	warnedLen bool
+	adMuted   bool
 
 	stopCh chan stopMode
 	mu     sync.Mutex
@@ -204,6 +206,23 @@ func (s *Session) setState(st proto.SessionState) {
 	s.mu.Unlock()
 	if changed {
 		s.deps.emit(proto.EventSessionState, proto.SessionStateEvent{State: st})
+		s.muteAds(st)
+	}
+}
+
+// muteAds silences the player while an ad plays (recorder.mute_ads), and
+// gives the volume back when anything else plays or the session ends.
+func (s *Session) muteAds(st proto.SessionState) {
+	if s.deps.mute == nil {
+		return
+	}
+	want := st == proto.StateAd && s.deps.values().Bool("recorder.mute_ads")
+	if want == s.adMuted {
+		return
+	}
+	s.adMuted = want
+	if err := s.deps.mute(want); err != nil {
+		s.deps.log.Infof("mute ads: %v", err)
 	}
 }
 
@@ -492,8 +511,36 @@ func (s *Session) onMeta(ev meta.Event) {
 	case meta.PlayerGone:
 		s.deps.log.Infof("player interface gone")
 		s.endOfPlayback()
+	case meta.Seeked:
+		s.onSeek(ev.PositionMs, at)
 	}
 	s.progress()
+}
+
+// onSeek follows a jump in the current item. The take no longer matches the
+// published track, so it is dropped; the item's end moves with the position
+// so that the next track is still cut at its own start.
+func (s *Session) onSeek(posMs, at int64) {
+	c := s.cur
+	if c == nil || posMs < 0 {
+		return
+	}
+	if c.length > 0 && c.info.LengthMs > 0 {
+		played := at - c.start
+		if played < 0 {
+			played = 0
+		}
+		c.length = played + c.format.FramesFromMs(max(0, c.info.LengthMs-posMs))
+	}
+	if c.ghost || c.provisional || c.reason != "" {
+		return
+	}
+	s.deps.log.Infof("%q: playback jumped to %d ms, this take is not kept", c.info.Title, posMs)
+	s.dropWriter(c)
+	c.reason = proto.SkipSeeked
+	if c.announced {
+		s.deps.fin.skip(c.id, c.reason)
+	}
 }
 
 func (s *Session) defaultFormat() pcm.Format {
@@ -817,12 +864,8 @@ func (s *Session) announce(seg *segment) {
 	seg.announced = true
 	s.deps.emit(proto.EventTrackStarted, proto.TrackStartedEvent{Track: trackOf(seg)})
 	switch seg.reason {
-	case proto.SkipAd, proto.SkipDuplicate:
+	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
 		s.deps.fin.skip(seg.id, seg.reason)
-	case "":
-		if s.deps.identify != nil {
-			s.deps.identify(seg.id)
-		}
 	}
 }
 

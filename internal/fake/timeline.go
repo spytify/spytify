@@ -1,7 +1,7 @@
 // Package fake replays a scripted timeline as a player would: audio frames
 // for the capture side and now-playing events for the metadata side, with
 // the notification offsets, gaps, adverts, pauses and format changes the
-// scenarios need. It replaces v1's FakeSpotify.
+// scenarios need. It replaces v1's fake player.
 package fake
 
 import (
@@ -64,6 +64,10 @@ type Item struct {
 	// the moment it resumes. Negative is early.
 	PauseNotifyMs int64 `json:"pause_notify_ms"`
 	DesyncMs      int64 `json:"desync_ms"`
+	// SeekAtMs and SeekToMs drag the track bar: SeekAtMs into the item,
+	// playback jumps to SeekToMs, forward or back.
+	SeekAtMs int64 `json:"seek_at_ms"`
+	SeekToMs int64 `json:"seek_to_ms"`
 }
 
 // Action is a command a test sends to the core while the timeline plays.

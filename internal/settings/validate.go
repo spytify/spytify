@@ -3,14 +3,11 @@ package settings
 import (
 	"fmt"
 	"math"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/text/language"
 )
 
 var placeholder = regexp.MustCompile(`\{([a-z]+)\}`)
@@ -91,29 +88,11 @@ func (d *Def) Coerce(v any) (any, error) {
 		return cleanPath(s)
 	case KindTemplate:
 		return validTemplate(s)
-	case KindLanguage:
-		s = strings.TrimSpace(s)
-		if s == "" || s == "system" {
-			return "", nil
-		}
-		tag, err := language.Parse(s)
-		if err != nil {
-			return nil, fmt.Errorf("expected a BCP-47 language code such as en or fr-CA")
-		}
-		return tag.String(), nil
 	case KindString:
 		if strings.ContainsRune(s, 0) {
 			return nil, fmt.Errorf("contains a NUL byte")
 		}
-		if d.Key == "tags.spotify.redirect_uri" {
-			return validRedirect(s)
-		}
 		return s, nil
-	case KindSecret:
-		if strings.ContainsRune(s, 0) || len(s) > 4096 {
-			return nil, fmt.Errorf("not a valid credential")
-		}
-		return strings.TrimSpace(s), nil
 	}
 	return nil, fmt.Errorf("unsupported setting kind %s", d.Kind)
 }
@@ -191,19 +170,4 @@ func validTemplate(s string) (string, error) {
 		}
 	}
 	return s, nil
-}
-
-func validRedirect(s string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(s))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return "", fmt.Errorf("expected an http(s) URL")
-	}
-	host := u.Hostname()
-	if host != "127.0.0.1" && host != "localhost" && host != "::1" {
-		return "", fmt.Errorf("the redirect URI must point at this machine (127.0.0.1)")
-	}
-	if u.Port() == "" {
-		return "", fmt.Errorf("the redirect URI needs a port")
-	}
-	return u.String(), nil
 }

@@ -33,7 +33,6 @@ type Backends interface {
 type Options struct {
 	Env      target.Env
 	Store    *settings.Store
-	Secrets  settings.Secrets
 	Log      *Logger
 	Backends Backends
 	// FindProcess reports whether the target runs; tests replace it.
@@ -49,7 +48,6 @@ type Core struct {
 	log      *Logger
 	backends Backends
 	find     func(target.Target) (target.Process, bool)
-	tags     *tagService
 
 	ffmpeg *encode.FFmpeg
 	ffErr  error
@@ -80,9 +78,7 @@ func New(o Options) *Core {
 	if c.find == nil {
 		c.find = target.FindProcess
 	}
-	c.tags = &tagService{values: o.Store.Values, secrets: o.Secrets, log: o.Log}
 	c.ffmpeg, c.ffErr = encode.Find(o.Env.FFmpeg)
-	o.Log.SetLevel(o.Store.Values().String("app.log_level"))
 	o.Log.SetEmitter(c.emit)
 	return c
 }
@@ -233,12 +229,6 @@ func (c *Core) Handle(ctx context.Context, method string, params json.RawMessage
 			return nil, err
 		}
 		return proto.Empty{}, nil
-	case proto.MethodSpotifyConnect:
-		u, err := c.tags.connect(context.Background())
-		if err != nil {
-			return nil, proto.Errorf(proto.CodeInvalidParams, "%v", err)
-		}
-		return proto.SpotifyConnectResult{AuthURL: u}, nil
 	case proto.MethodTagsRetag:
 		return nil, proto.Errorf(proto.CodeNotAvailable, "tags.retag arrives with the Library index after the alpha")
 	case proto.MethodLogTail:
@@ -343,9 +333,6 @@ func (c *Core) applied(changed map[string]any) {
 	if len(changed) == 0 {
 		return
 	}
-	if _, ok := changed["app.log_level"]; ok {
-		c.log.SetLevel(c.store.Values().String("app.log_level"))
-	}
 	c.emit(proto.EventSettingsChanged, proto.SettingsValues{Values: changed})
 }
 
@@ -382,14 +369,14 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 	}
 
 	id := time.Now().Format("20060102-150405")
-	fin := newFinisher(c.store.Values, c.ffmpeg, c.tags, c.emit, c.log)
+	fin := newFinisher(c.store.Values, c.ffmpeg, c.emit, c.log)
 	s := newSession(id, sessionDeps{
-		values:   c.store.Values,
-		emit:     c.emit,
-		log:      c.log,
-		fin:      fin,
-		control:  np.Control,
-		identify: c.tags.identify,
+		values:  c.store.Values,
+		emit:    c.emit,
+		log:     c.log,
+		fin:     fin,
+		control: np.Control,
+		mute:    adMuter(np),
 	}, opts)
 	restore := c.pinVolume(np)
 	if c.store.Values().Bool("player.mute_output") && runtime.GOOS != "darwin" {
@@ -537,6 +524,22 @@ func (c *Core) markerPath() string { return filepath.Join(c.env.StateDir, "sessi
 
 // pinVolume sets the player to 100% for the session and returns the undo.
 // A marker file lets the next start undo it after a crash.
+// adMuter sets the player's volume to 0 and back, for recorder.mute_ads.
+func adMuter(np meta.NowPlaying) func(on bool) error {
+	saved := 1.0
+	return func(on bool) error {
+		if !on {
+			return np.SetVolume(saved)
+		}
+		v, err := np.Volume()
+		if err != nil {
+			return err
+		}
+		saved = v
+		return np.SetVolume(0)
+	}
+}
+
 func (c *Core) pinVolume(np meta.NowPlaying) func() {
 	vol, err := np.Volume()
 	if err != nil || vol >= 0.999 {

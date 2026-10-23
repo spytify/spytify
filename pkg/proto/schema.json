@@ -364,17 +364,6 @@
       ],
       "type": "object"
     },
-    "SpotifyConnectResult": {
-      "properties": {
-        "auth_url": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "auth_url"
-      ],
-      "type": "object"
-    },
     "TargetInfo": {
       "properties": {
         "bundle_id": {
@@ -529,7 +518,7 @@
       }
     },
     "log": {
-      "description": "each log line at or above app.log_level",
+      "description": "each log line, every level",
       "params": {
         "$ref": "#/$defs/LogEvent"
       }
@@ -633,7 +622,7 @@
       }
     },
     "settings.get": {
-      "description": "secrets come back masked",
+      "description": "every setting when keys is empty",
       "params": {
         "$ref": "#/$defs/SettingsGetParams"
       },
@@ -666,12 +655,6 @@
       },
       "result": {
         "$ref": "#/$defs/RetagResult"
-      }
-    },
-    "tags.spotify.connect": {
-      "description": "starts the OAuth loopback listener on the redirect URI",
-      "result": {
-        "$ref": "#/$defs/SpotifyConnectResult"
       }
     }
   },

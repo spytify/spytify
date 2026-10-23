@@ -15,24 +15,49 @@ import (
 type Process struct {
 	PID  int
 	Name string
+	// Parent is the parent's PID where the listing gives it (Windows), else 0.
+	Parent int
 }
 
-// FindProcess returns the first running process whose executable name matches
-// one of the target names, ignoring case and a trailing ".exe".
+// FindProcess returns the running process whose executable name matches one
+// of the target names, ignoring case and a trailing ".exe". Of a player that
+// runs as a tree of processes of the same name, it returns the root, whose
+// tree holds the one that plays.
 func FindProcess(t Target) (Process, bool) {
 	if len(t.ProcessNames) == 0 {
 		return Process{}, false
 	}
 	var procs []Process
-	if runtime.GOOS == "linux" {
+	switch runtime.GOOS {
+	case "linux":
 		procs = listProc()
-	} else {
+	case "windows":
+		procs = listToolhelp()
+	default:
 		procs = listPS()
 	}
-	for _, p := range procs {
+	return pickRoot(t, procs)
+}
+
+// pickRoot returns the first matching process whose parent does not match.
+func pickRoot(t Target, procs []Process) (Process, bool) {
+	matching := map[int]bool{}
+	var first *Process
+	for i, p := range procs {
 		if t.Matches(p.Name) {
+			matching[p.PID] = true
+			if first == nil {
+				first = &procs[i]
+			}
+		}
+	}
+	for _, p := range procs {
+		if matching[p.PID] && !matching[p.Parent] {
 			return p, true
 		}
+	}
+	if first != nil {
+		return *first, true
 	}
 	return Process{}, false
 }
@@ -96,7 +121,7 @@ func listProc() []Process {
 	var out []Process
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
+		if err != nil || zombie(e.Name()) {
 			continue
 		}
 		if b, err := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline")); err == nil && len(b) > 0 {
@@ -108,6 +133,17 @@ func listProc() []Process {
 		}
 	}
 	return out
+}
+
+// zombie reports a process that exited but was not reaped: it plays nothing.
+func zombie(pid string) bool {
+	b, err := os.ReadFile(filepath.Join("/proc", pid, "stat"))
+	if err != nil {
+		return false
+	}
+	// "pid (comm) state ...": comm may hold spaces and parentheses.
+	i := bytes.LastIndexByte(b, ')')
+	return i >= 0 && i+2 < len(b) && b[i+2] == 'Z'
 }
 
 func listPS() []Process {

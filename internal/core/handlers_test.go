@@ -18,7 +18,7 @@ import (
 func newTestCore(t *testing.T, running bool) (*Core, *recorder) {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := settings.Open(filepath.Join(dir, "config.toml"), settings.NewMemorySecrets())
+	store, err := settings.Open(filepath.Join(dir, "config.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,6 @@ func newTestCore(t *testing.T, running bool) (*Core, *recorder) {
 	c := New(Options{
 		Env:      target.Env{Target: target.Target{ProcessNames: []string{"fakeplayer"}}, FFmpeg: "ffmpeg", StateDir: filepath.Join(dir, "state")},
 		Store:    store,
-		Secrets:  settings.NewMemorySecrets(),
 		Log:      log,
 		Backends: fakeBackends{fake.NewBackend(player)},
 		FindProcess: func(target.Target) (target.Process, bool) {
@@ -77,9 +76,9 @@ func TestSettingsActions(t *testing.T) {
 	c, rec := newTestCore(t, true)
 	var res proto.SettingsSetResult
 	if err := call(t, c, proto.MethodSettingsSet, proto.SettingsSetParams{Values: map[string]any{
-		"encode.format":              "flac",
-		"tags.spotify.client_secret": "hunter2",
-		"bogus":                      1,
+		"encode.format":        "flac",
+		"recorder.min_seconds": 10,
+		"bogus":                1,
 	}}, &res); err != nil {
 		t.Fatal(err)
 	}
@@ -92,15 +91,15 @@ func TestSettingsActions(t *testing.T) {
 			_ = ev.Decode(&changed)
 		}
 	}
-	if changed.Values["encode.format"] != "flac" || changed.Values["tags.spotify.client_secret"] != settings.Masked {
+	if changed.Values["encode.format"] != "flac" || changed.Values["recorder.min_seconds"] != float64(10) {
 		t.Fatalf("settings.changed = %+v", changed.Values)
 	}
 
 	var got proto.SettingsValues
-	if err := call(t, c, proto.MethodSettingsGet, proto.SettingsGetParams{Keys: []string{"encode.format", "tags.spotify.client_secret"}}, &got); err != nil {
+	if err := call(t, c, proto.MethodSettingsGet, proto.SettingsGetParams{Keys: []string{"encode.format", "recorder.min_seconds"}}, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Values["encode.format"] != "flac" || got.Values["tags.spotify.client_secret"] != settings.Masked {
+	if got.Values["encode.format"] != "flac" || got.Values["recorder.min_seconds"] != float64(10) {
 		t.Fatalf("get = %+v", got.Values)
 	}
 	if err := call(t, c, proto.MethodSettingsGet, proto.SettingsGetParams{Keys: []string{"nope"}}, nil); code(err) != proto.CodeInvalidParams {

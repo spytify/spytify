@@ -1,4 +1,4 @@
-//go:build !linux && !darwin
+//go:build !linux && !darwin && !windows
 
 package platform
 
@@ -20,6 +20,5 @@ func (b Backends) New(target.Target) (capture.Capture, meta.NowPlaying, error) {
 func (b Backends) Probe() []proto.Check {
 	return []proto.Check{
 		{Name: "capture", OK: false, Detail: "no " + runtime.GOOS + " capture backend in the alpha (Linux only)"},
-		keyringCheck(),
 	}
 }

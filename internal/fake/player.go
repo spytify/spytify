@@ -180,6 +180,13 @@ func (p *Player) scheduleFrom(from int, base int64, first, restart bool) {
 			p.push(at(pos, f, it.DesyncMs), meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: it.PauseAtMs})
 			p.spans = append(p.spans, span{format: f, frames: total - pauseAt, owner: i, audio: true, from: pauseAt})
 			pos += total - pauseAt
+		} else if seekAt := f.FramesFromMs(it.SeekAtMs); seekAt > 0 && seekAt < total {
+			seekTo := min(f.FramesFromMs(it.SeekToMs), total)
+			p.spans = append(p.spans, span{format: f, frames: seekAt, owner: i, audio: true})
+			pos += seekAt
+			p.push(pos, meta.Event{Kind: meta.Seeked, Track: p.Info(i), PositionMs: it.SeekToMs})
+			p.spans = append(p.spans, span{format: f, frames: total - seekTo, owner: i, audio: true, from: seekTo})
+			pos += total - seekTo
 		} else {
 			p.spans = append(p.spans, span{format: f, frames: total, owner: i, audio: true})
 			pos += total

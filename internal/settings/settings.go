@@ -14,41 +14,26 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Masked is what a client sees in place of a stored secret.
-const Masked = "***"
-
 // Store is the live settings: defaults, then config.toml, then in-memory
-// overrides. Secrets never touch config.toml.
+// overrides.
 type Store struct {
 	mu        sync.RWMutex
 	path      string
 	values    map[string]any
 	overrides map[string]any
-	secrets   Secrets
-	secretSet map[string]bool
 	warnings  []string
 }
 
 // Open loads path, creating nothing until the first Set. Invalid or unknown
 // entries in the file are reported by Warnings and replaced by defaults.
-func Open(path string, secrets Secrets) (*Store, error) {
+func Open(path string) (*Store, error) {
 	s := &Store{
 		path:      path,
 		values:    defaults(),
 		overrides: map[string]any{},
-		secrets:   secrets,
-		secretSet: map[string]bool{},
 	}
 	if err := s.load(); err != nil {
 		return nil, err
-	}
-	for _, d := range Table {
-		if d.Kind != KindSecret || secrets == nil {
-			continue
-		}
-		if v, err := secrets.Get(d.Key); err == nil && v != "" {
-			s.secretSet[d.Key] = true
-		}
 	}
 	return s, nil
 }
@@ -56,9 +41,7 @@ func Open(path string, secrets Secrets) (*Store, error) {
 func defaults() map[string]any {
 	m := make(map[string]any, len(Table))
 	for _, d := range Table {
-		if d.Kind != KindSecret {
-			m[d.Key] = d.Default
-		}
+		m[d.Key] = d.Default
 	}
 	return m
 }
@@ -82,10 +65,6 @@ func (s *Store) load() error {
 		d, ok := Lookup(k)
 		if !ok {
 			s.warnings = append(s.warnings, fmt.Sprintf("%s: unknown key ignored", k))
-			continue
-		}
-		if d.Kind == KindSecret {
-			s.warnings = append(s.warnings, fmt.Sprintf("%s: secrets are kept in the OS keyring, the value in config.toml is ignored", k))
 			continue
 		}
 		v, err := d.Coerce(flat[k])
@@ -123,8 +102,8 @@ func (s *Store) Warnings() []string {
 	return append([]string(nil), s.warnings...)
 }
 
-// Get returns the requested keys, or every key when keys is empty. Secrets
-// come back masked. Unknown keys are listed separately.
+// Get returns the requested keys, or every key when keys is empty. Unknown
+// keys are listed separately.
 func (s *Store) Get(keys []string) (values map[string]any, unknown []string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -146,12 +125,6 @@ func (s *Store) Get(keys []string) (values map[string]any, unknown []string) {
 }
 
 func (s *Store) publicLocked(d *Def) any {
-	if d.Kind == KindSecret {
-		if s.secretSet[d.Key] {
-			return Masked
-		}
-		return ""
-	}
 	if v, ok := s.overrides[d.Key]; ok {
 		return v
 	}
@@ -159,8 +132,8 @@ func (s *Store) publicLocked(d *Def) any {
 }
 
 // Set validates and persists values. Unknown keys and invalid values are
-// rejected individually; the valid ones are applied. The returned map is the
-// public (masked) form of what changed, ready for a settings.changed event.
+// rejected individually; the valid ones are applied. The returned map is what
+// changed, ready for a settings.changed event.
 func (s *Store) Set(in map[string]any) (applied []string, rejected map[string]string, changed map[string]any, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -170,29 +143,10 @@ func (s *Store) Set(in map[string]any) (applied []string, rejected map[string]st
 	for k, v := range s.values {
 		next[k] = v
 	}
-	type secretOp struct{ key, value string }
-	var secretOps []secretOp
 	for _, k := range sortedKeys(in) {
 		d, ok := Lookup(k)
 		if !ok {
 			rejected[k] = "unknown setting"
-			continue
-		}
-		if d.Kind == KindSecret {
-			str, isStr := in[k].(string)
-			if isStr && str == Masked {
-				continue
-			}
-			v, cerr := d.Coerce(in[k])
-			if cerr != nil {
-				rejected[k] = cerr.Error()
-				continue
-			}
-			if s.secrets == nil {
-				rejected[k] = "no keyring available on this system"
-				continue
-			}
-			secretOps = append(secretOps, secretOp{k, v.(string)})
 			continue
 		}
 		v, cerr := d.Coerce(in[k])
@@ -213,28 +167,6 @@ func (s *Store) Set(in map[string]any) (applied []string, rejected map[string]st
 			changed[k] = s.values[k]
 		}
 	}
-	for _, op := range secretOps {
-		var serr error
-		if op.value == "" {
-			serr = s.secrets.Delete(op.key)
-			if errors.Is(serr, ErrSecretNotFound) {
-				serr = nil
-			}
-		} else {
-			serr = s.secrets.Set(op.key, op.value)
-		}
-		if serr != nil {
-			rejected[op.key] = fmt.Sprintf("keyring: %v", serr)
-			continue
-		}
-		s.secretSet[op.key] = op.value != ""
-		applied = append(applied, op.key)
-		if op.value == "" {
-			changed[op.key] = ""
-		} else {
-			changed[op.key] = Masked
-		}
-	}
 	sort.Strings(applied)
 	return applied, rejected, changed, nil
 }
@@ -249,10 +181,6 @@ func (s *Store) Override(in map[string]any) map[string]string {
 		d, ok := Lookup(k)
 		if !ok {
 			rejected[k] = "unknown setting"
-			continue
-		}
-		if d.Kind == KindSecret {
-			rejected[k] = "secrets cannot be overridden on the command line"
 			continue
 		}
 		v, err := d.Coerce(raw)
@@ -274,15 +202,8 @@ func (s *Store) Reset(prefix string) (changed map[string]any, err error) {
 		next[k] = v
 	}
 	changed = map[string]any{}
-	var secrets []string
 	for _, d := range Table {
 		if prefix != "" && d.Key != prefix && !strings.HasPrefix(d.Key, prefix+".") {
-			continue
-		}
-		if d.Kind == KindSecret {
-			if s.secretSet[d.Key] {
-				secrets = append(secrets, d.Key)
-			}
 			continue
 		}
 		if next[d.Key] != d.Default {
@@ -295,13 +216,6 @@ func (s *Store) Reset(prefix string) (changed map[string]any, err error) {
 		return nil, err
 	}
 	s.values = next
-	for _, k := range secrets {
-		if derr := s.secrets.Delete(k); derr != nil && !errors.Is(derr, ErrSecretNotFound) {
-			return changed, fmt.Errorf("keyring: %w", derr)
-		}
-		s.secretSet[k] = false
-		changed[k] = ""
-	}
 	return changed, nil
 }
 
@@ -316,7 +230,7 @@ func (s *Store) Values() Values {
 	for k, v := range s.overrides {
 		m[k] = v
 	}
-	return Values{m: m, secrets: s.secrets}
+	return Values{m: m}
 }
 
 func sortedKeys(m map[string]any) []string {
@@ -332,7 +246,7 @@ func save(path string, values map[string]any) error {
 	nested := map[string]any{}
 	for _, d := range Table {
 		v, ok := values[d.Key]
-		if !ok || d.Kind == KindSecret {
+		if !ok {
 			continue
 		}
 		parts := strings.Split(d.Key, ".")
@@ -349,7 +263,7 @@ func save(path string, values map[string]any) error {
 	}
 	var buf bytes.Buffer
 	buf.WriteString("# spytify settings. Edit through spytify-cli set key=value or the UI;\n")
-	buf.WriteString("# the daemon validates every value. Secrets live in the OS keyring.\n\n")
+	buf.WriteString("# the daemon validates every value.\n\n")
 	if err := toml.NewEncoder(&buf).Encode(nested); err != nil {
 		return err
 	}
@@ -377,8 +291,7 @@ func save(path string, values map[string]any) error {
 
 // Values is a read-only snapshot of every setting.
 type Values struct {
-	m       map[string]any
-	secrets Secrets
+	m map[string]any
 }
 
 func (v Values) mustDef(key string) *Def {
@@ -433,18 +346,6 @@ func (v Values) Path(key string) string {
 	return p
 }
 
-// Secret reads a credential from the keyring; "" when unset or unavailable.
-func (v Values) Secret(key string) string {
-	if v.mustDef(key).Kind != KindSecret || v.secrets == nil {
-		return ""
-	}
-	s, err := v.secrets.Get(key)
-	if err != nil {
-		return ""
-	}
-	return s
-}
-
 // With returns a copy with one key replaced, for tests.
 func (v Values) With(key string, value any) Values {
 	d := v.mustDef(key)
@@ -457,7 +358,7 @@ func (v Values) With(key string, value any) Values {
 		m[k] = x
 	}
 	m[key] = cv
-	return Values{m: m, secrets: v.secrets}
+	return Values{m: m}
 }
 
 // Defaults is a snapshot of the default values, for tests and --once runs.

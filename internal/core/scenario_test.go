@@ -24,7 +24,6 @@ var baseSettings = map[string]any{
 	"encode.format":        "wav",
 	"recorder.normalize":   false,
 	"recorder.min_seconds": 1,
-	"tags.source":          "none",
 	"tags.cover":           false,
 	"output.group_by":      "none",
 }
@@ -75,7 +74,7 @@ func newScenario(t *testing.T, tl *fake.Timeline, extra map[string]any) *scenari
 	}
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
-	store, err := settings.Open(filepath.Join(dir, "config.toml"), settings.NewMemorySecrets())
+	store, err := settings.Open(filepath.Join(dir, "config.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,12 +96,10 @@ func newScenario(t *testing.T, tl *fake.Timeline, extra map[string]any) *scenari
 	c := New(Options{
 		Env:         target.Env{Target: target.Target{ProcessNames: []string{"fakeplayer"}}, FFmpeg: "ffmpeg", StateDir: filepath.Join(dir, "state")},
 		Store:       store,
-		Secrets:     settings.NewMemorySecrets(),
 		Log:         log,
 		Backends:    fakeBackends{fake.NewBackend(player)},
 		FindProcess: func(target.Target) (target.Process, bool) { return target.Process{PID: 4242, Name: "fakeplayer"}, true },
 	})
-	log.SetLevel("debug")
 	rec := &recorder{}
 	c.SetBroadcaster(rec.add)
 	return &scenario{core: c, player: player, out: out, events: rec, logs: logs}
@@ -151,7 +148,7 @@ func loadTimeline(t *testing.T, name string) *fake.Timeline {
 }
 
 func TestScenarios(t *testing.T) {
-	for _, name := range []string{"basic", "jitter", "gapless", "ads", "format-change", "pause-resume", "duplicate", "control"} {
+	for _, name := range []string{"basic", "jitter", "gapless", "ads", "format-change", "pause-resume", "duplicate", "control", "seek"} {
 		t.Run(name, func(t *testing.T) {
 			tl := loadTimeline(t, name)
 			variants := tl.Variants

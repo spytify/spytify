@@ -7,7 +7,7 @@ import (
 	"github.com/spytify/spytify/internal/meta"
 )
 
-// Ported from v1's SpotifyStatusTests and TrackTests. The advert and idle
+// Ported from v1's window-title and track tests. The advert and idle
 // window titles of v1 have no equivalent: v2 reads the playback status and
 // the item id instead (gap G9).
 

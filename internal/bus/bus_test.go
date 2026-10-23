@@ -210,3 +210,28 @@ func TestClientSeesClose(t *testing.T) {
 		t.Fatalf("call after close: %v", err)
 	}
 }
+
+// A handler that closes the server, as core.shutdown does, still answers.
+func TestReplyBeforeCloseIsDelivered(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		var srv *Server
+		srv = NewServer(func(context.Context, string, json.RawMessage) (any, error) {
+			go srv.Close()
+			return "bye", nil
+		}, t.Logf)
+		path := socketPath(t)
+		if err := srv.ListenUnix(path); err != nil {
+			t.Fatal(err)
+		}
+		c, err := Dial(context.Background(), path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		if err := c.Call(context.Background(), "shutdown", nil, &got); err != nil || got != "bye" {
+			t.Fatalf("run %d: %q, %v", i, got, err)
+		}
+		c.Close()
+		srv.Close()
+	}
+}

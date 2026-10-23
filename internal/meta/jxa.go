@@ -38,14 +38,14 @@ function track(p) {
     discNumber: p.discNumber || 0,
     year: typeof p.year === "number" ? p.year : 0,
     artworkUrl: p.artworkUrl || "",
-    url: p.spotifyUrl || p.url || ""
+    url: p.url || ""
   };
 }
 // fields reads the track one property at a time, for players whose
 // dictionary does not answer "properties" of the current track.
 function fields(t) {
   const p = {};
-  ["id", "name", "artist", "album", "albumArtist", "duration", "trackNumber", "discNumber", "year", "artworkUrl", "spotifyUrl", "url"].forEach(function (k) {
+  ["id", "name", "artist", "album", "albumArtist", "duration", "trackNumber", "discNumber", "year", "artworkUrl", "url"].forEach(function (k) {
     const v = get(() => t[k]());
     if (v !== null) { p[k] = v; }
   });
@@ -129,7 +129,7 @@ func (j *JXA) specifier() string {
 	return j.spec
 }
 
-type jxaTrack struct {
+type polledTrack struct {
 	ID          *string  `json:"id"`
 	Name        string   `json:"name"`
 	Artist      string   `json:"artist"`
@@ -143,12 +143,14 @@ type jxaTrack struct {
 	URL         string   `json:"url"`
 }
 
-type jxaPoll struct {
-	Running  bool      `json:"running"`
-	State    string    `json:"state"`
-	Position *float64  `json:"position"`
-	Track    *jxaTrack `json:"track"`
-	Error    string    `json:"error"`
+type playerPoll struct {
+	Running  bool         `json:"running"`
+	State    string       `json:"state"`
+	Position *float64     `json:"position"`
+	Track    *polledTrack `json:"track"`
+	Error    string       `json:"error"`
+	// at is when the poll was read; zero leaves seeks undetected.
+	at time.Time
 }
 
 // explain turns a scripting error into what the user can do about it.
@@ -174,7 +176,7 @@ func durationMs(d float64, unit string) int64 {
 	return int64(math.Round(d * 1000))
 }
 
-func (p jxaPoll) info(unit string) TrackInfo {
+func (p playerPoll) info(unit string) TrackInfo {
 	if p.Track == nil {
 		return TrackInfo{}
 	}
@@ -200,13 +202,14 @@ func (p jxaPoll) info(unit string) TrackInfo {
 	if t.Duration != nil {
 		info.LengthMs = durationMs(*t.Duration, unit)
 	}
-	if !strings.HasPrefix(info.ArtURL, "http://") && !strings.HasPrefix(info.ArtURL, "https://") {
+	// The Windows poller saves the cover to a temporary file.
+	if !strings.HasPrefix(info.ArtURL, "http://") && !strings.HasPrefix(info.ArtURL, "https://") && !strings.HasPrefix(info.ArtURL, "file:///") {
 		info.ArtURL = ""
 	}
 	return info
 }
 
-func (p jxaPoll) status() Status {
+func (p playerPoll) status() Status {
 	switch strings.ToLower(p.State) {
 	case "playing", "fast forwarding", "rewinding":
 		return Playing
@@ -216,23 +219,27 @@ func (p jxaPoll) status() Status {
 	return Stopped
 }
 
-// jxaTracker turns the stream of polls into change events.
-type jxaTracker struct {
+// pollTracker turns the stream of polls into change events.
+type pollTracker struct {
 	unit    string
 	started bool
 	running bool
 	last    TrackInfo
 	status  Status
 	lastPos int64
+	lastAt  time.Time
 }
 
 // A position that jumps back near zero on the same item is a restart.
 const (
 	restartFromMs = 3000
-	restartToMs   = 1500
+	// seekSlackMs is how far the position may drift from the wall clock
+	// between two polls before it counts as a seek.
+	seekSlackMs = 2000
+	restartToMs = 1500
 )
 
-func (k *jxaTracker) next(p jxaPoll) []Event {
+func (k *pollTracker) next(p playerPoll) []Event {
 	pos := int64(-1)
 	if p.Position != nil {
 		pos = int64(math.Round(*p.Position * 1000))
@@ -264,9 +271,17 @@ func (k *jxaTracker) next(p jxaPoll) []Event {
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos})
 	} else if !info.Empty() && pos >= 0 && pos < restartToMs && k.lastPos-pos > restartFromMs {
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos, Restart: true})
+	} else if !info.Empty() && pos >= 0 && k.lastPos >= 0 && !p.at.IsZero() && !k.lastAt.IsZero() {
+		expected := k.lastPos
+		if k.status == Playing {
+			expected += p.at.Sub(k.lastAt).Milliseconds()
+		}
+		if d := pos - expected; d > seekSlackMs || d < -seekSlackMs {
+			out = append(out, Event{Kind: Seeked, Track: info, PositionMs: pos})
+		}
 	}
 	if pos >= 0 {
-		k.lastPos = pos
+		k.lastPos, k.lastAt = pos, p.at
 	}
 	if st := p.status(); st != k.status {
 		k.status = st
@@ -295,17 +310,18 @@ func (j *JXA) Watch(ctx context.Context, t target.Target) (<-chan Event, error) 
 		return nil, fmt.Errorf("osascript: %w", err)
 	}
 	out := make(chan Event, 64)
-	tracker := &jxaTracker{unit: t.DurationUnit}
+	tracker := &pollTracker{unit: t.DurationUnit}
 	go func() {
 		defer cmd.Wait()
 		sc := bufio.NewScanner(stdout)
 		sc.Buffer(make([]byte, 1<<16), 1<<20)
 		lastErr := ""
 		for sc.Scan() {
-			var p jxaPoll
+			var p playerPoll
 			if json.Unmarshal(sc.Bytes(), &p) != nil {
 				continue
 			}
+			p.at = time.Now()
 			if p.Error != lastErr {
 				lastErr = p.Error
 				if p.Error != "" && j.Logf != nil {

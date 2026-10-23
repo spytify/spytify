@@ -39,6 +39,30 @@ func TestValidateRequiresProcess(t *testing.T) {
 	}
 }
 
+func TestDefaultPlayerWhenUnset(t *testing.T) {
+	defer func(p, b string) { DefaultProcess, DefaultBundleID = p, b }(DefaultProcess, DefaultBundleID)
+	t.Setenv("SPYTIFY_TARGET_PROCESS", "x")
+	os.Unsetenv("SPYTIFY_TARGET_PROCESS")
+
+	DefaultProcess, DefaultBundleID = "", ""
+	if err := Load().Validate(); !errors.Is(err, ErrNoTarget) {
+		t.Fatalf("a build without a default player: Validate() = %v", err)
+	}
+	DefaultProcess, DefaultBundleID = "Player", "org.example.player"
+	if err := Load().Validate(); err != nil {
+		t.Fatalf("Validate() = %v with the default player", err)
+	}
+	for goos, want := range map[string]Target{
+		"darwin":  {ProcessNames: []string{"Player"}, BundleID: "org.example.player"},
+		"linux":   {ProcessNames: []string{"Player"}},
+		"windows": {ProcessNames: []string{"Player"}},
+	} {
+		if got := withDefaultPlayer(Target{}, goos); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %+v, want %+v", goos, got, want)
+		}
+	}
+}
+
 func TestSaveUserTarget(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -92,5 +116,25 @@ func TestFindProcessFindsItself(t *testing.T) {
 	}
 	if p.PID <= 0 {
 		t.Fatalf("PID = %d", p.PID)
+	}
+}
+
+func TestPickRootFindsTheTreeRoot(t *testing.T) {
+	tg := Target{ProcessNames: []string{"Player"}}
+	procs := []Process{
+		{PID: 40, Parent: 30, Name: "Player.exe"}, // a renderer child, listed first
+		{PID: 30, Parent: 4, Name: "player.exe"},
+		{PID: 50, Parent: 30, Name: "Player.exe"},
+		{PID: 60, Parent: 4, Name: "other.exe"},
+	}
+	if p, ok := pickRoot(tg, procs); !ok || p.PID != 30 {
+		t.Fatalf("root = %+v, %v", p, ok)
+	}
+	// Without parents (Linux, macOS) the first match wins, as before.
+	if p, ok := pickRoot(tg, []Process{{PID: 7, Name: "player"}, {PID: 3, Name: "player"}}); !ok || p.PID != 7 {
+		t.Fatalf("first match = %+v, %v", p, ok)
+	}
+	if _, ok := pickRoot(tg, []Process{{PID: 9, Name: "other"}}); ok {
+		t.Fatal("matched a process of another name")
 	}
 }

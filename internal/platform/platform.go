@@ -6,7 +6,6 @@ import (
 	"github.com/spytify/spytify/internal/capture"
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/meta"
-	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -26,13 +25,6 @@ func (b Backends) logf(format string, args ...any) {
 	if b.Logf != nil {
 		b.Logf(format, args...)
 	}
-}
-
-func keyringCheck() proto.Check {
-	if err := settings.ProbeKeyring(); err != nil {
-		return proto.Check{Name: "OS keyring", OK: false, Detail: err.Error() + "; secrets are kept in memory until the daemon exits"}
-	}
-	return proto.Check{Name: "OS keyring", OK: true}
 }
 
 // Fake drives a session from a timeline file instead of a real player.

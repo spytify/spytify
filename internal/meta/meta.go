@@ -78,6 +78,10 @@ const (
 	PlayerGone
 	// PlayerAppeared means the player's interface is (back) on the bus.
 	PlayerAppeared
+	// Seeked means the position of the current item jumped to PositionMs
+	// for another reason than playing on (the user dragged the track bar).
+	// A jump back to the start is a TrackChanged with Restart instead.
+	Seeked
 )
 
 // Event is one change reported by a backend. The core stamps it with the

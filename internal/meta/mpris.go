@@ -204,10 +204,13 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal) []Event {
 		m.mu.Lock()
 		last := m.last
 		m.mu.Unlock()
-		if us < 1_500_000 && !last.Empty() {
+		if last.Empty() {
+			return nil
+		}
+		if us < 1_500_000 {
 			return []Event{{Kind: TrackChanged, Track: last, PositionMs: us / 1000, Restart: true}}
 		}
-		return nil
+		return []Event{{Kind: Seeked, Track: last, PositionMs: us / 1000}}
 	case propsInterface + ".PropertiesChanged":
 		if _, owner := m.current(); owner == "" || sig.Sender != owner || len(sig.Body) < 2 {
 			return nil
@@ -420,7 +423,9 @@ func ParseMetadata(v dbus.Variant) TrackInfo {
 	}
 	t.ID = str("mpris:trackid")
 	if t.ID == "/org/mpris/MediaPlayer2/TrackList/NoTrack" {
-		t.ID = ""
+		// The spec's "no track": whatever else the map still holds is
+		// the item that ended.
+		return TrackInfo{}
 	}
 	t.Title = strings.TrimSpace(str("xesam:title"))
 	t.Artists = list("xesam:artist")

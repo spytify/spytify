@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 )
 
-func poll(t *testing.T, s string) jxaPoll {
+func poll(t *testing.T, s string) playerPoll {
 	t.Helper()
-	var p jxaPoll
+	var p playerPoll
 	if err := json.Unmarshal([]byte(s), &p); err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +35,7 @@ func TestDurationUnits(t *testing.T) {
 }
 
 func TestJXATracker(t *testing.T) {
-	k := &jxaTracker{}
+	k := &pollTracker{}
 	first := k.next(poll(t, `{"running":true,"state":"playing","position":12.5,"track":{"id":"vendor:track:1","name":"Song","artist":"Artist","album":"Album","duration":200000,"trackNumber":3,"artworkUrl":"https://img/1.jpg"}}`))
 	want := TrackInfo{ID: "vendor:track:1", Title: "Song", Artists: []string{"Artist"}, Album: "Album", TrackNumber: 3, LengthMs: 200000, ArtURL: "https://img/1.jpg"}
 	if len(first) != 2 || first[0].Kind != TrackChanged || !reflect.DeepEqual(first[0].Track, want) || first[0].PositionMs != 12500 || first[1].Status != Playing {
@@ -60,7 +61,7 @@ func TestJXATracker(t *testing.T) {
 }
 
 func TestJXATrackerSeesARestart(t *testing.T) {
-	k := &jxaTracker{}
+	k := &pollTracker{}
 	at := func(pos string) []Event {
 		return k.next(poll(t, `{"running":true,"state":"playing","position":`+pos+`,"track":{"id":"vendor:track:7","name":"Song","artist":"A","duration":200000}}`))
 	}
@@ -80,8 +81,41 @@ func TestJXATrackerSeesARestart(t *testing.T) {
 	}
 }
 
+func TestJXATrackerSeesASeek(t *testing.T) {
+	k := &pollTracker{}
+	t0 := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	at := func(ms int, state, pos string) []Event {
+		p := poll(t, `{"running":true,"state":"`+state+`","position":`+pos+`,"track":{"id":"vendor:track:7","name":"Song","artist":"A","duration":200000}}`)
+		p.at = t0.Add(time.Duration(ms) * time.Millisecond)
+		return k.next(p)
+	}
+	at(0, "playing", "10.0")
+	if evs := at(250, "playing", "10.25"); len(evs) != 0 {
+		t.Fatalf("progress gave %+v", evs)
+	}
+	// A slow poll is not a seek: the position kept up with the clock.
+	if evs := at(3250, "playing", "13.3"); len(evs) != 0 {
+		t.Fatalf("a late poll gave %+v", evs)
+	}
+	evs := at(3500, "playing", "90.0")
+	if len(evs) != 1 || evs[0].Kind != Seeked || evs[0].PositionMs != 90000 {
+		t.Fatalf("forward seek = %+v", evs)
+	}
+	if evs := at(3750, "paused", "90.1"); len(evs) != 1 || evs[0].Kind != StatusChanged {
+		t.Fatalf("pause = %+v", evs)
+	}
+	// Paused, the position stays put however long the poll waits.
+	if evs := at(9000, "paused", "90.1"); len(evs) != 0 {
+		t.Fatalf("still paused gave %+v", evs)
+	}
+	evs = at(9250, "paused", "30.0")
+	if len(evs) != 1 || evs[0].Kind != Seeked || evs[0].PositionMs != 30000 {
+		t.Fatalf("seek back while paused = %+v", evs)
+	}
+}
+
 func TestJXATrackerStartsWithPlayerAbsent(t *testing.T) {
-	k := &jxaTracker{}
+	k := &pollTracker{}
 	evs := k.next(poll(t, `{"running":false}`))
 	if len(evs) != 2 || evs[0].Kind != TrackChanged || !evs[0].Track.Empty() || evs[1].Status != Stopped {
 		t.Fatalf("evs = %+v", evs)
@@ -90,7 +124,7 @@ func TestJXATrackerStartsWithPlayerAbsent(t *testing.T) {
 
 func TestJXAStatus(t *testing.T) {
 	for state, want := range map[string]Status{"playing": Playing, "fast forwarding": Playing, "paused": Paused, "stopped": Stopped, "": Stopped} {
-		if got := (jxaPoll{State: state}).status(); got != want {
+		if got := (playerPoll{State: state}).status(); got != want {
 			t.Errorf("status(%q) = %v", state, got)
 		}
 	}
