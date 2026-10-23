@@ -68,6 +68,9 @@ type Item struct {
 	// playback jumps to SeekToMs, forward or back.
 	SeekAtMs int64 `json:"seek_at_ms"`
 	SeekToMs int64 `json:"seek_to_ms"`
+	// LeadMs is silence at the start of the item's own audio, inside its
+	// length, as in a master that begins quietly.
+	LeadMs int64 `json:"lead_ms"`
 }
 
 // Action is a command a test sends to the core while the timeline plays.
@@ -127,6 +130,9 @@ func (tl *Timeline) validate() error {
 		if it.WAV == "" && it.LengthMs <= 0 {
 			return fmt.Errorf("item %d: length_ms is required without a wav", i)
 		}
+		if it.LeadMs < 0 || (it.WAV == "" && it.LeadMs >= it.LengthMs) {
+			return fmt.Errorf("item %d: lead_ms must be under length_ms", i)
+		}
 		if it.ID == "" {
 			kind := "track"
 			if it.Kind == "ad" {
@@ -174,5 +180,7 @@ func (tl *Timeline) ItemAudio(i int) (pcm.Format, []byte, error) {
 		fade = *it.FadeMs
 	}
 	frames := f.FramesFromMs(it.LengthMs)
-	return f, pcm.Synth{Seed: it.Seed, FadeInMs: fade, FadeOut: fade}.Render(f, frames), nil
+	lead := f.FramesFromMs(it.LeadMs)
+	audio := make([]byte, lead*int64(f.FrameBytes()), frames*int64(f.FrameBytes()))
+	return f, append(audio, pcm.Synth{Seed: it.Seed, FadeInMs: fade, FadeOut: fade}.Render(f, frames-lead)...), nil
 }
