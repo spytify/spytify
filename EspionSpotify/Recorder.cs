@@ -166,6 +166,20 @@ namespace EspionSpotify
             {
                 _form.WriteIntoConsole(I18NKeys.LogTrackExists, _track.ToString());
                 await UpdateMediaTagsWhenSkippingTrack();
+
+                // A skipped duplicate still belongs in the configured playlist.
+                // Resolve the existing file using the same naming rules as the skip check.
+                try
+                {
+                    var existingRecordingPath = _fileManager.GetOutputFileAndInitDirectories().ToMediaFilePath();
+                    M3uPlaylist.AppendCompletedRecording(existingRecordingPath, _track, CountSeconds);
+                }
+                catch (Exception ex)
+                {
+                    _form.WriteIntoConsole(I18NKeys.LogUnknownException, ex.Message);
+                    Console.WriteLine(ex.Message);
+                }
+
                 ForceStopRecording();
                 if (_userSettings.ForceSpotifyToSkipEnabled)
                 {

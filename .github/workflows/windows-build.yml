@@ -1,0 +1,77 @@
+name: Windows build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install .NET Framework 4.6.1 Developer Pack
+        shell: pwsh
+        run: |
+          choco install netfx-4.6.1-devpack --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $referenceAssemblies = Join-Path ${env:ProgramFiles(x86)} 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6.1'
+          if (-not (Test-Path $referenceAssemblies)) {
+            throw "The .NET Framework 4.6.1 targeting pack was not found at $referenceAssemblies"
+          }
+
+      - name: Restore NuGet packages
+        shell: pwsh
+        run: nuget restore EspionSpotify.sln
+
+      - name: Build solution
+        shell: pwsh
+        run: msbuild EspionSpotify.sln /m /verbosity:minimal /p:Configuration=Release
+
+      - name: Run unit tests
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsPath = & $vswhere -latest -products '*' -property installationPath
+          if (-not $vsPath) { throw 'Visual Studio Build Tools installation was not found.' }
+
+          $vstest = Join-Path $vsPath 'Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe'
+          $testAssembly = Join-Path $PWD 'EspionSpotify.Tests\bin\Release\EspionSpotify.Tests.dll'
+          $adapterPath = Join-Path $PWD 'packages\xunit.runner.visualstudio.2.4.3\build\net452'
+
+          if (-not (Test-Path $testAssembly)) { throw "Test assembly not found: $testAssembly" }
+          if (-not (Test-Path $vstest)) { throw "VSTest console not found: $vstest" }
+
+          & $vstest $testAssembly "/TestAdapterPath:$adapterPath" /Logger:trx
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload application build
+        uses: actions/upload-artifact@v4
+        with:
+          name: spy-spotify-windows-release
+          path: EspionSpotify/bin/Release/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spy-spotify-test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: ignore
+          retention-days: 14
