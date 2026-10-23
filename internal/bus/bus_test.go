@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -181,7 +182,8 @@ func TestStaleSocketIsReplacedButLiveOneIsNot(t *testing.T) {
 	}
 	defer a.Close()
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
+	// Windows has no mode bits; the socket's folder ACL protects it.
+	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 		t.Fatalf("socket mode: %v %v", info.Mode(), err)
 	}
 	b := NewServer(nil, nil)

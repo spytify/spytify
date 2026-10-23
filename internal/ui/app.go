@@ -72,7 +72,7 @@ type App struct {
 
 	dot     *widget.Label
 	status  *widget.Label
-	output  *widget.Label
+	output  *widget.RichText
 	update  *widget.Button
 	action  *widget.Button
 	banner  *widget.Label
@@ -112,8 +112,8 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 
 	a.dot = widget.NewLabel("●")
 	a.status = widget.NewLabel("")
-	a.output = widget.NewLabel("")
-	a.output.Importance = widget.LowImportance
+	// Secondary, but readable in both themes, unlike a low-importance label.
+	a.output = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
 	a.update = widget.NewButtonWithIcon("", theme.DownloadIcon(), nil)
 	a.update.Importance = widget.SuccessImportance
 	a.update.Hide()
@@ -218,7 +218,7 @@ func (a *App) render() {
 		a.status.SetText(s.Info.Target.Process + " is not running")
 	}
 	a.dot.Refresh()
-	a.output.SetText(outputText(s.Settings))
+	setCaption(a.output, outputText(s.Settings))
 	switch {
 	case !connected:
 		a.action.Disable()

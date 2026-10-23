@@ -337,13 +337,7 @@ func (v Values) Duration(key string) time.Duration {
 
 // Path expands a leading ~ to the home directory.
 func (v Values) Path(key string) string {
-	p := v.String(key)
-	if p == "~" || strings.HasPrefix(p, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, strings.TrimPrefix(p, "~"))
-		}
-	}
-	return p
+	return ExpandHome(v.String(key))
 }
 
 // With returns a copy with one key replaced, for tests.
