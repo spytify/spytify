@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -156,6 +157,11 @@ type Session struct {
 
 	lastSound time.Time
 	lastLevel time.Time
+	// started and lastChunk find a capture that delivers nothing while
+	// the player plays; stalled is set once that was reported.
+	started   time.Time
+	lastChunk time.Time
+	stalled   bool
 	peak, sum float64
 	count     int64
 	warnedLen bool
@@ -289,6 +295,7 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 	}
 	// Clients learn that a session runs from this first transition.
 	s.setState(proto.StateWaiting)
+	s.started = time.Now()
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	for !s.done {
@@ -320,7 +327,31 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 	s.setState(proto.StateIdle)
 }
 
+// captureStall is how long the player may play with no audio arriving
+// before the session says so.
+var captureStall = 10 * time.Second
+
+// stallHint is what to look at when no audio arrives.
+func stallHint(goos string) string {
+	switch goos {
+	case "darwin":
+		return "No audio from the player for 10 s. If macOS asks to let Spytify record system audio, allow it; it is in System Settings > Privacy & Security > Screen & System Audio Recording."
+	case "windows":
+		return "No audio from the player for 10 s. Check that the Windows Audio service runs and that the player plays on an output device."
+	}
+	return "No audio from the player for 10 s. Check that PipeWire runs: systemctl --user restart pipewire."
+}
+
 func (s *Session) onTick() {
+	last := s.lastChunk
+	if last.IsZero() {
+		last = s.started
+	}
+	if s.status == meta.Playing && !s.stalled && !last.IsZero() && time.Since(last) > captureStall {
+		s.stalled = true
+		s.deps.log.Errorf("no audio from the capture for %s while the player plays", captureStall)
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: stallHint(runtime.GOOS)})
+	}
 	if s.opts.IdleExit > 0 && s.seen && (s.status != meta.Playing) && time.Since(s.lastSound) > s.opts.IdleExit {
 		s.deps.log.Infof("player idle for %s, ending the session", s.opts.IdleExit)
 		s.endOfPlayback()
@@ -331,6 +362,11 @@ func (s *Session) onTick() {
 func (s *Session) onChunk(ch capture.Chunk) {
 	if len(ch.Data) == 0 || !ch.Format.Valid() {
 		return
+	}
+	s.lastChunk = time.Now()
+	if s.stalled {
+		s.stalled = false
+		s.deps.log.Infof("audio from the capture again")
 	}
 	switch {
 	case s.ring == nil:
@@ -503,6 +539,9 @@ func (s *Session) onMeta(ev meta.Event) {
 			s.initial, s.initPos = &info, ev.PositionMs
 			return
 		}
+		if ev.Restart {
+			s.deps.log.Debugf("%q started over: the player is at %d ms", ev.Track.Title, ev.PositionMs)
+		}
 		s.onTrack(ev.Track, at, ev.Restart)
 	case meta.StatusChanged:
 		first := !s.gotStatus
@@ -512,6 +551,7 @@ func (s *Session) onMeta(ev meta.Event) {
 		s.deps.log.Infof("player interface gone")
 		s.endOfPlayback()
 	case meta.Seeked:
+		s.deps.log.Debugf("%q: the player jumped to %d ms", ev.Track.Title, ev.PositionMs)
 		s.onSeek(ev.PositionMs, at)
 	}
 	s.progress()
@@ -865,7 +905,11 @@ func (s *Session) announce(seg *segment) {
 		return
 	}
 	seg.announced = true
-	s.deps.emit(proto.EventTrackStarted, proto.TrackStartedEvent{Track: trackOf(seg)})
+	ev := proto.TrackStartedEvent{Track: trackOf(seg)}
+	if seg.format.Valid() {
+		ev.Source = &proto.AudioSource{SampleRate: seg.format.Rate, Channels: seg.format.Channels}
+	}
+	s.deps.emit(proto.EventTrackStarted, ev)
 	switch seg.reason {
 	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
 		s.deps.fin.skip(seg.id, seg.reason)

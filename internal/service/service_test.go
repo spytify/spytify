@@ -16,7 +16,7 @@ func TestSystemdUnit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Path != filepath.Join("/home/u", ".config", "systemd", "user", "spytifyd.service") {
+	if p.Path != "/home/u/.config/systemd/user/spytifyd.service" {
 		t.Errorf("path %s", p.Path)
 	}
 	unit := string(p.Content)
@@ -35,7 +35,7 @@ func TestLaunchdAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Path != filepath.Join("/Users/u", "Library", "LaunchAgents", Label+".plist") {
+	if p.Path != "/Users/u/Library/LaunchAgents/"+Label+".plist" {
 		t.Errorf("path %s", p.Path)
 	}
 	// The plist is well-formed XML with the path escaped once.

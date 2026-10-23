@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -25,8 +26,17 @@ created by github.com/spytify/spytify/internal/core.(*Core).StartSession in goro
 	}
 }
 
+// crashDir is a temporary folder for crash logs. The runtime lets go of
+// the log before the folder is removed (cleanups run last first), since
+// Windows does not remove a file that is still open.
+func crashDir(t *testing.T) string {
+	dir := t.TempDir()
+	t.Cleanup(func() { _ = debug.SetCrashOutput(nil, debug.CrashOptions{}) })
+	return dir
+}
+
 func TestKeepCrashesReportsThePreviousRun(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "state", "spytifyd.crash.log")
+	path := filepath.Join(crashDir(t), "state", "spytifyd.crash.log")
 	if got := keepCrashes(path); got != "" {
 		t.Fatalf("first run reported %q", got)
 	}
@@ -52,7 +62,7 @@ func TestCrashOutputIsKept(t *testing.T) {
 		time.Sleep(5 * time.Second)
 		return
 	}
-	path := filepath.Join(t.TempDir(), "spytifyd.crash.log")
+	path := filepath.Join(crashDir(t), "spytifyd.crash.log")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCrashOutputIsKept$")
 	cmd.Env = append(os.Environ(), "SPYTIFY_CRASH_TEST="+path)
 	if err := cmd.Run(); err == nil {

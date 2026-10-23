@@ -21,6 +21,7 @@ func (b Backends) New(t target.Target) (capture.Capture, meta.NowPlaying, error)
 	if err != nil {
 		return nil, nil, err
 	}
+	c.MuteOutput = b.mute()
 	m := meta.NewMPRIS()
 	m.Target(t)
 	return c, m, nil

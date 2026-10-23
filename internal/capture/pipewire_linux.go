@@ -26,6 +26,7 @@ const pollInterval = 250 * time.Millisecond
 // describes it.
 type streamNode struct {
 	key      string // object.serial or sink-input index
+	id       int    // PipeWire's object id; the sink-input index on PulseAudio
 	rate     int
 	channels int
 	running  bool
@@ -37,8 +38,15 @@ type streamNode struct {
 // recreates its stream (a new item at another rate, a pause that tore the
 // stream down) the recorder follows the new node.
 type PipeWire struct {
+	// MuteOutput sends the player's stream to a sink nobody hears while it
+	// is recorded (player.mute_output): the capture reads the stream itself,
+	// so muting the stream would silence the recording too.
+	MuteOutput bool
+
 	logf    func(format string, args ...any)
 	backend procBackend
+	// silenced is the stream sent to the muted sink, if any.
+	silenced *streamNode
 
 	frames   chan Chunk
 	overruns atomic.Int64
@@ -51,7 +59,19 @@ type procBackend interface {
 	name() string
 	find(t target.Target) (streamNode, bool, error)
 	record(ctx context.Context, n streamNode, f pcm.Format) *exec.Cmd
+	// silence moves the stream to the muted sink, made on first use;
+	// unsilence moves it back to the default sink; dropSink removes the
+	// muted sink.
+	silence(n streamNode) error
+	unsilence(n streamNode) error
+	dropSink()
 }
+
+// mutedSink is the sink a muted player plays into.
+const (
+	mutedSink        = "spytify-muted"
+	mutedDescription = "Spytify (muted)"
+)
 
 // NewLinux picks PipeWire when pw-record and pw-dump exist, PulseAudio's
 // parec and pactl otherwise.
@@ -95,8 +115,29 @@ func (p *PipeWire) Close() error {
 			p.cancel()
 			<-p.done
 		}
+		if p.silenced != nil {
+			// The stream may be gone already; the sink goes either way.
+			_ = p.backend.unsilence(*p.silenced)
+			p.backend.dropSink()
+			p.logf("capture: the player plays on the default output again")
+		}
 	})
 	return nil
+}
+
+// silence sends a newly found stream to the muted sink.
+func (p *PipeWire) silence(n streamNode) {
+	if !p.MuteOutput || (p.silenced != nil && p.silenced.key == n.key) {
+		return
+	}
+	if err := p.backend.silence(n); err != nil {
+		p.logf("capture: could not mute the player on this computer: %v", err)
+		return
+	}
+	if p.silenced == nil {
+		p.logf("capture: the player plays into %q while it is recorded", mutedDescription)
+	}
+	p.silenced = &n
 }
 
 func (p *PipeWire) run(ctx context.Context, t target.Target) {
@@ -125,6 +166,7 @@ func (p *PipeWire) run(ctx context.Context, t target.Target) {
 			f.Channels = 2
 		}
 		p.logf("capture: %s stream %s, %s", p.backend.name(), node.key, f)
+		p.silence(node)
 		p.stream(ctx, t, node, f)
 		sleep(ctx, 100*time.Millisecond)
 	}
@@ -245,7 +287,7 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 		if !match {
 			continue
 		}
-		n := streamNode{key: strconv.Itoa(num(props["object.serial"])), running: o.Info.State == "running", order: int64(num(props["object.serial"]))}
+		n := streamNode{key: strconv.Itoa(num(props["object.serial"])), id: o.ID, running: o.Info.State == "running", order: int64(num(props["object.serial"]))}
 		if formats := o.Info.Params["Format"]; len(formats) > 0 {
 			n.rate = num(formats[0]["rate"])
 			n.channels = num(formats[0]["channels"])
@@ -283,4 +325,57 @@ func num(v any) int {
 		return i
 	}
 	return 0
+}
+
+func (pipewireTools) silence(n streamNode) error {
+	if _, ok := pipewireNodeID(mutedSink); !ok {
+		props := "{ factory.name=support.null-audio-sink node.name=" + mutedSink + " node.description=\"" + mutedDescription + "\"" +
+			" media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] priority.session=1 priority.driver=1 }"
+		if out, err := exec.Command("pw-cli", "create-node", "adapter", props).CombinedOutput(); err != nil {
+			return fmt.Errorf("pw-cli create-node: %v %s", err, out)
+		}
+		// The policy routes to a sink once it is in the graph.
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			if _, ok := pipewireNodeID(mutedSink); ok {
+				break
+			}
+			if time.Now().After(deadline) {
+				return errors.New("the muted sink did not appear")
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if out, err := exec.Command("pw-metadata", strconv.Itoa(n.id), "target.object", mutedSink).CombinedOutput(); err != nil {
+		return fmt.Errorf("pw-metadata: %v %s", err, out)
+	}
+	return nil
+}
+
+func (pipewireTools) unsilence(n streamNode) error {
+	return exec.Command("pw-metadata", "-d", strconv.Itoa(n.id), "target.object").Run()
+}
+
+func (pipewireTools) dropSink() {
+	if id, ok := pipewireNodeID(mutedSink); ok {
+		_ = exec.Command("pw-cli", "destroy", strconv.Itoa(id)).Run()
+	}
+}
+
+// pipewireNodeID finds a node by its node.name.
+func pipewireNodeID(name string) (int, bool) {
+	out, err := exec.Command("pw-dump").Output()
+	if err != nil {
+		return 0, false
+	}
+	var objs []pwObject
+	if json.Unmarshal(out, &objs) != nil {
+		return 0, false
+	}
+	for _, o := range objs {
+		if o.Type == "PipeWire:Interface:Node" && str(o.Info.Props["node.name"]) == name {
+			return o.ID, true
+		}
+	}
+	return 0, false
 }

@@ -34,19 +34,22 @@ const (
 
 // Row is one track of the session list.
 type Row struct {
-	ID         string
-	Artist     string
-	Title      string
-	Album      string
-	LengthMs   int64
-	CoverURL   string
-	Started    time.Time
-	Status     RowStatus
-	Reason     proto.SkipReason
-	Path       string
-	DurationMs int64
-	Bytes      int64
-	TaggedBy   string
+	ID       string
+	Artist   string
+	Title    string
+	Album    string
+	LengthMs int64
+	CoverURL string
+	// SourceRate and SourceChannels describe the captured stream, when known.
+	SourceRate     int
+	SourceChannels int
+	Started        time.Time
+	Status         RowStatus
+	Reason         proto.SkipReason
+	Path           string
+	DurationMs     int64
+	Bytes          int64
+	TaggedBy       string
 }
 
 // Done reports whether the row's file is closed (saved or skipped).
@@ -259,9 +262,20 @@ func (m *Model) Apply(ev proto.Event) {
 		m.mu.Lock()
 		_ = ev.Decode(&m.s.Level)
 		levels := append([]func(){}, m.levels...)
+		// Audio is back: the warning that none arrived no longer holds.
+		cleared := m.s.LastError != nil && m.s.LastError.Code == "capture_stalled"
+		if cleared {
+			m.s.LastError = nil
+		}
+		listeners := append([]func(){}, m.listeners...)
 		m.mu.Unlock()
 		for _, l := range levels {
 			l()
+		}
+		if cleared {
+			for _, l := range listeners {
+				l()
+			}
 		}
 		return
 	}
@@ -321,6 +335,9 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		m.retire(s)
 		s.Current = &Row{ID: e.ID, Artist: e.Artist, Title: e.Title, Album: e.Album, LengthMs: e.LengthMs,
 			CoverURL: e.CoverURL, Started: m.now(), Status: Recording}
+		if e.Source != nil {
+			s.Current.SourceRate, s.Current.SourceChannels = e.Source.SampleRate, e.Source.Channels
+		}
 	case proto.EventTrackFinished:
 		var e proto.TrackFinishedEvent
 		if ev.Decode(&e) != nil {

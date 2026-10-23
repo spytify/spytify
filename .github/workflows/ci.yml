@@ -35,8 +35,17 @@ jobs:
         run: go vet ./...
       - name: Schema is generated
         run: go generate ./pkg/proto && git diff --exit-code pkg/proto/schema.json
+      - name: Build FakePlayer, the scriptable test player (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          scripts/build-fakeplayer-macos.sh "$RUNNER_TEMP"
+          scripts/allow-fakeplayer-tcc.sh "$RUNNER_TEMP/FakePlayer.app"
+          echo "SPYTIFY_FAKE_APP=$RUNNER_TEMP/FakePlayer.app" >> "$GITHUB_ENV"
       - name: Unit, scenario, UI and end-to-end tests
         run: go run gotest.tools/gotestsum@v1.12.3 --format testname --jsonfile test.jsonl -- -race ./...
+      - name: What macOS said about Apple events (on failure)
+        if: failure() && runner.os == 'macOS'
+        run: log show --last 10m --style compact --predicate 'subsystem == "com.apple.TCC" OR process == "appleeventsd" OR process == "tccd"' | grep -i -E "fakeplayer|osascript|AppleEvents" | tail -60 || true
       - name: Keep the results for the test badge
         if: always() && matrix.os == 'ubuntu-24.04'
         uses: actions/upload-artifact@v4
@@ -138,17 +147,25 @@ jobs:
           ./spytify-cli.exe --help > /dev/null
           set +e; ./spytify-tap.exe; code=$?; set -e
           test "$code" -eq 2
-      - name: The capture helper records a running process
-        continue-on-error: true
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: scripts/ci
+      - name: An audio output for the runner (the Scream virtual driver)
+        shell: pwsh
+        run: src/scripts/ci/windows-audio-device.ps1
+      - name: The capture helper records a process playing a tone, and pins its volume
         run: |
-          powershell -NoProfile -Command 'Start-Sleep 30' &
-          sleep 2
-          pid=$(powershell -NoProfile -Command '(Get-Process powershell | Sort-Object StartTime -Descending | Select-Object -First 1).Id' | tr -d '\r')
-          set +e; timeout 5 ./spytify-tap.exe --pid "$pid" > tap.raw; echo "exit $?"; set -e
-          head -1 tap.raw
-          ls -l tap.raw
-          # No audio device on the runner: exit 4 (no session) is the expected answer.
-          set +e; ./spytify-tap.exe --pid "$pid" --get-volume; echo "get-volume exit $?"; set -e
+          # A process playing, by its Windows PID (bash's $! is not one).
+          pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
+          sleep 4
+          set +e; timeout 3 ./spytify-tap.exe --pid "$pid" > tap.raw; code=$?; set -e
+          echo "spytify-tap exit $code (124: stopped by timeout)"
+          python src/scripts/ci/tap-level.py tap.raw 2 -20
+          ./spytify-tap.exe --pid "$pid" --set-volume 0.25
+          v=$(./spytify-tap.exe --pid "$pid" --get-volume | tr -d '\r')
+          echo "volume $v"
+          test "$v" = "0.250"
 
   macos-build:
     runs-on: macos-15

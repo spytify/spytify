@@ -13,6 +13,8 @@ import (
 // spytifyd is up. It returns the summary of the trace the previous run left,
 // which moves to path.1.
 func keepCrashes(path string) (previous string) {
+	// Let go of a file set before, which Windows would not rename.
+	_ = debug.SetCrashOutput(nil, debug.CrashOptions{})
 	if b, err := os.ReadFile(path); err == nil && len(bytes.TrimSpace(b)) > 0 {
 		previous = crashSummary(string(b))
 		_ = os.Rename(path, path+".1")

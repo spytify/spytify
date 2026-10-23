@@ -47,7 +47,9 @@ func NewDarwin(helperPath string, mute bool, logf func(format string, args ...an
 	}
 	// The helper finds the player's processes itself and waits for them.
 	args := func(t target.Target) ([]string, bool) { return TapArgs(t, mute), true }
-	return newHelper(helper, args, logf), nil
+	h := newHelper(helper, args, logf)
+	h.running = func(t target.Target) bool { _, ok := target.FindProcess(t); return ok }
+	return h, nil
 }
 
 // TapArgs are the spytify-tap arguments that select the target.

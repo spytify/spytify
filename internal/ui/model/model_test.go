@@ -188,3 +188,25 @@ func TestClearRowsSurvivesAReplay(t *testing.T) {
 		t.Fatalf("a later track: rows %+v", s.Rows)
 	}
 }
+
+func TestAudioBackClearsTheNoAudioWarning(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "no audio"}))
+	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{}))
+	if e := m.Snapshot().LastError; e != nil {
+		t.Fatalf("warning kept after audio came back: %+v", e)
+	}
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
+	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{}))
+	if e := m.Snapshot().LastError; e == nil || e.Code != "disk_full" {
+		t.Fatalf("other errors must stay: %+v", e)
+	}
+}
+
+func TestTrackStartedKeepsTheSourceFormat(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-001", Title: "A"}, Source: &proto.AudioSource{SampleRate: 44100, Channels: 2}}))
+	if c := m.Snapshot().Current; c == nil || c.SourceRate != 44100 || c.SourceChannels != 2 {
+		t.Fatalf("current %+v", c)
+	}
+}

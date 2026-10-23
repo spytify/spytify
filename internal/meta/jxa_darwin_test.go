@@ -33,7 +33,9 @@ func TestPollScriptWithAbsentPlayer(t *testing.T) {
 	if got[0].Kind != TrackChanged || !got[0].Track.Empty() || got[1].Kind != StatusChanged || got[1].Status != Stopped {
 		t.Fatalf("events = %+v", got)
 	}
-	if err := j.Control("next"); err != ErrNoPlayer {
-		t.Fatalf("Control on an absent player: %v", err)
+	for _, cmd := range []string{"next", "restart"} {
+		if err := j.Control(cmd); err != ErrNoPlayer {
+			t.Fatalf("Control(%q) on an absent player: %v", cmd, err)
+		}
 	}
 }

@@ -37,8 +37,17 @@ jobs:
             dist/*.deb
             dist/*.rpm
 
+  # Signing and notarising run once the secrets exist: MACOS_CERT_P12 (a
+  # Developer ID Application certificate, base64), MACOS_CERT_PASSWORD,
+  # MACOS_SIGN_IDENTITY, and the App Store Connect API key NOTARY_KEY (the
+  # .p8, base64), NOTARY_KEY_ID, NOTARY_ISSUER.
   macos:
     runs-on: macos-15
+    outputs:
+      notarized: ${{ steps.notarize.outputs.done }}
+    env:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -46,11 +55,40 @@ jobs:
           go-version-file: go.mod
       - name: Spytify.app and the command-line tools
         run: SPYTIFY_VERSION="${GITHUB_REF_NAME#v}" scripts/build-macos.sh dist/macos
+      - name: Sign with the Developer ID
+        if: env.MACOS_CERT_P12 != ''
+        env:
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          SPYTIFY_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          kc="$RUNNER_TEMP/sign.keychain-db"
+          pw="$(openssl rand -hex 16)"
+          security create-keychain -p "$pw" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$pw" "$kc"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          scripts/sign-macos.sh dist/macos
       - name: Disk image and zip
         run: |
           v="${GITHUB_REF_NAME#v}"
           hdiutil create -volname Spytify -srcfolder dist/macos/Spytify.app -ov -format UDZO "dist/Spytify-$v-macos.dmg"
           (cd dist/macos && zip -q -r "../spytify-$v-macos-cli.zip" spytifyd spytify-cli spytify-tap)
+      - name: Notarise
+        id: notarize
+        if: env.MACOS_CERT_P12 != '' && env.NOTARY_KEY != ''
+        env:
+          SPYTIFY_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          SPYTIFY_NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          SPYTIFY_NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+        run: |
+          echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          SPYTIFY_NOTARY_KEY="$RUNNER_TEMP/notary.p8" scripts/notarize-macos.sh dist/*.dmg dist/*.zip
+          rm "$RUNNER_TEMP/notary.p8"
+          echo "done=true" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: release-macos
@@ -58,8 +96,14 @@ jobs:
             dist/*.dmg
             dist/*.zip
 
+  # Authenticode signing runs once WINDOWS_CERT_PFX (base64) and
+  # WINDOWS_CERT_PASSWORD exist.
   windows:
     runs-on: ubuntu-24.04
+    outputs:
+      signed: ${{ steps.sign.outputs.done }}
+    env:
+      WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -67,11 +111,25 @@ jobs:
           go-version-file: go.mod
       - name: Install MinGW-w64
         run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64
-      - name: Spytify.exe and the command-line tools, zipped
+      - name: Spytify.exe and the command-line tools
         run: |
           v="${GITHUB_REF_NAME#v}"
           SPYTIFY_VERSION="$v" scripts/build-windows.sh "dist/spytify-$v-windows-amd64"
           cp README.md LICENSE "dist/spytify-$v-windows-amd64/"
+      - name: Sign with Authenticode
+        id: sign
+        if: env.WINDOWS_CERT_PFX != ''
+        env:
+          SPYTIFY_WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          sudo apt-get install -y -qq osslsigncode
+          echo "$WINDOWS_CERT_PFX" | base64 --decode > "$RUNNER_TEMP/cert.pfx"
+          SPYTIFY_WINDOWS_PFX="$RUNNER_TEMP/cert.pfx" scripts/sign-windows.sh "dist/spytify-${GITHUB_REF_NAME#v}-windows-amd64"
+          rm "$RUNNER_TEMP/cert.pfx"
+          echo "done=true" >> "$GITHUB_OUTPUT"
+      - name: Zip
+        run: |
+          v="${GITHUB_REF_NAME#v}"
           (cd dist && zip -q -r "spytify-$v-windows-amd64.zip" "spytify-$v-windows-amd64")
       - uses: actions/upload-artifact@v4
         with:
@@ -92,10 +150,15 @@ jobs:
       - name: Draft release with every file
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTARIZED: ${{ needs.macos.outputs.notarized }}
+          SIGNED: ${{ needs.windows.outputs.signed }}
         run: |
           pre=""
           case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
           (cd files && sha256sum * > SHA256SUMS)
+          notes=""
+          [ "$NOTARIZED" = true ] || notes="The macOS app is not notarised: the first time, allow it in System Settings > Privacy & Security > Open Anyway. "
+          [ "$SIGNED" = true ] || notes="${notes}The Windows files are not signed, so SmartScreen warns before the first run. "
           gh release create "$GITHUB_REF_NAME" files/* --repo "$GITHUB_REPOSITORY" --draft $pre \
             --title "Spytify $GITHUB_REF_NAME" --generate-notes \
-            --notes "The macOS app is not notarised yet: the first time, allow it in System Settings > Privacy & Security > Open Anyway. The Windows build is a first draft."
+            --notes "${notes}The Windows build is a first draft."
