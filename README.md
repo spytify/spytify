@@ -203,6 +203,19 @@ On macOS, the capture helper is checked against what `afplay` plays. It needs th
 go test -tags macos_capture -v ./test/macos/
 ```
 
+The AppleScript side is checked against FakePlayer, a scriptable macOS app that plays a timeline ([`macos/fakeplayer`](macos/fakeplayer)). FakePlayer runs the test as its own child, so macOS asks for no Automation consent; CI also writes that consent into the runner's TCC database:
+
+```sh
+scripts/build-fakeplayer-macos.sh && SPYTIFY_FAKE_APP=bin/FakePlayer.app go test -run TestJXAWithTheFakePlayer -v ./internal/meta/
+```
+
+With a real player, `gate1` writes ten test tracks to play from the player's local files, then compares each recording with its track by the same rule:
+
+```sh
+go run ./internal/tools/gate1 export -dir ~/Gate1   # then play them, recording to WAV or FLAC with normalize off
+go run ./internal/tools/gate1 check -dir ~/Gate1 -out ~/Music/Spytify
+```
+
 ## Contributing
 
 Issues and pull requests are welcome. Run `gofmt` and `go test ./...` before you push; CI also builds every platform, runs the PipeWire scenarios, and runs the tests and the shipped executables on Windows.
