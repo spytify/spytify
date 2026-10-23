@@ -56,6 +56,7 @@ namespace EspionSpotify.Translations
         public static TranslationKeys LogPreviousLogs => TranslationKeys.logPreviousLogs;
         public static TranslationKeys LogRecorded => TranslationKeys.logRecorded;
         public static TranslationKeys LogRecordedFileNotFound => TranslationKeys.logRecordedFileNotFound;
+        public static TranslationKeys LogPlaylistUpdated => TranslationKeys.logPlaylistUpdated;
         public static TranslationKeys LogRecording => TranslationKeys.logRecording;
         public static TranslationKeys LogRecordingTimerDone => TranslationKeys.logRecordingTimerDone;
         public static TranslationKeys LogSpotifyConnecting => TranslationKeys.logSpotifyConnecting;
