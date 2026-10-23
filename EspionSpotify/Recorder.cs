@@ -172,7 +172,9 @@ namespace EspionSpotify
                 try
                 {
                     var existingRecordingPath = _fileManager.GetOutputFileAndInitDirectories().ToMediaFilePath();
-                    M3uPlaylist.AppendCompletedRecording(existingRecordingPath, _track, CountSeconds);
+                    var playlistPath = M3uPlaylist.AppendCompletedRecording(existingRecordingPath, _track, CountSeconds);
+                    if (playlistPath != null)
+                        _form.WriteIntoConsole(I18NKeys.LogPlaylistUpdated, _track.ToString(), playlistPath);
                 }
                 catch (Exception ex)
                 {
@@ -277,7 +279,9 @@ namespace EspionSpotify
 
             try
             {
-                M3uPlaylist.AppendCompletedRecording(_currentOutputFile.ToMediaFilePath(), _track, CountSeconds);
+                var playlistPath = M3uPlaylist.AppendCompletedRecording(_currentOutputFile.ToMediaFilePath(), _track, CountSeconds);
+                if (playlistPath != null)
+                    _form.WriteIntoConsole(I18NKeys.LogPlaylistUpdated, _track.ToString(), playlistPath);
             }
             catch (Exception ex)
             {
