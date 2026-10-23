@@ -129,6 +129,12 @@ func (p *Player) push(pos int64, ev meta.Event) {
 // schedule appends the spans and events of items[from:] starting at stream
 // position base. Notifications never land before base: a skip happens now.
 func (p *Player) schedule(from int, base int64, first bool) {
+	p.scheduleFrom(from, base, first, false)
+}
+
+// scheduleFrom is schedule; restart marks the first item's TrackChanged as
+// the same item started over.
+func (p *Player) scheduleFrom(from int, base int64, first, restart bool) {
 	items := p.tl.Items
 	pos := base
 	if first && p.tl.LeadInMs > 0 {
@@ -158,7 +164,7 @@ func (p *Player) schedule(from int, base int64, first bool) {
 			p.push(notify, meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: -1})
 			playing = true
 		}
-		p.push(notify, meta.Event{Kind: meta.TrackChanged, Track: p.Info(i), PositionMs: 0})
+		p.push(notify, meta.Event{Kind: meta.TrackChanged, Track: p.Info(i), PositionMs: 0, Restart: restart && i == from})
 		pauseAt := f.FramesFromMs(it.PauseAtMs)
 		if it.PauseMs > 0 && pauseAt > 0 && pauseAt < total {
 			p.spans = append(p.spans, span{format: f, frames: pauseAt, owner: i, audio: true})
@@ -209,7 +215,7 @@ func (p *Player) At(ms int64, fn func()) {
 // Control queues a transport command: play, pause, next, previous.
 func (p *Player) Control(cmd string) error {
 	switch cmd {
-	case "play", "pause", "playpause", "next", "previous":
+	case "play", "pause", "playpause", "next", "previous", "restart":
 	default:
 		return meta.ErrUnsupported
 	}
@@ -245,9 +251,9 @@ func (p *Player) apply(ctx context.Context, sink Sink, cmd string) error {
 	}
 	var immediate []meta.Event
 	switch cmd {
-	case "next", "previous":
+	case "next", "previous", "restart":
 		next := owner + 1
-		if cmd == "previous" {
+		if cmd != "next" {
 			next = owner
 		}
 		if next < 0 {
@@ -257,7 +263,7 @@ func (p *Player) apply(ctx context.Context, sink Sink, cmd string) error {
 		p.events = nil
 		p.paused = false
 		if next < len(p.tl.Items) {
-			p.schedule(next, p.pos, false)
+			p.scheduleFrom(next, p.pos, false, next == owner)
 		} else {
 			p.push(p.pos, meta.Event{Kind: meta.StatusChanged, Status: meta.Stopped, PositionMs: -1})
 		}

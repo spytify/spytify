@@ -167,6 +167,44 @@ func (w testWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// A restart of the same track mid-way (player.control restart, or repeat
+// one) discards the partial take and records the track from its start.
+func TestRestartRecordsTheTrackAgain(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	tl.Items = tl.Items[:1]
+	tl.Items[0].LengthMs = 8000
+	tl.Expect = nil
+	s := newScenario(t, tl, nil)
+	s.player.At(4000, func() {
+		if err := s.core.Control(proto.CmdRestart); err != nil {
+			t.Errorf("restart: %v", err)
+		}
+	})
+	runWith(t, s, SessionOptions{EndOnStop: true})
+	files := fake.AudioFiles(s.out)
+	if len(files) != 1 {
+		t.Fatalf("files %v\n%s", files, s.logs)
+	}
+	var skipped []proto.SkipReason
+	for _, ev := range s.events.all() {
+		var sk proto.TrackSkippedEvent
+		if ev.Method == proto.EventTrackSkipped && ev.Decode(&sk) == nil {
+			skipped = append(skipped, sk.Reason)
+		}
+	}
+	if len(skipped) != 1 || skipped[0] != proto.SkipIncomplete {
+		t.Fatalf("skipped %v, want the partial take as incomplete", skipped)
+	}
+	gotF, got, err := pcm.ReadWAV(filepath.Join(s.out, files[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantF, want, _ := tl.ItemAudio(0)
+	if c := pcm.Compare(wantF, want, gotF, got, fake.TrimDB, fake.SearchMs); !c.Matches(fake.MaxLagMs, fake.MaxErrorDB) {
+		t.Fatalf("restarted take does not match the track: %+v\n%s", c, s.logs)
+	}
+}
+
 // directSession drives a Session by hand, for states a timeline cannot
 // reach, such as a session that starts in the middle of a track.
 func directSession(t *testing.T) (*Session, *recorder, string) {

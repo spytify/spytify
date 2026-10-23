@@ -105,6 +105,8 @@ type change struct {
 	lo, hi   int64
 	expected int64
 	ready    int64
+	// restart: the same item started over, so the take before is partial.
+	restart bool
 }
 
 // sessionDeps is what a session needs from the core.
@@ -164,7 +166,7 @@ type Session struct {
 
 func newSession(id string, deps sessionDeps, opts SessionOptions) *Session {
 	s := &Session{id: id, deps: deps, opts: opts, status: meta.Stopped, stopCh: make(chan stopMode, 4), lastSound: time.Now()}
-	s.snap = proto.SessionStatusResult{State: proto.StateWaiting, SessionID: id}
+	s.snap = proto.SessionStatusResult{State: proto.StateIdle, SessionID: id}
 	return s
 }
 
@@ -266,6 +268,8 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: err.Error(), Fatal: true})
 		s.done = true
 	}
+	// Clients learn that a session runs from this first transition.
+	s.setState(proto.StateWaiting)
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	for !s.done {
@@ -480,7 +484,7 @@ func (s *Session) onMeta(ev meta.Event) {
 			s.initial, s.initPos = &info, ev.PositionMs
 			return
 		}
-		s.onTrack(ev.Track, at)
+		s.onTrack(ev.Track, at, ev.Restart)
 	case meta.StatusChanged:
 		first := !s.gotStatus
 		s.gotStatus = true
@@ -503,26 +507,31 @@ func sameItem(a, b meta.TrackInfo) bool {
 	return a.Title == b.Title && strings.Join(a.Artists, ",") == strings.Join(b.Artists, ",")
 }
 
-func (s *Session) onTrack(info meta.TrackInfo, at int64) {
+// onTrack handles a TrackChanged. The same item again is a metadata
+// refresh, unless restart says it started over: then it is a new track,
+// cut like a skip.
+func (s *Session) onTrack(info meta.TrackInfo, at int64, restart bool) {
 	if info.Empty() {
 		s.endOfPlayback()
 		return
 	}
-	if s.pend != nil && sameItem(s.pend.info, info) {
-		s.pend.info = info
-		return
-	}
-	if c := s.cur; c != nil && s.pend == nil && sameItem(c.info, info) {
-		if c.provisional {
-			s.adopt(c, info)
+	if !restart {
+		if s.pend != nil && sameItem(s.pend.info, info) {
+			s.pend.info = info
 			return
 		}
-		if c.length == 0 && info.LengthMs > 0 && !s.warnedLen {
-			c.length = c.format.FramesFromMs(info.LengthMs)
+		if c := s.cur; c != nil && s.pend == nil && sameItem(c.info, info) {
+			if c.provisional {
+				s.adopt(c, info)
+				return
+			}
+			if c.length == 0 && info.LengthMs > 0 && !s.warnedLen {
+				c.length = c.format.FramesFromMs(info.LengthMs)
+			}
+			c.info = info
+			s.refreshState()
+			return
 		}
-		c.info = info
-		s.refreshState()
-		return
 	}
 	if c := s.cur; c != nil && c.provisional {
 		s.adopt(c, info)
@@ -531,20 +540,20 @@ func (s *Session) onTrack(info meta.TrackInfo, at int64) {
 	if s.pend != nil {
 		s.tryResolve(true)
 	}
-	s.pend = s.plan(info, at)
+	s.pend = s.plan(info, at, restart)
 }
 
 // plan places the search window for a track change noticed at sample at.
-func (s *Session) plan(info meta.TrackInfo, at int64) *change {
+func (s *Session) plan(info meta.TrackInfo, at int64, restart bool) *change {
 	r := s.ring
 	c := s.cur
-	ch := &change{info: info, at: at}
+	ch := &change{info: info, at: at, restart: restart}
 	switch {
 	case c == nil:
 		ch.kind = changeFirst
 		ch.lo = at - s.ms(lateNotifyMs)
 		ch.expected = at
-	case c.length > 0 && at >= c.start+c.length-s.window-s.ms(earlySlackMs):
+	case !restart && c.length > 0 && at >= c.start+c.length-s.window-s.ms(earlySlackMs):
 		e := c.start + c.length
 		late := s.soundAt(c) + c.length
 		ch.kind, ch.lo, ch.hi, ch.expected = changeBoundary, e-s.window, late+s.window, e
@@ -686,16 +695,19 @@ func (s *Session) tryResolve(force bool) bool {
 	s.deps.log.Debugf("cut for %q at %d ms (kind %d, noticed at %d ms, window %d..%d ms)",
 		p.info.Title, f.MsFromFrames(cut), p.kind, f.MsFromFrames(p.at), f.MsFromFrames(p.lo), f.MsFromFrames(p.hi))
 	s.pend = nil
-	s.cutAt(cut, p.info, p.kind == changeFirst)
+	s.cutAt(cut, p.info, p.kind == changeFirst, p.restart)
 	return true
 }
 
 func f1ms(r *Ring) int64 { return r.Format().FramesFromMs(1) }
 
 // cutAt ends the current segment at cut and starts the next one there.
-func (s *Session) cutAt(cut int64, info meta.TrackInfo, first bool) {
+func (s *Session) cutAt(cut int64, info meta.TrackInfo, first, restart bool) {
 	prev := s.cur
 	afterAd := false
+	if prev != nil && restart {
+		prev.partial = true
+	}
 	if prev != nil {
 		s.write(prev, prev.drained, cut)
 		s.closeSegment(prev, cut)

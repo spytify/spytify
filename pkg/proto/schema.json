@@ -600,7 +600,7 @@
       }
     },
     "player.control": {
-      "description": "play, pause, next, previous through the player's local interface",
+      "description": "play, pause, next, previous, restart (from 0:00) through the player's local interface",
       "params": {
         "$ref": "#/$defs/PlayerControlParams"
       },

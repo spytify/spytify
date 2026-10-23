@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,7 +18,8 @@ import (
 
 var levelRank = map[string]int{"error": 0, "info": 1, "debug": 2}
 
-// logsScreen is the v1 console, filtered by level.
+// logsScreen is the v1 console, filtered by level, under the diagnostics:
+// the checks core.info runs, folded away while they all pass.
 type logsScreen struct {
 	app   *App
 	root  fyne.CanvasObject
@@ -25,17 +28,34 @@ type logsScreen struct {
 	lines []proto.LogEvent
 	all   []proto.LogEvent
 	path  string
+
+	diag      *widget.Accordion
+	checks    *fyne.Container
+	lastState string
 }
 
 func newLogsScreen(a *App) *logsScreen {
 	l := &logsScreen{app: a, path: filepath.Join(a.opts.StateDir, "spytifyd.log")}
+	l.checks = container.NewVBox()
+	refresh := widget.NewButtonWithIcon("Run the checks again", theme.ViewRefreshIcon(), func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			_ = a.link.RefreshInfo(ctx)
+		}()
+	})
+	refresh.Importance = widget.LowImportance
+	l.diag = widget.NewAccordion(widget.NewAccordionItem("Diagnostics", container.NewVBox(l.checks, container.NewHBox(refresh))))
+
 	l.level = widget.NewSelect([]string{"error", "info", "debug"}, func(string) { l.filter() })
 	l.list = widget.NewList(
 		func() int { return len(l.lines) },
 		func() fyne.CanvasObject {
 			msg := widget.NewLabel("message")
 			msg.Wrapping = fyne.TextWrapWord
-			return container.NewBorder(nil, nil, widget.NewLabelWithStyle("00:00:00 info ", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}), nil, msg)
+			prefix := widget.NewLabelWithStyle("00:00:00 info ", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
+			prefix.SizeName = theme.SizeNameCaptionText
+			return container.NewBorder(nil, nil, prefix, nil, msg)
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.lines) {
@@ -52,7 +72,7 @@ func newLogsScreen(a *App) *logsScreen {
 			if line.Level == "error" {
 				prefix.Importance = widget.DangerImportance
 			} else {
-				prefix.Importance = widget.LowImportance
+				prefix.Importance = widget.MediumImportance
 			}
 			prefix.Refresh()
 			box.Objects[0].(*widget.Label).SetText(line.Msg)
@@ -68,9 +88,11 @@ func newLogsScreen(a *App) *logsScreen {
 		}
 		a.fa.Clipboard().SetContent(b.String())
 	})
+	copyAll.Importance = widget.LowImportance
 	open := widget.NewButtonWithIcon("Open log file", theme.DocumentIcon(), func() { _ = openPath(l.path) })
-	top := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open))
-	l.root = container.NewBorder(top, nil, nil, nil, l.list)
+	open.Importance = widget.LowImportance
+	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open))
+	l.root = container.NewBorder(container.NewVBox(l.diag, widget.NewSeparator(), tools), nil, nil, nil, l.list)
 	return l
 }
 
@@ -84,8 +106,43 @@ func padLevel(s string) string {
 func (l *logsScreen) content() fyne.CanvasObject { return l.root }
 
 func (l *logsScreen) render(s model.State) {
+	l.renderChecks(s)
 	l.all = s.Logs
 	l.filter()
+}
+
+func (l *logsScreen) renderChecks(s model.State) {
+	failing := failingChecks(s.Info.Checks)
+	title := fmt.Sprintf("Diagnostics · all %d checks pass", len(s.Info.Checks))
+	if failing > 0 {
+		title = fmt.Sprintf("Diagnostics · %d of %d checks need attention", failing, len(s.Info.Checks))
+	}
+	state := fmt.Sprint(title, s.Info.Checks, s.Info.Warnings)
+	if state == l.lastState {
+		return
+	}
+	l.lastState = state
+	var rows []fyne.CanvasObject
+	for _, c := range s.Info.Checks {
+		icon := theme.ConfirmIcon()
+		if !c.OK {
+			icon = theme.ErrorIcon()
+		}
+		rows = append(rows, container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(c.Name)), nil, clipped(c.Detail)))
+	}
+	for _, w := range s.Info.Warnings {
+		rows = append(rows, container.NewBorder(nil, nil, widget.NewIcon(theme.WarningIcon()), nil, wrapped(w)))
+	}
+	l.checks.Objects = rows
+	l.checks.Refresh()
+	l.diag.Items[0].Title = title
+	// Fold the checks away while they all pass; open them when one fails.
+	if failing > 0 {
+		l.diag.Open(0)
+	} else {
+		l.diag.Close(0)
+	}
+	l.diag.Refresh()
 }
 
 func (l *logsScreen) filter() {

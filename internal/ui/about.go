@@ -1,13 +1,14 @@
 package ui
 
 import (
+	"context"
 	"fmt"
-	"net/url"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -20,28 +21,34 @@ const disclaimer = "For personal use of content you are entitled to listen to; y
 type aboutScreen struct {
 	app      *App
 	root     fyne.CanvasObject
-	versions *widget.Label
-	target   *widget.Label
-	checks   *fyne.Container
+	versions *widget.RichText
+	target   *widget.RichText
 }
 
 func newAboutScreen(a *App) *aboutScreen {
-	s := &aboutScreen{app: a, versions: widget.NewLabel(""), target: widget.NewLabel(""), checks: container.NewVBox()}
+	s := &aboutScreen{app: a, versions: caption(""), target: caption("")}
 	logo := canvas.NewImageFromResource(Logo)
 	logo.FillMode = canvas.ImageFillContain
-	logo.SetMinSize(fyne.NewSize(64, 64))
-	project, _ := url.Parse("https://github.com/spytify/spytify")
-	tagline := widget.NewLabel("Records any application's audio, splits it into tracks and tags them.")
+	logo.SetMinSize(fyne.NewSize(96, 96))
+	tagline := widget.NewLabelWithStyle("Records any application's audio, splits it into tracks and tags them.", fyne.TextAlignCenter, fyne.TextStyle{})
 	tagline.Wrapping = fyne.TextWrapWord
-	legal := muted(disclaimer)
+	project := widget.NewButtonWithIcon("Project page", theme.HomeIcon(), func() { a.openURL(projectURL) })
+	donate := widget.NewButton("♥ Donate", func() { a.openURL(donateURL) })
+	donate.Importance = widget.HighImportance
+	updates := widget.NewButtonWithIcon("Check for updates", theme.DownloadIcon(), s.checkNow)
+	legal := widget.NewLabelWithStyle(disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	legal.Wrapping = fyne.TextWrapWord
-	s.root = container.NewVScroll(container.NewVBox(
-		container.NewBorder(nil, nil, logo, nil, container.NewVBox(widget.NewLabelWithStyle("Spytify", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), tagline)),
-		s.versions, s.target,
-		widget.NewCard("Checks", "", s.checks),
-		widget.NewHyperlink("github.com/spytify/spytify", project),
+	legal.SizeName = theme.SizeNameCaptionText
+	s.root = container.NewCenter(container.NewGridWrap(fyne.NewSize(520, 420), container.NewVBox(
+		container.NewCenter(logo),
+		widget.NewLabelWithStyle("Spytify", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		tagline,
+		container.NewCenter(s.versions),
+		container.NewCenter(s.target),
+		container.NewCenter(container.NewHBox(project, updates, donate)),
+		layout.NewSpacer(),
 		legal,
-	))
+	)))
 	return s
 }
 
@@ -50,30 +57,35 @@ func (s *aboutScreen) content() fyne.CanvasObject { return s.root }
 func (s *aboutScreen) render(st model.State) {
 	core := "not connected"
 	if st.HaveInfo {
-		core = fmt.Sprintf("%s (%s)", st.Info.Version, st.Info.Platform)
+		core = fmt.Sprintf("%s on %s", st.Info.Version, st.Info.Platform)
 	}
-	s.versions.SetText(fmt.Sprintf("UI %s · core %s · protocol %d", proto.Version, core, proto.Protocol))
+	setCaption(s.versions, fmt.Sprintf("App %s · recorder %s · protocol %d", proto.Version, core, proto.Protocol))
 	t := st.Info.Target
-	text := "Target process: " + t.Process
+	text := "Records " + t.Process
 	if t.BundleID != "" {
-		text += " · bundle " + t.BundleID
+		text += " (" + t.BundleID + ")"
 	}
-	if t.MPRIS != "" {
-		text += " · MPRIS " + t.MPRIS
-	}
-	s.target.SetText(text)
-	var rows []fyne.CanvasObject
-	for _, c := range st.Info.Checks {
-		icon := theme.ConfirmIcon()
-		if !c.OK {
-			icon = theme.ErrorIcon()
-		}
-		detail := muted(c.Detail)
-		detail.Wrapping = fyne.TextWrapWord
-		rows = append(rows, container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(c.Name)), nil, detail))
-	}
-	s.checks.Objects = rows
-	s.checks.Refresh()
+	setCaption(s.target, text)
+}
+
+func (s *aboutScreen) checkNow() {
+	go func() {
+		tag, page, err := latestRelease(context.Background())
+		fyne.Do(func() {
+			switch {
+			case err != nil:
+				s.app.showError(fmt.Errorf("update check: %w", err))
+			case tag != "" && newer(tag, proto.Version):
+				dialog.ShowConfirm("Update available", "Spytify "+tag+" is out. Open the release page?", func(ok bool) {
+					if ok {
+						s.app.openURL(page)
+					}
+				}, s.app.win)
+			default:
+				dialog.ShowInformation("Up to date", "Spytify "+proto.Version+" is the latest version.", s.app.win)
+			}
+		})
+	}()
 }
 
 const firstRunKey = "first-run-seen"

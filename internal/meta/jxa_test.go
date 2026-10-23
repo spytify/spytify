@@ -59,6 +59,27 @@ func TestJXATracker(t *testing.T) {
 	}
 }
 
+func TestJXATrackerSeesARestart(t *testing.T) {
+	k := &jxaTracker{}
+	at := func(pos string) []Event {
+		return k.next(poll(t, `{"running":true,"state":"playing","position":`+pos+`,"track":{"id":"vendor:track:7","name":"Song","artist":"A","duration":200000}}`))
+	}
+	at("95.0")
+	if evs := at("95.25"); len(evs) != 0 {
+		t.Fatalf("progress gave %+v", evs)
+	}
+	if evs := at("60.0"); len(evs) != 0 {
+		t.Fatalf("a seek back that is not to the start gave %+v", evs)
+	}
+	evs := at("0.2")
+	if len(evs) != 1 || evs[0].Kind != TrackChanged || !evs[0].Restart || evs[0].Track.Title != "Song" {
+		t.Fatalf("restart = %+v", evs)
+	}
+	if evs := at("0.45"); len(evs) != 0 {
+		t.Fatalf("restart reported twice: %+v", evs)
+	}
+}
+
 func TestJXATrackerStartsWithPlayerAbsent(t *testing.T) {
 	k := &jxaTracker{}
 	evs := k.next(poll(t, `{"running":false}`))

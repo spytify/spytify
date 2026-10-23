@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/settings"
@@ -147,11 +148,21 @@ func TestSecondStartIsRefused(t *testing.T) {
 	if c.ffErr != nil {
 		t.Skip(c.ffErr)
 	}
+	rec := &recorder{}
+	c.SetBroadcaster(rec.add)
 	if err := call(t, c, proto.MethodSessionStart, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := call(t, c, proto.MethodSessionStart, nil, nil); code(err) != proto.CodeSessionActive {
 		t.Fatalf("second start: %v", err)
+	}
+	// A client learns that a session runs from its first state event.
+	deadline := time.Now().Add(5 * time.Second)
+	for !announced(rec.all(), proto.StateWaiting) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no session.state waiting announced: %+v", rec.all())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	var stop proto.SessionStopResult
 	if err := call(t, c, proto.MethodSessionStop, proto.SessionStopParams{Now: true}, &stop); err != nil {
@@ -195,4 +206,14 @@ func TestCoreInfoAndLogs(t *testing.T) {
 	if err := call(t, c, proto.MethodEventsRecent, nil, &recent); err != nil || len(recent.Events) == 0 {
 		t.Fatalf("recent events: %d %v", len(recent.Events), err)
 	}
+}
+
+func announced(events []proto.Event, st proto.SessionState) bool {
+	for _, ev := range events {
+		var e proto.SessionStateEvent
+		if ev.Method == proto.EventSessionState && ev.Decode(&e) == nil && e.State == st {
+			return true
+		}
+	}
+	return false
 }

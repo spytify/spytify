@@ -77,10 +77,13 @@ scripts/build-macos.sh                                               # macOS: bi
 
 The app is a client of `spytifyd`, like the CLI: closing the window does not stop a recording, and the tray menu (Start recording, Stop, Open window) keeps working while it is hidden (`app.minimize_to_tray`).
 
-- **Record**: the track being recorded (cover, progress, level, Skip), then every file of the session with its status, Reveal and Play, and the session totals with Open folder. Before a session it shows the checklist from `core.info`.
+The app bar holds the only Record button, which turns into Stop (and Stop now while the last track finishes), the player and format status, and Donate; an Update button appears there when a newer release is out (`app.check_updates`). The screens are tabs under it:
+
+- **Record**: the track being recorded (cover, progress, level, Skip), then every file of the session with its status, Reveal and Play, and the session totals with Open folder. A track already playing when you press Record is not recorded; **Record this track from the start** replays it from 0:00 so it is.
 - **Library**: every audio file in the output folder, newest first, with a search box.
-- **Settings**: one card per group with the TOML key under each field, a search box, Reset group, and a **Player** card that sets `SPYTIFY_TARGET_*` in your user `.env` and restarts the daemon.
-- **Logs** and **About**: the daemon's log by level, versions, the resolved target and the checks.
+- **Settings**: one section per group, the TOML key under each field, a search box, Reset per group, and a **Player** section that sets `SPYTIFY_TARGET_*` in your user `.env` and restarts the daemon.
+- **Logs**: the checks from `core.info` (folded while they all pass, open when one fails; the Record screen links here then), and the daemon's log by level.
+- **About**: versions, the resolved target, Check for updates and Donate.
 
 On macOS, open `bin/Spytify.app`. The first time, set the player in the Player card (process name and bundle id) and press **Save and restart spytifyd**; macOS then asks, once each, to let Spytify record system audio and to control the player. The app finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin` even though apps opened from Finder have no shell `PATH`. The build is ad-hoc signed: macOS asks for the permissions again after each rebuild, and another Mac will refuse to open it until it is signed and notarised.
 
@@ -125,7 +128,7 @@ bin/spytifyd --once --set output.dir=/srv/rec --set encode.format=flac
 | `set key=value...` / `get [key...]` / `reset [prefix]` | settings, validated by the daemon |
 | `tail [-n N] [-f]` | log lines |
 | `events` | every event as JSON lines |
-| `control play\|pause\|next\|previous` | `player.control` through MPRIS |
+| `control play\|pause\|next\|previous\|restart` | `player.control` through MPRIS or AppleScript; `restart` replays the current track from 0:00 |
 | `spotify-connect` | OAuth for `tags.source = spotify_api` |
 | `shutdown` | `core.shutdown` |
 

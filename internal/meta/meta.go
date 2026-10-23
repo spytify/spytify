@@ -88,6 +88,9 @@ type Event struct {
 	Status Status
 	// PositionMs is the playback position when known, or -1.
 	PositionMs int64
+	// Restart marks a TrackChanged for the same item started again from
+	// its beginning: repeat one, or a seek back to the start.
+	Restart bool
 }
 
 // NowPlaying is one OS metadata backend.

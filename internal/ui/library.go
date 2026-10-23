@@ -31,7 +31,9 @@ type libraryScreen struct {
 	search *widget.Entry
 	sortBy *widget.Select
 	list   *widget.List
-	count  *widget.Label
+	count  *widget.RichText
+	empty  fyne.CanvasObject
+	hint   *widget.Label
 
 	folder string
 	all    []libraryFile
@@ -45,17 +47,18 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.search.OnChanged = func(string) { l.filter() }
 	l.sortBy = widget.NewSelect([]string{"Newest", "Name"}, func(string) { l.filter() })
 	refresh := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { l.scan() })
-	l.count = muted("")
+	l.count = caption("")
+	l.hint = widget.NewLabel("")
+	l.empty = emptyState("No recordings yet", l.hint)
 	l.list = widget.NewList(
 		func() int { return len(l.shown) },
 		func() fyne.CanvasObject {
 			name := widget.NewLabelWithStyle("Name", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 			name.Truncation = fyne.TextTruncateEllipsis
-			sub := muted("Folder")
-			sub.Truncation = fyne.TextTruncateEllipsis
+			sub := clipped("Folder")
 			return container.NewBorder(nil, nil, nil, container.NewHBox(
-				widget.NewButtonWithIcon("", theme.SearchIcon(), nil),
-				widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)),
+				&widget.Button{Icon: theme.SearchIcon(), Importance: widget.LowImportance},
+				&widget.Button{Icon: theme.MediaPlayIcon(), Importance: widget.LowImportance}),
 				container.NewVBox(name, sub))
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
@@ -73,7 +76,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 			} else {
 				sub += " · "
 			}
-			text.Objects[1].(*widget.Label).SetText(sub + strings.ToUpper(strings.TrimPrefix(filepath.Ext(f.rel), ".")) + " · " + fmtBytes(f.size) + " · " + f.modTime.Format("2006-01-02 15:04"))
+			setCaption(text.Objects[1].(*widget.RichText), sub+strings.ToUpper(strings.TrimPrefix(filepath.Ext(f.rel), "."))+" · "+fmtBytes(f.size)+" · "+f.modTime.Format("2006-01-02 15:04"))
 			path := f.path
 			buttons.Objects[0].(*widget.Button).OnTapped = func() { _ = reveal(path) }
 			buttons.Objects[1].(*widget.Button).OnTapped = func() { _ = openPath(path) }
@@ -83,7 +86,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	// SetSelected runs the callback, which needs the list and the count.
 	l.sortBy.SetSelected("Newest")
 	top := container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search)
-	l.root = container.NewBorder(top, l.count, nil, nil, l.list)
+	l.root = container.NewBorder(top, container.NewPadded(l.count), nil, nil, container.NewStack(l.list, l.empty))
 	return l
 }
 
@@ -156,8 +159,18 @@ func (l *libraryScreen) filter() {
 		sort.Slice(shown, func(i, j int) bool { return shown[i].modTime.After(shown[j].modTime) })
 	}
 	l.shown = shown
-	l.count.SetText(pluralFiles(len(shown), len(l.all), l.folder))
+	setCaption(l.count, pluralFiles(len(shown), len(l.all), l.folder))
 	l.list.Refresh()
+	switch {
+	case len(l.all) == 0:
+		l.hint.SetText("Recorded tracks land in " + l.folder + ".")
+		l.empty.Show()
+	case len(shown) == 0:
+		l.hint.SetText("Nothing matches \"" + l.search.Text + "\".")
+		l.empty.Show()
+	default:
+		l.empty.Hide()
+	}
 }
 
 func pluralFiles(shown, all int, folder string) string {

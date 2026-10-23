@@ -76,9 +76,13 @@ func newFinisher(values func() settings.Values, ff *encode.FFmpeg, tags *tagServ
 }
 
 func (f *finisher) enqueue(j finishJob) {
-	f.mu.Lock()
-	f.claims[trackKey(j.info.Artist(), j.info.Title)] = true
-	f.mu.Unlock()
+	// A partial take is discarded, so it does not make the track a
+	// duplicate of itself.
+	if !j.partial {
+		f.mu.Lock()
+		f.claims[trackKey(j.info.Artist(), j.info.Title)] = true
+		f.mu.Unlock()
+	}
 	f.wg.Add(1)
 	f.jobs <- j
 }
@@ -175,6 +179,9 @@ func namingTrack(t tag.Track, info meta.TrackInfo) naming.Track {
 func (f *finisher) process(j finishJob) {
 	defer f.wg.Done()
 	defer func() {
+		if j.partial {
+			return
+		}
 		f.mu.Lock()
 		delete(f.claims, trackKey(j.info.Artist(), j.info.Title))
 		f.mu.Unlock()

@@ -196,6 +196,18 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal) []Event {
 		}
 		m.setOwner(name, newOwner)
 		return append([]Event{{Kind: PlayerAppeared, PositionMs: -1}}, m.snapshot(conn)...)
+	case mprisPlayer + ".Seeked":
+		if _, owner := m.current(); owner == "" || sig.Sender != owner || len(sig.Body) < 1 {
+			return nil
+		}
+		us, _ := toInt64(sig.Body[0])
+		m.mu.Lock()
+		last := m.last
+		m.mu.Unlock()
+		if us < 1_500_000 && !last.Empty() {
+			return []Event{{Kind: TrackChanged, Track: last, PositionMs: us / 1000, Restart: true}}
+		}
+		return nil
 	case propsInterface + ".PropertiesChanged":
 		if _, owner := m.current(); owner == "" || sig.Sender != owner || len(sig.Body) < 2 {
 			return nil
@@ -273,6 +285,9 @@ func (m *MPRIS) Target(t target.Target) {
 // Control sends a transport command through MPRIS, never through window
 // focus or synthetic keys.
 func (m *MPRIS) Control(cmd string) error {
+	if cmd == "restart" {
+		return m.restart()
+	}
 	method := map[string]string{"play": "Play", "pause": "Pause", "next": "Next", "previous": "Previous"}[cmd]
 	if method == "" {
 		return ErrUnsupported
@@ -292,6 +307,29 @@ func (m *MPRIS) Control(cmd string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return obj.CallWithContext(ctx, mprisPlayer+"."+method, 0).Err
+}
+
+// restart seeks the current track to its start.
+func (m *MPRIS) restart() error {
+	obj, err := m.player()
+	if err != nil {
+		return err
+	}
+	if v, err := obj.GetProperty(mprisPlayer + ".CanSeek"); err == nil {
+		if can, _ := v.Value().(bool); !can {
+			return ErrUnsupported
+		}
+	}
+	m.mu.Lock()
+	id := m.last.ID
+	m.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if id != "" && dbus.ObjectPath(id).IsValid() {
+		return obj.CallWithContext(ctx, mprisPlayer+".SetPosition", 0, dbus.ObjectPath(id), int64(0)).Err
+	}
+	// Seeking back past the start puts the position at 0.
+	return obj.CallWithContext(ctx, mprisPlayer+".Seek", 0, int64(-1<<40)).Err
 }
 
 func (m *MPRIS) Volume() (float64, error) {

@@ -370,10 +370,10 @@ func (a *app) eventsCmd() *cobra.Command {
 
 func (a *app) controlCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:       "control play|pause|next|previous",
+		Use:       "control play|pause|next|previous|restart",
 		Short:     "Send a transport command to the player",
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious},
+		ValidArgs: []string{proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.call(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: args[0]}, nil)
 		},

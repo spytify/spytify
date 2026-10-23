@@ -73,6 +73,9 @@ const (
 	CmdPause    = "pause"
 	CmdNext     = "next"
 	CmdPrevious = "previous"
+	// CmdRestart plays the current track again from its beginning, so a
+	// session started in the middle of it can record it whole.
+	CmdRestart = "restart"
 )
 
 // TargetInfo is the resolved SPYTIFY_TARGET_* configuration.

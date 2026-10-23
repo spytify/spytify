@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -74,7 +75,7 @@ func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	fa.Preferences().SetBool(firstRunKey, true)
 	m := model.New()
 	l := link.New(addr, m)
-	a := New(fa, l, m, Options{StateDir: t.TempDir(), Socket: addr, ManualRender: true})
+	a := New(fa, l, m, Options{StateDir: t.TempDir(), Socket: addr, ManualRender: true, NoUpdateCheck: true})
 	a.win.Resize(fyne.NewSize(920, 620))
 	return a, m, l
 }
@@ -131,6 +132,10 @@ func texts(o fyne.CanvasObject) []string {
 		switch w := o.(type) {
 		case *widget.Label:
 			out = append(out, w.Text)
+		case *widget.RichText:
+			out = append(out, w.String())
+		case *canvas.Text:
+			out = append(out, w.Text)
 		case *widget.Button:
 			out = append(out, w.Text)
 		case *widget.Card:
@@ -168,31 +173,65 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	feedSession(t, m)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Tagged", "Skipped: duplicate",
-		"2 saved · 1 skipped · 0 ads", "Stop", "● Player running", "FLAC"} {
+	for _, want := range []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Tagged", "Skipped: duplicate",
+		"2 saved · 1 skipped · 0 ads", "Stop", "Player is running", "FLAC", "♥ Donate", "Skip"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
 		}
 	}
-	if !contains(all, "● 2") {
-		t.Error("sidebar has no live count")
+	if a.tabs.Items[tabRecord].Text != "Record · 2" {
+		t.Errorf("Record tab title %q", a.tabs.Items[tabRecord].Text)
+	}
+	if a.action.Text != "Stop" || a.action.Importance != widget.DangerImportance {
+		t.Errorf("app bar action %q", a.action.Text)
 	}
 	snapshot(t, a, "record")
 }
 
-func TestEmptyStateShowsTheChecklist(t *testing.T) {
+func TestWaitingOffersToRestartTheTrack(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(defaults())
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
+	a.render()
+	all := texts(a.win.Content())
+	if !contains(all, "Waiting for the next track to start.") || !contains(all, "Record this track from the start") {
+		t.Fatalf("waiting state: %v", all)
+	}
+	snapshot(t, a, "waiting")
+}
+
+func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	m.SetConn(model.Connected, "")
 	m.SetInfo(info())
 	m.SetSettings(defaults())
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"Ready to record", "player running", "pid 4242", "capture helper", "turn crossfade and gapless playback off", "Record"} {
+	for _, want := range []string{"Ready to record", "Press Record, then play music in Player."} {
 		if !contains(all, want) {
-			t.Errorf("%q not on the empty state", want)
+			t.Errorf("%q not on the idle screen", want)
 		}
 	}
-	snapshot(t, a, "empty")
+	for _, unwanted := range []string{"pid 4242", "capture helper", "Open diagnostics"} {
+		if contains(all, unwanted) {
+			t.Errorf("%q is on the idle Record screen; the checks live in Logs", unwanted)
+		}
+	}
+	if n := len(buttons(a.win.Content(), "Record")); n != 1 {
+		t.Errorf("%d Record buttons; want the app bar's only", n)
+	}
+	snapshot(t, a, "idle")
+
+	// A failing check sends the user to the diagnostics.
+	failing := info()
+	failing.Checks[1].OK = false
+	m.SetInfo(failing)
+	a.render()
+	if !contains(texts(a.win.Content()), "Open diagnostics") {
+		t.Error("no way to the diagnostics while a check fails")
+	}
 }
 
 func TestOfflineScreen(t *testing.T) {
@@ -200,7 +239,7 @@ func TestOfflineScreen(t *testing.T) {
 	m.SetConn(model.Disconnected, "spytifyd is not running")
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"spytifyd is not running", "Start spytifyd", "/tmp/spytify.sock", "Player", "Save and restart spytifyd"} {
+	for _, want := range []string{"spytifyd is not running", "Start spytifyd", "/tmp/spytify.sock", "Player process", "Save and restart spytifyd"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the offline screen", want)
 		}
@@ -215,28 +254,63 @@ func TestOtherScreensRender(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	a.render()
-	for i, name := range []string{"library", "settings", "logs", "about"} {
-		a.sidebar.Select(i + 1)
+	for i, name := range map[int]string{tabLibrary: "library", tabSettings: "settings", tabLogs: "logs", tabAbout: "about"} {
+		a.showTab(i)
 		a.render()
 		snapshot(t, a, name)
 	}
-	a.sidebar.Select(2)
+
+	a.showTab(tabSettings)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"Output", "Output folder", "output.dir", "Encoding", "Tags", "Connect to the Spotify Web API", "Player", "Reset group"} {
+	for _, want := range []string{"Player", "Player process", "Output", "Output folder", "output.dir", "Encoding", "Tags", "Reset output settings"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the settings screen", want)
 		}
 	}
-	a.sidebar.Select(3)
+	s := a.screens[tabSettings].(*settingsScreen)
+	s.search.SetText("spotify")
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, "already recorded") || !contains(all, "session 20261023-120000 started") {
-		t.Errorf("logs screen: %v", all)
+	if all := texts(a.win.Content()); !contains(all, "Connect to the Spotify Web API") || !contains(all, "tags.spotify.client_id") || contains(all, "output.dir") {
+		t.Errorf("search for spotify: %v", all)
 	}
-	a.sidebar.Select(4)
+	s.search.SetText("")
+
+	a.showTab(tabLogs)
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, "core v2.0.0-alpha (darwin/arm64)") || !contains(all, "bundle org.example.player") {
-		t.Errorf("about screen: %v", all)
+	all = texts(a.win.Content())
+	for _, want := range []string{"Diagnostics · all 4 checks pass", "already recorded", "session 20261023-120000 started"} {
+		if !contains(all, want) {
+			t.Errorf("%q not on the logs screen", want)
+		}
+	}
+
+	a.showTab(tabAbout)
+	a.render()
+	all = texts(a.win.Content())
+	for _, want := range []string{"recorder v2.0.0-alpha on darwin/arm64", "(org.example.player)", "Check for updates"} {
+		if !contains(all, want) {
+			t.Errorf("%q not on the about screen", want)
+		}
+	}
+}
+
+func TestNewerVersion(t *testing.T) {
+	cases := []struct {
+		latest, current string
+		want            bool
+	}{
+		{"v2.0.0", "v2.0.0-alpha+f5dd96e", true},
+		{"v2.0.1", "v2.0.0", true},
+		{"v2.0.0", "v2.0.0", false},
+		{"v2.0.0-beta", "v2.0.0-alpha", false},
+		{"1.12", "v2.0.0-alpha", false},
+		{"", "v2.0.0", false},
+	}
+	for _, c := range cases {
+		if got := newer(c.latest, c.current); got != c.want {
+			t.Errorf("newer(%q, %q) = %v", c.latest, c.current, got)
+		}
 	}
 }
 
@@ -314,11 +388,11 @@ func TestButtonsSendActions(t *testing.T) {
 	test.Tap(a.action)
 	waitCall(t, core, proto.MethodSessionStart)
 
-	a.sidebar.Select(2)
+	a.showTab(tabSettings)
 	a.render()
-	s := a.screens[2].(*settingsScreen)
-	check := findCheck(s.fields["output.underscores"].row)
-	if check == nil {
+	s := a.screens[tabSettings].(*settingsScreen)
+	check, ok := s.fields["output.underscores"].item.Widget.(*widget.Check)
+	if !ok {
 		t.Fatal("no checkbox for output.underscores")
 	}
 	test.Tap(check)
@@ -342,16 +416,31 @@ func waitCall(t *testing.T, c *recordingCore, method string) {
 	}
 }
 
-func findCheck(o fyne.CanvasObject) *widget.Check {
-	switch w := o.(type) {
-	case *widget.Check:
-		return w
-	case *fyne.Container:
-		for _, c := range w.Objects {
-			if found := findCheck(c); found != nil {
-				return found
+func buttons(o fyne.CanvasObject, text string) []*widget.Button {
+	var out []*widget.Button
+	var walk func(fyne.CanvasObject)
+	walk = func(o fyne.CanvasObject) {
+		if o == nil || !o.Visible() {
+			return
+		}
+		switch w := o.(type) {
+		case *widget.Button:
+			if w.Text == text {
+				out = append(out, w)
+			}
+			return
+		case *fyne.Container:
+			for _, c := range w.Objects {
+				walk(c)
+			}
+			return
+		}
+		if w, ok := o.(fyne.Widget); ok {
+			for _, c := range test.WidgetRenderer(w).Objects() {
+				walk(c)
 			}
 		}
 	}
-	return nil
+	walk(o)
+	return out
 }

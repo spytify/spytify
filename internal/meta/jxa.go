@@ -26,32 +26,60 @@ function out(o) {
   $.NSFileHandle.fileHandleWithStandardOutput.writeData($(JSON.stringify(o) + "\n").dataUsingEncoding($.NSUTF8StringEncoding));
 }
 function get(f) { try { return f(); } catch (e) { return null; } }
+function track(p) {
+  return {
+    id: p.id === undefined || p.id === null ? null : String(p.id),
+    name: p.name || "",
+    artist: p.artist || "",
+    album: p.album || "",
+    albumArtist: p.albumArtist || "",
+    duration: typeof p.duration === "number" ? p.duration : null,
+    trackNumber: p.trackNumber || 0,
+    discNumber: p.discNumber || 0,
+    year: typeof p.year === "number" ? p.year : 0,
+    artworkUrl: p.artworkUrl || "",
+    url: p.spotifyUrl || p.url || ""
+  };
+}
+// fields reads the track one property at a time, for players whose
+// dictionary does not answer "properties" of the current track.
+function fields(t) {
+  const p = {};
+  ["id", "name", "artist", "album", "albumArtist", "duration", "trackNumber", "discNumber", "year", "artworkUrl", "spotifyUrl", "url"].forEach(function (k) {
+    const v = get(() => t[k]());
+    if (v !== null) { p[k] = v; }
+  });
+  return p;
+}
 function run(argv) {
   const spec = argv[0];
   const interval = parseFloat(argv[1] || "0.25");
   let app = null;
+  let wholeRecord = true;
+  let lastID = null, last = null;
   while (true) {
     // Application() throws while the player is not installed; try again.
     app = app || get(() => Application(spec));
     if (!app || !get(() => app.running())) { out({running: false}); delay(interval); continue; }
-    let track = null;
-    const props = get(() => app.currentTrack.properties());
-    if (props) {
-      track = {
-        id: props.id === undefined ? null : String(props.id),
-        name: props.name || "",
-        artist: props.artist || "",
-        album: props.album || "",
-        albumArtist: props.albumArtist || "",
-        duration: typeof props.duration === "number" ? props.duration : null,
-        trackNumber: props.trackNumber || 0,
-        discNumber: props.discNumber || 0,
-        year: props.year || 0,
-        artworkUrl: props.artworkUrl || "",
-        url: props.spotifyUrl || props.url || ""
-      };
+    let state = null, error = "";
+    try { state = String(app.playerState()); } catch (e) { error = String(e); }
+    let current = null;
+    if (wholeRecord) {
+      const props = get(() => app.currentTrack.properties());
+      if (props) { current = track(props); } else { wholeRecord = false; }
     }
-    out({running: true, state: String(get(() => app.playerState()) || ""), position: get(() => app.playerPosition()), track: track});
+    if (!wholeRecord) {
+      // One event per poll for the id; the rest only when it changes.
+      const id = get(() => app.currentTrack.id());
+      if (id === null) {
+        lastID = null; last = null;
+      } else if (String(id) !== lastID || !last) {
+        last = track(fields(app.currentTrack));
+        lastID = String(id);
+      }
+      current = last;
+    }
+    out({running: true, state: state || "", position: get(() => app.playerPosition()), track: current, error: error});
     delay(interval);
   }
 }
@@ -64,6 +92,7 @@ function run(argv) {
   if (!app.running()) { throw new Error("player not running"); }
   switch (argv[1]) {
     case "volume": return String(app.soundVolume());
+    case "restart": app.playerPosition = 0; return "";
     case "setvolume": app.soundVolume = parseInt(argv[2], 10); return "";
     default: app[argv[1]](); return "";
   }
@@ -76,6 +105,8 @@ function run(argv) {
 // player is named by its bundle id (or process name), never in code.
 type JXA struct {
 	Interval time.Duration
+	// Logf receives scripting errors, once per distinct message.
+	Logf func(format string, args ...any)
 
 	mu   sync.Mutex
 	spec string
@@ -117,6 +148,15 @@ type jxaPoll struct {
 	State    string    `json:"state"`
 	Position *float64  `json:"position"`
 	Track    *jxaTrack `json:"track"`
+	Error    string    `json:"error"`
+}
+
+// explain turns a scripting error into what the user can do about it.
+func explain(err string) string {
+	if strings.Contains(err, "-1743") || strings.Contains(err, "Not authorized") || strings.Contains(err, "not allowed") {
+		return "macOS does not let spytify read the player: allow it in System Settings > Privacy & Security > Automation (" + err + ")"
+	}
+	return "the player's AppleScript interface failed: " + err
 }
 
 // durationMs converts the dictionary's track length: some players report
@@ -183,7 +223,14 @@ type jxaTracker struct {
 	running bool
 	last    TrackInfo
 	status  Status
+	lastPos int64
 }
+
+// A position that jumps back near zero on the same item is a restart.
+const (
+	restartFromMs = 3000
+	restartToMs   = 1500
+)
 
 func (k *jxaTracker) next(p jxaPoll) []Event {
 	pos := int64(-1)
@@ -196,7 +243,7 @@ func (k *jxaTracker) next(p jxaPoll) []Event {
 		if !p.Running {
 			return []Event{{Kind: TrackChanged, PositionMs: -1}, {Kind: StatusChanged, Status: Stopped, PositionMs: -1}}
 		}
-		k.last, k.status = p.info(k.unit), p.status()
+		k.last, k.status, k.lastPos = p.info(k.unit), p.status(), pos
 		return []Event{{Kind: TrackChanged, Track: k.last, PositionMs: pos}, {Kind: StatusChanged, Status: k.status, PositionMs: pos}}
 	}
 	if !p.Running {
@@ -215,6 +262,11 @@ func (k *jxaTracker) next(p jxaPoll) []Event {
 	if !equalInfo(info, k.last) {
 		k.last = info
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos})
+	} else if !info.Empty() && pos >= 0 && pos < restartToMs && k.lastPos-pos > restartFromMs {
+		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos, Restart: true})
+	}
+	if pos >= 0 {
+		k.lastPos = pos
 	}
 	if st := p.status(); st != k.status {
 		k.status = st
@@ -248,10 +300,17 @@ func (j *JXA) Watch(ctx context.Context, t target.Target) (<-chan Event, error) 
 		defer cmd.Wait()
 		sc := bufio.NewScanner(stdout)
 		sc.Buffer(make([]byte, 1<<16), 1<<20)
+		lastErr := ""
 		for sc.Scan() {
 			var p jxaPoll
 			if json.Unmarshal(sc.Bytes(), &p) != nil {
 				continue
+			}
+			if p.Error != lastErr {
+				lastErr = p.Error
+				if p.Error != "" && j.Logf != nil {
+					j.Logf("now playing: %s", explain(p.Error))
+				}
 			}
 			for _, e := range tracker.next(p) {
 				select {
@@ -289,7 +348,7 @@ func (j *JXA) run(args ...string) (string, error) {
 
 // Control sends a transport command through the player's dictionary.
 func (j *JXA) Control(cmd string) error {
-	method := map[string]string{"play": "play", "pause": "pause", "next": "nextTrack", "previous": "previousTrack"}[cmd]
+	method := map[string]string{"play": "play", "pause": "pause", "next": "nextTrack", "previous": "previousTrack", "restart": "restart"}[cmd]
 	if method == "" {
 		return ErrUnsupported
 	}

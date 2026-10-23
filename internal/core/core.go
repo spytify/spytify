@@ -465,9 +465,9 @@ func (c *Core) Status() proto.SessionStatusResult {
 // Control sends a transport command to the player.
 func (c *Core) Control(cmd string) error {
 	switch cmd {
-	case proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious:
+	case proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart:
 	default:
-		return proto.Errorf(proto.CodeInvalidParams, "cmd must be play, pause, next or previous")
+		return proto.Errorf(proto.CodeInvalidParams, "cmd must be play, pause, next, previous or restart")
 	}
 	c.mu.Lock()
 	np := c.np

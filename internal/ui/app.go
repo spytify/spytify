@@ -1,5 +1,5 @@
-// Package ui is the spytify desktop client: one window with a sidebar, a
-// Record / Stop control in the title bar, and a tray menu. It holds no
+// Package ui is the spytify desktop client: one window with tabs, a single
+// Record / Stop control in the app bar, and a tray menu. It holds no
 // recording state of its own; every screen is drawn from the model, which
 // only changes when the core sends a result or an event.
 package ui
@@ -8,6 +8,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"net/url"
 	"sync"
 	"time"
 
@@ -38,12 +39,22 @@ type Options struct {
 	// headless driver runs fyne.Do on the calling goroutine, so a timed
 	// redraw would race with the test.
 	ManualRender bool
+	// NoUpdateCheck skips the GitHub release check (tests).
+	NoUpdateCheck bool
 }
 
 type screen interface {
 	content() fyne.CanvasObject
 	render(s model.State)
 }
+
+const (
+	tabRecord = iota
+	tabLibrary
+	tabSettings
+	tabLogs
+	tabAbout
+)
 
 // App is the window and its screens.
 type App struct {
@@ -54,20 +65,20 @@ type App struct {
 	opts Options
 
 	screens []screen
-	names   []string
-	icons   []fyne.Resource
-	current int
+	tabs    *container.AppTabs
+	center  *fyne.Container
+	offline fyne.CanvasObject
+	player  *playerCard
 
-	sidebar       *widget.List
-	center        *fyne.Container
-	offline       fyne.CanvasObject
-	offlinePlayer *playerCard
-	status        *widget.Label
-	output        *widget.Label
-	action        *widget.Button
-	banner        *widget.Label
-	bar           *fyne.Container
-	covers        *covers
+	dot     *widget.Label
+	status  *widget.Label
+	output  *widget.Label
+	update  *widget.Button
+	action  *widget.Button
+	banner  *widget.Label
+	bar     *fyne.Container
+	covers  *covers
+	checked bool
 
 	pending sync.Mutex
 	queued  bool
@@ -80,40 +91,34 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.covers = newCovers(a.scheduleRender)
 	a.win = fa.NewWindow("Spytify")
 	a.win.SetIcon(Logo)
-	a.win.Resize(fyne.NewSize(920, 620))
+	a.win.Resize(fyne.NewSize(920, 640))
 
-	rec := newRecordScreen(a)
-	a.screens = []screen{rec, newLibraryScreen(a), newSettingsScreen(a), newLogsScreen(a), newAboutScreen(a)}
-	a.names = []string{"Record", "Library", "Settings", "Logs", "About"}
-	a.icons = []fyne.Resource{theme.MediaRecordIcon(), theme.FolderIcon(), theme.SettingsIcon(), theme.ListIcon(), theme.InfoIcon()}
-
-	a.sidebar = widget.NewList(
-		func() int { return len(a.names) },
-		func() fyne.CanvasObject {
-			// The template's texts size the column: the longest name and a count.
-			return container.NewHBox(widget.NewIcon(theme.MediaRecordIcon()), widget.NewLabel("Settings"), widget.NewLabel("● 999"))
-		},
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			box := o.(*fyne.Container)
-			box.Objects[0].(*widget.Icon).SetResource(a.icons[id])
-			box.Objects[1].(*widget.Label).SetText(a.names[id])
-			extra := box.Objects[2].(*widget.Label)
-			extra.SetText("")
-			if id == 0 && a.last.Recording() {
-				extra.SetText(fmt.Sprintf("● %d", a.last.Totals().Saved))
-				extra.Importance = widget.DangerImportance
-			}
-			extra.Refresh()
-		},
+	a.screens = []screen{newRecordScreen(a), newLibraryScreen(a), newSettingsScreen(a), newLogsScreen(a), newAboutScreen(a)}
+	a.tabs = container.NewAppTabs(
+		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), a.screens[tabRecord].content()),
+		container.NewTabItemWithIcon("Library", theme.FolderIcon(), a.screens[tabLibrary].content()),
+		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), a.screens[tabSettings].content()),
+		container.NewTabItemWithIcon("Logs", theme.ListIcon(), a.screens[tabLogs].content()),
+		container.NewTabItemWithIcon("About", theme.InfoIcon(), a.screens[tabAbout].content()),
 	)
-	a.sidebar.OnSelected = func(id widget.ListItemID) { a.show(int(id)) }
+	a.tabs.SetTabLocation(container.TabLocationTop)
+	a.tabs.OnSelected = func(*container.TabItem) { a.renderCenter(a.last) }
 
+	a.dot = widget.NewLabel("●")
 	a.status = widget.NewLabel("")
 	a.output = widget.NewLabel("")
+	a.output.Importance = widget.LowImportance
+	a.update = widget.NewButtonWithIcon("", theme.DownloadIcon(), nil)
+	a.update.Importance = widget.SuccessImportance
+	a.update.Hide()
+	donate := widget.NewButton("♥ Donate", func() { a.openURL(donateURL) })
+	donate.Importance = widget.LowImportance
 	a.action = widget.NewButtonWithIcon("Record", theme.MediaRecordIcon(), a.toggleRecording)
 	a.action.Importance = widget.HighImportance
-	title := widget.NewLabelWithStyle("Spytify", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	a.bar = container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(Logo), title), a.action, container.NewHBox(a.status, widget.NewSeparator(), a.output))
+	brand := container.NewHBox(widget.NewIcon(Logo), widget.NewLabelWithStyle("Spytify", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
+	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, donate, a.action))
+
 	a.banner = widget.NewLabel("")
 	a.banner.Wrapping = fyne.TextWrapWord
 	a.banner.Importance = widget.DangerImportance
@@ -121,20 +126,21 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 
 	start := widget.NewButtonWithIcon("Start spytifyd", theme.MediaPlayIcon(), a.StartDaemon)
 	start.Importance = widget.HighImportance
-	a.offlinePlayer = newPlayerCard(a)
-	a.offline = container.NewVScroll(container.NewVBox(
-		widget.NewLabelWithStyle("spytifyd is not running", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewLabelWithStyle("The recorder runs on its own, so it keeps recording when this window is closed.", fyne.TextAlignCenter, fyne.TextStyle{}),
-		container.NewCenter(start),
-		widget.NewLabelWithStyle(opts.Socket, fyne.TextAlignCenter, fyne.TextStyle{Monospace: true}),
-		a.offlinePlayer.card,
-	))
+	a.player = newPlayerCard(a)
+	intro := widget.NewLabel("The recorder runs on its own, so it keeps recording when this window is closed. Choose the player it records, then start it.")
+	intro.Wrapping = fyne.TextWrapWord
+	a.offline = container.NewVScroll(container.NewPadded(container.NewVBox(
+		heading("spytifyd is not running"),
+		intro,
+		container.NewHBox(start),
+		caption(opts.Socket),
+		widget.NewSeparator(),
+		a.player.form,
+	)))
 
-	a.center = container.NewStack(a.screens[0].content())
-	body := container.NewBorder(container.NewVBox(a.bar, a.banner, widget.NewSeparator()), nil,
-		container.NewBorder(nil, nil, nil, widget.NewSeparator(), a.sidebar), nil, a.center)
+	a.center = container.NewStack(a.tabs)
+	body := container.NewBorder(container.NewVBox(container.NewPadded(a.bar), a.banner), nil, nil, nil, a.center)
 	a.win.SetContent(body)
-	a.sidebar.Select(0)
 
 	a.setupTray()
 	a.win.SetCloseIntercept(func() {
@@ -159,11 +165,10 @@ func (a *App) ShowAndRun() {
 	a.fa.Run()
 }
 
-func (a *App) show(i int) {
-	a.current = i
-	a.center.Objects = []fyne.CanvasObject{a.screens[i].content()}
+// showTab switches to a tab, from a button elsewhere in the window.
+func (a *App) showTab(i int) {
+	a.tabs.SelectIndex(i)
 	a.renderCenter(a.last)
-	a.center.Refresh()
 }
 
 // scheduleRender coalesces bursts of events (levels arrive at 10 Hz) into
@@ -191,59 +196,107 @@ func (a *App) render() {
 	s := a.m.Snapshot()
 	a.last = s
 	connected := s.Conn == model.Connected
+	running := (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running"))
 	switch {
 	case !connected:
+		a.dot.Importance = widget.LowImportance
 		a.status.SetText("Not connected")
 	case !s.HaveInfo:
+		a.dot.Importance = widget.LowImportance
 		a.status.SetText("Connecting…")
-	case (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running")):
-		a.status.SetText("● " + s.Info.Target.Process + " running")
+	case running:
+		a.dot.Importance = widget.SuccessImportance
+		a.status.SetText(s.Info.Target.Process + " is running")
 	default:
-		a.status.SetText("○ " + s.Info.Target.Process + " not running")
+		a.dot.Importance = widget.WarningImportance
+		a.status.SetText(s.Info.Target.Process + " is not running")
 	}
+	a.dot.Refresh()
 	a.output.SetText(outputText(s.Settings))
 	switch {
 	case !connected:
 		a.action.Disable()
+		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	case s.Session == proto.StateStopping:
 		a.action.Enable()
-		a.action.SetText("Stop now")
-		a.action.SetIcon(theme.MediaStopIcon())
+		a.setAction("Stop now", theme.MediaStopIcon(), widget.DangerImportance)
 	case s.Recording():
 		a.action.Enable()
-		a.action.SetText("Stop")
-		a.action.SetIcon(theme.MediaStopIcon())
+		a.setAction("Stop", theme.MediaStopIcon(), widget.DangerImportance)
 	default:
 		a.action.Enable()
-		a.action.SetText("Record")
-		a.action.SetIcon(theme.MediaRecordIcon())
+		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	}
-	if s.LastError != nil && s.LastError.Msg != "" {
+	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {
 		a.banner.SetText(s.LastError.Msg)
 		a.banner.Show()
 	} else {
 		a.banner.Hide()
 	}
-	a.sidebar.Refresh()
+	record := "Record"
+	if n := s.Totals().Saved; s.Recording() && n > 0 {
+		record = fmt.Sprintf("Record · %d", n)
+	}
+	if a.tabs.Items[tabRecord].Text != record {
+		a.tabs.Items[tabRecord].Text = record
+		a.tabs.Refresh()
+	}
+	if connected && !a.checked && !a.opts.NoUpdateCheck {
+		if v, ok := s.Settings["app.check_updates"].(bool); ok {
+			a.checked = true
+			if v {
+				go a.checkUpdate()
+			}
+		}
+	}
 	// Texts changed width: lay the bar out again.
 	a.bar.Refresh()
 	a.renderCenter(s)
 }
 
-func (a *App) renderCenter(s model.State) {
-	if s.Conn != model.Connected && !s.HaveInfo {
-		a.center.Objects = []fyne.CanvasObject{a.offline}
-		a.center.Refresh()
+func (a *App) setAction(text string, icon fyne.Resource, imp widget.Importance) {
+	if a.action.Text == text && a.action.Importance == imp {
 		return
 	}
-	view := a.screens[a.current].content()
-	if len(a.center.Objects) != 1 || a.center.Objects[0] != view {
-		a.center.Objects = []fyne.CanvasObject{view}
-		a.center.Refresh()
+	a.action.SetText(text)
+	a.action.SetIcon(icon)
+	a.action.Importance = imp
+	a.action.Refresh()
+}
+
+func (a *App) renderCenter(s model.State) {
+	if s.Conn != model.Connected && !s.HaveInfo {
+		if len(a.center.Objects) != 1 || a.center.Objects[0] != a.offline {
+			a.center.Objects = []fyne.CanvasObject{a.offline}
+			a.center.Refresh()
+		}
+		return
 	}
-	a.screens[a.current].render(s)
-	// Rows and checklists changed size: lay the screen out again.
+	if len(a.center.Objects) != 1 || a.center.Objects[0] != a.tabs {
+		a.center.Objects = []fyne.CanvasObject{a.tabs}
+	}
+	a.screens[a.tabs.SelectedIndex()].render(s)
+	// Rows and lists changed size: lay the screen out again.
 	a.center.Refresh()
+}
+
+func (a *App) checkUpdate() {
+	tag, page, err := latestRelease(context.Background())
+	if err != nil || tag == "" || !newer(tag, proto.Version) {
+		return
+	}
+	fyne.Do(func() {
+		a.update.SetText("Update to " + tag)
+		a.update.OnTapped = func() { a.openURL(page) }
+		a.update.Show()
+		a.bar.Refresh()
+	})
+}
+
+func (a *App) openURL(raw string) {
+	if u, err := url.Parse(raw); err == nil {
+		_ = a.fa.OpenURL(u)
+	}
 }
 
 func checkOK(checks []proto.Check, name string) bool {
@@ -255,13 +308,23 @@ func checkOK(checks []proto.Check, name string) bool {
 	return false
 }
 
+func failingChecks(checks []proto.Check) int {
+	n := 0
+	for _, c := range checks {
+		if !c.OK {
+			n++
+		}
+	}
+	return n
+}
+
 func outputText(settings map[string]any) string {
 	format, _ := settings["encode.format"].(string)
 	switch format {
 	case "":
 		return ""
 	case "mp3", "aac":
-		return fmt.Sprintf("%s %v kbps", upper(format), settings["encode.bitrate_kbps"])
+		return fmt.Sprintf("%s %v kbps", upper(format), number(settings["encode.bitrate_kbps"]))
 	}
 	return upper(format)
 }

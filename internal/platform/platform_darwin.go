@@ -19,6 +19,7 @@ func (b Backends) New(t target.Target) (capture.Capture, meta.NowPlaying, error)
 		return nil, nil, err
 	}
 	m := meta.NewJXA()
+	m.Logf = b.logf
 	m.Target(t)
 	return c, m, nil
 }

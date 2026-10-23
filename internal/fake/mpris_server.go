@@ -63,7 +63,7 @@ func ServeMPRIS(conn *dbus.Conn, name string, p *Player) (*MPRISServer, error) {
 			"CanGoPrevious": ro(true),
 			"CanPlay":       ro(true),
 			"CanPause":      ro(true),
-			"CanSeek":       ro(false),
+			"CanSeek":       ro(true),
 			"CanControl":    ro(true),
 		},
 	})
@@ -80,17 +80,20 @@ func ServeMPRIS(conn *dbus.Conn, name string, p *Player) (*MPRISServer, error) {
 		}
 	}
 	if err := conn.ExportMethodTable(map[string]any{
-		"Next":      control("next"),
-		"Previous":  control("previous"),
+		"Next":     control("next"),
+		"Previous": control("previous"),
+		"SetPosition": func(_ dbus.ObjectPath, pos int64) *dbus.Error {
+			if pos == 0 {
+				return control("restart")()
+			}
+			return nil
+		},
 		"Pause":     control("pause"),
 		"Play":      control("play"),
 		"PlayPause": control("playpause"),
 		"Stop":      control("pause"),
 		"Seek":      func(int64) *dbus.Error { return nil },
-		"SetPosition": func(dbus.ObjectPath, int64) *dbus.Error {
-			return nil
-		},
-		"OpenUri": func(string) *dbus.Error { return nil },
+		"OpenUri":   func(string) *dbus.Error { return nil },
 	}, mprisPath, mprisPlayer); err != nil {
 		return nil, err
 	}
@@ -118,6 +121,11 @@ func (s *MPRISServer) Update(ev meta.Event) {
 		s.mu.Lock()
 		s.itemStart, s.paused = time.Now(), 0
 		s.mu.Unlock()
+		if ev.Restart {
+			// The metadata is unchanged; MPRIS says it with Seeked.
+			_ = s.conn.Emit(mprisPath, mprisPlayer+".Seeked", int64(0))
+			return
+		}
 		s.props.SetMust(mprisPlayer, "Metadata", metadataOf(ev.Track))
 	case meta.StatusChanged:
 		s.mu.Lock()
