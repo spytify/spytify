@@ -53,6 +53,36 @@ func (t Target) Matches(name string) bool {
 	return false
 }
 
+// MatchesTree reports whether pid or one of its ancestors is a target
+// process, for players that play audio from a helper process. It needs
+// /proc and returns false elsewhere.
+func (t Target) MatchesTree(pid int) bool {
+	for depth := 0; pid > 1 && depth < 16; depth++ {
+		if b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "comm")); err == nil && t.Matches(string(b)) {
+			return true
+		}
+		if b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline")); err == nil && len(b) > 0 {
+			if t.Matches(string(bytes.SplitN(b, []byte{0}, 2)[0])) {
+				return true
+			}
+		}
+		stat, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+		if err != nil {
+			return false
+		}
+		// The command name is in parentheses and may contain spaces.
+		rest := stat[bytes.LastIndexByte(stat, ')')+1:]
+		fields := strings.Fields(string(rest))
+		if len(fields) < 2 {
+			return false
+		}
+		if pid, err = strconv.Atoi(fields[1]); err != nil {
+			return false
+		}
+	}
+	return false
+}
+
 func normalizeName(s string) string {
 	s = strings.ToLower(strings.TrimSpace(filepath.Base(s)))
 	return strings.TrimSuffix(s, ".exe")
