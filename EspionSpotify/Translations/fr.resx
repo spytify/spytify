@@ -349,6 +349,10 @@
     <value>Enregistré: {0} en {1}</value>
     <comment>console</comment>
   </data>
+  <data name="logPlaylistUpdated" xml:space="preserve">
+    <value>Liste de lecture mise à jour : ajout de {0} à {1}</value>
+    <comment>console</comment>
+  </data>
   <data name="logTrackExists" xml:space="preserve">
     <value>Passe: {0} (l'enregistrement existe déjà)</value>
     <comment>console</comment>
