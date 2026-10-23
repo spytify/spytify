@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,14 @@ import (
 
 var bin string
 
+// exe is the path of a command built by TestMain.
+func exe(name string) string {
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return filepath.Join(bin, name)
+}
+
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "spy-bin")
 	if err != nil {
@@ -26,7 +35,7 @@ func TestMain(m *testing.M) {
 	}
 	bin = dir
 	for _, cmd := range []string{"spytifyd", "spytify-cli"} {
-		out, err := exec.Command("go", "build", "-o", filepath.Join(dir, cmd), "../../cmd/"+cmd).CombinedOutput()
+		out, err := exec.Command("go", "build", "-o", exe(cmd), "../../cmd/"+cmd).CombinedOutput()
 		if err != nil {
 			panic(string(out))
 		}
@@ -61,6 +70,9 @@ func newEnv(t *testing.T) *env {
 		"SPYTIFY_CONFIG="+filepath.Join(dir, "config.toml"),
 		"XDG_STATE_HOME="+filepath.Join(dir, "state"),
 		"HOME="+dir,
+		// Windows keeps the state and the user .env here instead.
+		"LOCALAPPDATA="+filepath.Join(dir, "local"),
+		"APPDATA="+filepath.Join(dir, "roaming"),
 	)
 	return e
 }
@@ -76,7 +88,7 @@ func (e *env) daemonArgs(timeline string, extra ...string) []string {
 }
 
 func (e *env) cli(args ...string) (string, error) {
-	cmd := exec.Command(filepath.Join(bin, "spytify-cli"), args...)
+	cmd := exec.Command(exe("spytify-cli"), args...)
 	cmd.Env = e.vars
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -94,7 +106,7 @@ func (e *env) mustCLI(args ...string) string {
 func TestDaemonAndCLI(t *testing.T) {
 	e := newEnv(t)
 	logs := &bytes.Buffer{}
-	d := exec.Command(filepath.Join(bin, "spytifyd"), e.daemonArgs("basic")...)
+	d := exec.Command(exe("spytifyd"), e.daemonArgs("basic")...)
 	d.Env, d.Stdout, d.Stderr = e.vars, logs, logs
 	if err := d.Start(); err != nil {
 		t.Fatal(err)
@@ -188,7 +200,7 @@ func TestOnceWritesEventsForTheVerifier(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t)
 			events := filepath.Join(e.dir, "events.jsonl")
-			d := exec.Command(filepath.Join(bin, "spytifyd"), e.daemonArgs(name, "--once", "--events", events)...)
+			d := exec.Command(exe("spytifyd"), e.daemonArgs(name, "--once", "--events", events)...)
 			d.Env = e.vars
 			if out, err := d.CombinedOutput(); err != nil {
 				t.Fatalf("spytifyd --once: %v\n%s", err, out)
@@ -226,7 +238,7 @@ func readEvents(t *testing.T, path string) []proto.Event {
 
 func TestDaemonRefusesWithoutTarget(t *testing.T) {
 	e := newEnv(t)
-	d := exec.Command(filepath.Join(bin, "spytifyd"))
+	d := exec.Command(exe("spytifyd"))
 	d.Env = append(e.vars, "SPYTIFY_TARGET_PROCESS=")
 	out, err := d.CombinedOutput()
 	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 || !strings.Contains(string(out), "SPYTIFY_TARGET_PROCESS is not set") {
