@@ -17,7 +17,8 @@ cd "$(dirname "$0")/.."
 [ -f build.env ] && . ./build.env
 out="${1:-bin/windows}"
 mkdir -p "$out"
-version="2.0.0-alpha+$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
+# SPYTIFY_VERSION (such as 2.0.0-alpha.1) is set by the release workflow.
+version="${SPYTIFY_VERSION:-2.0.0-alpha+$(git rev-parse --short HEAD 2>/dev/null || echo dev)}"
 ldflags="-s -w -X github.com/spytify/spytify/pkg/proto.Version=v$version"
 ldflags+=" -X github.com/spytify/spytify/internal/target.DefaultProcess=${SPYTIFY_DEFAULT_PROCESS:-}"
 

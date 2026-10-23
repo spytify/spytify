@@ -3,7 +3,10 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -346,7 +349,11 @@ func TestNewerVersion(t *testing.T) {
 		{"v2.0.0", "v2.0.0-alpha+f5dd96e", true},
 		{"v2.0.1", "v2.0.0", true},
 		{"v2.0.0", "v2.0.0", false},
-		{"v2.0.0-beta", "v2.0.0-alpha", false},
+		{"v2.0.0-beta", "v2.0.0-alpha", true},
+		{"v2.0.0-alpha", "v2.0.0-beta", false},
+		{"v2.0.0-alpha.10", "v2.0.0-alpha.9", true},
+		{"v2.0.0-alpha.1", "v2.0.0-alpha", true},
+		{"v2.0.0-alpha", "v2.0.0-alpha+f5dd96e", false},
 		{"1.12", "v2.0.0-alpha", false},
 		{"", "v2.0.0", false},
 	}
@@ -518,4 +525,22 @@ func buttons(o fyne.CanvasObject, text string) []*widget.Button {
 	}
 	walk(o)
 	return out
+}
+
+func TestLatestReleaseCountsPreReleases(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `[{"tag_name":"v2.1.0","html_url":"https://x/draft","draft":true},
+			{"tag_name":"v2.0.0-alpha.2","html_url":"https://x/a2","draft":false,"prerelease":true},
+			{"tag_name":"v2.0.0-alpha.1","html_url":"https://x/a1","draft":false,"prerelease":true}]`)
+	}))
+	defer srv.Close()
+	defer func(u string) { releasesURL = u }(releasesURL)
+	releasesURL = srv.URL
+	tag, page, err := latestRelease(context.Background())
+	if err != nil || tag != "v2.0.0-alpha.2" || page != "https://x/a2" {
+		t.Fatalf("latest = %q %q %v", tag, page, err)
+	}
+	if !newer(tag, "v2.0.0-alpha.1+f5dd96e") {
+		t.Fatal("alpha.2 is not newer than alpha.1")
+	}
 }

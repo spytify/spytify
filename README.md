@@ -79,6 +79,7 @@ Go 1.26 or later.
 
 ```sh
 go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli ./cmd/spytify-ui   # Linux
+scripts/build-linux.sh                                               # Linux packages: dist/*.tar.gz, .deb, .rpm
 scripts/build-macos.sh                                               # macOS: bin/Spytify.app and the command-line tools
 scripts/build-windows.sh                                             # Windows, cross-compiled: bin/windows/*.exe
 ```
@@ -203,7 +204,9 @@ go test -tags macos_capture -v ./test/macos/
 
 ## Contributing
 
-Issues and pull requests are welcome. Run `gofmt` and `go test ./...` before you push; CI also builds every platform and runs the PipeWire scenarios.
+Issues and pull requests are welcome. Run `gofmt` and `go test ./...` before you push; CI also builds every platform, runs the PipeWire scenarios, and runs the tests and the shipped executables on Windows.
+
+Releases: pushing a tag such as `v2.0.0-alpha.1` builds the Linux packages (amd64 and arm64), the macOS disk image and the Windows zip, and drafts a GitHub release with them and their checksums. A tag with a `-` is a pre-release. A maintainer reviews the draft and publishes it.
 
 ## License
 

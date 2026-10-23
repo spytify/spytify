@@ -10,11 +10,14 @@ import (
 	"time"
 )
 
+// releasesURL lists the newest releases, pre-releases included: GitHub's
+// "latest" leaves those out, and the alphas are pre-releases.
+var releasesURL = "https://api.github.com/repos/spytify/spytify/releases?per_page=10"
+
 const (
-	releasesURL = "https://api.github.com/repos/spytify/spytify/releases/latest"
-	donateURL   = "https://spytify.github.io/spytify/donate.html"
-	siteURL     = "https://spytify.github.io/spytify/"
-	sourceURL   = "https://github.com/spytify/spytify"
+	donateURL = "https://spytify.github.io/spytify/donate.html"
+	siteURL   = "https://spytify.github.io/spytify/"
+	sourceURL = "https://github.com/spytify/spytify"
 )
 
 // latestRelease asks GitHub for the newest published release. It is the
@@ -38,14 +41,21 @@ func latestRelease(ctx context.Context) (tag, page string, err error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", "", fmt.Errorf("GitHub answered %s", resp.Status)
 	}
-	var r struct {
-		Tag  string `json:"tag_name"`
-		Page string `json:"html_url"`
+	var list []struct {
+		Tag   string `json:"tag_name"`
+		Page  string `json:"html_url"`
+		Draft bool   `json:"draft"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 		return "", "", err
 	}
-	return r.Tag, r.Page, nil
+	// Newest first; a draft is not published yet.
+	for _, r := range list {
+		if !r.Draft {
+			return r.Tag, r.Page, nil
+		}
+	}
+	return "", "", nil
 }
 
 type semver struct {
@@ -85,7 +95,39 @@ func newer(latest, current string) bool {
 			return a > b
 		}
 	}
-	return c.pre != "" && l.pre == ""
+	switch {
+	case l.pre == c.pre:
+		return false
+	case l.pre == "":
+		return true // a release beats its pre-releases
+	case c.pre == "":
+		return false
+	}
+	return prereleaseAfter(l.pre, c.pre)
+}
+
+// prereleaseAfter orders pre-release tags as semver does: dot-separated
+// fields left to right, numbers by value and below words, words as text,
+// and a longer tag after its own prefix (alpha.1 after alpha).
+func prereleaseAfter(a, b string) bool {
+	x, y := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(x) && i < len(y); i++ {
+		if x[i] == y[i] {
+			continue
+		}
+		m, errM := strconv.Atoi(x[i])
+		n, errN := strconv.Atoi(y[i])
+		switch {
+		case errM == nil && errN == nil:
+			return m > n
+		case errM == nil:
+			return false
+		case errN == nil:
+			return true
+		}
+		return x[i] > y[i]
+	}
+	return len(x) > len(y)
 }
 
 func at(n []int, i int) int {
