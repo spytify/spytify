@@ -8,9 +8,9 @@ namespace EspionSpotify
     internal static class M3uPlaylist
     {
         private static readonly object SyncRoot = new object();
-        public static void AppendCompletedRecording(string recordingPath, Track track, int durationSeconds)
+        public static string AppendCompletedRecording(string recordingPath, Track track, int durationSeconds)
         {
-            if (!Settings.Default.settings_playlist_generation_enabled) return;
+            if (!Settings.Default.settings_playlist_generation_enabled) return null;
             var folder = Settings.Default.settings_playlist_output_path;
             var filename = Settings.Default.settings_playlist_filename;
             if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) throw new DirectoryNotFoundException("Playlist folder does not exist.");
@@ -30,6 +30,8 @@ namespace EspionSpotify
                     writer.WriteLine(Path.GetFullPath(recordingPath));
                 }
             }
+
+            return playlist;
         }
     }
 }
