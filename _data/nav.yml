@@ -16,10 +16,8 @@ v2:
     url: /v2/features.html
   - title: Settings
     url: /v2/settings.html
-  - title: CLI
-    url: /v2/cli.html
-  - title: Protocol
-    url: /v2/protocol.html
+  - title: Advanced
+    url: /v2/advanced.html
   - title: F.A.Q
     url: /v2/faq.html
   - title: Legal

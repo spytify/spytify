@@ -18,6 +18,11 @@
   </head>
   <body>
     <header class="page-header" role="banner">
+      <select class="version-switch" aria-label="Documentation version" onchange="switchVersion(this.value)">
+        {% for ver in site.versions %}
+          <option value="{{ ver.id }}"{% if ver.id == page.version %} selected{% endif %}>{{ ver.label }}</option>
+        {% endfor %}
+      </select>
       <a href="{{ site.repository_url }}" aria-label="Spytify on GitHub"><img class="logo" alt="Spytify logo" src="{{ site.logo | relative_url }}" role="logo" /></a>
       <h1 class="project-name">{{ site.title }}{% if v2 %} v2{% endif %}</h1>
       <h2 class="project-tagline">{% if v2 %}{{ site.description }}{% else %}{{ site.data.v1.tagline }}{% endif %}</h2>
@@ -32,11 +37,6 @@
       {% if site.show_downloads %}
         <a href="{% if v2 %}{{ site.repository_download }}{% else %}{{ site.v1_download }}{% endif %}" aria-label="Download" class="btn out">Download</a>
       {% endif %}
-      <select class="version-switch" aria-label="Documentation version" onchange="switchVersion(this.value)">
-        {% for ver in site.versions %}
-          <option value="{{ ver.id }}"{% if ver.id == page.version %} selected{% endif %}>{{ ver.label }}</option>
-        {% endfor %}
-      </select>
     </nav>
 
     <main id="content" class="main-content" role="main">

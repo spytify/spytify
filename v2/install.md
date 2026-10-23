@@ -37,4 +37,4 @@ The Windows build is a first draft, being tested.
 
 ### [Choose the application](#choose-the-application)
 
-Official builds come with a default application. In a build of your own, open **Settings > App > Advanced > Player**, enter the application's name (its executable, without `.app` or `.exe`), and press **Save and restart spytifyd**. The [command line page](cli.html#configuration) lists the variables behind it.
+Official builds come with a default application. In a build of your own, open **Settings > App > Advanced > Player**, enter the application's name (its executable, without `.app` or `.exe`), and press **Save and restart spytifyd**. The [command line page](advanced.html#configuration) lists the variables behind it.
