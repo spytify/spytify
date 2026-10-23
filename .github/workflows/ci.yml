@@ -88,8 +88,8 @@ jobs:
       # The desktop UI needs cgo; the unit and macOS jobs build it natively.
       - run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build ./cmd/spytifyd ./cmd/spytify-cli ./cmd/fakeplayer
 
-  # Real Windows: the pure-Go packages, the media session poller in Windows
-  # PowerShell, and the capture helper built with the runner's MinGW.
+  # Real Windows: the pure-Go packages and the media session poller in
+  # Windows PowerShell. windows-smoke runs the shipped executables.
   windows:
     runs-on: windows-2022
     defaults:
@@ -105,17 +105,6 @@ jobs:
         run: choco install ffmpeg -y --no-progress
       - name: Unit tests (all but the desktop UI, which windows-build cross-compiles)
         run: CGO_ENABLED=0 go test $(go list ./... | grep -v -e /internal/ui$ -e /cmd/spytify-ui)
-      - name: Capture helper
-        run: g++ -O2 -Wall -static -municode -o spytify-tap.exe windows/spytify-tap/main.cpp -lole32 -luuid
-      - name: Capture helper starts on a running process
-        continue-on-error: true
-        run: |
-          powershell -NoProfile -Command 'Start-Sleep 30' & target=$!
-          sleep 2
-          pid=$(powershell -NoProfile -Command '(Get-Process powershell | Sort-Object StartTime -Descending | Select-Object -First 1).Id' | tr -d '\r')
-          timeout 5 ./spytify-tap.exe --pid "$pid" > tap.raw; echo "exit $?"
-          head -c 40 tap.raw | head -1
-          ls -l tap.raw
 
   windows-build:
     runs-on: ubuntu-24.04
@@ -132,6 +121,33 @@ jobs:
         with:
           name: spytify-windows
           path: dist/windows/
+
+  # The executables windows-build ships, run on a real Windows.
+  windows-smoke:
+    needs: windows-build
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spytify-windows
+      - name: The command-line tools start
+        run: |
+          ./spytifyd.exe -version
+          ./spytify-cli.exe --help > /dev/null
+          set +e; ./spytify-tap.exe; code=$?; set -e
+          test "$code" -eq 2
+      - name: The capture helper records a running process
+        continue-on-error: true
+        run: |
+          powershell -NoProfile -Command 'Start-Sleep 30' &
+          sleep 2
+          pid=$(powershell -NoProfile -Command '(Get-Process powershell | Sort-Object StartTime -Descending | Select-Object -First 1).Id' | tr -d '\r')
+          set +e; timeout 5 ./spytify-tap.exe --pid "$pid" > tap.raw; echo "exit $?"; set -e
+          head -1 tap.raw
+          ls -l tap.raw
 
   macos-build:
     runs-on: macos-15
