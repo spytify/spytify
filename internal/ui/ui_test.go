@@ -136,6 +136,8 @@ func texts(o fyne.CanvasObject) []string {
 			out = append(out, w.String())
 		case *canvas.Text:
 			out = append(out, w.Text)
+		case *widget.Hyperlink:
+			out = append(out, w.Text)
 		case *widget.Button:
 			out = append(out, w.Text)
 		case *widget.Card:
@@ -288,10 +290,38 @@ func TestOtherScreensRender(t *testing.T) {
 	a.showTab(tabAbout)
 	a.render()
 	all = texts(a.win.Content())
-	for _, want := range []string{"recorder v2.0.0-alpha on darwin/arm64", "(org.example.player)", "Check for updates"} {
+	for _, want := range []string{"recorder v2.0.0-alpha on darwin/arm64", "Source code on GitHub", "Project page", "Check for updates"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the about screen", want)
 		}
+	}
+}
+
+func TestLibraryRescansWhenShown(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	dir := t.TempDir()
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+
+	a.showTab(tabLibrary)
+	a.render()
+	if len(lib.shown) != 0 {
+		t.Fatalf("%d files in an empty folder", len(lib.shown))
+	}
+	// A file lands while another tab is open; coming back lists it.
+	a.showTab(tabRecord)
+	if err := os.WriteFile(filepath.Join(dir, "Artist - Title.flac"), []byte("fLaC"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.showTab(tabLibrary)
+	a.render()
+	if len(lib.shown) != 1 || !contains(texts(a.win.Content()), "Artist - Title") {
+		t.Errorf("library after coming back: %d files", len(lib.shown))
 	}
 }
 

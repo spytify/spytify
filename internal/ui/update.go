@@ -13,7 +13,8 @@ import (
 const (
 	releasesURL = "https://api.github.com/repos/spytify/spytify/releases/latest"
 	donateURL   = "https://spytify.github.io/spytify/donate.html"
-	projectURL  = "https://github.com/spytify/spytify"
+	siteURL     = "https://spytify.github.io/spytify/"
+	sourceURL   = "https://github.com/spytify/spytify"
 )
 
 // latestRelease asks GitHub for the newest published release. It is the

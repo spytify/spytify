@@ -102,7 +102,13 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		container.NewTabItemWithIcon("About", theme.InfoIcon(), a.screens[tabAbout].content()),
 	)
 	a.tabs.SetTabLocation(container.TabLocationTop)
-	a.tabs.OnSelected = func(*container.TabItem) { a.renderCenter(a.last) }
+	a.tabs.OnSelected = func(*container.TabItem) {
+		// Files can change behind the app's back: read the folder again.
+		if l, ok := a.screens[a.tabs.SelectedIndex()].(*libraryScreen); ok {
+			l.scan()
+		}
+		a.renderCenter(a.last)
+	}
 
 	a.dot = widget.NewLabel("●")
 	a.status = widget.NewLabel("")
