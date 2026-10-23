@@ -1,0 +1,16 @@
+{
+  "name": "basic",
+  "seed": 1,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "items": [
+    {"artist": "Basic Artist", "title": "Basic One", "album": "Basics", "track_number": 1, "length_ms": 5000, "gap_ms": 1000},
+    {"artist": "Basic Artist", "title": "Basic Two", "album": "Basics", "track_number": 2, "length_ms": 6000, "gap_ms": 1000},
+    {"artist": "Basic Artist", "title": "Basic Three", "album": "Basics", "track_number": 3, "length_ms": 4500, "gap_ms": 1000}
+  ],
+  "expect": [
+    {"item": 0, "saved": true},
+    {"item": 1, "saved": true},
+    {"item": 2, "saved": true}
+  ]
+}

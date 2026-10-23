@@ -1,0 +1,16 @@
+{
+  "name": "control",
+  "seed": 8,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "settings": {"recorder.min_seconds": 15},
+  "items": [
+    {"artist": "Skipped Artist", "title": "Skipped Early", "album": "Queue", "length_ms": 30000},
+    {"artist": "Next Artist", "title": "Played Through", "album": "Queue", "length_ms": 20000, "gap_ms": 1000}
+  ],
+  "actions": [{"at_ms": 10000, "cmd": "next"}],
+  "expect": [
+    {"item": 0, "saved": false, "reason": "too_short"},
+    {"item": 1, "saved": true}
+  ]
+}

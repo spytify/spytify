@@ -1,0 +1,17 @@
+{
+  "name": "gapless",
+  "seed": 3,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "items": [
+    {"artist": "Seamless", "title": "Movement I",   "album": "Suite", "length_ms": 4000, "fade_ms": 0, "notify_offset_ms": 0},
+    {"artist": "Seamless", "title": "Movement II",  "album": "Suite", "length_ms": 5200, "fade_ms": 0, "notify_offset_ms": 500},
+    {"artist": "Seamless", "title": "Movement III", "album": "Suite", "length_ms": 3700, "fade_ms": 0, "notify_offset_ms": -200},
+    {"artist": "Seamless", "title": "Movement IV",  "album": "Suite", "length_ms": 6100, "fade_ms": 0, "notify_offset_ms": 800},
+    {"artist": "Seamless", "title": "Movement V",   "album": "Suite", "length_ms": 4400, "fade_ms": 0, "notify_offset_ms": -300, "gap_ms": 1000}
+  ],
+  "expect": [
+    {"item": 0, "saved": true}, {"item": 1, "saved": true}, {"item": 2, "saved": true},
+    {"item": 3, "saved": true}, {"item": 4, "saved": true}
+  ]
+}

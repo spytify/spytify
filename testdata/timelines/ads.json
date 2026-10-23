@@ -1,0 +1,16 @@
+{
+  "name": "ads",
+  "seed": 4,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "items": [
+    {"artist": "Before Ad", "title": "First Song", "album": "Side A", "length_ms": 6000, "gap_ms": 500},
+    {"kind": "ad", "artist": "Sponsor", "title": "Sponsored message", "length_ms": 30000, "gap_ms": 300, "notify_offset_ms": 600},
+    {"artist": "After Ad", "title": "Second Song", "album": "Side B", "length_ms": 5000, "gap_ms": 1000, "notify_offset_ms": 700}
+  ],
+  "expect": [
+    {"item": 0, "saved": true},
+    {"item": 1, "saved": false, "reason": "ad"},
+    {"item": 2, "saved": true}
+  ]
+}
