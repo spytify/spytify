@@ -74,7 +74,10 @@ jobs:
         run: |
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq pipewire pipewire-bin pipewire-pulse wireplumber dbus dbus-bin ffmpeg pulseaudio-utils procps python3
-      - name: Record the eight timelines
+      - name: Record the timelines
         run: |
+          # The checkout belongs to the runner user, not the container's root:
+          # without this, git refuses it and go build cannot stamp the version.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           . scripts/pipewire-session.sh
           go test -tags integration -v -timeout 20m ./test/integration/

@@ -22,6 +22,9 @@ import (
 const (
 	maxLine     = 1 << 20
 	sendBacklog = 512
+	// closeGrace bounds how long Close waits for requests in flight and
+	// queued replies, so a core.shutdown caller still gets its answer.
+	closeGrace = 2 * time.Second
 )
 
 // Handler answers one request. An error of type *proto.Error is sent as is;
@@ -38,6 +41,7 @@ type Server struct {
 	conns     map[*conn]struct{}
 	closed    bool
 	wg        sync.WaitGroup
+	inflight  sync.WaitGroup
 }
 
 // NewServer serves handle; logf may be nil.
@@ -114,7 +118,8 @@ func (s *Server) accept(ln net.Listener) {
 			}
 			return
 		}
-		c := &conn{srv: s, nc: nc, out: make(chan []byte, sendBacklog), done: make(chan struct{})}
+		c := &conn{srv: s, nc: nc, out: make(chan []byte, sendBacklog), done: make(chan struct{}),
+			draining: make(chan struct{}), flushed: make(chan struct{})}
 		s.mu.Lock()
 		if s.closed {
 			s.mu.Unlock()
@@ -154,14 +159,21 @@ func (s *Server) Close() error {
 	s.closed = true
 	listeners := s.listeners
 	s.listeners = nil
-	conns := s.conns
-	s.conns = map[*conn]struct{}{}
 	s.mu.Unlock()
 	for _, ln := range listeners {
 		ln.Close()
 		if ln.Addr().Network() == "unix" {
 			os.Remove(ln.Addr().String())
 		}
+	}
+	deadline := time.Now().Add(closeGrace)
+	waitUntil(deadline, s.inflight.Wait)
+	s.mu.Lock()
+	conns := s.conns
+	s.conns = map[*conn]struct{}{}
+	s.mu.Unlock()
+	for c := range conns {
+		c.drain(deadline)
 	}
 	for c := range conns {
 		c.close()
@@ -170,12 +182,42 @@ func (s *Server) Close() error {
 	return nil
 }
 
+// waitUntil runs wait and returns when it does or at deadline.
+func waitUntil(deadline time.Time, wait func()) {
+	done := make(chan struct{})
+	go func() {
+		wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Until(deadline)):
+	}
+}
+
+// begin counts a request in flight, or refuses it once Close has started,
+// so no request is added while Close waits for the others.
+func (s *Server) begin() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+	s.inflight.Add(1)
+	return true
+}
+
 type conn struct {
 	srv  *Server
 	nc   net.Conn
 	out  chan []byte
 	once sync.Once
 	done chan struct{}
+	// draining asks writeLoop to write what is queued and stop; flushed
+	// closes when writeLoop has stopped.
+	drainOnce sync.Once
+	draining  chan struct{}
+	flushed   chan struct{}
 }
 
 func (c *conn) close() {
@@ -207,16 +249,45 @@ func (c *conn) send(line []byte, dropSlow bool) {
 }
 
 func (c *conn) writeLoop() {
+	defer close(c.flushed)
 	for {
 		select {
 		case <-c.done:
 			return
 		case line := <-c.out:
-			if _, err := c.nc.Write(line); err != nil {
-				c.close()
+			if !c.write(line) {
 				return
 			}
+		case <-c.draining:
+			for {
+				select {
+				case line := <-c.out:
+					if !c.write(line) {
+						return
+					}
+				default:
+					return
+				}
+			}
 		}
+	}
+}
+
+func (c *conn) write(line []byte) bool {
+	if _, err := c.nc.Write(line); err != nil {
+		c.close()
+		return false
+	}
+	return true
+}
+
+// drain writes the replies already queued, giving up at deadline.
+func (c *conn) drain(deadline time.Time) {
+	c.drainOnce.Do(func() { close(c.draining) })
+	c.nc.SetWriteDeadline(deadline)
+	select {
+	case <-c.flushed:
+	case <-time.After(time.Until(deadline)):
 	}
 }
 
@@ -244,7 +315,13 @@ func (c *conn) readLoop() {
 			}
 			continue
 		}
-		go c.serve(ctx, m)
+		if !c.srv.begin() {
+			return
+		}
+		go func() {
+			defer c.srv.inflight.Done()
+			c.serve(ctx, m)
+		}()
 	}
 }
 
