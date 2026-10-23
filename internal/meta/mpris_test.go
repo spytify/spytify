@@ -34,13 +34,21 @@ func TestParseMetadata(t *testing.T) {
 
 func TestParseMetadataVariants(t *testing.T) {
 	got := ParseMetadata(dbus.MakeVariant(map[string]dbus.Variant{
-		"mpris:trackid": dbus.MakeVariant("/org/mpris/MediaPlayer2/TrackList/NoTrack"),
-		"mpris:length":  dbus.MakeVariant(int64(5_000_000)),
-		"xesam:artist":  dbus.MakeVariant("Single Artist"),
-		"mpris:artUrl":  dbus.MakeVariant("javascript:alert(1)"),
+		"mpris:length": dbus.MakeVariant(int64(5_000_000)),
+		"xesam:artist": dbus.MakeVariant("Single Artist"),
+		"mpris:artUrl": dbus.MakeVariant("javascript:alert(1)"),
 	}))
 	if got.ID != "" || got.LengthMs != 5000 || !reflect.DeepEqual(got.Artists, []string{"Single Artist"}) || got.ArtURL != "" {
 		t.Fatalf("got %+v", got)
+	}
+	// NoTrack with the ended item's fields left over is no track at all.
+	ended := ParseMetadata(dbus.MakeVariant(map[string]dbus.Variant{
+		"mpris:trackid": dbus.MakeVariant(dbus.ObjectPath("/org/mpris/MediaPlayer2/TrackList/NoTrack")),
+		"xesam:title":   dbus.MakeVariant("Basic Three"),
+		"mpris:length":  dbus.MakeVariant(int64(4_500_000)),
+	}))
+	if !ended.Empty() {
+		t.Fatalf("NoTrack parsed as %+v", ended)
 	}
 	if empty := ParseMetadata(dbus.MakeVariant("not a map")); !empty.Empty() {
 		t.Fatalf("garbage metadata parsed as %+v", empty)

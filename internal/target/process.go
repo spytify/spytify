@@ -96,7 +96,7 @@ func listProc() []Process {
 	var out []Process
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
+		if err != nil || zombie(e.Name()) {
 			continue
 		}
 		if b, err := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline")); err == nil && len(b) > 0 {
@@ -108,6 +108,17 @@ func listProc() []Process {
 		}
 	}
 	return out
+}
+
+// zombie reports a process that exited but was not reaped: it plays nothing.
+func zombie(pid string) bool {
+	b, err := os.ReadFile(filepath.Join("/proc", pid, "stat"))
+	if err != nil {
+		return false
+	}
+	// "pid (comm) state ...": comm may hold spaces and parentheses.
+	i := bytes.LastIndexByte(b, ')')
+	return i >= 0 && i+2 < len(b) && b[i+2] == 'Z'
 }
 
 func listPS() []Process {

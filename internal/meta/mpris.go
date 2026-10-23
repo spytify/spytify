@@ -423,7 +423,9 @@ func ParseMetadata(v dbus.Variant) TrackInfo {
 	}
 	t.ID = str("mpris:trackid")
 	if t.ID == "/org/mpris/MediaPlayer2/TrackList/NoTrack" {
-		t.ID = ""
+		// The spec's "no track": whatever else the map still holds is
+		// the item that ended.
+		return TrackInfo{}
 	}
 	t.Title = strings.TrimSpace(str("xesam:title"))
 	t.Artists = list("xesam:artist")

@@ -51,6 +51,12 @@ func TestSessionList(t *testing.T) {
 		t.Fatalf("a skipped current track stays current: %+v", s.Current)
 	}
 
+	// The skipped item ends and the core waits: the card empties.
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
+	if s = m.Snapshot(); s.Current != nil || s.Rows[0].Title != "Two" {
+		t.Fatalf("waiting kept the skipped card: %+v", s.Current)
+	}
+
 	m.Apply(started(t, "s-003", "Three"))
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-003", Path: "/m/Three.flac", Bytes: 1e6, Tagged: true, TaggedBy: "local"}))
 	s = m.Snapshot()

@@ -253,7 +253,8 @@ func (m *Model) apply(s *State, ev proto.Event) {
 			s.Rows, s.Current, s.LastError = nil, nil, nil
 		}
 		s.Session = e.State
-		if e.State == proto.StateIdle {
+		// Waiting means the core follows no item: what was playing ended.
+		if e.State == proto.StateIdle || e.State == proto.StateWaiting {
 			m.retire(s)
 		}
 	case proto.EventTrackStarted:
