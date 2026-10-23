@@ -53,7 +53,12 @@ type libraryScreen struct {
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
-	l.covers = newCovers(func() { fyne.Do(l.list.Refresh) })
+	l.covers = newCovers(func() {
+		// Tests draw by hand: see Options.ManualRender.
+		if !a.opts.ManualRender {
+			fyne.Do(l.list.Refresh)
+		}
+	})
 	l.search = widget.NewEntry()
 	l.search.SetPlaceHolder("Search artist, title or album")
 	l.search.OnChanged = func(string) { l.filter() }

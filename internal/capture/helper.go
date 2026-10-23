@@ -47,6 +47,8 @@ type Helper struct {
 	// running reports whether the target runs; while it does not, a helper
 	// that waits for it has nothing to say yet.
 	running func(target.Target) bool
+	// headerTimeout and frameTimeout are the package's, read once.
+	headerTimeout, frameTimeout time.Duration
 
 	frames   chan Chunk
 	overruns atomic.Int64
@@ -59,7 +61,8 @@ func newHelper(helper string, args func(target.Target) ([]string, bool), logf fu
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
-	return &Helper{logf: logf, helper: helper, args: args, frames: make(chan Chunk, 256), done: make(chan struct{})}
+	return &Helper{logf: logf, helper: helper, args: args, headerTimeout: headerTimeout, frameTimeout: frameTimeout,
+		frames: make(chan Chunk, 256), done: make(chan struct{})}
 }
 
 // FindTapHelper locates spytify-tap: the given path, next to the running
@@ -165,7 +168,7 @@ func (c *Helper) stream(ctx context.Context, args []string, t target.Target) int
 		f, err := readTapHeader(r)
 		got <- header{f, err}
 	}()
-	timer := time.NewTimer(headerTimeout)
+	timer := time.NewTimer(c.headerTimeout)
 	defer timer.Stop()
 wait:
 	for {
@@ -181,10 +184,10 @@ wait:
 			break wait
 		case <-timer.C:
 			if c.running != nil && !c.running(t) {
-				timer.Reset(headerTimeout)
+				timer.Reset(c.headerTimeout)
 				continue
 			}
-			c.logf("capture: the helper got no answer from the audio system in %s; starting it again", headerTimeout)
+			c.logf("capture: the helper got no answer from the audio system in %s; starting it again", c.headerTimeout)
 			// Wait closes the pipes, which ends the header read.
 			_ = cmd.Process.Kill()
 			break wait
@@ -200,8 +203,8 @@ wait:
 
 func (c *Helper) readFrames(ctx context.Context, r io.Reader, f pcm.Format, p *os.Process) {
 	chunk := make([]byte, f.FramesFromMs(10)*int64(f.FrameBytes()))
-	stalled := time.AfterFunc(frameTimeout, func() {
-		c.logf("capture: no audio from the helper for %s; starting it again", frameTimeout)
+	stalled := time.AfterFunc(c.frameTimeout, func() {
+		c.logf("capture: no audio from the helper for %s; starting it again", c.frameTimeout)
 		_ = p.Kill()
 	})
 	defer stalled.Stop()
@@ -209,7 +212,7 @@ func (c *Helper) readFrames(ctx context.Context, r io.Reader, f pcm.Format, p *o
 		if _, err := io.ReadFull(r, chunk); err != nil {
 			return
 		}
-		stalled.Reset(frameTimeout)
+		stalled.Reset(c.frameTimeout)
 		select {
 		case c.frames <- Chunk{Data: append([]byte(nil), chunk...), Format: f}:
 		case <-ctx.Done():
