@@ -111,12 +111,13 @@ type change struct {
 
 // sessionDeps is what a session needs from the core.
 type sessionDeps struct {
-	values   func() settings.Values
-	emit     func(method string, payload any)
-	log      *Logger
-	fin      *finisher
-	control  func(cmd string) error
-	identify func(key string)
+	values  func() settings.Values
+	emit    func(method string, payload any)
+	log     *Logger
+	fin     *finisher
+	control func(cmd string) error
+	// mute silences the player (true) or gives it back its volume.
+	mute func(on bool) error
 }
 
 // Session turns a stream of frames and now-playing events into track files.
@@ -158,6 +159,7 @@ type Session struct {
 	peak, sum float64
 	count     int64
 	warnedLen bool
+	adMuted   bool
 
 	stopCh chan stopMode
 	mu     sync.Mutex
@@ -204,6 +206,23 @@ func (s *Session) setState(st proto.SessionState) {
 	s.mu.Unlock()
 	if changed {
 		s.deps.emit(proto.EventSessionState, proto.SessionStateEvent{State: st})
+		s.muteAds(st)
+	}
+}
+
+// muteAds silences the player while an ad plays (recorder.mute_ads), and
+// gives the volume back when anything else plays or the session ends.
+func (s *Session) muteAds(st proto.SessionState) {
+	if s.deps.mute == nil {
+		return
+	}
+	want := st == proto.StateAd && s.deps.values().Bool("recorder.mute_ads")
+	if want == s.adMuted {
+		return
+	}
+	s.adMuted = want
+	if err := s.deps.mute(want); err != nil {
+		s.deps.log.Infof("mute ads: %v", err)
 	}
 }
 
@@ -847,10 +866,6 @@ func (s *Session) announce(seg *segment) {
 	switch seg.reason {
 	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
 		s.deps.fin.skip(seg.id, seg.reason)
-	case "":
-		if s.deps.identify != nil {
-			s.deps.identify(seg.id)
-		}
 	}
 }
 

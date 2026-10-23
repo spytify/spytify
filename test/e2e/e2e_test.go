@@ -66,7 +66,7 @@ func newEnv(t *testing.T) *env {
 }
 
 var quiet = []string{
-	"--set", "encode.format=wav", "--set", "recorder.normalize=false", "--set", "tags.source=none",
+	"--set", "encode.format=wav", "--set", "recorder.normalize=false",
 	"--set", "recorder.min_seconds=1", "--set", "output.group_by=none", "--set", "tags.cover=false",
 }
 

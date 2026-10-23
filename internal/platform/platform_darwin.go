@@ -39,5 +39,5 @@ func (b Backends) Probe() []proto.Check {
 	} else {
 		checks = append(checks, proto.Check{Name: "AppleScript", OK: true, Detail: "macOS asks once to let spytify control the player"})
 	}
-	return append(checks, keyringCheck())
+	return checks
 }

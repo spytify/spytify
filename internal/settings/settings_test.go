@@ -11,7 +11,7 @@ import (
 func openTemp(t *testing.T) (*Store, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "spytify", "config.toml")
-	s, err := Open(path, NewMemorySecrets())
+	s, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestSetPersistsAndReloads(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("config mode = %v", info.Mode().Perm())
 	}
-	again, err := Open(path, NewMemorySecrets())
+	again, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,15 +80,14 @@ func TestSetPersistsAndReloads(t *testing.T) {
 func TestSetRejectsInvalidAndUnknown(t *testing.T) {
 	s, _ := openTemp(t)
 	cases := map[string]any{
-		"encode.format":             "ogg",
-		"encode.bitrate_kbps":       192,
-		"recorder.min_seconds":      1.5,
-		"output.dir":                "relative/dir",
-		"output.template":           "{artist}/{title}",
-		"tags.spotify.redirect_uri": "https://example.com/cb",
-		"recorder.session_timer":    "forever",
-		"no.such.key":               true,
-		"app.log_level":             "trace",
+		"encode.format":          "ogg",
+		"encode.bitrate_kbps":    192,
+		"recorder.min_seconds":   1.5,
+		"output.dir":             "relative/dir",
+		"output.template":        "{artist}/{title}",
+		"recorder.session_timer": "forever",
+		"no.such.key":            true,
+		"app.log_level":          "debug",
 	}
 	applied, rejected, _, err := s.Set(cases)
 	if err != nil {
@@ -117,42 +116,9 @@ func TestTemplatePlaceholders(t *testing.T) {
 	}
 }
 
-func TestSecretsStayOutOfConfig(t *testing.T) {
-	s, path := openTemp(t)
-	applied, rejected, changed, err := s.Set(map[string]any{
-		"tags.spotify.client_secret": "s3cr3t",
-		"tags.spotify.client_id":     "abc",
-	})
-	if err != nil || len(rejected) != 0 || len(applied) != 2 {
-		t.Fatalf("applied=%v rejected=%v err=%v", applied, rejected, err)
-	}
-	if changed["tags.spotify.client_secret"] != Masked {
-		t.Fatalf("secret echoed back: %v", changed["tags.spotify.client_secret"])
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(b), "s3cr3t") || strings.Contains(string(b), "client_secret") {
-		t.Fatalf("secret written to config.toml:\n%s", b)
-	}
-	got, _ := s.Get([]string{"tags.spotify.client_secret"})
-	if got["tags.spotify.client_secret"] != Masked {
-		t.Fatalf("Get = %v", got)
-	}
-	if s.Values().Secret("tags.spotify.client_secret") != "s3cr3t" {
-		t.Fatal("secret not readable by the core")
-	}
-	// A client that sends the mask back changes nothing.
-	applied, _, _, _ = s.Set(map[string]any{"tags.spotify.client_secret": Masked})
-	if len(applied) != 0 || s.Values().Secret("tags.spotify.client_secret") != "s3cr3t" {
-		t.Fatal("mask overwrote the secret")
-	}
-}
-
 func TestResetPrefix(t *testing.T) {
 	s, _ := openTemp(t)
-	if _, _, _, err := s.Set(map[string]any{"output.underscores": true, "encode.format": "wav", "tags.spotify.client_secret": "x"}); err != nil {
+	if _, _, _, err := s.Set(map[string]any{"output.underscores": true, "encode.format": "wav"}); err != nil {
 		t.Fatal(err)
 	}
 	changed, err := s.Reset("output")
@@ -165,12 +131,6 @@ func TestResetPrefix(t *testing.T) {
 	v := s.Values()
 	if v.Bool("output.underscores") || v.String("encode.format") != "wav" {
 		t.Fatal("reset touched the wrong keys")
-	}
-	if _, err := s.Reset("tags.spotify"); err != nil {
-		t.Fatal(err)
-	}
-	if s.Values().Secret("tags.spotify.client_secret") != "" {
-		t.Fatal("reset kept the secret")
 	}
 }
 
@@ -190,18 +150,18 @@ func TestOverrideIsNotPersisted(t *testing.T) {
 func TestLoadWarnsAndKeepsDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	content := "[encode]\nformat = \"ogg\"\n[output]\ndir = \"/music\"\nnope = 1\n[tags.spotify]\nclient_secret = \"leak\"\n"
+	content := "[encode]\nformat = \"ogg\"\n[output]\ndir = \"/music\"\nnope = 1\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := Open(path, NewMemorySecrets())
+	s, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if s.Values().String("encode.format") != "mp3" || s.Values().Path("output.dir") != "/music" {
 		t.Fatal("bad load")
 	}
-	if len(s.Warnings()) != 3 {
+	if len(s.Warnings()) != 2 {
 		t.Fatalf("warnings = %v", s.Warnings())
 	}
 }

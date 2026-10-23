@@ -55,7 +55,7 @@ func (b Backends) Probe() []proto.Check {
 		conn.Close()
 		checks = append(checks, proto.Check{Name: "D-Bus session bus", OK: true})
 	}
-	return append(checks, keyringCheck())
+	return checks
 }
 
 var allowedRates = regexp.MustCompile(`key:'clock\.allowed-rates' value:'\[([^\]]*)\]'`)

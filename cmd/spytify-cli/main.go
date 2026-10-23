@@ -83,7 +83,7 @@ func newRoot(out io.Writer) *cobra.Command {
 
 	root.AddCommand(
 		a.infoCmd(), a.startCmd(), a.stopCmd(), a.statusCmd(), a.setCmd(), a.getCmd(), a.resetCmd(),
-		a.tailCmd(), a.eventsCmd(), a.controlCmd(), a.connectCmd(), a.shutdownCmd(),
+		a.tailCmd(), a.eventsCmd(), a.controlCmd(), a.shutdownCmd(),
 	)
 	return root
 }
@@ -240,7 +240,7 @@ func (a *app) setCmd() *cobra.Command {
 func (a *app) getCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "get [key...]",
-		Short: "Print settings (all when no key is given); secrets are masked",
+		Short: "Print settings (all when no key is given)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var res proto.SettingsValues
 			if err := a.call(proto.MethodSettingsGet, proto.SettingsGetParams{Keys: args}, &res); err != nil || a.asJSON {
@@ -376,22 +376,6 @@ func (a *app) controlCmd() *cobra.Command {
 		ValidArgs: []string{proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.call(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: args[0]}, nil)
-		},
-	}
-}
-
-func (a *app) connectCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "spotify-connect",
-		Short: "Start the Spotify Web API authorisation for tags.source = spotify_api",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			var res proto.SpotifyConnectResult
-			if err := a.call(proto.MethodSpotifyConnect, nil, &res); err != nil || a.asJSON {
-				return err
-			}
-			fmt.Fprintf(a.out, "open this URL in a browser on this machine:\n%s\n", res.AuthURL)
-			return nil
 		},
 	}
 }

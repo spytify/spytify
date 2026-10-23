@@ -1,7 +1,7 @@
 // Package fake replays a scripted timeline as a player would: audio frames
 // for the capture side and now-playing events for the metadata side, with
 // the notification offsets, gaps, adverts, pauses and format changes the
-// scenarios need. It replaces v1's FakeSpotify.
+// scenarios need. It replaces v1's fake player.
 package fake
 
 import (

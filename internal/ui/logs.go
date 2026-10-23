@@ -16,14 +16,14 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-var levelRank = map[string]int{"error": 0, "info": 1, "debug": 2}
+var logLevels = []string{"error", "info", "debug"}
 
 // logsScreen is the v1 console, filtered by level, under the diagnostics:
 // the checks core.info runs, folded away while they all pass.
 type logsScreen struct {
 	app   *App
 	root  fyne.CanvasObject
-	level *widget.Select
+	level *widget.CheckGroup
 	list  *widget.List
 	lines []proto.LogEvent
 	all   []proto.LogEvent
@@ -47,7 +47,8 @@ func newLogsScreen(a *App) *logsScreen {
 	refresh.Importance = widget.LowImportance
 	l.diag = widget.NewAccordion(widget.NewAccordionItem("Diagnostics", container.NewVBox(l.checks, container.NewHBox(refresh))))
 
-	l.level = widget.NewSelect([]string{"error", "info", "debug"}, func(string) { l.filter() })
+	l.level = widget.NewCheckGroup(logLevels, func([]string) { l.filter() })
+	l.level.Horizontal = true
 	l.list = widget.NewList(
 		func() int { return len(l.lines) },
 		func() fyne.CanvasObject {
@@ -80,7 +81,7 @@ func newLogsScreen(a *App) *logsScreen {
 		},
 	)
 	// SetSelected runs the callback, which needs the list.
-	l.level.SetSelected("info")
+	l.level.SetSelected(logLevels)
 	copyAll := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
 		var b strings.Builder
 		for _, line := range l.lines {
@@ -146,10 +147,13 @@ func (l *logsScreen) renderChecks(s model.State) {
 }
 
 func (l *logsScreen) filter() {
-	max := levelRank[l.level.Selected]
+	shown := map[string]bool{}
+	for _, lv := range l.level.Selected {
+		shown[lv] = true
+	}
 	var lines []proto.LogEvent
 	for i := len(l.all) - 1; i >= 0; i-- {
-		if levelRank[l.all[i].Level] <= max {
+		if shown[l.all[i].Level] {
 			lines = append(lines, l.all[i])
 		}
 	}

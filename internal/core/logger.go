@@ -25,10 +25,9 @@ const (
 )
 
 // Logger writes a rotating log file, keeps the last lines for log.tail and
-// broadcasts each line at or above app.log_level as a log event.
+// broadcasts every line as a log event; the Logs tab filters by level.
 type Logger struct {
 	mu      sync.Mutex
-	level   int
 	path    string
 	file    *os.File
 	size    int64
@@ -39,7 +38,7 @@ type Logger struct {
 
 // NewLogger opens path (empty for no file) and mirrors lines to console.
 func NewLogger(path string, console io.Writer) (*Logger, error) {
-	l := &Logger{level: levelInfo, path: path, console: console}
+	l := &Logger{path: path, console: console}
 	if path != "" {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return nil, err
@@ -83,20 +82,6 @@ func (l *Logger) SetEmitter(emit func(method string, payload any)) {
 	l.emit = emit
 }
 
-// SetLevel applies app.log_level.
-func (l *Logger) SetLevel(level string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	switch level {
-	case "error":
-		l.level = levelError
-	case "debug":
-		l.level = levelDebug
-	default:
-		l.level = levelInfo
-	}
-}
-
 func (l *Logger) Errorf(format string, args ...any) { l.write(levelError, format, args...) }
 func (l *Logger) Infof(format string, args ...any)  { l.write(levelInfo, format, args...) }
 func (l *Logger) Debugf(format string, args ...any) { l.write(levelDebug, format, args...) }
@@ -106,10 +91,6 @@ func (l *Logger) write(level int, format string, args ...any) {
 		return
 	}
 	l.mu.Lock()
-	if level > l.level {
-		l.mu.Unlock()
-		return
-	}
 	ev := proto.LogEvent{
 		Level: [...]string{"error", "info", "debug"}[level],
 		Msg:   strings.TrimSpace(fmt.Sprintf(format, args...)),

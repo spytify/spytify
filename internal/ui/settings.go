@@ -21,9 +21,9 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// settingsScreen is one section per group of the validation table, each a
-// form whose hints are the TOML keys, so the UI and spytify-cli speak the
-// same names. Sections fold; a search opens the ones that match.
+// settingsScreen is one section per group of the validation table: the
+// settings most people change, then the rest folded under Advanced. The
+// player, which few people change, is the App section's advanced part.
 type settingsScreen struct {
 	app      *App
 	root     fyne.CanvasObject
@@ -33,21 +33,23 @@ type settingsScreen struct {
 	fields    map[string]*field
 	rendering bool
 	player    *playerCard
+	// advanced remembers which Advanced parts the user opened.
+	advanced  map[string]*widget.Accordion
 	open      map[string]bool
-	acc       *widget.Accordion
 	lastQuery string
 }
 
 type field struct {
-	def  *settings.Def
-	set  func(v any)
-	item *widget.FormItem
+	def   *settings.Def
+	set   func(v any)
+	input fyne.CanvasObject
+	item  *widget.FormItem
 }
 
 func newSettingsScreen(a *App) *settingsScreen {
-	s := &settingsScreen{app: a, fields: map[string]*field{}, open: map[string]bool{"Player": true, "Output": true}}
+	s := &settingsScreen{app: a, fields: map[string]*field{}, advanced: map[string]*widget.Accordion{}, open: map[string]bool{}}
 	s.search = widget.NewEntry()
-	s.search.SetPlaceHolder("Search settings by name or key")
+	s.search.SetPlaceHolder("Search settings")
 	s.search.ActionItem = widget.NewIcon(theme.SearchIcon())
 	s.search.OnChanged = func(string) { s.layout() }
 	s.sections = container.NewVBox()
@@ -76,71 +78,71 @@ func groups() []string {
 	return out
 }
 
+func matches(q string, d settings.Def) bool {
+	return q == "" || strings.Contains(strings.ToLower(d.Label), q) || strings.Contains(d.Key, q)
+}
+
 func (s *settingsScreen) layout() {
 	q := strings.ToLower(strings.TrimSpace(s.search.Text))
 	// Remember what the user opened, not what a search opened.
-	if s.acc != nil && s.lastQuery == "" {
-		for _, item := range s.acc.Items {
-			s.open[item.Title] = item.Open
+	if s.lastQuery == "" {
+		for g, acc := range s.advanced {
+			s.open[g] = acc.Items[0].Open
 		}
 	}
 	s.lastQuery = q
-	acc := widget.NewAccordion()
-	acc.MultiOpen = true
-	if q == "" || strings.Contains("player process bundle mpris target launch", q) {
-		acc.Append(widget.NewAccordionItem("Player", s.player.form))
-	}
+	s.advanced = map[string]*widget.Accordion{}
+	var sections []fyne.CanvasObject
 	for _, g := range groups() {
-		form := widget.NewForm()
+		var main, adv []*widget.FormItem
 		var keys []string
 		for _, d := range settings.Table {
-			if d.Group != g {
+			if d.Group != g || !matches(q, d) {
 				continue
 			}
-			if q != "" && !strings.Contains(strings.ToLower(d.Label), q) && !strings.Contains(d.Key, q) {
-				continue
+			if d.Advanced {
+				adv = append(adv, s.fields[d.Key].item)
+			} else {
+				main = append(main, s.fields[d.Key].item)
 			}
-			form.AppendItem(s.fields[d.Key].item)
 			keys = append(keys, d.Key)
 		}
-		if len(keys) == 0 {
+		player := g == "App" && (q == "" || strings.Contains("player process bundle mpris launch", q))
+		if len(keys) == 0 && !player {
 			continue
 		}
-		reset := widget.NewButtonWithIcon("Reset "+strings.ToLower(g)+" settings", theme.HistoryIcon(), func() { s.resetKeys(keys) })
-		reset.Importance = widget.LowImportance
-		body := []fyne.CanvasObject{form}
-		if g == "Tags" {
-			body = append(body, s.spotifyRow())
+		var advanced []fyne.CanvasObject
+		if player {
+			advanced = append(advanced, widget.NewLabelWithStyle("Player", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), s.player.form)
 		}
-		body = append(body, container.NewHBox(reset))
-		acc.Append(widget.NewAccordionItem(g, container.NewVBox(body...)))
-	}
-	for i, item := range acc.Items {
-		if q != "" || s.open[item.Title] {
-			acc.Open(i)
+		if len(adv) > 0 {
+			advanced = append(advanced, widget.NewForm(adv...))
 		}
+		body := []fyne.CanvasObject{s.header(g, keys)}
+		if len(main) > 0 {
+			body = append(body, widget.NewForm(main...))
+		}
+		if len(advanced) > 0 {
+			acc := widget.NewAccordion(widget.NewAccordionItem("Advanced", container.NewVBox(advanced...)))
+			if q != "" || s.open[g] {
+				acc.Open(0)
+			}
+			s.advanced[g] = acc
+			body = append(body, acc)
+		}
+		sections = append(sections, container.NewVBox(body...), widget.NewSeparator())
 	}
-	s.acc = acc
-	s.sections.Objects = []fyne.CanvasObject{acc}
+	s.sections.Objects = sections
 	s.sections.Refresh()
 }
 
-func (s *settingsScreen) spotifyRow() fyne.CanvasObject {
-	connect := widget.NewButton("Connect to the Spotify Web API", func() {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			var res proto.SpotifyConnectResult
-			if err := s.app.link.Do(ctx, proto.MethodSpotifyConnect, nil, &res); err != nil {
-				fyne.Do(func() { s.app.showError(err) })
-				return
-			}
-			fyne.Do(func() { s.app.openURL(res.AuthURL) })
-		}()
-	})
-	note := wrapped("Only for tags.source = spotify_api. The API can revoke keys used to tag recordings; that risk is yours.")
-	note.Wrapping = fyne.TextWrapWord
-	return container.NewVBox(container.NewHBox(connect), note)
+func (s *settingsScreen) header(group string, keys []string) fyne.CanvasObject {
+	if len(keys) == 0 {
+		return heading(group)
+	}
+	reset := widget.NewButtonWithIcon("Reset", theme.HistoryIcon(), func() { s.resetKeys(keys) })
+	reset.Importance = widget.LowImportance
+	return container.NewBorder(nil, nil, heading(group), reset)
 }
 
 func (s *settingsScreen) resetKeys(keys []string) {
@@ -168,7 +170,7 @@ func (s *settingsScreen) apply(key string, v any) {
 		var res proto.SettingsSetResult
 		err := s.app.link.Do(ctx, proto.MethodSettingsSet, proto.SettingsSetParams{Values: map[string]any{key: v}}, &res)
 		if err == nil && res.Rejected[key] != "" {
-			err = fmt.Errorf("%s: %s", key, res.Rejected[key])
+			err = fmt.Errorf("%s: %s", s.fields[key].def.Label, res.Rejected[key])
 		}
 		if err != nil {
 			fyne.Do(func() {
@@ -182,16 +184,11 @@ func (s *settingsScreen) apply(key string, v any) {
 func (s *settingsScreen) newField(d *settings.Def) *field {
 	f := &field{def: d}
 	key := d.Key
-	hint := d.Key
-	if d.Note != "" {
-		hint += " · " + d.Note
-	}
-	var input fyne.CanvasObject
 	switch d.Kind {
 	case settings.KindBool:
 		c := widget.NewCheck("", func(b bool) { s.apply(key, b) })
 		f.set = func(v any) { b, _ := v.(bool); c.SetChecked(b) }
-		input = c
+		f.input = c
 	case settings.KindEnum, settings.KindIntEnum:
 		opts := d.Enum
 		if d.Kind == settings.KindIntEnum {
@@ -202,24 +199,9 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		sel := widget.NewSelect(opts, func(v string) { s.apply(key, v) })
 		f.set = func(v any) { sel.SetSelected(fmt.Sprint(number(v))) }
-		input = sel
-	case settings.KindSecret:
-		e := widget.NewPasswordEntry()
-		e.SetPlaceHolder("not set")
-		save := widget.NewButton("Save", func() { s.apply(key, e.Text); e.SetText("") })
-		clear := widget.NewButton("Clear", func() { s.apply(key, "") })
-		clear.Importance = widget.LowImportance
-		f.set = func(v any) {
-			if v == settings.Masked {
-				e.SetPlaceHolder("stored in the OS keyring")
-			} else {
-				e.SetPlaceHolder("not set")
-			}
-		}
-		input = container.NewBorder(nil, nil, nil, container.NewHBox(save, clear), e)
+		f.input = sel
 	case settings.KindPath:
-		e := widget.NewEntry()
-		e.OnSubmitted = func(v string) { s.apply(key, v) }
+		e := newApplyEntry(func(v string) { s.apply(key, v) })
 		browse := widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() {
 			dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
 				if err == nil && u != nil {
@@ -230,24 +212,55 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		})
 		f.set = func(v any) {
 			if str, _ := v.(string); !s.focused(e) {
-				e.SetText(str)
+				e.show(str)
 			}
 		}
-		input = container.NewBorder(nil, nil, nil, browse, e)
-		hint += " · Enter to apply"
+		f.input = container.NewBorder(nil, nil, nil, browse, e)
 	default:
-		e := widget.NewEntry()
-		e.OnSubmitted = func(v string) { s.apply(key, v) }
+		e := newApplyEntry(func(v string) { s.apply(key, v) })
+		if d.Kind == settings.KindTemplate {
+			e.SetPlaceHolder(d.Note)
+		}
 		f.set = func(v any) {
 			if !s.focused(e) {
-				e.SetText(fmt.Sprint(number(v)))
+				e.show(fmt.Sprint(number(v)))
 			}
 		}
-		input = e
-		hint += " · Enter to apply"
+		f.input = e
 	}
-	f.item = &widget.FormItem{Text: d.Label, Widget: input, HintText: hint}
+	f.item = &widget.FormItem{Text: d.Label, Widget: f.input}
 	return f
+}
+
+// applyEntry sends its text on Enter or when it loses focus, if it changed.
+type applyEntry struct {
+	widget.Entry
+	shown string
+	done  func(string)
+}
+
+func newApplyEntry(done func(string)) *applyEntry {
+	e := &applyEntry{done: done}
+	e.ExtendBaseWidget(e)
+	e.OnSubmitted = func(string) { e.submit() }
+	return e
+}
+
+func (e *applyEntry) show(text string) {
+	e.shown = text
+	e.SetText(text)
+}
+
+func (e *applyEntry) submit() {
+	if e.Text != e.shown {
+		e.shown = e.Text
+		e.done(e.Text)
+	}
+}
+
+func (e *applyEntry) FocusLost() {
+	e.Entry.FocusLost()
+	e.submit()
 }
 
 // number prints JSON numbers without a decimal point when they are whole.
@@ -264,6 +277,14 @@ func (s *settingsScreen) render(st model.State) {
 	for key, f := range s.fields {
 		if v, ok := st.Settings[key]; ok && f.set != nil {
 			f.set(v)
+		}
+	}
+	// FLAC and WAV are lossless: a bitrate means nothing for them.
+	if sel, ok := s.fields["encode.bitrate_kbps"].input.(*widget.Select); ok {
+		if format, _ := st.Settings["encode.format"].(string); format == "flac" || format == "wav" {
+			sel.Disable()
+		} else {
+			sel.Enable()
 		}
 	}
 	s.player.render(st)
@@ -292,25 +313,23 @@ func newPlayerCard(a *App) *playerCard {
 	p.bundle.SetPlaceHolder("bundle id")
 	p.mpris.SetPlaceHolder("org.mpris.MediaPlayer2.<name> (default)")
 	p.launch.SetPlaceHolder("command that starts the player (optional)")
-	form := widget.NewForm(&widget.FormItem{Text: "Player process", Widget: p.process, HintText: "SPYTIFY_TARGET_PROCESS"})
+	form := widget.NewForm(&widget.FormItem{Text: "Player process", Widget: p.process})
 	switch runtime.GOOS {
 	case "darwin":
-		form.AppendItem(&widget.FormItem{Text: "Bundle id", Widget: p.bundle,
-			HintText: `SPYTIFY_TARGET_BUNDLE_ID · osascript -e 'id of app "<Player name>"' prints it`})
+		form.AppendItem(&widget.FormItem{Text: "Bundle id", Widget: p.bundle})
 	case "linux":
-		form.AppendItem(&widget.FormItem{Text: "MPRIS name", Widget: p.mpris, HintText: "SPYTIFY_TARGET_MPRIS"})
+		form.AppendItem(&widget.FormItem{Text: "MPRIS name", Widget: p.mpris})
 	}
-	form.AppendItem(&widget.FormItem{Text: "Launch command", Widget: p.launch, HintText: "SPYTIFY_TARGET_LAUNCH"})
+	form.AppendItem(&widget.FormItem{Text: "Launch command", Widget: p.launch})
 	save := widget.NewButtonWithIcon("Save and restart spytifyd", theme.DocumentSaveIcon(), p.save)
 	save.Importance = widget.HighImportance
-	intro := widget.NewLabel("The app Spytify records, by its process name. Spytify ships with no player built in.")
-	intro.Wrapping = fyne.TextWrapWord
-	p.form = container.NewVBox(intro, form, container.NewHBox(save), caption("Saved to "+target.UserEnvPath()))
+	p.form = container.NewVBox(form, container.NewHBox(save))
 	// Until the daemon answers, show what this process would start it with.
-	p.process.SetText(os.Getenv("SPYTIFY_TARGET_PROCESS"))
-	p.bundle.SetText(os.Getenv("SPYTIFY_TARGET_BUNDLE_ID"))
+	t := target.Load().Target
+	p.process.SetText(strings.Join(t.ProcessNames, ","))
+	p.bundle.SetText(t.BundleID)
 	p.mpris.SetText(os.Getenv("SPYTIFY_TARGET_MPRIS"))
-	p.launch.SetText(os.Getenv("SPYTIFY_TARGET_LAUNCH"))
+	p.launch.SetText(t.Launch)
 	return p
 }
 

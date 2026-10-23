@@ -5,13 +5,21 @@
 #                                        the capture helper inside it
 # Needs Go and the Xcode command line tools (swiftc, clang, lipo, codesign,
 # sips, iconutil).
+#
+# The player recorded when none is chosen comes from SPYTIFY_DEFAULT_PROCESS
+# and SPYTIFY_DEFAULT_BUNDLE_ID, from the environment or an untracked
+# build.env; without them the app asks for a player first.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source=/dev/null
+[ -f build.env ] && . ./build.env
 out="${1:-bin}"
 mkdir -p "$out"
 version="2.0.0-alpha+$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
 ldflags="-s -w -X github.com/spytify/spytify/pkg/proto.Version=v$version"
+ldflags+=" -X github.com/spytify/spytify/internal/target.DefaultProcess=${SPYTIFY_DEFAULT_PROCESS:-}"
+ldflags+=" -X github.com/spytify/spytify/internal/target.DefaultBundleID=${SPYTIFY_DEFAULT_BUNDLE_ID:-}"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 

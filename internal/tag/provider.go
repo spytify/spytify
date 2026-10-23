@@ -2,7 +2,6 @@ package tag
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,22 +9,6 @@ import (
 	"os"
 	"time"
 )
-
-// Provider completes the local tags of a closed track from a web service.
-// key identifies the recording (the session's track id).
-type Provider interface {
-	Name() string
-	Lookup(ctx context.Context, key string, local Track) (Track, error)
-}
-
-// Identifier is a provider that must look at the player while the track is
-// still playing (the Spotify provider queries currently-playing).
-type Identifier interface {
-	Identify(ctx context.Context, key string)
-}
-
-// ErrNotFound means the service does not know the track.
-var ErrNotFound = errors.New("track not found")
 
 // MaxCoverBytes caps embedded art so FLAC files do not balloon.
 const MaxCoverBytes = 1 << 20

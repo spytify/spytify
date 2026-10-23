@@ -24,8 +24,7 @@ type Track struct {
 	CoverURL     string   `json:"cover_url,omitempty"`
 	Cover        []byte   `json:"-"`
 	CoverMIME    string   `json:"-"`
-	// Source names the provider that identified the track: local, lastfm
-	// or spotify_api.
+	// Source is where the tags came from: local, the player itself.
 	Source string `json:"source"`
 }
 

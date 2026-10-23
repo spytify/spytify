@@ -38,14 +38,14 @@ function track(p) {
     discNumber: p.discNumber || 0,
     year: typeof p.year === "number" ? p.year : 0,
     artworkUrl: p.artworkUrl || "",
-    url: p.spotifyUrl || p.url || ""
+    url: p.url || ""
   };
 }
 // fields reads the track one property at a time, for players whose
 // dictionary does not answer "properties" of the current track.
 function fields(t) {
   const p = {};
-  ["id", "name", "artist", "album", "albumArtist", "duration", "trackNumber", "discNumber", "year", "artworkUrl", "spotifyUrl", "url"].forEach(function (k) {
+  ["id", "name", "artist", "album", "albumArtist", "duration", "trackNumber", "discNumber", "year", "artworkUrl", "url"].forEach(function (k) {
     const v = get(() => t[k]());
     if (v !== null) { p[k] = v; }
   });

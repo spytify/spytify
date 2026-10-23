@@ -205,12 +205,41 @@ func TestRestartRecordsTheTrackAgain(t *testing.T) {
 	}
 }
 
+func TestMuteAdsSilencesThePlayerDuringTheAd(t *testing.T) {
+	tl := loadTimeline(t, "ads")
+	tl.Items[1].LengthMs = 8000
+	tl.Expect = nil
+	s := newScenario(t, tl, map[string]any{"recorder.mute_ads": true})
+	if err := s.player.SetVolume(0.6); err != nil {
+		t.Fatal(err)
+	}
+	volumeAt := map[string]float64{}
+	probe := func(name string) func() {
+		return func() { volumeAt[name], _ = s.player.Volume() }
+	}
+	// Item 0 ends at 6.5 s, the ad at 15 s, the last item at 20.3 s.
+	s.player.At(3000, probe("song"))
+	s.player.At(11000, probe("ad"))
+	s.player.At(18000, probe("after"))
+	runWith(t, s, SessionOptions{EndOnStop: true})
+	if volumeAt["ad"] != 0 {
+		t.Errorf("volume during the ad = %v, want 0", volumeAt["ad"])
+	}
+	// The session pins the player at full volume and restores 60% at the end.
+	if volumeAt["song"] != 1 || volumeAt["after"] != 1 {
+		t.Errorf("volume around the ad = %v", volumeAt)
+	}
+	if v, _ := s.player.Volume(); v != 0.6 {
+		t.Errorf("volume after the session = %v, want 0.6", v)
+	}
+}
+
 // directSession drives a Session by hand, for states a timeline cannot
 // reach, such as a session that starts in the middle of a track.
 func directSession(t *testing.T) (*Session, *recorder, string) {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := settings.Open(filepath.Join(dir, "config.toml"), settings.NewMemorySecrets())
+	store, err := settings.Open(filepath.Join(dir, "config.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +249,6 @@ func directSession(t *testing.T) (*Session, *recorder, string) {
 	}
 	store.Override(overrides)
 	log, _ := NewLogger("", testWriter{t})
-	log.SetLevel("debug")
 	rec := &recorder{}
 	ff, ffErr := encode.Find("ffmpeg")
 	if ffErr != nil {
@@ -231,7 +259,7 @@ func directSession(t *testing.T) (*Session, *recorder, string) {
 		raw, _ := json.Marshal(payload)
 		rec.add(method, json.RawMessage(raw))
 	}
-	fin := newFinisher(store.Values, ff, &tagService{values: store.Values, log: log}, emit, log)
+	fin := newFinisher(store.Values, ff, emit, log)
 	s := newSession("test", sessionDeps{values: store.Values, emit: emit, log: log, fin: fin, control: func(string) error { return nil }}, SessionOptions{EndOnStop: true})
 	return s, rec, filepath.Join(dir, "out")
 }

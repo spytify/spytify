@@ -39,6 +39,30 @@ func TestValidateRequiresProcess(t *testing.T) {
 	}
 }
 
+func TestDefaultPlayerWhenUnset(t *testing.T) {
+	defer func(p, b string) { DefaultProcess, DefaultBundleID = p, b }(DefaultProcess, DefaultBundleID)
+	t.Setenv("SPYTIFY_TARGET_PROCESS", "x")
+	os.Unsetenv("SPYTIFY_TARGET_PROCESS")
+
+	DefaultProcess, DefaultBundleID = "", ""
+	if err := Load().Validate(); !errors.Is(err, ErrNoTarget) {
+		t.Fatalf("a build without a default player: Validate() = %v", err)
+	}
+	DefaultProcess, DefaultBundleID = "Player", "org.example.player"
+	if err := Load().Validate(); err != nil {
+		t.Fatalf("Validate() = %v with the default player", err)
+	}
+	for goos, want := range map[string]Target{
+		"darwin":  {ProcessNames: []string{"Player"}, BundleID: "org.example.player"},
+		"linux":   {ProcessNames: []string{"Player"}},
+		"windows": {ProcessNames: []string{"Player"}},
+	} {
+		if got := withDefaultPlayer(Target{}, goos); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %+v, want %+v", goos, got, want)
+		}
+	}
+}
+
 func TestSaveUserTarget(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

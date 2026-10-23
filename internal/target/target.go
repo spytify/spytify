@@ -140,14 +140,18 @@ func loadIfExists(path string) {
 // Load reads the environment. It does not fail when the target is unset, so
 // clients can resolve the socket; the daemon calls Validate.
 func Load() Env {
+	t := Target{
+		ProcessNames: splitList(os.Getenv("SPYTIFY_TARGET_PROCESS")),
+		MPRISName:    strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_MPRIS")),
+		BundleID:     strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_BUNDLE_ID")),
+		Launch:       strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_LAUNCH")),
+		DurationUnit: strings.ToLower(strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_DURATION_UNIT"))),
+	}
+	if _, set := os.LookupEnv("SPYTIFY_TARGET_PROCESS"); !set {
+		t = withDefaultPlayer(t, runtime.GOOS)
+	}
 	return Env{
-		Target: Target{
-			ProcessNames: splitList(os.Getenv("SPYTIFY_TARGET_PROCESS")),
-			MPRISName:    strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_MPRIS")),
-			BundleID:     strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_BUNDLE_ID")),
-			Launch:       strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_LAUNCH")),
-			DurationUnit: strings.ToLower(strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_DURATION_UNIT"))),
-		},
+		Target:     t,
 		ConfigPath: firstNonEmpty(os.Getenv("SPYTIFY_CONFIG"), defaultConfigPath()),
 		SocketPath: firstNonEmpty(os.Getenv("SPYTIFY_SOCKET"), DefaultSocketPath()),
 		FFmpeg:     firstNonEmpty(os.Getenv("SPYTIFY_FFMPEG"), "ffmpeg"),
@@ -216,4 +220,27 @@ func defaultStateDir() string {
 		return filepath.Join(home, "Library", "Application Support", "Spytify")
 	}
 	return filepath.Join(home, ".local", "state", "spytify")
+}
+
+// DefaultProcess and DefaultBundleID name the player recorded when
+// SPYTIFY_TARGET_PROCESS is not set. Builds fill them in with -ldflags -X
+// from the SPYTIFY_DEFAULT_PROCESS and SPYTIFY_DEFAULT_BUNDLE_ID build
+// variables, so no player is named in the source; left empty, the daemon
+// waits for a player to be chosen.
+var (
+	DefaultProcess  string
+	DefaultBundleID string
+)
+
+// withDefaultPlayer fills in the build's default player. Process names match
+// without case and without .exe, so one name serves every OS.
+func withDefaultPlayer(t Target, goos string) Target {
+	if DefaultProcess == "" {
+		return t
+	}
+	t.ProcessNames = []string{DefaultProcess}
+	if goos == "darwin" && t.BundleID == "" {
+		t.BundleID = DefaultBundleID
+	}
+	return t
 }

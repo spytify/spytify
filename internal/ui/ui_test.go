@@ -43,8 +43,6 @@ func defaults() map[string]any {
 			values[d.Key] = float64(v.Int(d.Key))
 		case settings.KindFloat:
 			values[d.Key] = v.Float(d.Key)
-		case settings.KindSecret:
-			values[d.Key] = ""
 		default:
 			values[d.Key] = v.String(d.Key)
 		}
@@ -265,16 +263,31 @@ func TestOtherScreensRender(t *testing.T) {
 	a.showTab(tabSettings)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"Player", "Player process", "Output", "Output folder", "output.dir", "Encoding", "Tags", "Reset output settings"} {
+	for _, want := range []string{"App", "Minimize to tray", "Output", "Output folder", "Group by folders", "Encoding", "Output format",
+		"Recording", "Normalize volume", "Ads", "Mute ads", "Advanced", "Reset"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the settings screen", want)
 		}
 	}
+	// Advanced settings are folded, and no field carries a caption.
+	for _, unwanted := range []string{"File name template", "Player process", "Embed album cover", "output.dir", "Log level", "Language"} {
+		if contains(all, unwanted) {
+			t.Errorf("%q shows on the settings screen", unwanted)
+		}
+	}
+	if g := groups(); g[0] != "App" {
+		t.Errorf("sections %v: App is not first", g)
+	}
 	s := a.screens[tabSettings].(*settingsScreen)
-	s.search.SetText("spotify")
+	s.search.SetText("cover")
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, "Connect to the Spotify Web API") || !contains(all, "tags.spotify.client_id") || contains(all, "output.dir") {
-		t.Errorf("search for spotify: %v", all)
+	if all := texts(a.win.Content()); !contains(all, "Embed album cover") || contains(all, "Output folder") {
+		t.Errorf("search for cover: %v", all)
+	}
+	s.search.SetText("player")
+	a.render()
+	if all := texts(a.win.Content()); !contains(all, "Player process") || !contains(all, "Save and restart spytifyd") {
+		t.Errorf("search for player: %v", all)
 	}
 	s.search.SetText("")
 
@@ -432,6 +445,38 @@ func TestButtonsSendActions(t *testing.T) {
 	core.mu.Unlock()
 	if last["output.underscores"] != true {
 		t.Fatalf("settings.set sent %v", last)
+	}
+
+	// A text setting applies when it loses focus, once, if it changed.
+	e := s.fields["output.template"].input.(*applyEntry)
+	e.FocusLost()
+	e.SetText("{title}")
+	e.FocusLost()
+	e.FocusLost()
+	waitSets(t, core, 2)
+	core.mu.Lock()
+	sets := append([]map[string]any(nil), core.sets...)
+	core.mu.Unlock()
+	if len(sets) != 2 || sets[1]["output.template"] != "{title}" {
+		t.Fatalf("settings.set calls %v", sets)
+	}
+}
+
+func waitSets(t *testing.T, c *recordingCore, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c.mu.Lock()
+		got := len(c.sets)
+		c.mu.Unlock()
+		if got >= n {
+			time.Sleep(100 * time.Millisecond)
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d settings.set calls, want %d", got, n)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

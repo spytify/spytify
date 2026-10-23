@@ -101,12 +101,7 @@ func run() int {
 	}
 	defer log.Close()
 
-	var secrets settings.Secrets = settings.Keyring{}
-	if err := settings.ProbeKeyring(); err != nil {
-		log.Infof("OS keyring unavailable (%v); secrets are kept in memory until the daemon exits", err)
-		secrets = settings.NewMemorySecrets()
-	}
-	store, err := settings.Open(env.ConfigPath, secrets)
+	store, err := settings.Open(env.ConfigPath)
 	if err != nil {
 		log.Errorf("%v", err)
 		return 1
@@ -121,7 +116,7 @@ func run() int {
 		backends = platform.Backends{Logf: log.Infof, TapHelper: env.TapHelper, MuteOutput: func() bool { return store.Values().Bool("player.mute_output") }}
 	}
 
-	c := core.New(core.Options{Env: env, Store: store, Secrets: secrets, Log: log, Backends: backends, FindProcess: findProcess})
+	c := core.New(core.Options{Env: env, Store: store, Log: log, Backends: backends, FindProcess: findProcess})
 	events, closeEvents, err := eventSink(*eventsPath)
 	if err != nil {
 		log.Errorf("--events: %v", err)
