@@ -1,13 +1,16 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -135,7 +138,11 @@ func texts(o fyne.CanvasObject) []string {
 		case *widget.Label:
 			out = append(out, w.Text)
 		case *widget.RichText:
-			out = append(out, w.String())
+			for _, seg := range w.Segments {
+				if ts, ok := seg.(*widget.TextSegment); ok {
+					out = append(out, ts.Text)
+				}
+			}
 		case *canvas.Text:
 			out = append(out, w.Text)
 		case *widget.Hyperlink:
@@ -601,5 +608,52 @@ func TestLatestReleaseCountsPreReleases(t *testing.T) {
 	}
 	if !newer(tag, "v2.0.0-alpha.1+f5dd96e") {
 		t.Fatal("alpha.2 is not newer than alpha.1")
+	}
+}
+
+func TestLibraryShowsEmbeddedCovers(t *testing.T) {
+	ff, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	var picture bytes.Buffer
+	if err := png.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	cover := filepath.Join(t.TempDir(), "cover.png")
+	if err := os.WriteFile(cover, picture.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	track := filepath.Join(dir, "Artist - Song.flac")
+	cmd := exec.Command(ff, "-v", "error", "-nostdin", "-f", "lavfi", "-t", "0.5", "-i", "anullsrc", "-i", cover,
+		"-map", "0:a", "-map", "1:v", "-c:a", "flac", "-c:v", "copy", "-disposition:v", "attached_pic", track)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("make the FLAC: %v: %s", err, b)
+	}
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.showTab(tabLibrary)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	if len(lib.shown) != 1 {
+		t.Fatalf("%d files listed", len(lib.shown))
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if res := lib.cover(lib.shown[0]); res != nil {
+			if !bytes.Equal(res.Content(), picture.Bytes()) {
+				t.Fatal("the row shows another picture")
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the cover never loaded")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

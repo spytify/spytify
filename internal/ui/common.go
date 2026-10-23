@@ -72,6 +72,25 @@ func clipped(text string) *widget.RichText {
 	return rt
 }
 
+// rowText is a list row's title over its details as one block: two stacked
+// widgets would each add their padding between the lines.
+func rowText() *widget.RichText {
+	rt := widget.NewRichText(
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameText, TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
+	)
+	rt.Truncation = fyne.TextTruncateEllipsis
+	return rt
+}
+
+func setRowText(rt *widget.RichText, title, details string) {
+	t, d := rt.Segments[0].(*widget.TextSegment), rt.Segments[1].(*widget.TextSegment)
+	if t.Text != title || d.Text != details {
+		t.Text, d.Text = title, details
+		rt.Refresh()
+	}
+}
+
 // wrapped is a caption that breaks into lines.
 func wrapped(text string) *widget.RichText {
 	rt := caption(text)
@@ -102,33 +121,54 @@ type covers struct {
 	cache   map[string]fyne.Resource
 	pending map[string]bool
 	loaded  func()
+	// slots bounds the loads running at once.
+	slots chan struct{}
 }
 
 func newCovers(loaded func()) *covers {
-	return &covers{cache: map[string]fyne.Resource{}, pending: map[string]bool{}, loaded: loaded}
+	return &covers{cache: map[string]fyne.Resource{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 }
 
-// get returns the cover for url, or nil while it loads or when it failed.
+// get returns the cover at url, or nil while it loads or when it failed.
+// count is how many covers are in the cache, loaded or failed: a screen
+// that changed nothing else redraws its rows when it grows.
+func (c *covers) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.cache)
+}
+
 func (c *covers) get(url string) fyne.Resource {
 	if url == "" {
 		return nil
 	}
+	return c.load(url, func(ctx context.Context) ([]byte, error) {
+		data, _, err := tag.FetchCover(ctx, nil, url)
+		return data, err
+	})
+}
+
+// load returns the cover cached under key, or starts fetch and returns nil
+// until it is done; loaded runs then, so the screen can draw it.
+func (c *covers) load(key string, fetch func(context.Context) ([]byte, error)) fyne.Resource {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if r, ok := c.cache[url]; ok {
+	if r, ok := c.cache[key]; ok {
 		return r
 	}
-	if !c.pending[url] {
-		c.pending[url] = true
+	if !c.pending[key] {
+		c.pending[key] = true
 		go func() {
+			c.slots <- struct{}{}
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			data, _, err := tag.FetchCover(ctx, nil, url)
+			data, err := fetch(ctx)
+			cancel()
+			<-c.slots
 			c.mu.Lock()
 			if err == nil {
-				c.cache[url] = fyne.NewStaticResource(url, data)
+				c.cache[key] = fyne.NewStaticResource(key, data)
 			} else {
-				c.cache[url] = nil
+				c.cache[key] = nil
 			}
 			c.mu.Unlock()
 			if c.loaded != nil {

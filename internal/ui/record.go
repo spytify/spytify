@@ -41,8 +41,11 @@ type recordScreen struct {
 	waiting *widget.Label
 	restart *widget.Button
 
-	rows   []model.Row
-	list   *widget.List
+	rows []model.Row
+	list *widget.List
+	// shown is what the list last drew; refreshing it on every level event
+	// would clear the row the pointer hovers.
+	shown  string
 	noRows fyne.CanvasObject
 	clear  *widget.Button
 	totals *widget.RichText
@@ -105,8 +108,6 @@ func newRecordScreen(a *App) *recordScreen {
 			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
 			img.FillMode = canvas.ImageFillContain
 			img.SetMinSize(fyne.NewSize(40, 40))
-			title := widget.NewLabelWithStyle("Title", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-			title.Truncation = fyne.TextTruncateEllipsis
 			chip := widget.NewLabel("Skipped: duplicate")
 			chip.SizeName = theme.SizeNameCaptionText
 			reveal := widget.NewButtonWithIcon("", theme.SearchIcon(), nil)
@@ -114,7 +115,7 @@ func newRecordScreen(a *App) *recordScreen {
 			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
 			return container.NewBorder(nil, nil, img, container.NewHBox(container.NewCenter(chip), container.NewCenter(reveal), container.NewCenter(play)),
-				container.NewVBox(title, clipped("Artist")))
+				rowText())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(r.rows) {
@@ -123,11 +124,10 @@ func newRecordScreen(a *App) *recordScreen {
 			row := r.rows[id]
 			// Border layout: center first, then the leading and trailing parts.
 			box := o.(*fyne.Container)
-			text := box.Objects[0].(*fyne.Container)
+			text := box.Objects[0].(*widget.RichText)
 			img := box.Objects[1].(*canvas.Image)
 			right := box.Objects[2].(*fyne.Container)
-			text.Objects[0].(*widget.Label).SetText(row.Title)
-			setCaption(text.Objects[1].(*widget.RichText), rowSubtitle(row))
+			setRowText(text, row.Title, rowSubtitle(row))
 			if res := a.covers.get(row.CoverURL); res != nil {
 				img.Resource = res
 			} else {
@@ -262,7 +262,10 @@ func (r *recordScreen) render(s model.State) {
 	}
 
 	r.rows = s.Rows
-	r.list.Refresh()
+	if shown := fmt.Sprint(r.rows, r.app.covers.count()); shown != r.shown {
+		r.shown = shown
+		r.list.Refresh()
+	}
 	if len(r.rows) == 0 {
 		r.noRows.Show()
 		r.clear.Disable()

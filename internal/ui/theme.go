@@ -41,8 +41,16 @@ func (t spytifyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color
 		return green
 	case theme.ColorNameFocus:
 		return withAlpha(green, 0x7f)
+	case theme.ColorNameHover:
+		if v == theme.VariantLight {
+			return color.NRGBA{R: 0xf4, G: 0xf4, B: 0xf4, A: 0xff}
+		}
 	case theme.ColorNameSelection:
-		return withAlpha(green, 0x3f)
+		// A row picked in a list: a little greyer than one under the pointer.
+		if v == theme.VariantLight {
+			return color.NRGBA{R: 0xec, G: 0xec, B: 0xec, A: 0xff}
+		}
+		return color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0x1c}
 	}
 	return theme.DefaultTheme().Color(name, v)
 }
