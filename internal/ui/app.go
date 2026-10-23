@@ -92,9 +92,11 @@ type App struct {
 	// themeMode is the app.theme applied: system, light or dark.
 	themeMode string
 
-	pending sync.Mutex
-	queued  bool
-	last    model.State
+	pending     sync.Mutex
+	queued      bool
+	levelQueued bool
+	barKey      string
+	last        model.State
 }
 
 // New builds the window; call ShowAndRun to start.
@@ -170,6 +172,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	// Every way out (this window, the tray's Quit, Cmd+Q) ends here.
 	fa.Lifecycle().SetOnStopped(a.stopDaemon)
 	m.OnChange(a.scheduleRender)
+	m.OnLevel(a.scheduleLevel)
 	a.render()
 	return a
 }
@@ -275,7 +278,6 @@ func (a *App) render() {
 		a.dot.Importance = widget.WarningImportance
 		a.status.SetText(s.Info.Target.Process + " is not running")
 	}
-	a.dot.Refresh()
 	setCaption(a.output, outputText(s.Settings))
 	switch {
 	case !connected:
@@ -316,8 +318,12 @@ func (a *App) render() {
 			}
 		}
 	}
-	// Texts changed width: lay the bar out again.
-	a.bar.Refresh()
+	// Texts changed width: lay the bar out again, only then.
+	if key := fmt.Sprint(a.dot.Importance, a.status.Text, a.output.String(), a.action.Text, a.update.Visible()); key != a.barKey {
+		a.barKey = key
+		a.dot.Refresh()
+		a.bar.Refresh()
+	}
 	a.renderCenter(s)
 }
 
@@ -341,10 +347,36 @@ func (a *App) renderCenter(s model.State) {
 	}
 	if len(a.center.Objects) != 1 || a.center.Objects[0] != a.tabs {
 		a.center.Objects = []fyne.CanvasObject{a.tabs}
+		a.center.Refresh()
 	}
 	a.screens[a.tabs.SelectedIndex()].render(s)
-	// Rows and lists changed size: lay the screen out again.
-	a.center.Refresh()
+}
+
+// scheduleLevel redraws the meter and the progress, at most every 100 ms.
+func (a *App) scheduleLevel() {
+	if a.opts.ManualRender {
+		return
+	}
+	a.pending.Lock()
+	if a.levelQueued {
+		a.pending.Unlock()
+		return
+	}
+	a.levelQueued = true
+	a.pending.Unlock()
+	time.AfterFunc(100*time.Millisecond, func() {
+		a.pending.Lock()
+		a.levelQueued = false
+		a.pending.Unlock()
+		fyne.Do(a.renderLevel)
+	})
+}
+
+func (a *App) renderLevel() {
+	if a.tabs.SelectedIndex() != tabRecord {
+		return
+	}
+	a.screens[tabRecord].(*recordScreen).renderLive(a.m.Live())
 }
 
 func (a *App) checkUpdate() {

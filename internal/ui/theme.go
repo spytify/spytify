@@ -14,6 +14,13 @@ var (
 	greenLight = color.NRGBA{R: 0x13, G: 0x8a, B: 0x3f, A: 0xff}
 )
 
+// Muted status colours for the session list, softer than Success and
+// Warning, which stay for the status dot and the level bar.
+const (
+	colorSaved   fyne.ThemeColorName = "spytifySaved"
+	colorSkipped fyne.ThemeColorName = "spytifySkipped"
+)
+
 // spytifyTheme is Fyne's theme with the green in place of the blue accent.
 // mode is app.theme: "system" follows the OS, "light" and "dark" force it.
 type spytifyTheme struct {
@@ -36,7 +43,18 @@ func (t spytifyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color
 	if v == theme.VariantLight {
 		green = greenLight
 	}
+	light := v == theme.VariantLight
 	switch name {
+	case colorSaved:
+		if light {
+			return color.NRGBA{R: 0x4f, G: 0x8f, B: 0x66, A: 0xff}
+		}
+		return color.NRGBA{R: 0x7c, G: 0xb8, B: 0x93, A: 0xff}
+	case colorSkipped:
+		if light {
+			return color.NRGBA{R: 0xa8, G: 0x84, B: 0x4c, A: 0xff}
+		}
+		return color.NRGBA{R: 0xc4, G: 0xa4, B: 0x70, A: 0xff}
 	case theme.ColorNamePrimary, theme.ColorNameHyperlink:
 		return green
 	case theme.ColorNameFocus:

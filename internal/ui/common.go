@@ -72,6 +72,22 @@ func clipped(text string) *widget.RichText {
 	return rt
 }
 
+// setImage changes an image only when its resource changes: a refresh
+// decodes the picture again.
+func setImage(img *canvas.Image, res fyne.Resource) {
+	if img.Resource != res {
+		img.Resource = res
+		img.Refresh()
+	}
+}
+
+// setLabel changes a label only when its text changes.
+func setLabel(l *widget.Label, text string) {
+	if l.Text != text {
+		l.SetText(text)
+	}
+}
+
 // rowText is a list row's title over its details as one block: two stacked
 // widgets would each add their padding between the lines.
 func rowText() *widget.RichText {

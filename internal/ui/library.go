@@ -84,11 +84,10 @@ func newLibraryScreen(a *App) *libraryScreen {
 			img := box.Objects[1].(*canvas.Image)
 			buttons := box.Objects[2].(*fyne.Container)
 			if res := l.cover(f); res != nil {
-				img.Resource = res
+				setImage(img, res)
 			} else {
-				img.Resource = theme.MediaMusicIcon()
+				setImage(img, theme.MediaMusicIcon())
 			}
-			img.Refresh()
 			folder := filepath.Dir(f.rel)
 			if folder == "." {
 				folder = ""
