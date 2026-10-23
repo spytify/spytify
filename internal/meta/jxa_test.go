@@ -3,6 +3,7 @@ package meta
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -147,5 +148,17 @@ func TestJXATrackerIgnoresTheResetAtTheEnd(t *testing.T) {
 	evs := at(500, "2", "0.2")
 	if len(evs) != 1 || evs[0].Kind != TrackChanged || evs[0].Restart || evs[0].Track.Title != "Song 2" {
 		t.Fatalf("next item = %+v", evs)
+	}
+}
+
+func TestARestartThePlayerIgnoredIsAnError(t *testing.T) {
+	for out, ok := range map[string]bool{"0": true, "1.2": true, "": true, "24.6": false, "83": false} {
+		err := restarted(out)
+		if (err == nil) != ok {
+			t.Errorf("restarted(%q) = %v", out, err)
+		}
+	}
+	if err := restarted("83"); err == nil || !strings.Contains(err.Error(), "1:23") {
+		t.Errorf("message %v", err)
 	}
 }

@@ -539,6 +539,9 @@ func (s *Session) onMeta(ev meta.Event) {
 			s.initial, s.initPos = &info, ev.PositionMs
 			return
 		}
+		if ev.Restart {
+			s.deps.log.Debugf("%q started over: the player is at %d ms", ev.Track.Title, ev.PositionMs)
+		}
 		s.onTrack(ev.Track, at, ev.Restart)
 	case meta.StatusChanged:
 		first := !s.gotStatus
@@ -548,6 +551,7 @@ func (s *Session) onMeta(ev meta.Event) {
 		s.deps.log.Infof("player interface gone")
 		s.endOfPlayback()
 	case meta.Seeked:
+		s.deps.log.Debugf("%q: the player jumped to %d ms", ev.Track.Title, ev.PositionMs)
 		s.onSeek(ev.PositionMs, at)
 	}
 	s.progress()

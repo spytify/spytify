@@ -92,7 +92,20 @@ function run(argv) {
   if (!app.running()) { throw new Error("player not running"); }
   switch (argv[1]) {
     case "volume": return String(app.soundVolume());
-    case "restart": app.playerPosition = 0; return "";
+    case "restart": {
+      // A player may echo the new position, then carry on where it was:
+      // read it back twice, and try again. The result is where it is.
+      let at = 0;
+      for (let i = 0; i < 3; i++) {
+        app.playerPosition = 0;
+        delay(0.5);
+        const soon = Number(app.playerPosition());
+        delay(0.5);
+        at = Number(app.playerPosition());
+        if (soon < 2 && at < 3) { break; }
+      }
+      return String(at);
+    }
     case "setvolume": app.soundVolume = parseInt(argv[2], 10); return "";
     default: app[argv[1]](); return "";
   }
@@ -373,8 +386,21 @@ func (j *JXA) Control(cmd string) error {
 	if method == "" {
 		return ErrUnsupported
 	}
-	_, err := j.run(method)
-	return err
+	out, err := j.run(method)
+	if err != nil || cmd != "restart" {
+		return err
+	}
+	return restarted(out)
+}
+
+// restarted reads where the restart script left the player, in seconds.
+func restarted(out string) error {
+	at, err := strconv.ParseFloat(out, 64)
+	if err != nil || at < 3 {
+		return nil
+	}
+	s := int(at)
+	return fmt.Errorf("the player did not go back to the start of the track: it plays at %d:%02d", s/60, s%60)
 }
 
 func (j *JXA) Volume() (float64, error) {
