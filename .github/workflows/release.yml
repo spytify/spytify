@@ -13,7 +13,6 @@ permissions:
 
 env:
   SPYTIFY_DEFAULT_PROCESS: ${{ vars.SPYTIFY_DEFAULT_PROCESS }}
-  SPYTIFY_DEFAULT_BUNDLE_ID: ${{ vars.SPYTIFY_DEFAULT_BUNDLE_ID }}
 
 jobs:
   linux:

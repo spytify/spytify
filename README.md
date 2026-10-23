@@ -90,9 +90,9 @@ scripts/build-windows.sh                                             # Windows, 
   - macOS: the Xcode command line tools, which also build the Swift helper `spytify-tap`.
   - Windows: MinGW-w64 (`x86_64-w64-mingw32-gcc` and `-g++`), from Linux or macOS; it also builds the C++ helper `spytify-tap.exe`.
 
-A build of your own records nothing until you choose the application. In the app, go to **Settings > App > Advanced > Player**, enter its process name (and its bundle id on macOS), then press **Save and restart spytifyd**. Without the app, set `SPYTIFY_TARGET_PROCESS` (see [Configuration](#configuration)).
+A build of your own records nothing until you choose the application. In the app, go to **Settings > App > Advanced > Player**, enter its name, then press **Save and restart spytifyd**. Without the app, set `SPYTIFY_TARGET_PROCESS` (see [Configuration](#configuration)).
 
-Packagers can set a default application with the build variables `SPYTIFY_DEFAULT_PROCESS` and `SPYTIFY_DEFAULT_BUNDLE_ID`. The build scripts read them from the environment or from an untracked `build.env`; the project's CI takes them from repository variables.
+Packagers can set a default application with the build variable `SPYTIFY_DEFAULT_PROCESS`: its bare name, which matches `Name.app` on macOS, `Name.exe` on Windows and `name` on Linux. On macOS the bundle id is read from the installed app. The build scripts read the variable from the environment or from an untracked `build.env`; the project's CI takes it from a repository variable.
 
 The macOS app is ad-hoc signed. macOS asks for the permissions again after every rebuild, and another Mac refuses to open it until it is signed and notarised. Opened from Finder, the app still finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin`.
 
@@ -146,7 +146,7 @@ The recorded application is set with environment variables, read when the daemon
 | --- | --- | --- |
 | `SPYTIFY_TARGET_PROCESS` | process to record; a comma list for several packagings | the build's default, if any |
 | `SPYTIFY_TARGET_MPRIS` | D-Bus name of the application (Linux) | `org.mpris.MediaPlayer2.<process>` |
-| `SPYTIFY_TARGET_BUNDLE_ID` | bundle id of the application (macOS) | the process name is used |
+| `SPYTIFY_TARGET_BUNDLE_ID` | bundle id of the application (macOS) | read from the installed app |
 | `SPYTIFY_TARGET_DURATION_UNIT` | `ms` or `s`, unit of the AppleScript track length (macOS) | guessed |
 | `SPYTIFY_TARGET_LAUNCH` | command that starts the application when a session starts | none |
 | `SPYTIFY_TAP` | path of `spytify-tap` (macOS, Windows) | next to `spytifyd`, then `PATH` |
