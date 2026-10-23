@@ -600,7 +600,10 @@ func (s *Session) plan(info meta.TrackInfo, at int64, restart bool) *change {
 		ch.kind = changeFirst
 		ch.lo = at - s.ms(lateNotifyMs)
 		ch.expected = at
-	case !restart && c.length > 0 && at >= c.start+c.length-s.window-s.ms(earlySlackMs):
+	case c.length > 0 && at >= c.start+c.length-s.window-s.ms(earlySlackMs):
+		// At its end, the same item again is a new take (repeat), and the
+		// one before it is complete.
+		ch.restart = false
 		e := c.start + c.length
 		late := s.soundAt(c) + c.length
 		ch.kind, ch.lo, ch.hi, ch.expected = changeBoundary, e-s.window, late+s.window, e
