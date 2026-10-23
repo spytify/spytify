@@ -44,6 +44,7 @@ type recordScreen struct {
 	rows   []model.Row
 	list   *widget.List
 	noRows fyne.CanvasObject
+	clear  *widget.Button
 	totals *widget.RichText
 	folder string
 }
@@ -161,7 +162,9 @@ func newRecordScreen(a *App) *recordScreen {
 		}
 	})
 	openFolder.Importance = widget.LowImportance
-	footer := container.NewBorder(nil, nil, nil, openFolder, r.totals)
+	r.clear = widget.NewButtonWithIcon("Clear list", theme.ContentClearIcon(), a.m.ClearRows)
+	r.clear.Importance = widget.LowImportance
+	footer := container.NewBorder(nil, nil, nil, container.NewHBox(r.clear, openFolder), r.totals)
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
 	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow, widget.NewSeparator()), container.NewVBox(widget.NewSeparator(), footer), nil, nil,
 		container.NewStack(r.list, r.noRows))
@@ -262,8 +265,10 @@ func (r *recordScreen) render(s model.State) {
 	r.list.Refresh()
 	if len(r.rows) == 0 {
 		r.noRows.Show()
+		r.clear.Disable()
 	} else {
 		r.noRows.Hide()
+		r.clear.Enable()
 	}
 	t := s.Totals()
 	setCaption(r.totals, fmt.Sprintf("%d saved · %d skipped · %d ads · %s", t.Saved, t.Skipped, t.Ads, fmtBytes(t.Bytes)))

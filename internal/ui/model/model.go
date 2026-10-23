@@ -133,11 +133,24 @@ type Model struct {
 	s         State
 	now       func() time.Time
 	listeners []func()
+	// cleared are the rows the user cleared; a replay of the core's recent
+	// events must not bring them back.
+	cleared map[string]bool
 }
 
 // New returns an empty, disconnected model.
 func New() *Model {
-	return &Model{s: State{Session: proto.StateIdle, Settings: map[string]any{}}, now: time.Now}
+	return &Model{s: State{Session: proto.StateIdle, Settings: map[string]any{}}, now: time.Now, cleared: map[string]bool{}}
+}
+
+// ClearRows empties the list of finished tracks; the current one stays.
+func (m *Model) ClearRows() {
+	m.update(func(s *State) {
+		for _, r := range s.Rows {
+			m.cleared[r.ID] = true
+		}
+		s.Rows = nil
+	})
 }
 
 // OnChange registers fn, called after every change, outside the lock.
@@ -264,7 +277,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		// A reconnecting client can see a start twice: once replayed, once
 		// live.
-		if s.Current != nil && s.Current.ID == e.ID {
+		if m.cleared[e.ID] || (s.Current != nil && s.Current.ID == e.ID) {
 			return
 		}
 		for _, r := range s.Rows {

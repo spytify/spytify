@@ -189,10 +189,23 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	if a.tabs.Items[tabRecord].Text != "Record · 2" {
 		t.Errorf("Record tab title %q", a.tabs.Items[tabRecord].Text)
 	}
+	r := a.screens[tabRecord].(*recordScreen)
+	if r.clear.Disabled() {
+		t.Error("Clear list is disabled with rows in the list")
+	}
 	if a.action.Text != "Stop" || a.action.Importance != widget.DangerImportance {
 		t.Errorf("app bar action %q", a.action.Text)
 	}
 	snapshot(t, a, "record")
+
+	test.Tap(r.clear)
+	a.render()
+	if s := m.Snapshot(); len(s.Rows) != 0 || s.Current == nil {
+		t.Errorf("after Clear list: %d rows, current %v", len(s.Rows), s.Current)
+	}
+	if !r.clear.Disabled() || !contains(texts(a.win.Content()), "No files yet") {
+		t.Error("the cleared list does not say it is empty")
+	}
 }
 
 func TestWaitingOffersToRestartTheTrack(t *testing.T) {
