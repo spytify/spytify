@@ -19,6 +19,13 @@ import (
 
 func newTestCore(t *testing.T, running bool) (*Core, *recorder) {
 	t.Helper()
+	return newTestCoreAt(t, running, false)
+}
+
+// newTestCoreAt plays the timeline in real time when realtime is set, so a
+// session lasts until the test stops it instead of ending in milliseconds.
+func newTestCoreAt(t *testing.T, running, realtime bool) (*Core, *recorder) {
+	t.Helper()
 	dir := t.TempDir()
 	store, err := settings.Open(filepath.Join(dir, "config.toml"))
 	if err != nil {
@@ -28,7 +35,7 @@ func newTestCore(t *testing.T, running bool) (*Core, *recorder) {
 		t.Fatal(rej)
 	}
 	tl := loadTimeline(t, "basic")
-	player, err := fake.NewPlayer(tl, false)
+	player, err := fake.NewPlayer(tl, realtime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +152,7 @@ func TestSecondStartIsRefused(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	c, _ := newTestCore(t, true)
+	c, _ := newTestCoreAt(t, true, true)
 	if c.ffErr != nil {
 		t.Skip(c.ffErr)
 	}
