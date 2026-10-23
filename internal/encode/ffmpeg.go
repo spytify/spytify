@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -26,9 +27,21 @@ type FFmpeg struct {
 // ErrMissing means ffmpeg could not be run; session.start is refused.
 var ErrMissing = errors.New("ffmpeg not found; install it or set SPYTIFY_FFMPEG")
 
+// wellKnown are tried when ffmpeg is not on PATH, as for an app started
+// from a desktop launcher with a minimal PATH.
+var wellKnown = []string{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "/snap/bin/ffmpeg"}
+
 // Find resolves name (a path or a command on PATH) and reads its version.
 func Find(name string) (*FFmpeg, error) {
 	path, err := exec.LookPath(name)
+	if err != nil && name == "ffmpeg" {
+		for _, p := range wellKnown {
+			if _, serr := os.Stat(p); serr == nil {
+				path, err = p, nil
+				break
+			}
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w (%s)", ErrMissing, name)
 	}

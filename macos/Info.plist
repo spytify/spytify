@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Spytify</string>
+	<key>CFBundleDisplayName</key>
+	<string>Spytify</string>
+	<key>CFBundleIdentifier</key>
+	<string>org.spytify.ui</string>
+	<key>CFBundleExecutable</key>
+	<string>spytify-ui</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.2</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Spytify records the audio of the application you choose, and nothing else.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Spytify reads what your player is playing to split and tag the recording, and can skip or pause it.</string>
+</dict>
+</plist>

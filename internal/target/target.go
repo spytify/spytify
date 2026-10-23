@@ -80,12 +80,55 @@ type Env struct {
 var ErrNoTarget = errors.New("SPYTIFY_TARGET_PROCESS is not set; the daemon needs the player's process name")
 
 // LoadDotEnv loads a .env file next to the binary, then one in the working
-// directory. Variables already set in the environment win.
+// directory, then the user's (UserEnvPath, which the UI writes). Variables
+// already set in the environment win, and earlier files win over later ones.
 func LoadDotEnv() {
 	if exe, err := os.Executable(); err == nil {
 		loadIfExists(filepath.Join(filepath.Dir(exe), ".env"))
 	}
 	loadIfExists(".env")
+	loadIfExists(UserEnvPath())
+}
+
+// UserEnvPath is the per-user .env file, for an app started from a desktop
+// launcher that inherits no shell environment.
+func UserEnvPath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "spytify", ".env")
+}
+
+// TargetKeys are the variables that identify the player.
+var TargetKeys = []string{"SPYTIFY_TARGET_PROCESS", "SPYTIFY_TARGET_BUNDLE_ID", "SPYTIFY_TARGET_MPRIS", "SPYTIFY_TARGET_LAUNCH"}
+
+// SaveUserTarget writes the target variables to UserEnvPath, keeping the
+// other lines of the file, and applies them to this process so a daemon it
+// starts sees them.
+func SaveUserTarget(values map[string]string) error {
+	path := UserEnvPath()
+	if path == "" {
+		return errors.New("no user configuration folder")
+	}
+	all := map[string]string{}
+	if existing, err := godotenv.Read(path); err == nil {
+		all = existing
+	}
+	for _, k := range TargetKeys {
+		v := strings.TrimSpace(values[k])
+		if v == "" {
+			delete(all, k)
+			os.Unsetenv(k)
+			continue
+		}
+		all[k] = v
+		os.Setenv(k, v)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return godotenv.Write(all, path)
 }
 
 func loadIfExists(path string) {

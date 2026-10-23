@@ -3,7 +3,9 @@ package target
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -34,6 +36,31 @@ func TestValidateRequiresProcess(t *testing.T) {
 	t.Setenv("SPYTIFY_TARGET_PROCESS", "")
 	if err := Load().Validate(); !errors.Is(err, ErrNoTarget) {
 		t.Fatalf("Validate() = %v, want ErrNoTarget", err)
+	}
+}
+
+func TestSaveUserTarget(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("SPYTIFY_TARGET_PROCESS", "")
+	t.Setenv("SPYTIFY_TARGET_BUNDLE_ID", "")
+	path := UserEnvPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("SPYTIFY_FFMPEG=/opt/ffmpeg\nSPYTIFY_TARGET_BUNDLE_ID=old.bundle\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveUserTarget(map[string]string{"SPYTIFY_TARGET_PROCESS": " Player ", "SPYTIFY_TARGET_BUNDLE_ID": ""}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if s := string(b); !strings.Contains(s, `SPYTIFY_TARGET_PROCESS="Player"`) || !strings.Contains(s, "SPYTIFY_FFMPEG") || strings.Contains(s, "old.bundle") {
+		t.Fatalf("file:\n%s", b)
+	}
+	if os.Getenv("SPYTIFY_TARGET_PROCESS") != "Player" {
+		t.Fatal("not applied to this process")
 	}
 }
 

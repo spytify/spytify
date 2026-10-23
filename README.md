@@ -4,7 +4,7 @@
 
 **Records any application's audio, splits it into tracks and tags them.**
 
-> **Alpha.** Linux and macOS 14.2 or later, headless, driven from the command line. The desktop UI and the Windows backend come next (milestones M4 and M5 of [the plan](PLAN.md)). Settings, file names and the protocol may still change.
+> **Alpha.** Linux and macOS 14.2 or later, with a desktop app (`Spytify.app` on macOS, `spytify-ui` on Linux) or the command line. The Windows backend comes next (milestone M5 of [the plan](PLAN.md)). Settings, file names and the protocol may still change.
 
 Spytify v2 is a rewrite in Go of [Spytify v1](https://github.com/jwallet/spy-spotify), the Windows recorder. You name the process to record; Spytify captures that process's audio stream only, cuts it into one file per track at a computed sample position, encodes with ffmpeg and writes tags. It never downloads anything and never names a player in its code: the player is whatever you put in `SPYTIFY_TARGET_PROCESS`.
 
@@ -67,11 +67,22 @@ Spytify is a general-purpose application audio recorder, in the same category as
 ## Build
 
 ```sh
-go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli       # Linux
-scripts/build-macos.sh                                  # macOS: universal spytifyd, spytify-cli and spytify-tap in bin/
+go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli ./cmd/spytify-ui   # Linux
+scripts/build-macos.sh                                               # macOS: bin/Spytify.app, plus the command-line tools
 ```
 
-The Go binaries are static (`CGO_ENABLED=0` works); the Linux backends call the PipeWire, PulseAudio and D-Bus tools at run time. On macOS the build needs the Xcode command line tools for `spytify-tap`, which is written in Swift.
+`spytifyd` and `spytify-cli` are static Go (`CGO_ENABLED=0` works); the Linux backends call the PipeWire, PulseAudio and D-Bus tools at run time. The desktop app is built with [Fyne](https://fyne.io) and needs cgo: on Linux `gcc`, `libgl1-mesa-dev`, `xorg-dev`, `libwayland-dev`, `libxkbcommon-dev` and `wayland-protocols` (Debian names); on macOS the Xcode command line tools, which also build `spytify-tap`, written in Swift.
+
+## Desktop app
+
+The app is a client of `spytifyd`, like the CLI: closing the window does not stop a recording, and the tray menu (Start recording, Stop, Open window) keeps working while it is hidden (`app.minimize_to_tray`).
+
+- **Record**: the track being recorded (cover, progress, level, Skip), then every file of the session with its status, Reveal and Play, and the session totals with Open folder. Before a session it shows the checklist from `core.info`.
+- **Library**: every audio file in the output folder, newest first, with a search box.
+- **Settings**: one card per group with the TOML key under each field, a search box, Reset group, and a **Player** card that sets `SPYTIFY_TARGET_*` in your user `.env` and restarts the daemon.
+- **Logs** and **About**: the daemon's log by level, versions, the resolved target and the checks.
+
+On macOS, open `bin/Spytify.app`. The first time, set the player in the Player card (process name and bundle id) and press **Save and restart spytifyd**; macOS then asks, once each, to let Spytify record system audio and to control the player. The app finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin` even though apps opened from Finder have no shell `PATH`. The build is ad-hoc signed: macOS asks for the permissions again after each rebuild, and another Mac will refuse to open it until it is signed and notarised.
 
 ## Quick start
 
@@ -120,7 +131,7 @@ bin/spytifyd --once --set output.dir=/srv/rec --set encode.format=flac
 
 ## Configuration
 
-The player is identified by environment variables, read once at daemon start and logged on the first line. A `.env` file next to the binary (or in the working directory) is loaded if present.
+The player is identified by environment variables, read once at daemon start and logged on the first line. A `.env` file next to the binary, in the working directory, or in your user configuration folder (`~/.config/spytify/.env`, `~/Library/Application Support/spytify/.env` on macOS; the desktop app writes this one) is loaded if present.
 
 | Variable | Used for | Default |
 | --- | --- | --- |
