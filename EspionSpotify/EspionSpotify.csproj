@@ -286,6 +286,7 @@
     </Compile>
     <Compile Include="Settings.cs" />
     <Compile Include="Recorder.cs" />
+    <Compile Include="M3uPlaylist.cs" />
     <Compile Include="frmEspionSpotify.cs">
       <SubType>Form</SubType>
     </Compile>

@@ -43,6 +43,9 @@ namespace EspionSpotify
         private bool _toggleStopRecordingDelayed;
         private Watcher _watcher;
         private bool _watching;
+        private MetroToggle _tgPlaylistEnabled;
+        private MetroTextBox _txtPlaylistPath;
+        private MetroTextBox _txtPlaylistFilename;
 
         public FrmEspionSpotify()
         {
@@ -67,6 +70,8 @@ namespace EspionSpotify
                 Settings.Default.app_analytics_cid = Analytics.GenerateCid();
                 Settings.Default.Save();
             }
+
+            ConfigurePlaylistSettings();
 
             _analytics = new Analytics(Settings.Default.app_analytics_cid,
                 Assembly.GetExecutingAssembly().GetName().Version.ToString());
@@ -902,6 +907,120 @@ namespace EspionSpotify
 #if !DEBUG
             Environment.Exit(0);
 #endif
+        }
+
+
+        private void ConfigurePlaylistSettings()
+        {
+            if (string.IsNullOrWhiteSpace(Settings.Default.settings_playlist_output_path))
+                Settings.Default.settings_playlist_output_path = Settings.Default.settings_output_path;
+            if (string.IsNullOrWhiteSpace(Settings.Default.settings_playlist_filename))
+                Settings.Default.settings_playlist_filename = "playlist.m3u8";
+            Settings.Default.Save();
+
+            tlSettings.SuspendLayout();
+            tlSettings.RowCount = 11;
+            tlSettings.RowStyles.Clear();
+            for (var i = 0; i < 11; i++)
+                tlSettings.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.AutoSize));
+
+            AddPlaylistLabel("Generate playlist", 8);
+            _tgPlaylistEnabled = new MetroToggle
+            {
+                Name = "tgPlaylistEnabled",
+                Checked = Settings.Default.settings_playlist_generation_enabled,
+                Dock = System.Windows.Forms.DockStyle.Left,
+                Theme = MetroFramework.MetroThemeStyle.Dark,
+                Style = MetroFramework.MetroColorStyle.Green,
+                UseSelectable = true
+            };
+            tlSettings.Controls.Add(_tgPlaylistEnabled, 2, 8);
+            _tgPlaylistEnabled.CheckedChanged += (sender, args) =>
+            {
+                Settings.Default.settings_playlist_generation_enabled = _tgPlaylistEnabled.Checked;
+                Settings.Default.Save();
+            };
+
+            AddPlaylistLabel("Playlist folder", 9);
+            var pathPanel = new System.Windows.Forms.TableLayoutPanel
+            {
+                ColumnCount = 2,
+                RowCount = 1,
+                Dock = System.Windows.Forms.DockStyle.Fill,
+                AutoSize = true,
+                Margin = new System.Windows.Forms.Padding(3)
+            };
+            pathPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            pathPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 40F));
+            _txtPlaylistPath = new MetroTextBox
+            {
+                Name = "txtPlaylistPath",
+                Text = Settings.Default.settings_playlist_output_path,
+                Dock = System.Windows.Forms.DockStyle.Fill,
+                Theme = MetroFramework.MetroThemeStyle.Dark,
+                Style = MetroFramework.MetroColorStyle.Green,
+                UseSelectable = true,
+                Margin = new System.Windows.Forms.Padding(0)
+            };
+            var browse = new MetroLink
+            {
+                Name = "lnkPlaylistPath",
+                Image = Resources.folder,
+                ImageSize = 28,
+                Dock = System.Windows.Forms.DockStyle.Fill,
+                Cursor = System.Windows.Forms.Cursors.Hand,
+                UseSelectable = true,
+                Margin = new System.Windows.Forms.Padding(0)
+            };
+            pathPanel.Controls.Add(_txtPlaylistPath, 0, 0);
+            pathPanel.Controls.Add(browse, 1, 0);
+            tlSettings.Controls.Add(pathPanel, 2, 9);
+            _txtPlaylistPath.TextChanged += (sender, args) =>
+            {
+                Settings.Default.settings_playlist_output_path = _txtPlaylistPath.Text.Trim();
+                Settings.Default.Save();
+            };
+            browse.Click += (sender, args) =>
+            {
+                folderBrowserDialog.SelectedPath = Directory.Exists(_txtPlaylistPath.Text)
+                    ? _txtPlaylistPath.Text
+                    : Settings.Default.settings_output_path;
+                if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
+                    _txtPlaylistPath.Text = folderBrowserDialog.SelectedPath;
+            };
+
+            AddPlaylistLabel("Playlist filename", 10);
+            _txtPlaylistFilename = new MetroTextBox
+            {
+                Name = "txtPlaylistFilename",
+                Text = Settings.Default.settings_playlist_filename,
+                Dock = System.Windows.Forms.DockStyle.Fill,
+                Theme = MetroFramework.MetroThemeStyle.Dark,
+                Style = MetroFramework.MetroColorStyle.Green,
+                UseSelectable = true,
+                Margin = new System.Windows.Forms.Padding(3)
+            };
+            tlSettings.Controls.Add(_txtPlaylistFilename, 2, 10);
+            _txtPlaylistFilename.TextChanged += (sender, args) =>
+            {
+                Settings.Default.settings_playlist_filename = _txtPlaylistFilename.Text.Trim();
+                Settings.Default.Save();
+            };
+            tlSettings.ResumeLayout(true);
+        }
+
+        private void AddPlaylistLabel(string text, int row)
+        {
+            var label = new MetroLabel
+            {
+                Text = text,
+                AutoSize = true,
+                Dock = System.Windows.Forms.DockStyle.Fill,
+                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
+                Theme = MetroFramework.MetroThemeStyle.Dark,
+                Margin = new System.Windows.Forms.Padding(3, 5, 3, 5)
+            };
+            tlSettings.Controls.Add(label, 0, row);
         }
 
         private void LnkPath_Click(object sender, EventArgs e)

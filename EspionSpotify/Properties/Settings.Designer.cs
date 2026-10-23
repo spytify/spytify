@@ -382,5 +382,28 @@ namespace EspionSpotify.Properties {
                 this["advanced_file_album_track_number_prefix_enabled"] = value;
             }
         }
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool settings_playlist_generation_enabled {
+            get { return ((bool)(this["settings_playlist_generation_enabled"])); }
+            set { this["settings_playlist_generation_enabled"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string settings_playlist_output_path {
+            get { return ((string)(this["settings_playlist_output_path"])); }
+            set { this["settings_playlist_output_path"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("playlist.m3u8")]
+        public string settings_playlist_filename {
+            get { return ((string)(this["settings_playlist_filename"])); }
+            set { this["settings_playlist_filename"] = value; }
+        }
     }
 }

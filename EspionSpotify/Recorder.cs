@@ -261,6 +261,16 @@ namespace EspionSpotify
 
             await UpdateMediaTagsFileBasedOnMediaFormat();
 
+            try
+            {
+                M3uPlaylist.AppendCompletedRecording(_currentOutputFile.ToMediaFilePath(), _track, CountSeconds);
+            }
+            catch (Exception ex)
+            {
+                _form.WriteIntoConsole(I18NKeys.LogUnknownException, ex.Message);
+                Console.WriteLine(ex.Message);
+            }
+
             EndRecording();
         }
 
