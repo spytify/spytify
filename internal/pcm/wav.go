@@ -113,26 +113,45 @@ func ReadWAV(path string) (Format, []byte, error) {
 
 // DecodeWAV parses a WAV stream.
 func DecodeWAV(r io.Reader) (Format, []byte, error) {
-	var riff [12]byte
-	if _, err := io.ReadFull(r, riff[:]); err != nil {
+	format, size, err := readWAVHeader(r)
+	if err != nil {
 		return Format{}, nil, err
 	}
+	if size == 0 || size == 0xFFFFFFFF {
+		data, err := io.ReadAll(r)
+		return format, data[:len(data)-len(data)%format.FrameBytes()], err
+	}
+	data := make([]byte, size)
+	n, err := io.ReadFull(r, data)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return Format{}, nil, err
+	}
+	return format, data[:n-n%format.FrameBytes()], nil
+}
+
+// readWAVHeader reads up to the start of the data chunk and returns the
+// format and the chunk's declared size (0 or 0xFFFFFFFF: unknown).
+func readWAVHeader(r io.Reader) (Format, uint32, error) {
+	var riff [12]byte
+	if _, err := io.ReadFull(r, riff[:]); err != nil {
+		return Format{}, 0, err
+	}
 	if string(riff[0:4]) != "RIFF" || string(riff[8:12]) != "WAVE" {
-		return Format{}, nil, errors.New("pcm: not a WAV file")
+		return Format{}, 0, errors.New("pcm: not a WAV file")
 	}
 	var format Format
 	haveFmt := false
 	for {
 		var hdr [8]byte
 		if _, err := io.ReadFull(r, hdr[:]); err != nil {
-			return Format{}, nil, fmt.Errorf("pcm: no data chunk: %w", err)
+			return Format{}, 0, fmt.Errorf("pcm: no data chunk: %w", err)
 		}
 		size := binary.LittleEndian.Uint32(hdr[4:])
 		switch string(hdr[0:4]) {
 		case "fmt ":
 			body := make([]byte, size)
 			if _, err := io.ReadFull(r, body); err != nil {
-				return Format{}, nil, err
+				return Format{}, 0, err
 			}
 			tag := binary.LittleEndian.Uint16(body[0:])
 			if tag == 0xFFFE && size >= 26 {
@@ -146,27 +165,74 @@ func DecodeWAV(r io.Reader) (Format, []byte, error) {
 			case tag == wavFloat && bits == 32:
 				format.Sample = F32LE
 			default:
-				return Format{}, nil, fmt.Errorf("pcm: unsupported WAV encoding tag=%d bits=%d", tag, bits)
+				return Format{}, 0, fmt.Errorf("pcm: unsupported WAV encoding tag=%d bits=%d", tag, bits)
 			}
 			haveFmt = true
 		case "data":
 			if !haveFmt {
-				return Format{}, nil, errors.New("pcm: data chunk before fmt chunk")
+				return Format{}, 0, errors.New("pcm: data chunk before fmt chunk")
 			}
-			if size == 0 || size == 0xFFFFFFFF {
-				data, err := io.ReadAll(r)
-				return format, data[:len(data)-len(data)%format.FrameBytes()], err
-			}
-			data := make([]byte, size)
-			n, err := io.ReadFull(r, data)
-			if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
-				return Format{}, nil, err
-			}
-			return format, data[:n-n%format.FrameBytes()], nil
+			return format, size, nil
 		default:
 			if _, err := io.CopyN(io.Discard, r, int64(size+size%2)); err != nil {
-				return Format{}, nil, err
+				return Format{}, 0, err
 			}
 		}
 	}
 }
+
+// WAVFile reads a WAV file's frames on demand, so a long one is never
+// held whole in memory.
+type WAVFile struct {
+	f      *os.File
+	format Format
+	offset int64 // of the first frame
+	frames int64
+}
+
+// OpenWAV opens a 16-bit PCM or 32-bit float WAV file for reading.
+func OpenWAV(path string) (*WAVFile, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	format, size, err := readWAVHeader(f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	offset, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	st, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	bytes := st.Size() - offset
+	if size != 0 && size != 0xFFFFFFFF && int64(size) < bytes {
+		bytes = int64(size)
+	}
+	return &WAVFile{f: f, format: format, offset: offset, frames: bytes / int64(format.FrameBytes())}, nil
+}
+
+func (w *WAVFile) Format() Format { return w.format }
+
+// Frames is the number of whole frames in the file.
+func (w *WAVFile) Frames() int64 { return w.frames }
+
+// ReadFrames returns frames [from, to), clamped to the file.
+func (w *WAVFile) ReadFrames(from, to int64) ([]byte, error) {
+	from, to = max(from, 0), min(to, w.frames)
+	if to <= from {
+		return nil, nil
+	}
+	fb := int64(w.format.FrameBytes())
+	b := make([]byte, (to-from)*fb)
+	_, err := w.f.ReadAt(b, w.offset+from*fb)
+	return b, err
+}
+
+func (w *WAVFile) Close() error { return w.f.Close() }

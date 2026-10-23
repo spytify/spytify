@@ -321,30 +321,27 @@ func (f *finisher) fail(j finishJob, code string, err error) {
 // first and last sample above db. A sample only counts when the 10 ms
 // around it is above db too, so an isolated click does not stop the trim.
 func scanTrim(path string, db float64) (start, end int64, ok bool, err error) {
-	format, data, err := pcm.ReadWAV(path)
+	w, err := pcm.OpenWAV(path)
 	if err != nil {
 		return 0, 0, false, err
 	}
+	defer w.Close()
+	format := w.Format()
+	fw := &frameWindow{w: w, size: format.FramesFromMs(4000)}
 	block := format.FramesFromMs(10)
-	fb := int64(format.FrameBytes())
-	total := int64(len(data)) / fb
+	total := w.Frames()
 	thr := math.Pow(10, db/20)
 	loudFrame := func(i int64) bool {
+		b := fw.frames(i, i+1)
 		for c := 0; c < format.Channels; c++ {
-			if math.Abs(format.SampleAt(data, int(i)*format.Channels+c)) > thr {
+			if math.Abs(format.SampleAt(b, c)) > thr {
 				return true
 			}
 		}
 		return false
 	}
 	loudSpan := func(from, to int64) bool {
-		if from < 0 {
-			from = 0
-		}
-		if to > total {
-			to = total
-		}
-		_, rms := format.Level(data[from*fb : to*fb])
+		_, rms := format.Level(fw.frames(from, to))
 		return rms > db
 	}
 	start = -1
@@ -355,7 +352,7 @@ func scanTrim(path string, db float64) (start, end int64, ok bool, err error) {
 		}
 	}
 	if start < 0 {
-		return 0, 0, false, nil
+		return 0, 0, false, fw.err
 	}
 	end = start + 1
 	for j := total - 1; j >= start; j-- {
@@ -370,8 +367,9 @@ func scanTrim(path string, db float64) (start, end int64, ok bool, err error) {
 	quietRun := format.FramesFromMs(1)
 	maxExtend := format.FramesFromMs(100)
 	above := func(i int64) bool {
+		b := fw.frames(i, i+1)
 		for c := 0; c < format.Channels; c++ {
-			if math.Abs(format.SampleAt(data, int(i)*format.Channels+c)) > floor {
+			if math.Abs(format.SampleAt(b, c)) > floor {
 				return true
 			}
 		}
@@ -391,7 +389,44 @@ func scanTrim(path string, db float64) (start, end int64, ok bool, err error) {
 			quiet++
 		}
 	}
-	return start, end, true, nil
+	return start, end, true, fw.err
+}
+
+// frameWindow keeps a few seconds of a WAV file around the frames asked
+// for, loading ahead or behind as the scan moves, so trimming a long take
+// does not load it whole.
+type frameWindow struct {
+	w    *pcm.WAVFile
+	size int64
+	from int64
+	data []byte
+	err  error
+}
+
+// frames returns frames [from, to) of the file, clamped to it.
+func (fw *frameWindow) frames(from, to int64) []byte {
+	from, to = max(from, 0), min(to, fw.w.Frames())
+	if to <= from {
+		return nil
+	}
+	fb := int64(fw.w.Format().FrameBytes())
+	if from < fw.from || to > fw.from+int64(len(fw.data))/fb {
+		lo := from
+		if from < fw.from {
+			// Moving back: the window ends where the scan is.
+			lo = min(from, to-fw.size)
+		}
+		lo = max(lo, 0)
+		data, err := fw.w.ReadFrames(lo, max(to, lo+fw.size))
+		if err != nil {
+			if fw.err == nil {
+				fw.err = err
+			}
+			lo, data = from, make([]byte, (to-from)*fb)
+		}
+		fw.from, fw.data = lo, data
+	}
+	return fw.data[(from-fw.from)*fb : (to-fw.from)*fb]
 }
 
 // recordIndex remembers which artist and title went to which file, so a

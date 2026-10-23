@@ -31,6 +31,25 @@ func TestWAVRoundTrip(t *testing.T) {
 		if gotF != f || !bytes.Equal(got, data) {
 			t.Fatalf("%v: round trip mismatch: %v, %d bytes vs %d", f, gotF, len(got), len(data))
 		}
+		wf, err := OpenWAV(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fb := int64(f.FrameBytes())
+		if wf.Format() != f || wf.Frames() != 4410 {
+			t.Fatalf("%v: OpenWAV sees %v, %d frames", f, wf.Format(), wf.Frames())
+		}
+		for _, r := range [][2]int64{{0, 10}, {100, 3000}, {4400, 5000}, {-5, 3}} {
+			part, err := wf.ReadFrames(r[0], r[1])
+			if err != nil {
+				t.Fatal(err)
+			}
+			from, to := max(r[0], 0), min(r[1], 4410)
+			if !bytes.Equal(part, data[from*fb:to*fb]) {
+				t.Errorf("%v: ReadFrames%v differs", f, r)
+			}
+		}
+		wf.Close()
 	}
 }
 
