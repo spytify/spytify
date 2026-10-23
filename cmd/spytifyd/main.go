@@ -118,7 +118,7 @@ func run() int {
 		return 2
 	}
 	if backends == nil {
-		backends = platform.Backends{Logf: log.Infof}
+		backends = platform.Backends{Logf: log.Infof, TapHelper: env.TapHelper, MuteOutput: func() bool { return store.Values().Bool("player.mute_output") }}
 	}
 
 	c := core.New(core.Options{Env: env, Store: store, Secrets: secrets, Log: log, Backends: backends, FindProcess: findProcess})

@@ -4,6 +4,7 @@ package capture
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/target"
@@ -33,3 +34,10 @@ var (
 	ErrUnsupported = errors.New("capture is not available on this platform in the alpha")
 	ErrNoStream    = errors.New("the target process has no audio stream yet")
 )
+
+func sleep(ctx context.Context, d time.Duration) {
+	select {
+	case <-ctx.Done():
+	case <-time.After(d):
+	}
+}

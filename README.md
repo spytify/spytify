@@ -4,7 +4,7 @@
 
 **Records any application's audio, splits it into tracks and tags them.**
 
-> **Alpha.** Linux only, headless, driven from the command line. The desktop UI and the macOS and Windows backends come after the alpha (milestones M4 and M5 of [the plan](PLAN.md)). Settings, file names and the protocol may still change.
+> **Alpha.** Linux and macOS 14.2 or later, headless, driven from the command line. The desktop UI and the Windows backend come next (milestones M4 and M5 of [the plan](PLAN.md)). Settings, file names and the protocol may still change.
 
 Spytify v2 is a rewrite in Go of [Spytify v1](https://github.com/jwallet/spy-spotify), the Windows recorder. You name the process to record; Spytify captures that process's audio stream only, cuts it into one file per track at a computed sample position, encodes with ffmpeg and writes tags. It never downloads anything and never names a player in its code: the player is whatever you put in `SPYTIFY_TARGET_PROCESS`.
 
@@ -17,16 +17,29 @@ spytify-cli  ──actions──▶  spytifyd  ◀── PCM ── pw-record �
 ```
 
 - **Two processes, one bus.** `spytifyd` does all capture, splitting, encoding and tagging, and keeps running without a window. Clients (`spytify-cli` today, a UI later) talk to it over newline-delimited JSON-RPC 2.0 on a Unix socket.
-- **Per-process capture.** On PipeWire the daemon finds the player's output stream with `pw-dump` and records that stream alone with `pw-record`, so no other application can bleed in and no virtual cable is needed. PulseAudio falls back to `parec --monitor-stream`.
+- **Per-process capture.** On PipeWire the daemon finds the player's output stream with `pw-dump` and records that stream alone with `pw-record`, so no other application can bleed in and no virtual cable is needed. PulseAudio falls back to `parec --monitor-stream`. On macOS a small helper, `spytify-tap`, records the player's processes with a Core Audio process tap.
+- **Now playing.** MPRIS on Linux; on macOS the player's AppleScript interface (current track, player state, player position), polled every 250 ms.
 - **Sample-accurate boundaries.** The player's MPRIS notification only says roughly when a track changed. The cut is placed from the audio: the declared track length gives the expected end, and the quietest 20 ms inside a ±300 ms window decides the exact sample. Gapless transitions fall back to the declared length. This fixes v1's split jitter (issue #359).
 - **Two-pass finishing.** Each track goes to a temp WAV first; it is then checked against the minimum length, trimmed, loudness-normalised, encoded by ffmpeg to `<name>.part`, tagged and renamed. A half-written file never carries the final name.
 
 ## Requirements
 
-- Linux with PipeWire 0.3.40 or later (`pw-record`, `pw-dump`), or PulseAudio (`parec`, `pactl`).
-- A D-Bus session bus, and a player that exposes MPRIS (most Linux players do).
+Everywhere:
+
 - `ffmpeg` on `PATH` (or `SPYTIFY_FFMPEG`), built with `libmp3lame` for MP3 output. It is the only runtime dependency.
 - Crossfade and gapless playback turned off in the player: two mixed tracks cannot be un-mixed.
+
+Linux:
+
+- PipeWire 0.3.40 or later (`pw-record`, `pw-dump`), or PulseAudio (`parec`, `pactl`).
+- A D-Bus session bus, and a player that exposes MPRIS (most Linux players do).
+
+macOS:
+
+- macOS 14.2 or later (process taps), and a player with an AppleScript dictionary (`current track`, `player state`, `next track`).
+- `spytify-tap` next to `spytifyd` (the build script puts it there).
+- Two permissions, asked once by macOS for the app you run `spytifyd` from (Terminal, iTerm, …): **System Audio Recording** (Privacy & Security > Screen & System Audio Recording) for the capture, and **Automation** for reading the player's now-playing. If you denied one, turn it on in System Settings and restart `spytifyd`.
+- With `player.mute_output = true` the player is silent on your speakers while it is recorded.
 - On PipeWire, let the graph run at 44.1 kHz as well as 48 kHz, or 44.1 kHz audio is resampled before it reaches the recorder. `spytify-cli info` checks it. Create `~/.config/pipewire/pipewire.conf.d/10-rates.conf` with:
 
   ```
@@ -54,10 +67,11 @@ Spytify is a general-purpose application audio recorder, in the same category as
 ## Build
 
 ```sh
-go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli
+go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli       # Linux
+scripts/build-macos.sh                                  # macOS: universal spytifyd, spytify-cli and spytify-tap in bin/
 ```
 
-Binaries are static Go (`CGO_ENABLED=0` works); the Linux backends call the PipeWire, PulseAudio and D-Bus tools at run time.
+The Go binaries are static (`CGO_ENABLED=0` works); the Linux backends call the PipeWire, PulseAudio and D-Bus tools at run time. On macOS the build needs the Xcode command line tools for `spytify-tap`, which is written in Swift.
 
 ## Quick start
 
@@ -71,6 +85,15 @@ bin/spytify-cli status
 bin/spytify-cli tail -f       # follow the log
 bin/spytify-cli stop          # the current track finishes first; --now discards it
 ```
+
+On macOS, also set the player's bundle id in `.env`; `osascript -e 'id of app "<Player name>"'` prints it:
+
+```sh
+SPYTIFY_TARGET_PROCESS=<Player name>
+SPYTIFY_TARGET_BUNDLE_ID=<bundle id>
+```
+
+The bundle id selects the player's processes, helpers included, and names it for AppleScript. Players report track lengths in milliseconds or in seconds; Spytify reads an integer as milliseconds and a fraction as seconds, and `SPYTIFY_TARGET_DURATION_UNIT=ms` or `s` overrides it.
 
 Headless one-shot run, no socket, until the player stops or goes idle:
 
@@ -102,7 +125,10 @@ The player is identified by environment variables, read once at daemon start and
 | Variable | Used for | Default |
 | --- | --- | --- |
 | `SPYTIFY_TARGET_PROCESS` | process to record; a comma list for several packagings | none: the daemon refuses to start |
-| `SPYTIFY_TARGET_MPRIS` | D-Bus name of the player | `org.mpris.MediaPlayer2.<process>` |
+| `SPYTIFY_TARGET_MPRIS` | D-Bus name of the player (Linux) | `org.mpris.MediaPlayer2.<process>` |
+| `SPYTIFY_TARGET_BUNDLE_ID` | bundle id of the player (macOS) | none: the process name is used |
+| `SPYTIFY_TARGET_DURATION_UNIT` | `ms` or `s`, unit of the AppleScript track length (macOS) | guessed |
+| `SPYTIFY_TAP` | path of `spytify-tap` (macOS) | next to `spytifyd`, then `PATH` |
 | `SPYTIFY_TARGET_LAUNCH` | command that starts the player when a session starts | none |
 | `SPYTIFY_CONFIG` | settings file | `~/.config/spytify/config.toml` |
 | `SPYTIFY_SOCKET` | daemon socket | `$XDG_RUNTIME_DIR/spytify.sock` |
@@ -137,6 +163,12 @@ The same timelines run against real PipeWire and MPRIS with `cmd/fakeplayer`, wh
 ```sh
 . scripts/pipewire-session.sh      # D-Bus, PipeWire, WirePlumber and a null sink, no sound card needed
 go test -tags integration -v ./test/integration/
+```
+
+On macOS, the capture helper is checked against what `afplay` plays (it needs the System Audio Recording permission, so it does not run in CI):
+
+```sh
+go test -tags macos_capture -v ./test/macos/
 ```
 
 ## License

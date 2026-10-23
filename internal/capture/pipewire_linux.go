@@ -183,13 +183,6 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 	_ = cmd.Wait()
 }
 
-func sleep(ctx context.Context, d time.Duration) {
-	select {
-	case <-ctx.Done():
-	case <-time.After(d):
-	}
-}
-
 type pipewireTools struct{}
 
 func (pipewireTools) name() string { return "pipewire" }

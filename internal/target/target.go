@@ -25,6 +25,18 @@ type Target struct {
 	BundleID     string
 	// Launch is an optional command line that starts the player.
 	Launch string
+	// DurationUnit is "ms", "s" or "" (guess) for the track length the
+	// player's AppleScript dictionary reports on macOS.
+	DurationUnit string
+}
+
+// AppSpecifier names the player for AppleScript: its bundle id when known,
+// else its process name.
+func (t Target) AppSpecifier() string {
+	if t.BundleID != "" {
+		return t.BundleID
+	}
+	return strings.TrimSuffix(t.ProcessName(), ".app")
 }
 
 // ProcessName is the first configured process name.
@@ -60,6 +72,9 @@ type Env struct {
 	FFmpeg     string
 	// StateDir holds the crash marker, temp recordings index and logs.
 	StateDir string
+	// TapHelper is the macOS capture helper; empty means next to the
+	// daemon, then on PATH.
+	TapHelper string
 }
 
 var ErrNoTarget = errors.New("SPYTIFY_TARGET_PROCESS is not set; the daemon needs the player's process name")
@@ -88,11 +103,13 @@ func Load() Env {
 			MPRISName:    strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_MPRIS")),
 			BundleID:     strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_BUNDLE_ID")),
 			Launch:       strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_LAUNCH")),
+			DurationUnit: strings.ToLower(strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_DURATION_UNIT"))),
 		},
 		ConfigPath: firstNonEmpty(os.Getenv("SPYTIFY_CONFIG"), defaultConfigPath()),
 		SocketPath: firstNonEmpty(os.Getenv("SPYTIFY_SOCKET"), DefaultSocketPath()),
 		FFmpeg:     firstNonEmpty(os.Getenv("SPYTIFY_FFMPEG"), "ffmpeg"),
 		StateDir:   defaultStateDir(),
+		TapHelper:  strings.TrimSpace(os.Getenv("SPYTIFY_TAP")),
 	}
 }
 

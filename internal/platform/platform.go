@@ -14,7 +14,13 @@ import (
 // Backends are the OS backends; Logf receives their diagnostics.
 type Backends struct {
 	Logf func(format string, args ...any)
+	// TapHelper is the macOS capture helper path ("" = next to spytifyd).
+	TapHelper string
+	// MuteOutput reads player.mute_output when a session starts.
+	MuteOutput func() bool
 }
+
+func (b Backends) mute() bool { return b.MuteOutput != nil && b.MuteOutput() }
 
 func (b Backends) logf(format string, args ...any) {
 	if b.Logf != nil {

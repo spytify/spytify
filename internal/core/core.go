@@ -269,7 +269,10 @@ func (c *Core) Info() proto.CoreInfoResult {
 		Version:  proto.Version,
 		Protocol: proto.Protocol,
 		Platform: runtime.GOOS + "/" + runtime.GOARCH,
-		Target:   proto.TargetInfo{Process: joinNames(t.ProcessNames), MPRIS: joinNames(t.MPRISNames()), BundleID: t.BundleID, Launch: t.Launch},
+		Target:   proto.TargetInfo{Process: joinNames(t.ProcessNames), BundleID: t.BundleID, Launch: t.Launch},
+	}
+	if runtime.GOOS == "linux" {
+		info.Target.MPRIS = joinNames(t.MPRISNames())
 	}
 	add := func(name string, ok bool, detail string) {
 		info.Checks = append(info.Checks, proto.Check{Name: name, OK: ok, Detail: detail})
@@ -293,8 +296,8 @@ func (c *Core) Info() proto.CoreInfoResult {
 	dir := v.Path("output.dir")
 	add("output folder writable", writable(dir), dir)
 	info.Warnings = append(info.Warnings, "turn crossfade and gapless playback off in the player")
-	if v.Bool("player.mute_output") {
-		info.Warnings = append(info.Warnings, "player.mute_output is stored but not applied in the alpha")
+	if v.Bool("player.mute_output") && runtime.GOOS != "darwin" {
+		info.Warnings = append(info.Warnings, "player.mute_output is only applied on macOS in the alpha")
 	}
 	return info
 }
@@ -389,8 +392,8 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		identify: c.tags.identify,
 	}, opts)
 	restore := c.pinVolume(np)
-	if c.store.Values().Bool("player.mute_output") {
-		c.log.Infof("player.mute_output is not applied in the alpha; the player stays audible")
+	if c.store.Values().Bool("player.mute_output") && runtime.GOOS != "darwin" {
+		c.log.Infof("player.mute_output is only applied on macOS in the alpha; the player stays audible")
 	}
 
 	done := make(chan struct{})

@@ -46,6 +46,20 @@ jobs:
           go-version-file: go.mod
       - run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build ./cmd/...
 
+  macos-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Universal spytifyd, spytify-cli and spytify-tap
+        run: scripts/build-macos.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spytify-macos
+          path: dist/
+
   # Gate 1 of M1: the fake player recorded through PipeWire and MPRIS, every
   # file matched sample by sample against its source.
   pipewire-gate:

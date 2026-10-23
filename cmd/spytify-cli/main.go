@@ -99,7 +99,14 @@ func (a *app) infoCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(a.out, "spytifyd %s, protocol %d, %s\n", info.Version, info.Protocol, info.Platform)
-			fmt.Fprintf(a.out, "target   process=%s mpris=%s\n", info.Target.Process, info.Target.MPRIS)
+			fmt.Fprintf(a.out, "target   process=%s", info.Target.Process)
+			if info.Target.MPRIS != "" {
+				fmt.Fprintf(a.out, " mpris=%s", info.Target.MPRIS)
+			}
+			if info.Target.BundleID != "" {
+				fmt.Fprintf(a.out, " bundle=%s", info.Target.BundleID)
+			}
+			fmt.Fprintln(a.out)
 			for _, c := range info.Checks {
 				mark := "ok  "
 				if !c.OK {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spytify/spytify/internal/fake"
@@ -170,8 +171,11 @@ func TestCoreInfoAndLogs(t *testing.T) {
 	if err := call(t, c, proto.MethodCoreInfo, nil, &info); err != nil {
 		t.Fatal(err)
 	}
-	if info.Protocol != proto.Protocol || info.Target.Process != "fakeplayer" || info.Target.MPRIS != "org.mpris.MediaPlayer2.fakeplayer" {
+	if info.Protocol != proto.Protocol || info.Target.Process != "fakeplayer" {
 		t.Fatalf("info = %+v", info)
+	}
+	if wantMPRIS := runtime.GOOS == "linux"; (info.Target.MPRIS == "org.mpris.MediaPlayer2.fakeplayer") != wantMPRIS {
+		t.Fatalf("MPRIS name %q on %s", info.Target.MPRIS, runtime.GOOS)
 	}
 	checks := map[string]bool{}
 	for _, ch := range info.Checks {
