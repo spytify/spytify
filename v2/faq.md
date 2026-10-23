@@ -33,4 +33,4 @@ FLAC and WAV avoid a second lossy pass, but streaming services already send comp
 
 ### [macOS does not let Spytify record](#macos-permissions)
 
-Spytify needs **System Audio Recording** and **Automation**. Turn them on in System Settings > Privacy & Security, then open Spytify again. A Spytify you built yourself asks again after each build.
+Spytify needs **System Audio Recording** and **Automation**. Turn them on in System Settings > Privacy & Security, then open Spytify again. A Spytify you built yourself asks again after each build. While the prompt waits for an answer, nothing is recorded and the level stays still; after 10 s with no audio, the app shows where to allow it.
