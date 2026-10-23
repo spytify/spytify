@@ -85,6 +85,8 @@ type App struct {
 	bar     *fyne.Container
 	covers  *covers
 	checked bool
+	// themeMode is the app.theme applied: system, light or dark.
+	themeMode string
 
 	pending sync.Mutex
 	queued  bool
@@ -94,6 +96,7 @@ type App struct {
 // New builds the window; call ShowAndRun to start.
 func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a := &App{fa: fa, m: m, link: l, opts: opts}
+	a.applyTheme("system")
 	a.covers = newCovers(a.scheduleRender)
 	a.win = fa.NewWindow("Spytify")
 	a.win.SetIcon(Logo)
@@ -176,6 +179,12 @@ func (a *App) ShowAndRun() {
 }
 
 // showTab switches to a tab, from a button elsewhere in the window.
+// applyTheme switches to the Spytify theme in the given app.theme mode.
+func (a *App) applyTheme(mode string) {
+	a.themeMode = mode
+	a.fa.Settings().SetTheme(spytifyTheme{mode: mode})
+}
+
 func (a *App) showTab(i int) {
 	a.tabs.SelectIndex(i)
 	a.renderCenter(a.last)
@@ -246,6 +255,9 @@ func (a *App) render() {
 	record := "Record"
 	if n := s.Totals().Saved; s.Recording() && n > 0 {
 		record = fmt.Sprintf("Record · %d", n)
+	}
+	if mode, _ := s.Settings["app.theme"].(string); mode != "" && mode != a.themeMode {
+		a.applyTheme(mode)
 	}
 	if a.tabs.Items[tabRecord].Text != record {
 		a.tabs.Items[tabRecord].Text = record

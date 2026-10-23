@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/bus"
@@ -341,6 +342,33 @@ func TestLibraryRescansWhenShown(t *testing.T) {
 	a.render()
 	if len(lib.shown) != 1 || !contains(texts(a.win.Content()), "Artist - Title") {
 		t.Errorf("library after coming back: %d files", len(lib.shown))
+	}
+}
+
+func TestThemeFollowsTheSetting(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["app.theme"] = "light"
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.render()
+	th := a.fa.Settings().Theme()
+	// The green replaces the blue, whatever variant the OS asks for.
+	if got := th.Color(theme.ColorNamePrimary, theme.VariantDark); got != greenLight {
+		t.Errorf("light theme primary = %v", got)
+	}
+	values["app.theme"] = "dark"
+	m.SetSettings(values)
+	a.render()
+	if got := a.fa.Settings().Theme().Color(theme.ColorNamePrimary, theme.VariantLight); got != greenDark {
+		t.Errorf("dark theme primary = %v", got)
+	}
+	values["app.theme"] = "system"
+	m.SetSettings(values)
+	a.render()
+	if got := a.fa.Settings().Theme().Color(theme.ColorNamePrimary, theme.VariantLight); got != greenLight {
+		t.Errorf("system theme on a light OS = %v", got)
 	}
 }
 
