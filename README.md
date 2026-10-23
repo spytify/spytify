@@ -1,4 +1,4 @@
-[![Spytify](https://user-images.githubusercontent.com/23088305/29906214-6daad21c-8de1-11e7-80f5-ef6791cc7825.png)](https://spytify.github.io/spytify/)
+[![Spytify](assets/logo-wordmark.png)](https://spytify.github.io/spytify/overview.html)
 
 [![Build](https://github.com/spytify/spytify/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/spytify/spytify/actions/workflows/ci.yml?query=branch%3Amaster)
 [![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspytify%2Fspytify%2Fbadges%2Ftests.json)](https://github.com/spytify/spytify/actions/workflows/ci.yml?query=branch%3Amaster)

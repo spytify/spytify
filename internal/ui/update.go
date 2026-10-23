@@ -16,7 +16,7 @@ var releasesURL = "https://api.github.com/repos/spytify/spytify/releases?per_pag
 
 const (
 	donateURL = "https://spytify.github.io/spytify/donate.html"
-	siteURL   = "https://spytify.github.io/spytify/"
+	siteURL   = "https://spytify.github.io/spytify/overview.html"
 	sourceURL = "https://github.com/spytify/spytify"
 )
 

@@ -26,9 +26,9 @@ type aboutScreen struct {
 
 func newAboutScreen(a *App) *aboutScreen {
 	s := &aboutScreen{app: a, versions: caption("")}
-	logo := canvas.NewImageFromResource(Logo)
+	logo := canvas.NewImageFromResource(Wordmark)
 	logo.FillMode = canvas.ImageFillContain
-	logo.SetMinSize(fyne.NewSize(96, 96))
+	logo.SetMinSize(fyne.NewSize(300, 98))
 	tagline := widget.NewLabelWithStyle("Records any application's audio, splits it into tracks and tags them.", fyne.TextAlignCenter, fyne.TextStyle{})
 	tagline.Wrapping = fyne.TextWrapWord
 	source := widget.NewHyperlink("Source code on GitHub", nil)
@@ -42,7 +42,6 @@ func newAboutScreen(a *App) *aboutScreen {
 	legal.SizeName = theme.SizeNameCaptionText
 	s.root = container.NewCenter(container.NewGridWrap(fyne.NewSize(520, 420), container.NewVBox(
 		container.NewCenter(logo),
-		widget.NewLabelWithStyle("Spytify", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		tagline,
 		container.NewCenter(s.versions),
 		container.NewCenter(source),

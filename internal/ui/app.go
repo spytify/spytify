@@ -29,6 +29,12 @@ var logoPNG []byte
 // Logo is the app and tray icon.
 var Logo = fyne.NewStaticResource("logo.png", logoPNG)
 
+//go:embed assets/logo-wordmark.png
+var wordmarkPNG []byte
+
+// Wordmark is the logo with the name beside it, for the About screen.
+var Wordmark = fyne.NewStaticResource("logo-wordmark.png", wordmarkPNG)
+
 // Options are what the UI needs from its environment.
 type Options struct {
 	// StateDir holds the daemon's log file.
@@ -117,13 +123,11 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.update = widget.NewButtonWithIcon("", theme.DownloadIcon(), nil)
 	a.update.Importance = widget.SuccessImportance
 	a.update.Hide()
-	donate := widget.NewButton("♥ Donate", func() { a.openURL(donateURL) })
-	donate.Importance = widget.LowImportance
 	a.action = widget.NewButtonWithIcon("Record", theme.MediaRecordIcon(), a.toggleRecording)
 	a.action.Importance = widget.HighImportance
 	brand := container.NewHBox(widget.NewIcon(Logo), widget.NewLabelWithStyle("Spytify", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
-	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, donate, a.action))
+	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.action))
 
 	a.banner = widget.NewLabel("")
 	a.banner.Wrapping = fyne.TextWrapWord

@@ -177,10 +177,13 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	a.render()
 	all := texts(a.win.Content())
 	for _, want := range []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Tagged", "Skipped: duplicate",
-		"2 saved · 1 skipped · 0 ads", "Stop", "Player is running", "FLAC", "♥ Donate", "Skip"} {
+		"2 saved · 1 skipped · 0 ads", "Stop", "Player is running", "FLAC", "Skip"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
 		}
+	}
+	if contains(all, "♥ Donate") {
+		t.Error("Donate is in the app bar; About has it")
 	}
 	if a.tabs.Items[tabRecord].Text != "Record · 2" {
 		t.Errorf("Record tab title %q", a.tabs.Items[tabRecord].Text)
@@ -306,7 +309,7 @@ func TestOtherScreensRender(t *testing.T) {
 	a.showTab(tabAbout)
 	a.render()
 	all = texts(a.win.Content())
-	for _, want := range []string{"recorder v2.0.0-alpha on darwin/arm64", "Source code on GitHub", "Project page", "Check for updates"} {
+	for _, want := range []string{"recorder v2.0.0-alpha on darwin/arm64", "Source code on GitHub", "Project page", "Check for updates", "♥ Donate"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the about screen", want)
 		}
