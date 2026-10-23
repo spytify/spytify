@@ -164,9 +164,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.win.SetContent(body)
 
 	a.setupTray()
+	if !opts.ManualRender {
+		onReopen(func() { fyne.Do(a.showWindow) })
+	}
 	a.win.SetCloseIntercept(func() {
 		if _, tray := a.fa.(desktop.App); tray && a.last.Settings["app.minimize_to_tray"] == true {
-			a.win.Hide()
+			a.hideToTray()
 			return
 		}
 		a.quit()
@@ -539,6 +542,32 @@ func (a *App) setupTray() {
 		fyne.NewMenuItem("Start recording", func() { a.do(proto.MethodSessionStart, proto.SessionStartParams{}, nil) }),
 		fyne.NewMenuItem("Stop", func() { a.do(proto.MethodSessionStop, proto.SessionStopParams{}, nil) }),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Open window", func() { a.win.Show(); a.win.RequestFocus() }),
+		fyne.NewMenuItem("Open window", a.showWindow),
 	))
+}
+
+const trayNoticeKey = "tray-notice-seen"
+
+// hideToTray hides the window, and on macOS the Dock icon with it; the
+// session goes on. The first time, a notification says where the app is.
+func (a *App) hideToTray() {
+	a.win.Hide()
+	if a.opts.ManualRender {
+		return
+	}
+	showInDock(false)
+	prefs := a.fa.Preferences()
+	if !prefs.Bool(trayNoticeKey) {
+		prefs.SetBool(trayNoticeKey, true)
+		a.fa.SendNotification(fyne.NewNotification("Spytify is still running",
+			"It records from the menu bar. Quit it from there, or turn off Minimize to tray in Settings."))
+	}
+}
+
+func (a *App) showWindow() {
+	if !a.opts.ManualRender {
+		showInDock(true)
+	}
+	a.win.Show()
+	a.win.RequestFocus()
 }
