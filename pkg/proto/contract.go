@@ -35,7 +35,7 @@ var Events = []EventSpec{
 	{EventSessionState, SessionStateEvent{}, "every transition"},
 	{EventTrackStarted, TrackStartedEvent{}, "boundary committed"},
 	{EventTrackFinished, TrackFinishedEvent{}, "file closed and tagged"},
-	{EventTrackSkipped, TrackSkippedEvent{}, "decision made: duplicate, too_short, ad, incomplete"},
+	{EventTrackSkipped, TrackSkippedEvent{}, "decision made: duplicate, too_short, ad, incomplete, seeked"},
 	{EventLevel, LevelEvent{}, "10 Hz while recording"},
 	{EventSettingsChanged, SettingsValues{}, "after any successful settings.set or settings.reset"},
 	{EventTargetState, TargetStateEvent{}, "player process appears or exits"},

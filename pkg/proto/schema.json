@@ -526,7 +526,7 @@
       }
     },
     "track.skipped": {
-      "description": "decision made: duplicate, too_short, ad, incomplete",
+      "description": "decision made: duplicate, too_short, ad, incomplete, seeked",
       "params": {
         "$ref": "#/$defs/TrackSkippedEvent"
       }
