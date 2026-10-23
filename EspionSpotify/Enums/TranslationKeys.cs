@@ -50,6 +50,7 @@
         logPreviousLogs,
         logRecorded,
         logRecordedFileNotFound,
+        logPlaylistUpdated,
         logRecording,
         logRecordingTimerDone,
         logSpotifyConnecting,
