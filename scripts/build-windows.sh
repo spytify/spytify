@@ -28,7 +28,7 @@ for cmd in spytifyd spytify-cli; do
 done
 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
   go build -trimpath -ldflags "$ldflags -H=windowsgui" -o "$out/Spytify.exe" ./cmd/spytify-ui
-x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -static -municode \
+x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -std=c++17 -static -municode \
   -o "$out/spytify-tap.exe" windows/spytify-tap/main.cpp -lole32 -luuid
 
 echo "built v$version into $out/: Spytify.exe spytifyd.exe spytify-cli.exe spytify-tap.exe"

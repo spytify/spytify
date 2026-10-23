@@ -3,9 +3,12 @@
 package capture
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -50,4 +53,40 @@ func stopHelper(p *os.Process) error { return p.Kill() }
 // hideWindow keeps the helper from opening a console window.
 func hideWindow(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+}
+
+// ErrNoSession means the player has not opened an audio session yet: it
+// has played nothing since it started.
+var ErrNoSession = errors.New("the player has no audio session yet")
+
+// SessionVolume reads the volume of the audio sessions of pid's process
+// tree: the player's slider in the Volume Mixer, from 0 to 1.
+func SessionVolume(helper string, pid int) (float64, error) {
+	out, err := volumeCmd(helper, pid, "--get-volume")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseFloat(strings.TrimSpace(out), 64)
+}
+
+// SetSessionVolume sets that volume.
+func SetSessionVolume(helper string, pid int, v float64) error {
+	_, err := volumeCmd(helper, pid, "--set-volume", strconv.FormatFloat(v, 'f', 3, 64))
+	return err
+}
+
+func volumeCmd(helper string, pid int, args ...string) (string, error) {
+	cmd := exec.Command(helper, append([]string{"--pid", strconv.Itoa(pid)}, args...)...)
+	hideWindow(cmd)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	var ee *exec.ExitError
+	switch {
+	case errors.As(err, &ee) && ee.ExitCode() == 4:
+		return "", ErrNoSession
+	case err != nil:
+		return "", fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return string(out), nil
 }

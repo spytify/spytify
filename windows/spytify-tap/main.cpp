@@ -11,18 +11,26 @@
 // Usage: spytify-tap.exe --pid <pid> [--rate 48000]
 // Exit status: 0 when spytifyd closes the pipe, 2 for bad arguments, 3 when
 // the process ended (spytifyd looks for the player again), 1 otherwise.
+//
+// spytify-tap.exe --pid <pid> --get-volume | --set-volume <0..1> reads or
+// sets the volume of the process tree's audio sessions, the player's slider
+// in the Volume Mixer, and exits 4 when the tree has no session yet.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <audioclient.h>
+#include <audiopolicy.h>
 #include <fcntl.h>
 #include <io.h>
 #include <mmdeviceapi.h>
+#include <tlhelp32.h>
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cwchar>
+#include <map>
+#include <set>
 #include <vector>
 
 // From audioclientactivationparams.h of the Windows SDK, which MinGW lacks.
@@ -50,6 +58,11 @@ static const GUID kIAudioClient = {0x1CB9AD4C, 0xDBFA, 0x4c32, {0xB1, 0x78, 0xC2
 static const GUID kIAudioCaptureClient = {0xC8ADBD64, 0xE71E, 0x48a0, {0xA4, 0xDE, 0x18, 0x5C, 0x39, 0x5C, 0xD3, 0x17}};
 static const GUID kICompletionHandler = {0x41D949AB, 0x9862, 0x444A, {0x80, 0xF6, 0xC2, 0x61, 0x33, 0x4D, 0xA5, 0xEB}};
 static const GUID kIAgileObject = {0x94ea2b94, 0xe9cc, 0x49e0, {0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90}};
+static const GUID kMMDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
+static const GUID kIMMDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
+static const GUID kIAudioSessionManager2 = {0x77AA99A0, 0x1BD6, 0x484F, {0x8B, 0xC7, 0x2C, 0x65, 0x4C, 0x9A, 0x9B, 0x6F}};
+static const GUID kIAudioSessionControl2 = {0xbfb7ff88, 0x7239, 0x4fc9, {0x8f, 0xa2, 0x07, 0xc9, 0x50, 0xbe, 0x9c, 0x6d}};
+static const GUID kISimpleAudioVolume = {0x87CE5498, 0x68D6, 0x44E5, {0x92, 0x15, 0x6D, 0xA4, 0x7E, 0xF8, 0x83, 0xD8}};
 
 typedef HRESULT(WINAPI *ActivateFn)(LPCWSTR, REFIID, PROPVARIANT *, IActivateAudioInterfaceCompletionHandler *,
                                     IActivateAudioInterfaceAsyncOperation **);
@@ -118,20 +131,111 @@ struct Out {
   void bytes(const BYTE *data, uint64_t n) { buf.insert(buf.end(), data, data + n); }
 };
 
+// processTree is pid and every process below it: players play from a child.
+static std::set<DWORD> processTree(DWORD root) {
+  std::map<DWORD, DWORD> parent;
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snap != INVALID_HANDLE_VALUE) {
+    PROCESSENTRY32W e = {};
+    e.dwSize = sizeof e;
+    for (BOOL ok = Process32FirstW(snap, &e); ok; ok = Process32NextW(snap, &e)) parent[e.th32ProcessID] = e.th32ParentProcessID;
+    CloseHandle(snap);
+  }
+  std::set<DWORD> tree = {root};
+  for (bool grew = true; grew;) {
+    grew = false;
+    for (auto &[child, up] : parent) {
+      if (child != up && tree.count(up) && !tree.count(child)) {
+        tree.insert(child);
+        grew = true;
+      }
+    }
+  }
+  return tree;
+}
+
+// sessionVolume reads (set false) or sets the master volume of every audio
+// session of the tree, on every active output device.
+static int sessionVolume(DWORD pid, bool set, float value) {
+  HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  if (FAILED(hr)) return fail("CoInitializeEx", hr);
+  std::set<DWORD> tree = processTree(pid);
+  IMMDeviceEnumerator *devices = nullptr;
+  hr = CoCreateInstance(kMMDeviceEnumerator, nullptr, CLSCTX_ALL, kIMMDeviceEnumerator, reinterpret_cast<void **>(&devices));
+  if (FAILED(hr)) return fail("MMDeviceEnumerator", hr);
+  IMMDeviceCollection *list = nullptr;
+  hr = devices->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &list);
+  if (FAILED(hr)) return fail("EnumAudioEndpoints", hr);
+  UINT count = 0;
+  list->GetCount(&count);
+  int found = 0;
+  float first = 0;
+  for (UINT d = 0; d < count; d++) {
+    IMMDevice *device = nullptr;
+    IAudioSessionManager2 *manager = nullptr;
+    IAudioSessionEnumerator *sessions = nullptr;
+    if (FAILED(list->Item(d, &device))) continue;
+    if (SUCCEEDED(device->Activate(kIAudioSessionManager2, CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&manager))) &&
+        SUCCEEDED(manager->GetSessionEnumerator(&sessions))) {
+      int n = 0;
+      sessions->GetCount(&n);
+      for (int i = 0; i < n; i++) {
+        IAudioSessionControl *control = nullptr;
+        IAudioSessionControl2 *control2 = nullptr;
+        ISimpleAudioVolume *volume = nullptr;
+        DWORD owner = 0;
+        if (SUCCEEDED(sessions->GetSession(i, &control)) &&
+            SUCCEEDED(control->QueryInterface(kIAudioSessionControl2, reinterpret_cast<void **>(&control2))) &&
+            SUCCEEDED(control2->GetProcessId(&owner)) && tree.count(owner) &&
+            SUCCEEDED(control->QueryInterface(kISimpleAudioVolume, reinterpret_cast<void **>(&volume)))) {
+          if (set) {
+            volume->SetMasterVolume(value, nullptr);
+          } else if (found == 0) {
+            volume->GetMasterVolume(&first);
+          }
+          found++;
+        }
+        if (volume) volume->Release();
+        if (control2) control2->Release();
+        if (control) control->Release();
+      }
+    }
+    if (sessions) sessions->Release();
+    if (manager) manager->Release();
+    device->Release();
+  }
+  list->Release();
+  devices->Release();
+  if (found == 0) {
+    fprintf(stderr, "spytify-tap: process %lu has no audio session yet\n", (unsigned long)pid);
+    return 4;
+  }
+  if (!set) printf("%.3f\n", first);
+  return 0;
+}
+
 int wmain(int argc, wchar_t **argv) {
   DWORD pid = 0;
   DWORD rate = 48000;
-  for (int i = 1; i + 1 < argc; i += 2) {
-    if (wcscmp(argv[i], L"--pid") == 0) {
-      pid = wcstoul(argv[i + 1], nullptr, 10);
-    } else if (wcscmp(argv[i], L"--rate") == 0) {
-      rate = wcstoul(argv[i + 1], nullptr, 10);
+  bool getVolume = false, setVolume = false;
+  float volume = 0;
+  for (int i = 1; i < argc; i++) {
+    if (wcscmp(argv[i], L"--get-volume") == 0) {
+      getVolume = true;
+    } else if (i + 1 < argc && wcscmp(argv[i], L"--pid") == 0) {
+      pid = wcstoul(argv[++i], nullptr, 10);
+    } else if (i + 1 < argc && wcscmp(argv[i], L"--rate") == 0) {
+      rate = wcstoul(argv[++i], nullptr, 10);
+    } else if (i + 1 < argc && wcscmp(argv[i], L"--set-volume") == 0) {
+      setVolume = true;
+      volume = wcstof(argv[++i], nullptr);
     }
   }
-  if (pid == 0 || rate < 8000 || rate > 384000) {
-    fprintf(stderr, "usage: spytify-tap.exe --pid <pid> [--rate 48000]\n");
+  if (pid == 0 || rate < 8000 || rate > 384000 || (setVolume && (volume < 0 || volume > 1))) {
+    fprintf(stderr, "usage: spytify-tap.exe --pid <pid> [--rate 48000] | --get-volume | --set-volume <0..1>\n");
     return 2;
   }
+  if (getVolume || setVolume) return sessionVolume(pid, setVolume, volume);
   _setmode(_fileno(stdout), _O_BINARY);
 
   HANDLE target = OpenProcess(SYNCHRONIZE, FALSE, pid);
