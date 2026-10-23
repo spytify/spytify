@@ -129,9 +129,6 @@ func TestSessionErrors(t *testing.T) {
 	if err := call(t, c, proto.MethodSessionStatus, nil, &st); err != nil || st.State != proto.StateIdle {
 		t.Fatalf("status: %+v %v", st, err)
 	}
-	if err := call(t, c, proto.MethodTagsRetag, nil, nil); code(err) != proto.CodeNotAvailable {
-		t.Fatalf("retag: %v", err)
-	}
 	if err := call(t, c, proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: "rewind"}, nil); code(err) != proto.CodeInvalidParams {
 		t.Fatalf("bad control: %v", err)
 	}

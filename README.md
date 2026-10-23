@@ -37,6 +37,7 @@ spytify-cli ─┴─ JSON-RPC ──▶ spytifyd ◀── now playing ◀─�
 
 - `ffmpeg` on `PATH` (or `SPYTIFY_FFMPEG`), with `libmp3lame` for MP3 output.
 - Crossfade and gapless playback turned off in the recorded application: two mixed tracks cannot be separated again.
+- If the application can play your own music files, keep Spytify's output folder out of the folders it scans. Otherwise it plays your recording of a track in place of the track itself.
 
 Linux:
 

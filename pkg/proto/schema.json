@@ -201,28 +201,6 @@
       ],
       "type": "object"
     },
-    "RetagParams": {
-      "properties": {
-        "paths": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    },
-    "RetagResult": {
-      "properties": {
-        "queued": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "queued"
-      ],
-      "type": "object"
-    },
     "SessionStartParams": {
       "properties": {
         "single_track": {
@@ -646,15 +624,6 @@
       },
       "result": {
         "$ref": "#/$defs/SettingsSetResult"
-      }
-    },
-    "tags.retag": {
-      "description": "not available in the alpha",
-      "params": {
-        "$ref": "#/$defs/RetagParams"
-      },
-      "result": {
-        "$ref": "#/$defs/RetagResult"
       }
     }
   },

@@ -229,8 +229,6 @@ func (c *Core) Handle(ctx context.Context, method string, params json.RawMessage
 			return nil, err
 		}
 		return proto.Empty{}, nil
-	case proto.MethodTagsRetag:
-		return nil, proto.Errorf(proto.CodeNotAvailable, "tags.retag arrives with the Library index after the alpha")
 	case proto.MethodLogTail:
 		var p proto.LogTailParams
 		if err := decode(&p); err != nil {

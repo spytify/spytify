@@ -67,7 +67,6 @@ var Table = []Def{
 	{Key: "tags.track_from_counter", Tab: "Tags", Group: "Encoding", Label: "Replace track number with counter", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "tags.extra_to_subtitle", Tab: "Tags", Group: "Encoding", Label: "Move parenthesised extra title to subtitle", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "tags.artist_separator", Tab: "Tags", Group: "Encoding", Label: "Multiple artists separator", Kind: KindString, Default: ", ", Advanced: true},
-	{Key: "tags.update_existing", Tab: "Tags", Group: "Encoding", Label: "Re-tag existing files", Kind: KindBool, Default: false, Advanced: true},
 
 	{Key: "recorder.min_seconds", Tab: "Recorder", Group: "Recording", Label: "Minimum track length (seconds)", Kind: KindInt, Default: int64(30), Min: 0, Max: 3600, Ranged: true},
 	{Key: "recorder.duplicates", Tab: "Recorder", Group: "Recording", Label: "Already recorded tracks", Kind: KindEnum, Enum: []string{"skip", "suffix", "overwrite"}, Default: "skip"},

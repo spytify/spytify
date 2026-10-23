@@ -26,7 +26,6 @@ const (
 	MethodSettingsSet   = "settings.set"
 	MethodSettingsReset = "settings.reset"
 	MethodPlayerControl = "player.control"
-	MethodTagsRetag     = "tags.retag"
 	MethodLogTail       = "log.tail"
 	MethodEventsRecent  = "events.recent"
 )
@@ -172,14 +171,6 @@ type SettingsResetParams struct {
 
 type PlayerControlParams struct {
 	Cmd string `json:"cmd"`
-}
-
-type RetagParams struct {
-	Paths []string `json:"paths,omitempty"`
-}
-
-type RetagResult struct {
-	Queued int `json:"queued"`
 }
 
 type LogTailParams struct {
