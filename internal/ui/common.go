@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -47,16 +44,6 @@ func fmtBytes(n int64) string {
 		return fmt.Sprintf("%.0f kB", float64(n)/(1<<10))
 	}
 	return fmt.Sprintf("%d B", n)
-}
-
-// expandHome turns a leading ~ into the home folder, as the core does.
-func expandHome(p string) string {
-	if p == "~" || strings.HasPrefix(p, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, strings.TrimPrefix(p, "~"))
-		}
-	}
-	return p
 }
 
 // heading is a section title.

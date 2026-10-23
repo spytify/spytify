@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -114,6 +115,9 @@ func TestSettingsActions(t *testing.T) {
 }
 
 func TestSessionErrors(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not installed: session.start refuses before it looks for the player")
+	}
 	c, _ := newTestCore(t, false)
 	if err := call(t, c, proto.MethodSessionStart, nil, nil); code(err) != proto.CodeTargetNotRunning {
 		t.Fatalf("start without player: %v", err)

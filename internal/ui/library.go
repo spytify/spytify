@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/ui/model"
 )
 
@@ -94,7 +95,7 @@ func (l *libraryScreen) content() fyne.CanvasObject { return l.root }
 
 func (l *libraryScreen) render(s model.State) {
 	dir, _ := s.Settings["output.dir"].(string)
-	dir = expandHome(dir)
+	dir = settings.ExpandHome(dir)
 	if dir != l.folder {
 		l.folder = dir
 		l.scan()

@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -58,7 +59,8 @@ func TestSetPersistsAndReloads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// Windows has no mode bits; the folder's ACL protects the file.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("config mode = %v", info.Mode().Perm())
 	}
 	again, err := Open(path)
@@ -150,7 +152,9 @@ func TestOverrideIsNotPersisted(t *testing.T) {
 func TestLoadWarnsAndKeepsDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	content := "[encode]\nformat = \"ogg\"\n[output]\ndir = \"/music\"\nnope = 1\n"
+	music := filepath.Join(dir, "music")
+	// A TOML literal string: Windows paths keep their backslashes.
+	content := "[encode]\nformat = \"ogg\"\n[output]\ndir = '" + music + "'\nnope = 1\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +162,7 @@ func TestLoadWarnsAndKeepsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Values().String("encode.format") != "mp3" || s.Values().Path("output.dir") != "/music" {
+	if s.Values().String("encode.format") != "mp3" || s.Values().Path("output.dir") != music {
 		t.Fatal("bad load")
 	}
 	if len(s.Warnings()) != 2 {
@@ -173,5 +177,25 @@ func TestDuration(t *testing.T) {
 	}
 	if Defaults().Duration("recorder.session_timer") != 0 {
 		t.Fatal("default timer not off")
+	}
+}
+
+func TestHomeRelativePaths(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip(err)
+	}
+	for in, want := range map[string]string{"~": "~", "~/Music//Rec/": "~/Music/Rec", "~/a/../b": "~/b"} {
+		if got, err := cleanPath(in); err != nil || got != want {
+			t.Errorf("cleanPath(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	if got := ExpandHome("~/Music/Rec"); got != filepath.Join(home, "Music", "Rec") {
+		t.Errorf("ExpandHome = %q", got)
+	}
+	if runtime.GOOS == "windows" {
+		if got, err := cleanPath(`~\Music\Rec`); err != nil || got != "~/Music/Rec" {
+			t.Errorf(`cleanPath(~\Music\Rec) = %q, %v`, got, err)
+		}
 	}
 }

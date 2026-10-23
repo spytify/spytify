@@ -23,6 +23,12 @@ func fakeCore(t *testing.T, protocol int) (*bus.Server, string, *atomic.Int32) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
+	return fakeCoreAt(t, protocol, filepath.Join(dir, "s.sock"))
+}
+
+// fakeCoreAt serves a scripted core on the socket at path.
+func fakeCoreAt(t *testing.T, protocol int, path string) (*bus.Server, string, *atomic.Int32) {
+	t.Helper()
 	starts := &atomic.Int32{}
 	recent := func() []proto.Event {
 		raw, _ := json.Marshal(proto.TrackStartedEvent{Track: proto.Track{ID: "s-001", Title: "Replayed"}})
@@ -47,10 +53,10 @@ func fakeCore(t *testing.T, protocol int) (*bus.Server, string, *atomic.Int32) {
 		}
 		return nil, proto.Errorf(proto.CodeMethodNotFound, "unknown")
 	}, nil)
-	path := filepath.Join(dir, "s.sock")
 	if err := srv.ListenUnix(path); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { srv.Close() })
 	return srv, path, starts
 }
 
@@ -108,9 +114,7 @@ func TestReconnectsWhenTheDaemonComesBack(t *testing.T) {
 	defer cancel()
 	go l.Run(ctx)
 	waitFor(t, m, "disconnected", func(s model.State) bool { return s.Conn == model.Disconnected && s.ConnError != "" })
-	if err := os.Symlink(path, missing); err != nil {
-		t.Fatal(err)
-	}
+	fakeCoreAt(t, proto.Protocol, missing)
 	l.Retry()
 	waitFor(t, m, "reconnected", func(s model.State) bool { return s.Conn == model.Connected })
 }

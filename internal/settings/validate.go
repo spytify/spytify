@@ -3,6 +3,8 @@ package settings
 import (
 	"fmt"
 	"math"
+	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -144,13 +146,40 @@ func cleanPath(s string) (string, error) {
 	if s == "" || strings.ContainsRune(s, 0) {
 		return "", fmt.Errorf("expected a folder path")
 	}
-	if s == "~" || strings.HasPrefix(s, "~/") {
-		return "~" + filepath.Clean(strings.TrimPrefix(s, "~")), nil
+	// A home-relative path keeps its "~/" form on every OS, so config.toml
+	// moves between machines; Values.Path turns it into a native path.
+	if rest, ok := homeRelative(s); ok {
+		if p := path.Clean("/" + filepath.ToSlash(rest)); p != "/" {
+			return "~" + p, nil
+		}
+		return "~", nil
 	}
 	if !filepath.IsAbs(s) {
 		return "", fmt.Errorf("expected an absolute path or one starting with ~/")
 	}
 	return filepath.Clean(s), nil
+}
+
+// ExpandHome turns a leading ~ into the home folder, as a native path.
+func ExpandHome(p string) string {
+	if rest, ok := homeRelative(p); ok {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, filepath.FromSlash(rest))
+		}
+	}
+	return p
+}
+
+// homeRelative splits "~", "~/x" and, on Windows, "~\x" into what follows
+// the home folder.
+func homeRelative(s string) (string, bool) {
+	switch {
+	case s == "~":
+		return "", true
+	case strings.HasPrefix(s, "~/"), filepath.Separator == '\\' && strings.HasPrefix(s, `~\`):
+		return s[2:], true
+	}
+	return "", false
 }
 
 func validTemplate(s string) (string, error) {

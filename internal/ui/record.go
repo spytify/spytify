@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -198,7 +199,7 @@ func (r *recordScreen) content() fyne.CanvasObject { return r.root }
 
 func (r *recordScreen) render(s model.State) {
 	r.folder, _ = s.Settings["output.dir"].(string)
-	r.folder = expandHome(r.folder)
+	r.folder = settings.ExpandHome(r.folder)
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
 		player := s.Info.Target.Process
 		if player == "" {
