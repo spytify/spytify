@@ -118,3 +118,23 @@ func TestFindProcessFindsItself(t *testing.T) {
 		t.Fatalf("PID = %d", p.PID)
 	}
 }
+
+func TestPickRootFindsTheTreeRoot(t *testing.T) {
+	tg := Target{ProcessNames: []string{"Player"}}
+	procs := []Process{
+		{PID: 40, Parent: 30, Name: "Player.exe"}, // a renderer child, listed first
+		{PID: 30, Parent: 4, Name: "player.exe"},
+		{PID: 50, Parent: 30, Name: "Player.exe"},
+		{PID: 60, Parent: 4, Name: "other.exe"},
+	}
+	if p, ok := pickRoot(tg, procs); !ok || p.PID != 30 {
+		t.Fatalf("root = %+v, %v", p, ok)
+	}
+	// Without parents (Linux, macOS) the first match wins, as before.
+	if p, ok := pickRoot(tg, []Process{{PID: 7, Name: "player"}, {PID: 3, Name: "player"}}); !ok || p.PID != 7 {
+		t.Fatalf("first match = %+v, %v", p, ok)
+	}
+	if _, ok := pickRoot(tg, []Process{{PID: 9, Name: "other"}}); ok {
+		t.Fatal("matched a process of another name")
+	}
+}

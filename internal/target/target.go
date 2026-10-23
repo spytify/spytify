@@ -197,6 +197,9 @@ func defaultConfigPath() string {
 
 // DefaultSocketPath is the socket used when SPYTIFY_SOCKET is unset.
 func DefaultSocketPath() string {
+	if dir := os.Getenv("LOCALAPPDATA"); runtime.GOOS == "windows" && dir != "" {
+		return filepath.Join(dir, "Spytify", "spytify.sock")
+	}
 	if runtime.GOOS == "darwin" {
 		if home, err := os.UserHomeDir(); err == nil {
 			return filepath.Join(home, "Library", "Application Support", "Spytify", "spytify.sock")
@@ -209,6 +212,9 @@ func DefaultSocketPath() string {
 }
 
 func defaultStateDir() string {
+	if dir := os.Getenv("LOCALAPPDATA"); runtime.GOOS == "windows" && dir != "" {
+		return filepath.Join(dir, "Spytify")
+	}
 	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
 		return filepath.Join(dir, "spytify")
 	}

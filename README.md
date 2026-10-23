@@ -11,7 +11,7 @@
 
 ![Spytify recording a session: the current track with its progress and level, and the files already saved](assets/recording.png)
 
-Spytify records the sound one application sends to your speakers, nothing else, and saves each track it plays as its own file: cut at the right sample, encoded with ffmpeg, and tagged with the title, artist, album and cover the application itself reports. It runs on Linux and macOS 14.2 or later; Windows is in progress.
+Spytify records the sound one application sends to your speakers, nothing else, and saves each track it plays as its own file: cut at the right sample, encoded with ffmpeg, and tagged with the title, artist, album and cover the application itself reports. It runs on Linux and macOS 14.2 or later; a first Windows build (Windows 10 version 2004 or later) is being tested.
 
 This page is for people who want to build Spytify from source or contribute to it.
 
@@ -27,7 +27,8 @@ spytify-cli ─┴─ JSON-RPC ──▶ spytifyd ◀── now playing ◀─�
 - **One application only.** Only the chosen process is recorded, so notifications or other apps never end up in a file, and no virtual audio device is needed.
   - Linux: the daemon finds the application's PipeWire stream with `pw-dump` and records it with `pw-record` (PulseAudio: `parec --monitor-stream`).
   - macOS: a small helper, `spytify-tap`, uses a Core Audio process tap.
-- **Now playing.** Title, artist, album, track number, length and cover come from the application: MPRIS on Linux, its AppleScript interface on macOS. Nothing is looked up on the web.
+  - Windows: `spytify-tap.exe` uses WASAPI process loopback on the application's process tree.
+- **Now playing.** Title, artist, album, track number, length and cover come from the application: MPRIS on Linux, its AppleScript interface on macOS, the Windows media session (the one behind the volume flyout) on Windows. Nothing is looked up on the web.
 - **Sample-accurate cuts.** A track-change notification only says roughly when a track ended. The track length gives the expected end, and the quietest 20 ms around it decides the exact sample, so a file holds one whole track and nothing of its neighbours.
 - **Whole tracks only.** A track that was skipped, stopped early, or moved along its track bar is not kept, even when it played for its full length. A track already playing when you press Record is skipped too, unless you choose **Record this track from the start**.
 - **Two-pass finishing.** Each track is written to a temporary WAV, checked, trimmed, loudness-normalised, encoded to `<name>.part`, tagged, then renamed. A half-written file never carries the final name.
@@ -55,6 +56,12 @@ macOS:
 - `spytify-tap` next to `spytifyd`; the build script puts it there.
 - macOS asks once for two permissions: **System Audio Recording** for the capture, and **Automation** to read what is playing. If you denied one, turn it on in System Settings > Privacy & Security and restart Spytify.
 
+Windows:
+
+- Windows 10 version 2004 or later, or Windows 11.
+- `spytify-tap.exe` next to `spytifyd.exe`, and Windows PowerShell, which every install has.
+- The application must show what it plays in the Windows media controls.
+
 ## Legal and your account
 
 Spytify is a general-purpose application audio recorder, like Audio Hijack, Loopback or OBS. This is not legal advice.
@@ -72,16 +79,18 @@ Go 1.26 or later.
 ```sh
 go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli ./cmd/spytify-ui   # Linux
 scripts/build-macos.sh                                               # macOS: bin/Spytify.app and the command-line tools
+scripts/build-windows.sh                                             # Windows, cross-compiled: bin/windows/*.exe
 ```
 
 - `spytifyd` and `spytify-cli` are pure Go (`CGO_ENABLED=0` works).
 - The desktop app uses [Fyne](https://fyne.io) and needs cgo:
   - Linux: `gcc`, `libgl1-mesa-dev`, `xorg-dev`, `libwayland-dev`, `libxkbcommon-dev` and `wayland-protocols` (Debian names).
   - macOS: the Xcode command line tools, which also build the Swift helper `spytify-tap`.
+  - Windows: MinGW-w64 (`x86_64-w64-mingw32-gcc` and `-g++`), from Linux or macOS; it also builds the C++ helper `spytify-tap.exe`.
 
 A build of your own records nothing until you choose the application. In the app, go to **Settings > App > Advanced > Player**, enter its process name (and its bundle id on macOS), then press **Save and restart spytifyd**. Without the app, set `SPYTIFY_TARGET_PROCESS` (see [Configuration](#configuration)).
 
-Packagers can set a default application with the build variables `SPYTIFY_DEFAULT_PROCESS` and `SPYTIFY_DEFAULT_BUNDLE_ID`. `scripts/build-macos.sh` reads them from the environment or from an untracked `build.env`; the project's CI takes them from repository variables.
+Packagers can set a default application with the build variables `SPYTIFY_DEFAULT_PROCESS` and `SPYTIFY_DEFAULT_BUNDLE_ID`. The build scripts read them from the environment or from an untracked `build.env`; the project's CI takes them from repository variables.
 
 The macOS app is ad-hoc signed. macOS asks for the permissions again after every rebuild, and another Mac refuses to open it until it is signed and notarised. Opened from Finder, the app still finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin`.
 
@@ -137,9 +146,9 @@ The recorded application is set with environment variables, read when the daemon
 | `SPYTIFY_TARGET_BUNDLE_ID` | bundle id of the application (macOS) | the process name is used |
 | `SPYTIFY_TARGET_DURATION_UNIT` | `ms` or `s`, unit of the AppleScript track length (macOS) | guessed |
 | `SPYTIFY_TARGET_LAUNCH` | command that starts the application when a session starts | none |
-| `SPYTIFY_TAP` | path of `spytify-tap` (macOS) | next to `spytifyd`, then `PATH` |
+| `SPYTIFY_TAP` | path of `spytify-tap` (macOS, Windows) | next to `spytifyd`, then `PATH` |
 | `SPYTIFY_CONFIG` | settings file | `~/.config/spytify/config.toml` |
-| `SPYTIFY_SOCKET` | daemon socket | `$XDG_RUNTIME_DIR/spytify.sock` |
+| `SPYTIFY_SOCKET` | daemon socket | `$XDG_RUNTIME_DIR/spytify.sock`; `%LOCALAPPDATA%\Spytify\spytify.sock` on Windows |
 | `SPYTIFY_FFMPEG` | ffmpeg binary | `ffmpeg` on `PATH` |
 
 Everything else is a setting in `config.toml`, changed in the app or with `spytify-cli set`; `spytify-cli get` lists them all.

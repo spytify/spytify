@@ -15,24 +15,49 @@ import (
 type Process struct {
 	PID  int
 	Name string
+	// Parent is the parent's PID where the listing gives it (Windows), else 0.
+	Parent int
 }
 
-// FindProcess returns the first running process whose executable name matches
-// one of the target names, ignoring case and a trailing ".exe".
+// FindProcess returns the running process whose executable name matches one
+// of the target names, ignoring case and a trailing ".exe". Of a player that
+// runs as a tree of processes of the same name, it returns the root, whose
+// tree holds the one that plays.
 func FindProcess(t Target) (Process, bool) {
 	if len(t.ProcessNames) == 0 {
 		return Process{}, false
 	}
 	var procs []Process
-	if runtime.GOOS == "linux" {
+	switch runtime.GOOS {
+	case "linux":
 		procs = listProc()
-	} else {
+	case "windows":
+		procs = listToolhelp()
+	default:
 		procs = listPS()
 	}
-	for _, p := range procs {
+	return pickRoot(t, procs)
+}
+
+// pickRoot returns the first matching process whose parent does not match.
+func pickRoot(t Target, procs []Process) (Process, bool) {
+	matching := map[int]bool{}
+	var first *Process
+	for i, p := range procs {
 		if t.Matches(p.Name) {
+			matching[p.PID] = true
+			if first == nil {
+				first = &procs[i]
+			}
+		}
+	}
+	for _, p := range procs {
+		if matching[p.PID] && !matching[p.Parent] {
 			return p, true
 		}
+	}
+	if first != nil {
+		return *first, true
 	}
 	return Process{}, false
 }

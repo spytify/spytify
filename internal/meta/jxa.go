@@ -129,7 +129,7 @@ func (j *JXA) specifier() string {
 	return j.spec
 }
 
-type jxaTrack struct {
+type polledTrack struct {
 	ID          *string  `json:"id"`
 	Name        string   `json:"name"`
 	Artist      string   `json:"artist"`
@@ -143,12 +143,12 @@ type jxaTrack struct {
 	URL         string   `json:"url"`
 }
 
-type jxaPoll struct {
-	Running  bool      `json:"running"`
-	State    string    `json:"state"`
-	Position *float64  `json:"position"`
-	Track    *jxaTrack `json:"track"`
-	Error    string    `json:"error"`
+type playerPoll struct {
+	Running  bool         `json:"running"`
+	State    string       `json:"state"`
+	Position *float64     `json:"position"`
+	Track    *polledTrack `json:"track"`
+	Error    string       `json:"error"`
 	// at is when the poll was read; zero leaves seeks undetected.
 	at time.Time
 }
@@ -176,7 +176,7 @@ func durationMs(d float64, unit string) int64 {
 	return int64(math.Round(d * 1000))
 }
 
-func (p jxaPoll) info(unit string) TrackInfo {
+func (p playerPoll) info(unit string) TrackInfo {
 	if p.Track == nil {
 		return TrackInfo{}
 	}
@@ -202,13 +202,14 @@ func (p jxaPoll) info(unit string) TrackInfo {
 	if t.Duration != nil {
 		info.LengthMs = durationMs(*t.Duration, unit)
 	}
-	if !strings.HasPrefix(info.ArtURL, "http://") && !strings.HasPrefix(info.ArtURL, "https://") {
+	// The Windows poller saves the cover to a temporary file.
+	if !strings.HasPrefix(info.ArtURL, "http://") && !strings.HasPrefix(info.ArtURL, "https://") && !strings.HasPrefix(info.ArtURL, "file:///") {
 		info.ArtURL = ""
 	}
 	return info
 }
 
-func (p jxaPoll) status() Status {
+func (p playerPoll) status() Status {
 	switch strings.ToLower(p.State) {
 	case "playing", "fast forwarding", "rewinding":
 		return Playing
@@ -218,8 +219,8 @@ func (p jxaPoll) status() Status {
 	return Stopped
 }
 
-// jxaTracker turns the stream of polls into change events.
-type jxaTracker struct {
+// pollTracker turns the stream of polls into change events.
+type pollTracker struct {
 	unit    string
 	started bool
 	running bool
@@ -238,7 +239,7 @@ const (
 	restartToMs = 1500
 )
 
-func (k *jxaTracker) next(p jxaPoll) []Event {
+func (k *pollTracker) next(p playerPoll) []Event {
 	pos := int64(-1)
 	if p.Position != nil {
 		pos = int64(math.Round(*p.Position * 1000))
@@ -309,14 +310,14 @@ func (j *JXA) Watch(ctx context.Context, t target.Target) (<-chan Event, error) 
 		return nil, fmt.Errorf("osascript: %w", err)
 	}
 	out := make(chan Event, 64)
-	tracker := &jxaTracker{unit: t.DurationUnit}
+	tracker := &pollTracker{unit: t.DurationUnit}
 	go func() {
 		defer cmd.Wait()
 		sc := bufio.NewScanner(stdout)
 		sc.Buffer(make([]byte, 1<<16), 1<<20)
 		lastErr := ""
 		for sc.Scan() {
-			var p jxaPoll
+			var p playerPoll
 			if json.Unmarshal(sc.Bytes(), &p) != nil {
 				continue
 			}

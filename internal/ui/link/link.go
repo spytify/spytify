@@ -174,7 +174,7 @@ func (l *Link) Retry() {
 // FindDaemon locates spytifyd: next to the running binary, then on PATH.
 func FindDaemon() (string, error) {
 	if exe, err := os.Executable(); err == nil {
-		p := filepath.Join(filepath.Dir(exe), "spytifyd")
+		p := filepath.Join(filepath.Dir(exe), "spytifyd"+exeSuffix)
 		if _, err := os.Stat(p); err == nil {
 			return p, nil
 		}
