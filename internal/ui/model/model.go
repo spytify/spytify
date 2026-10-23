@@ -259,9 +259,20 @@ func (m *Model) Apply(ev proto.Event) {
 		m.mu.Lock()
 		_ = ev.Decode(&m.s.Level)
 		levels := append([]func(){}, m.levels...)
+		// Audio is back: the warning that none arrived no longer holds.
+		cleared := m.s.LastError != nil && m.s.LastError.Code == "capture_stalled"
+		if cleared {
+			m.s.LastError = nil
+		}
+		listeners := append([]func(){}, m.listeners...)
 		m.mu.Unlock()
 		for _, l := range levels {
 			l()
+		}
+		if cleared {
+			for _, l := range listeners {
+				l()
+			}
 		}
 		return
 	}

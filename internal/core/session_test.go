@@ -298,6 +298,35 @@ func directSession(t *testing.T) (*Session, *recorder, string) {
 	return s, rec, filepath.Join(dir, "out")
 }
 
+func TestNoAudioWhileThePlayerPlaysIsReported(t *testing.T) {
+	defer func(d time.Duration) { captureStall = d }(captureStall)
+	captureStall = 300 * time.Millisecond
+	s, rec, _ := directSession(t)
+	frames := make(chan capture.Chunk)
+	events := make(chan meta.Event)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.Run(ctx, frames, events)
+	events <- meta.Event{Kind: meta.TrackChanged, Track: meta.TrackInfo{ID: "/x/track/a", Title: "A", LengthMs: 60000}, PositionMs: 0}
+	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: 0}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		for _, ev := range rec.all() {
+			var e proto.ErrorEvent
+			if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == "capture_stalled" {
+				if e.Msg == "" {
+					t.Fatal("the warning says nothing")
+				}
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a capture that delivers nothing was not reported")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestSessionStartedMidTrackWaitsForNextTrack(t *testing.T) {
 	s, rec, out := directSession(t)
 	f := pcm.Format{Rate: 8000, Channels: 1, Sample: pcm.S16LE}
