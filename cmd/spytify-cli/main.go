@@ -83,7 +83,7 @@ func newRoot(out io.Writer) *cobra.Command {
 
 	root.AddCommand(
 		a.infoCmd(), a.startCmd(), a.stopCmd(), a.statusCmd(), a.setCmd(), a.getCmd(), a.resetCmd(),
-		a.tailCmd(), a.eventsCmd(), a.controlCmd(), a.shutdownCmd(),
+		a.tailCmd(), a.eventsCmd(), a.controlCmd(), a.shutdownCmd(), a.serviceCmd(),
 	)
 	return root
 }

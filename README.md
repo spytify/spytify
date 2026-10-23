@@ -127,6 +127,7 @@ bin/spytify-cli stop          # the current track finishes first; --now discards
 | `tail [-n N] [-f]` / `events` | log lines / every event as JSON lines |
 | `control play\|pause\|next\|previous\|restart` | transport; `restart` plays the current track again from 0:00 |
 | `shutdown` | stops the daemon |
+| `service install\|uninstall\|status` | runs `spytifyd` at login and starts it again after a crash (systemd user unit on Linux, launchd agent on macOS) |
 
 Headless one-shot run, without a socket, until the application stops or stays idle:
 
