@@ -72,6 +72,6 @@ func (pulseTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.
 		"--format=float32le",
 		"--rate="+strconv.Itoa(f.Rate),
 		"--channels="+strconv.Itoa(f.Channels),
-		"--latency-msec=20",
+		"--latency-msec=100",
 		"--client-name=spytify-capture")
 }

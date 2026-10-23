@@ -179,6 +179,123 @@ func (r *Ring) FirstAbove(from int64, db float64, block int64) (int64, bool) {
 	return 0, false
 }
 
+// QuietestPeak finds the win-frame window in [lo, hi) with the lowest peak,
+// the earliest on ties, and returns its start, its peak and the median peak
+// of all windows, in dBFS.
+func (r *Ring) QuietestPeak(lo, hi, win int64) (at int64, peakDB, medianDB float64) {
+	if lo < r.start {
+		lo = r.start
+	}
+	if hi > r.end {
+		hi = r.end
+	}
+	n := int(hi - lo)
+	if n < int(win) || win <= 0 {
+		return lo, pcm.Silence, pcm.Silence
+	}
+	data := r.Bytes(lo, hi)
+	peak := make([]float64, n)
+	for i := 0; i < n; i++ {
+		for c := 0; c < r.format.Channels; c++ {
+			if v := math.Abs(r.format.SampleAt(data, i*r.format.Channels+c)); v > peak[i] {
+				peak[i] = v
+			}
+		}
+	}
+	windowPeak := func(from int) float64 {
+		m := 0.0
+		for _, v := range peak[from : from+int(win)] {
+			if v > m {
+				m = v
+			}
+		}
+		return m
+	}
+	best, bestPeak := 0, math.Inf(1)
+	for i := 0; i+int(win) <= n; i++ {
+		if m := windowPeak(i); m < bestPeak-1e-12 {
+			best, bestPeak = i, m
+		}
+	}
+	var tiles []float64
+	for i := 0; i+int(win) <= n; i += int(win) {
+		tiles = append(tiles, windowPeak(i))
+	}
+	sort.Float64s(tiles)
+	return lo + int64(best), pcm.DBFS(bestPeak), pcm.DBFS(tiles[len(tiles)/2])
+}
+
+// RefineCut moves a cut to the start of the win-frame window with the lowest
+// peak within span frames of it; ties go to the earliest. In a gap that is
+// where the silence begins; where a fade-out meets a fade-in, or a skipped
+// track gives way to the next one's fade-in, it is the junction itself.
+func (r *Ring) RefineCut(cut, span, win int64) int64 {
+	lo, hi := cut-span, cut+span
+	if lo < r.start {
+		lo = r.start
+	}
+	if hi+win > r.end {
+		hi = r.end - win
+	}
+	if hi < lo {
+		return cut
+	}
+	data := r.Bytes(lo, hi+win)
+	n := int(hi + win - lo)
+	peak := make([]float64, n)
+	for i := 0; i < n; i++ {
+		for c := 0; c < r.format.Channels; c++ {
+			if v := math.Abs(r.format.SampleAt(data, i*r.format.Channels+c)); v > peak[i] {
+				peak[i] = v
+			}
+		}
+	}
+	best, bestPeak := cut, math.Inf(1)
+	for at := 0; at+int(win) <= n; at++ {
+		m := 0.0
+		for _, v := range peak[at : at+int(win)] {
+			if v > m {
+				m = v
+			}
+		}
+		if m < bestPeak-1e-12 {
+			best, bestPeak = lo+int64(at), m
+		}
+	}
+	return best
+}
+
+// ExtendBack moves at back over the quiet start of a fade: samples louder
+// than floorDB, until run consecutive quieter frames, limit, or max frames.
+func (r *Ring) ExtendBack(at int64, floorDB float64, run, max, limit int64) int64 {
+	if limit < r.start {
+		limit = r.start
+	}
+	from := at - max
+	if from < limit {
+		from = limit
+	}
+	data := r.Bytes(from, at)
+	thr := math.Pow(10, floorDB/20)
+	quiet := int64(0)
+	best := at
+	for i := at - 1; i >= from && quiet < run; i-- {
+		loud := false
+		for c := 0; c < r.format.Channels; c++ {
+			if math.Abs(r.format.SampleAt(data, int(i-from)*r.format.Channels+c)) > thr {
+				loud = true
+				break
+			}
+		}
+		if loud {
+			best, quiet = i, 0
+		} else {
+			quiet++
+		}
+	}
+	return best
+}
+
 // SilenceStart walks back from the end of the ring over blocks quieter than
 // db and returns where that trailing silence begins, no earlier than floor.
 func (r *Ring) SilenceStart(floor int64, db float64, block int64) int64 {

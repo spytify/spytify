@@ -67,6 +67,27 @@ func TestQuietestFindsGap(t *testing.T) {
 	}
 }
 
+func TestExtendBackKeepsFadeIn(t *testing.T) {
+	r := NewRing(mono, 4)
+	r.Append(constant(mono, 0, 100))
+	// A fade from -61 dBFS up: 0.0009, 0.0012, ... crosses -50 dBFS late.
+	values := make([]float64, 50)
+	for i := range values {
+		values[i] = 0.0009 + float64(i)*0.0003
+	}
+	r.Append(frames(mono, values...))
+	at, ok := r.FirstAbove(0, -50, 5)
+	if !ok || at <= 100 {
+		t.Fatalf("FirstAbove = %d %v", at, ok)
+	}
+	if got := r.ExtendBack(at, -62, 2, 100, 0); got != 100 {
+		t.Fatalf("ExtendBack = %d, want the fade start at 100", got)
+	}
+	if got := r.ExtendBack(at, -62, 2, 100, at-3); got != at-3 {
+		t.Fatalf("ExtendBack ignored its limit: %d", got)
+	}
+}
+
 func TestFirstAboveAndSilenceStart(t *testing.T) {
 	r := NewRing(mono, 4)
 	r.Append(constant(mono, 0, 500))

@@ -18,6 +18,10 @@ import (
 	"github.com/spytify/spytify/internal/target"
 )
 
+// pollInterval bounds how much of a recreated stream is missed before the
+// recorder follows it.
+const pollInterval = 250 * time.Millisecond
+
 // streamNode is a player's audio output stream as PipeWire or PulseAudio
 // describes it.
 type streamNode struct {
@@ -109,7 +113,7 @@ func (p *PipeWire) run(ctx context.Context, t target.Target) {
 				p.logf("capture: waiting for an audio stream from %s", t.ProcessName())
 				waiting = true
 			}
-			sleep(ctx, 500*time.Millisecond)
+			sleep(ctx, pollInterval)
 			continue
 		}
 		waiting = false
@@ -141,7 +145,7 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 		return
 	}
 	go func() {
-		tick := time.NewTicker(time.Second)
+		tick := time.NewTicker(pollInterval)
 		defer tick.Stop()
 		for {
 			select {
@@ -267,7 +271,7 @@ func (pipewireTools) record(ctx context.Context, n streamNode, f pcm.Format) *ex
 		"--rate", strconv.Itoa(f.Rate),
 		"--channels", strconv.Itoa(f.Channels),
 		"--format", "f32",
-		"--latency", "20ms",
+		"--latency", "100ms",
 		"-P", "{ node.name = spytify-capture node.description = \"Spytify capture\" }",
 		"-")
 }

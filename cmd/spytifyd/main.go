@@ -57,6 +57,7 @@ func run() int {
 	idleExit := flag.Duration("idle-exit", 30*time.Second, "with --once, end after the player is idle this long (0 = never)")
 	waitTarget := flag.Duration("wait-target", 15*time.Second, "with --once, wait this long for the player to start")
 	single := flag.Bool("single-track", false, "with --once, stop after one track")
+	serve := flag.Bool("serve", false, "with --once, also answer clients on the socket while recording")
 	version := flag.Bool("version", false, "print the version and exit")
 	flag.Var(overrides, "set", "override a setting for this run, key=value (repeatable, not saved)")
 	flag.Parse()
@@ -132,7 +133,7 @@ func run() int {
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	if *once {
+	if *once && !*serve {
 		c.SetBroadcaster(events)
 		return runOnce(c, log, sigs, core.SessionOptions{EndOnStop: true, IdleExit: *idleExit, SingleTrack: *single}, *waitTarget)
 	}
@@ -156,6 +157,9 @@ func run() int {
 	})
 	for _, a := range srv.Addrs() {
 		log.Infof("listening on %s %s", a.Network(), a.String())
+	}
+	if *once {
+		return runOnce(c, log, sigs, core.SessionOptions{EndOnStop: true, IdleExit: *idleExit, SingleTrack: *single}, *waitTarget)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

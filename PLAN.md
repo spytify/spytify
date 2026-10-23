@@ -566,9 +566,32 @@ Verdict: ready for the alpha once the four design patches below are applied; not
 
 **Pre-alpha checklist**
 
-- [ ] Apply patches 1 to 4 to the sections above (pipeline, tags, settings table, tests)
-- [ ] Create `github.com/spytify/spytify` with the repo layout, `.env.example`, MIT licence, logo
-- [ ] Land `pkg/proto` and `internal/settings` with the validation table generated from the settings section
-- [ ] Land `fakeplayer` MPRIS on Linux and `basic.json`, `jitter.json`
-- [ ] M1 gate run in CI under PipeWire with a null sink
-- [ ] README: alpha label, Linux-only note, Legal section, link to this plan
+- [x] Apply patches 1 to 4 (in the code: two-pass finisher, currently-playing Spotify provider, `output.prefix`, v1 tests ported; see the implementation notes below)
+- [x] Create `github.com/spytify/spytify` with the repo layout, `.env.example`, MIT licence, logo (on the `v2-alpha` branch)
+- [x] Land `pkg/proto` and `internal/settings` with the validation table generated from the settings section
+- [x] Land `fakeplayer` MPRIS on Linux and `basic.json`, `jitter.json` (and the six other timelines)
+- [ ] M1 gate run in CI under PipeWire with a null sink (the `pipewire-gate` job is written and the eight timelines pass in the same container image locally; it has not run on GitHub yet)
+- [x] README: alpha label, Linux-only note, Legal section, link to this plan
+
+## Alpha implementation notes
+
+The alpha in this repository follows the sections above. Where the plan left a question open, or two sections disagreed, the code does the following.
+
+| Topic | Plan says | Alpha does | Why |
+| --- | --- | --- | --- |
+| Adverts | Settings table keeps `ads.mute` and `ads.record`; Legal decision 4 says no ads switch | No `ads.*` keys. An item is an advert when its MPRIS track id or URL has an `ad` segment (`/vendor/ad/N`, `vendor:ad:N`), or when it is shorter than `recorder.skip_short_untitled` seconds (default 60, 0 = off) and has no album. `recorder.record_everything` records both | Decision 4 is the later decision, and the rule names no player |
+| Boundary search | `window = expected ± W`, next track starts at the cut | Window runs from `cut + length − W` to `first sound + length + W`. Inside it: the quietest 20 ms if it is below `silence_db`, else a dip 15 dB under the window's median, else first sound + length. A silence or dip cut is then moved to the start of the quietest 1 ms within 20 ms of it, which is the exact junction where a fade-out meets a fade-in | A player that leaves a gap between items starts the item at its first sound, one that streams back to back starts it at the cut; the scenarios showed a plain `± W` window truncating tracks by the gap |
+| Skips and seeks | Not covered | A notification more than `W + 1 s` before the expected end is an interruption: the cut is searched in `[at − 1 s, at + 300 ms]`, at silence, else where the peak of 1 ms windows drops 20 dB under its median (the next track's fade-in), else at the notification | A skip has no expected end to search around, and the notification carries the audio pipeline's latency (61 ms off through PipeWire) |
+| Partial tracks | `session.stop` "finishes current track if past `min_seconds`" | `session.stop` waits for the current track to end (state `stopping`) when it is past `min_seconds`; `{"now": true}` discards it. A track that played 2 s or more short of its declared length (skip, seek, stop) is discarded with the new skip reason `incomplete` | A file never holds half a track, and a half track is not counted as recorded for duplicate checks |
+| Session start mid-track | Not covered | The track already playing is recorded only if its position is ≤ 300 ms; otherwise recording starts with the next one | Same as v1 |
+| Pause | Scenario 6 only | From the `Paused` notification until the audio resumes after `Playing`, every run of at least 20 ms of silent frames is cut out at the sample, including the part captured before a late notification | Through PipeWire the notifications arrive a few hundred ms off from the audio; dropping whole chunks left a few ms of silence inside the file |
+| Format change (R4) | Close the encoder at the sample, open a new one | Same, plus: a track change within 3 s of the change names the new stream instead of cutting it; a change mid-track discards both halves | Players open the next stream when an item ends |
+| Trim and track starts | `trim_silence` after the cut | `silence_db` finds the first and last sound; the fade around it is kept down to 12 dB under it. The same rule places a track that starts at its first sound (first track, after an advert, after a format change) | Trimming at −50 dBFS cut 2–3 ms of quiet fade-ins, which the −60 dBFS comparison flagged |
+| Duplicates (G3) | Check at track start | Check at track start against the files on disk, an index `<output>/.spytify/recorded.jsonl` and tracks still being finished; `suffix` and `overwrite` are resolved by the finisher, in order | Tags can move a track to another folder after the check |
+| Tag writers (R11) | Three writers behind one interface | One writer that stream-copies through ffmpeg with ID3v2.4, Vorbis comment or MP4 metadata and the cover as an attached picture; WAV gets `<file>.wav.json` | ffmpeg is already the one runtime dependency; the audio is never re-encoded |
+| Capture | `pw-record --target <node> --format s16 --rate 44100` | `pw-record --target <object.serial> --raw --format f32 --latency 100ms` at the stream's own rate and channel count; the node is found by its client's binary, name, or process ancestry; `pw-dump` is polled every 250 ms to follow a recreated stream. `core.info` fails a check when PipeWire's `clock.allowed-rates` lacks 44100 | Process properties live on the client object; helper processes play the audio for some players; with 20 ms buffers the container runs (no realtime scheduling) lost or gained whole quanta (−512, +640 frames), which stopped at 100 ms; a 48 kHz-only graph resamples 44.1 kHz audio twice (a −48 dBFS residual in the tests) |
+| Volume (R3) | Pin to 100 % while recording | Done through MPRIS `Volume` when it is below 100 %, restored at the end; a crash marker restores it at the next start | G10 |
+| Protocol additions | Tables above | `events.recent` (the 200-event ring), `session.stop {now}`, `settings.reset {prefix}`, `core.info.checks` and `warnings`, skip reason `incomplete`, `track.finished.tagged_by` | Needed by the CLI and by a UI that joins mid-session |
+| `spytifyd --once` | No bus, no UI | Ends when the player stops, exits, or stays idle for `--idle-exit` (default 30 s); `--serve` keeps the socket open for tests that send `player.control` | |
+
+Not applied in the alpha, though stored and validated: `player.mute_output` (logged as a warning), `app.language`, `app.minimize_to_tray` (UI), `app.check_updates`, `tags.update_existing` and `tags.retag` (wait for the Library index), MusicBrainz tagging. Real players that recreate their stream exactly at the first sample of a new track lose up to about 300 ms at the start of that track, the time `pw-dump` polling and `pw-record` need to follow; the Linux integration timeline opens the new stream during the gap, as players do when an item ends.

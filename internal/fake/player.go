@@ -49,6 +49,10 @@ type Player struct {
 	tl       *Timeline
 	realtime bool
 	chunkMs  int64
+	// Lead lets a real-time player deliver audio this far ahead of the
+	// wall clock, to keep an output buffer filled. The sink is expected to
+	// delay events by the same amount.
+	Lead time.Duration
 
 	mu      sync.Mutex
 	audio   map[int][]byte
@@ -159,7 +163,7 @@ func (p *Player) schedule(from int, base int64, first bool) {
 		if it.PauseMs > 0 && pauseAt > 0 && pauseAt < total {
 			p.spans = append(p.spans, span{format: f, frames: pauseAt, owner: i, audio: true})
 			pos += pauseAt
-			p.push(pos, meta.Event{Kind: meta.StatusChanged, Status: meta.Paused, PositionMs: it.PauseAtMs})
+			p.push(at(pos, f, it.PauseNotifyMs), meta.Event{Kind: meta.StatusChanged, Status: meta.Paused, PositionMs: it.PauseAtMs})
 			pf := f.FramesFromMs(it.PauseMs)
 			if p.tl.PauseSilence {
 				p.spans = append(p.spans, span{format: f, frames: pf, owner: i})
@@ -175,8 +179,14 @@ func (p *Player) schedule(from int, base int64, first bool) {
 			pos += total
 		}
 		if it.GapMs > 0 {
-			n := f.FramesFromMs(it.GapMs)
-			p.spans = append(p.spans, span{format: f, frames: n, owner: i})
+			// A player opens the next item's stream when this one ends, so
+			// the gap is already in the next item's format.
+			gf := f
+			if i+1 < len(items) {
+				gf = p.formats[i+1]
+			}
+			n := gf.FramesFromMs(it.GapMs)
+			p.spans = append(p.spans, span{format: gf, frames: n, owner: i})
 			pos += n
 		}
 	}
@@ -423,7 +433,7 @@ func (p *Player) pace(ctx context.Context, start time.Time, played time.Duration
 	if !p.realtime {
 		return
 	}
-	if wait := time.Until(start.Add(played)); wait > 0 {
+	if wait := time.Until(start.Add(played - p.Lead)); wait > 0 {
 		select {
 		case <-ctx.Done():
 		case <-time.After(wait):

@@ -59,9 +59,11 @@ type Item struct {
 	WAV       string `json:"wav"`
 	PauseAtMs int64  `json:"pause_at_ms"`
 	PauseMs   int64  `json:"pause_ms"`
-	// Desync makes the Playing notification after a pause arrive this many
-	// ms after the audio resumed.
-	DesyncMs int64 `json:"desync_ms"`
+	// PauseNotifyMs moves the Paused notification relative to the moment
+	// the audio stops; DesyncMs moves the Playing notification relative to
+	// the moment it resumes. Negative is early.
+	PauseNotifyMs int64 `json:"pause_notify_ms"`
+	DesyncMs      int64 `json:"desync_ms"`
 }
 
 // Action is a command a test sends to the core while the timeline plays.

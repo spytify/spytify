@@ -37,15 +37,21 @@ func (f fakeBackends) New(target.Target) (capture.Capture, meta.NowPlaying, erro
 func (f fakeBackends) Probe() []proto.Check { return nil }
 
 type recorder struct {
-	mu     sync.Mutex
-	events []proto.Event
+	mu      sync.Mutex
+	events  []proto.Event
+	onEvent func(proto.Event)
 }
 
 func (r *recorder) add(method string, payload any) {
 	raw, _ := payload.(json.RawMessage)
+	ev := proto.Event{Method: method, Params: raw}
 	r.mu.Lock()
-	r.events = append(r.events, proto.Event{Method: method, Params: raw})
+	r.events = append(r.events, ev)
+	hook := r.onEvent
 	r.mu.Unlock()
+	if hook != nil {
+		hook(ev)
+	}
 }
 
 func (r *recorder) all() []proto.Event {
