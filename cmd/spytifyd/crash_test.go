@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +26,14 @@ created by github.com/spytify/spytify/internal/core.(*Core).StartSession in goro
 	}
 }
 
+// releaseCrashOutput lets the test's temporary folder go: Windows does not
+// remove a file the runtime keeps open.
+func releaseCrashOutput(t *testing.T) {
+	t.Cleanup(func() { _ = debug.SetCrashOutput(nil, debug.CrashOptions{}) })
+}
+
 func TestKeepCrashesReportsThePreviousRun(t *testing.T) {
+	releaseCrashOutput(t)
 	path := filepath.Join(t.TempDir(), "state", "spytifyd.crash.log")
 	if got := keepCrashes(path); got != "" {
 		t.Fatalf("first run reported %q", got)
@@ -52,6 +60,7 @@ func TestCrashOutputIsKept(t *testing.T) {
 		time.Sleep(5 * time.Second)
 		return
 	}
+	releaseCrashOutput(t)
 	path := filepath.Join(t.TempDir(), "spytifyd.crash.log")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCrashOutputIsKept$")
 	cmd.Env = append(os.Environ(), "SPYTIFY_CRASH_TEST="+path)

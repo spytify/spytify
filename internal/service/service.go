@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -34,30 +35,31 @@ type Plan struct {
 func Supported(goos string) bool { return goos == "linux" || goos == "darwin" }
 
 // For returns the plan for daemon, the absolute path of spytifyd, on goos.
+// Both service managers are POSIX: the plan uses slash paths.
 func For(goos, daemon, home string, uid int) (Plan, error) {
 	if !Supported(goos) {
 		return Plan{}, ErrUnsupported
 	}
-	if !filepath.IsAbs(daemon) {
+	if !path.IsAbs(daemon) {
 		return Plan{}, fmt.Errorf("spytifyd path %q is not absolute", daemon)
 	}
 	if goos == "linux" {
 		unit := "spytifyd.service"
 		return Plan{
-			Path:      filepath.Join(home, ".config", "systemd", "user", unit),
+			Path:      path.Join(home, ".config", "systemd", "user", unit),
 			Content:   systemdUnit(daemon),
 			Install:   [][]string{{"systemctl", "--user", "daemon-reload"}, {"systemctl", "--user", "enable", "--now", unit}},
 			Uninstall: [][]string{{"systemctl", "--user", "disable", "--now", unit}},
 			Status:    []string{"systemctl", "--user", "--no-pager", "status", unit},
 		}, nil
 	}
-	path := filepath.Join(home, "Library", "LaunchAgents", Label+".plist")
+	agent := path.Join(home, "Library", "LaunchAgents", Label+".plist")
 	domain := fmt.Sprintf("gui/%d", uid)
 	return Plan{
-		Path:      path,
+		Path:      agent,
 		Content:   launchdAgent(daemon),
-		Install:   [][]string{{"launchctl", "bootstrap", domain, path}},
-		Uninstall: [][]string{{"launchctl", "bootout", domain, path}},
+		Install:   [][]string{{"launchctl", "bootstrap", domain, agent}},
+		Uninstall: [][]string{{"launchctl", "bootout", domain, agent}},
 		Status:    []string{"launchctl", "print", domain + "/" + Label},
 	}, nil
 }
