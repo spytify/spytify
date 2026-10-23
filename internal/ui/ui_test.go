@@ -671,3 +671,16 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// Hover and selection are drawn over buttons: an opaque colour would hide
+// a red Stop under the pointer.
+func TestHoverAndSelectionAreTranslucent(t *testing.T) {
+	th := spytifyTheme{mode: "system"}
+	for _, v := range []fyne.ThemeVariant{theme.VariantLight, theme.VariantDark} {
+		for _, name := range []fyne.ThemeColorName{theme.ColorNameHover, theme.ColorNameSelection} {
+			if _, _, _, a := th.Color(name, v).RGBA(); a >= 0xffff {
+				t.Errorf("%s is opaque in variant %d", name, v)
+			}
+		}
+	}
+}

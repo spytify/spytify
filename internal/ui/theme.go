@@ -59,14 +59,16 @@ func (t spytifyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color
 		return green
 	case theme.ColorNameFocus:
 		return withAlpha(green, 0x7f)
+	// Hover and selection are drawn over what they mark, buttons included,
+	// so they stay translucent: on white they read #f4f4f4 and #ececec.
 	case theme.ColorNameHover:
-		if v == theme.VariantLight {
-			return color.NRGBA{R: 0xf4, G: 0xf4, B: 0xf4, A: 0xff}
+		if light {
+			return color.NRGBA{A: 0x0b}
 		}
 	case theme.ColorNameSelection:
 		// A row picked in a list: a little greyer than one under the pointer.
-		if v == theme.VariantLight {
-			return color.NRGBA{R: 0xec, G: 0xec, B: 0xec, A: 0xff}
+		if light {
+			return color.NRGBA{A: 0x13}
 		}
 		return color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0x1c}
 	}
