@@ -62,6 +62,14 @@ func TestJXAWithTheFakePlayer(t *testing.T) {
 func scriptTheFakePlayer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
+	// One plain call first, so a blocked Apple event shows as such.
+	probe, cancelProbe := context.WithTimeout(ctx, 20*time.Second)
+	out, err := exec.CommandContext(probe, "osascript", "-l", "JavaScript", "-e", `Application("org.spytify.fakeplayer").playerState()`).CombinedOutput()
+	cancelProbe()
+	if err != nil {
+		t.Fatalf("osascript asking FakePlayer its state: %v %s", err, out)
+	}
+	t.Logf("FakePlayer state: %s", strings.TrimSpace(string(out)))
 	j := NewJXA()
 	j.Interval = 100 * time.Millisecond
 	j.Logf = t.Logf
