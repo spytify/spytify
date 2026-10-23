@@ -100,7 +100,7 @@ The macOS app is ad-hoc signed. macOS asks for the permissions again after every
 
 The app is a client of `spytifyd`. Closing the window does not stop a recording, and the tray menu (Start recording, Stop, Open window) keeps working while the window is hidden.
 
-The app bar holds the Record button, which becomes Stop while recording and Stop now while the last track finishes. It also shows the application's state, the output format, Donate, and an Update button when a newer release is out.
+The app bar holds the Record button, which becomes Stop while recording and Stop now while the last track finishes. It also shows the application's state, the output format, and an Update button when a newer release is out.
 
 - **Record**: the current track (cover, progress, level, Skip), then every file of the session with its status, Reveal and Play, and the session totals.
 - **Library**: every audio file in the output folder, newest first, with a search box. It reads the folder again each time you open the tab.
@@ -208,6 +208,8 @@ go test -tags macos_capture -v ./test/macos/
 Issues and pull requests are welcome. Run `gofmt` and `go test ./...` before you push; CI also builds every platform, runs the PipeWire scenarios, and runs the tests and the shipped executables on Windows.
 
 Releases: pushing a tag such as `v2.0.0-alpha.1` builds the Linux packages (amd64 and arm64), the macOS disk image and the Windows zip, and drafts a GitHub release with them and their checksums. A tag with a `-` is a pre-release. A maintainer reviews the draft and publishes it.
+
+Signing turns on once the repository has the secrets: `MACOS_CERT_P12` (a Developer ID Application certificate, base64), `MACOS_CERT_PASSWORD` and `MACOS_SIGN_IDENTITY` sign the macOS files with the hardened runtime (`scripts/sign-macos.sh`); `NOTARY_KEY` (an App Store Connect API key, base64), `NOTARY_KEY_ID` and `NOTARY_ISSUER` notarise them (`scripts/notarize-macos.sh`); `WINDOWS_CERT_PFX` (base64) and `WINDOWS_CERT_PASSWORD` sign the `.exe` files with Authenticode (`scripts/sign-windows.sh`). Without them the files ship unsigned, and the release notes say so.
 
 ## License
 
