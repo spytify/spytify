@@ -15,7 +15,7 @@ func TestPagesCoverTheCode(t *testing.T) {
 			t.Errorf("settings page lacks %s", d.Key)
 		}
 	}
-	p := protocolPage()
+	p := protocolSection()
 	for _, m := range proto.Methods {
 		if !strings.Contains(p, "`"+m.Name+"`") {
 			t.Errorf("protocol page lacks %s", m.Name)
