@@ -162,7 +162,7 @@ func TestLoadWarnsAndKeepsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Values().String("encode.format") != "mp3" || s.Values().Path("output.dir") != music {
+	if s.Values().String("encode.format") != "flac" || s.Values().Path("output.dir") != music {
 		t.Fatal("bad load")
 	}
 	if len(s.Warnings()) != 2 {

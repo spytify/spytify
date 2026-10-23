@@ -905,7 +905,11 @@ func (s *Session) announce(seg *segment) {
 		return
 	}
 	seg.announced = true
-	s.deps.emit(proto.EventTrackStarted, proto.TrackStartedEvent{Track: trackOf(seg)})
+	ev := proto.TrackStartedEvent{Track: trackOf(seg)}
+	if seg.format.Valid() {
+		ev.Source = &proto.AudioSource{SampleRate: seg.format.Rate, Channels: seg.format.Channels}
+	}
+	s.deps.emit(proto.EventTrackStarted, ev)
 	switch seg.reason {
 	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
 		s.deps.fin.skip(seg.id, seg.reason)

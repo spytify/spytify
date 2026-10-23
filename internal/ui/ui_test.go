@@ -684,3 +684,14 @@ func TestHoverAndSelectionAreTranslucent(t *testing.T) {
 		}
 	}
 }
+
+func TestSourceText(t *testing.T) {
+	for _, c := range []struct {
+		rate, ch int
+		want     string
+	}{{44100, 2, "44.1 kHz stereo"}, {48000, 1, "48 kHz mono"}, {96000, 6, "96 kHz 6 channels"}, {0, 2, ""}} {
+		if got := sourceText(c.rate, c.ch); got != c.want {
+			t.Errorf("sourceText(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
+		}
+	}
+}

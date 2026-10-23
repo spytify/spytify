@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -242,6 +243,9 @@ func (r *recordScreen) render(s model.State) {
 		if c.Album != "" {
 			sub += " · " + c.Album
 		}
+		if src := sourceText(c.SourceRate, c.SourceChannels); src != "" {
+			sub += " · " + src
+		}
 		setCaption(r.subtitle, sub)
 		if res := r.app.covers.get(c.CoverURL); res != nil {
 			setImage(r.cover, res)
@@ -322,6 +326,21 @@ func stateText(st proto.SessionState, c *model.Row) string {
 		return "ADVERT, NOT RECORDED"
 	}
 	return "● RECORDING"
+}
+
+// sourceText is the captured stream: "44.1 kHz stereo".
+func sourceText(rate, channels int) string {
+	if rate <= 0 {
+		return ""
+	}
+	khz := strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64) + " kHz"
+	switch channels {
+	case 1:
+		return khz + " mono"
+	case 2:
+		return khz + " stereo"
+	}
+	return fmt.Sprintf("%s %d channels", khz, channels)
 }
 
 func waitingText(st proto.SessionState) string {

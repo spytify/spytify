@@ -1,5 +1,20 @@
 {
   "$defs": {
+    "AudioSource": {
+      "properties": {
+        "channels": {
+          "type": "integer"
+        },
+        "sample_rate": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "channels",
+        "sample_rate"
+      ],
+      "type": "object"
+    },
     "Check": {
       "properties": {
         "detail": {
@@ -466,6 +481,9 @@
         },
         "length_ms": {
           "type": "integer"
+        },
+        "source": {
+          "$ref": "#/$defs/AudioSource"
         },
         "title": {
           "type": "string"

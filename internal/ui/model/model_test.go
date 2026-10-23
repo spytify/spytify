@@ -202,3 +202,11 @@ func TestAudioBackClearsTheNoAudioWarning(t *testing.T) {
 		t.Fatalf("other errors must stay: %+v", e)
 	}
 }
+
+func TestTrackStartedKeepsTheSourceFormat(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-001", Title: "A"}, Source: &proto.AudioSource{SampleRate: 44100, Channels: 2}}))
+	if c := m.Snapshot().Current; c == nil || c.SourceRate != 44100 || c.SourceChannels != 2 {
+		t.Fatalf("current %+v", c)
+	}
+}

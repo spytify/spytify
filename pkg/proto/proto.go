@@ -196,6 +196,14 @@ type SessionStateEvent struct {
 
 type TrackStartedEvent struct {
 	Track
+	// Source is the audio as the player delivers it.
+	Source *AudioSource `json:"source,omitempty"`
+}
+
+// AudioSource is the captured stream's format.
+type AudioSource struct {
+	SampleRate int `json:"sample_rate"`
+	Channels   int `json:"channels"`
 }
 
 type TrackFinishedEvent struct {
