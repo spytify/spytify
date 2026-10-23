@@ -35,6 +35,9 @@ jobs:
         run: go vet ./...
       - name: Schema is generated
         run: go generate ./pkg/proto && git diff --exit-code pkg/proto/schema.json
+      - name: Build FakePlayer, the scriptable test player (macOS)
+        if: runner.os == 'macOS'
+        run: scripts/build-fakeplayer-macos.sh "$RUNNER_TEMP" && echo "SPYTIFY_FAKE_APP=$RUNNER_TEMP/FakePlayer.app" >> "$GITHUB_ENV"
       - name: Unit, scenario, UI and end-to-end tests
         run: go run gotest.tools/gotestsum@v1.12.3 --format testname --jsonfile test.jsonl -- -race ./...
       - name: Keep the results for the test badge

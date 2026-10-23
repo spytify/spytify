@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<!-- The vocabulary Spytify's AppleScript backend uses, and nothing else. -->
+<dictionary title="FakePlayer Terminology" xmlns:xi="http://www.w3.org/2003/XInclude">
+	<xi:include href="file:///System/Library/ScriptingDefinitions/CocoaStandard.sdef" xpointer="xpointer(/dictionary/suite)"/>
+	<suite name="FakePlayer Suite" code="FkPl" description="A player that plays a timeline.">
+		<enumeration name="player states" code="FkPs">
+			<enumerator name="stopped" code="FkSs"/>
+			<enumerator name="playing" code="FkSp"/>
+			<enumerator name="paused" code="FkSa"/>
+		</enumeration>
+		<class-extension extends="application">
+			<property name="current track" code="FkCt" type="track" access="r">
+				<cocoa key="currentTrack"/>
+			</property>
+			<property name="player state" code="FkPS" type="player states" access="r">
+				<cocoa key="playerState"/>
+			</property>
+			<property name="player position" code="FkPP" type="real">
+				<cocoa key="playerPosition"/>
+			</property>
+			<property name="sound volume" code="FkSV" type="integer">
+				<cocoa key="soundVolume"/>
+			</property>
+		</class-extension>
+		<class name="track" code="FkTr" inherits="item" description="The item playing.">
+			<cocoa class="FakeTrack"/>
+			<property name="id" code="ID  " type="text" access="r">
+				<cocoa key="trackID"/>
+			</property>
+			<property name="name" code="pnam" type="text" access="r"/>
+			<property name="artist" code="FkAr" type="text" access="r"/>
+			<property name="album" code="FkAl" type="text" access="r"/>
+			<property name="album artist" code="FkAA" type="text" access="r">
+				<cocoa key="albumArtist"/>
+			</property>
+			<property name="duration" code="FkDu" type="integer" access="r" description="The length in milliseconds."/>
+			<property name="track number" code="FkTN" type="integer" access="r">
+				<cocoa key="trackNumber"/>
+			</property>
+			<property name="artwork url" code="FkAU" type="text" access="r">
+				<cocoa key="artworkUrl"/>
+			</property>
+		</class>
+		<command name="next track" code="FkPlNext">
+			<cocoa class="FakeCommand"/>
+		</command>
+		<command name="previous track" code="FkPlPrev">
+			<cocoa class="FakeCommand"/>
+		</command>
+		<command name="play" code="FkPlPlay">
+			<cocoa class="FakeCommand"/>
+		</command>
+		<command name="pause" code="FkPlPaus">
+			<cocoa class="FakeCommand"/>
+		</command>
+		<command name="playpause" code="FkPlPlPs">
+			<cocoa class="FakeCommand"/>
+		</command>
+	</suite>
+</dictionary>
