@@ -498,6 +498,21 @@ func TestButtonsSendActions(t *testing.T) {
 	if len(sets) != 2 || sets[1]["output.template"] != "{title}" {
 		t.Fatalf("settings.set calls %v", sets)
 	}
+
+	// Quitting the app stops the recorder too.
+	a.stopDaemon()
+	waitCall(t, core, proto.MethodCoreShutdown)
+}
+
+func TestQuitWhileRecordingAsksFirst(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	a.render()
+	a.quit()
+	top := a.win.Canvas().Overlays().Top()
+	if top == nil || !contains(texts(top), "Quit Spytify?") {
+		t.Fatal("quitting during a recording did not ask")
+	}
 }
 
 func waitSets(t *testing.T, c *recordingCore, n int) {

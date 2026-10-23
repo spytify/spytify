@@ -9,15 +9,19 @@ import (
 	_ "embed"
 	"fmt"
 	"net/url"
+	"os"
+	"runtime"
 	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/service"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -161,8 +165,10 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 			a.win.Hide()
 			return
 		}
-		a.fa.Quit()
+		a.quit()
 	})
+	// Every way out (this window, the tray's Quit, Cmd+Q) ends here.
+	fa.Lifecycle().SetOnStopped(a.stopDaemon)
 	m.OnChange(a.scheduleRender)
 	a.render()
 	return a
@@ -179,6 +185,45 @@ func (a *App) ShowAndRun() {
 }
 
 // showTab switches to a tab, from a button elsewhere in the window.
+// quit closes Spytify, the recorder included; a recording in progress is
+// confirmed first, since its current track is not kept.
+func (a *App) quit() {
+	if !a.last.Recording() {
+		a.fa.Quit()
+		return
+	}
+	dialog.ShowConfirm("Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
+		if ok {
+			a.fa.Quit()
+		}
+	}, a.win)
+}
+
+// stopDaemon shuts spytifyd down as the app quits, unless it runs as a
+// login service (spytify-cli service install), which keeps it alive.
+func (a *App) stopDaemon() {
+	if daemonIsService() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil)
+}
+
+// daemonIsService reports whether spytifyd is installed as a login service.
+func daemonIsService() bool {
+	daemon, err := link.FindDaemon()
+	if err != nil {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	p, err := service.For(runtime.GOOS, daemon, home, os.Getuid())
+	return err == nil && service.Installed(p)
+}
+
 // applyTheme switches to the Spytify theme in the given app.theme mode.
 func (a *App) applyTheme(mode string) {
 	a.themeMode = mode

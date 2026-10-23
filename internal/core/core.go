@@ -37,12 +37,15 @@ type Options struct {
 	Backends Backends
 	// FindProcess reports whether the target runs; tests replace it.
 	FindProcess func(target.Target) (target.Process, bool)
+	// Crashed summarises the previous run's crash, shown in core.info.
+	Crashed string
 }
 
 const recentEvents = 200
 
 // Core is the daemon state behind the bus.
 type Core struct {
+	crashed  string
 	env      target.Env
 	store    *settings.Store
 	log      *Logger
@@ -74,6 +77,7 @@ func New(o Options) *Core {
 		log:      o.Log,
 		backends: o.Backends,
 		find:     o.FindProcess,
+		crashed:  o.Crashed,
 	}
 	if c.find == nil {
 		c.find = target.FindProcess
@@ -283,6 +287,9 @@ func (c *Core) Info() proto.CoreInfoResult {
 	info.Checks = append(info.Checks, c.backends.Probe()...)
 	dir := v.Path("output.dir")
 	add("output folder writable", writable(dir), dir)
+	if c.crashed != "" {
+		info.Warnings = append(info.Warnings, c.crashed)
+	}
 	info.Warnings = append(info.Warnings, "turn crossfade and gapless playback off in the player")
 	if v.Bool("player.mute_output") && runtime.GOOS != "darwin" {
 		info.Warnings = append(info.Warnings, "player.mute_output is only applied on macOS in the alpha")
