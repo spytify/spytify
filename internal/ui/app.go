@@ -91,6 +91,8 @@ type App struct {
 	checked bool
 	// themeMode is the app.theme applied: system, light or dark.
 	themeMode string
+	// replaced is set once a recorder of another build was restarted.
+	replaced bool
 
 	pending     sync.Mutex
 	queued      bool
@@ -188,6 +190,44 @@ func (a *App) ShowAndRun() {
 }
 
 // showTab switches to a tab, from a button elsewhere in the window.
+// playerRunning is the latest word on the player: the target.state events,
+// or core.info's check until the first one.
+func playerRunning(s model.State) bool {
+	return (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running"))
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// launchPlayer asks the recorder to open the player.
+func (a *App) launchPlayer() {
+	a.do(proto.MethodPlayerLaunch, nil, nil)
+}
+
+// replaceOtherBuild restarts a recorder of another build, once and only
+// while it records nothing: an app and a daemon of different builds do not
+// agree on their settings and features.
+func (a *App) replaceOtherBuild(s model.State) {
+	if a.replaced || !s.HaveInfo || s.Info.Version == proto.Version || s.Recording() || a.opts.ManualRender {
+		return
+	}
+	a.replaced = true
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil) == nil {
+			time.Sleep(time.Second)
+		}
+		if err := a.link.StartDaemon(); err != nil {
+			fyne.Do(func() { a.showError(err) })
+		}
+	}()
+}
+
 // quit closes Spytify, the recorder included; a recording in progress is
 // confirmed first, since its current track is not kept.
 func (a *App) quit() {
@@ -263,7 +303,7 @@ func (a *App) render() {
 	s := a.m.Snapshot()
 	a.last = s
 	connected := s.Conn == model.Connected
-	running := (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running"))
+	running := playerRunning(s)
 	switch {
 	case !connected:
 		a.dot.Importance = widget.LowImportance
@@ -302,6 +342,9 @@ func (a *App) render() {
 	record := "Record"
 	if n := s.Totals().Saved; s.Recording() && n > 0 {
 		record = fmt.Sprintf("Record · %d", n)
+	}
+	if connected {
+		a.replaceOtherBuild(s)
 	}
 	if mode, _ := s.Settings["app.theme"].(string); mode != "" && mode != a.themeMode {
 		a.applyTheme(mode)

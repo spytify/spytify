@@ -251,9 +251,23 @@ func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	}
 	snapshot(t, a, "idle")
 
-	// A failing check sends the user to the diagnostics.
+	// A player that is not running is offered to open, not diagnosed.
+	down := info()
+	down.Checks[1].OK = false
+	m.SetInfo(down)
+	a.render()
+	if all := texts(a.win.Content()); !contains(all, "Open Player") || contains(all, "Open diagnostics") {
+		t.Errorf("player not running: %v", all)
+	}
+	// It starts: the check follows the target's state, and the offer goes.
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 99}))
+	a.render()
+	if all := texts(a.win.Content()); contains(all, "Open Player") || !checkOK(m.Snapshot().Info.Checks, "player running") {
+		t.Errorf("player started: %v", all)
+	}
+	// Any other failing check sends the user to the diagnostics.
 	failing := info()
-	failing.Checks[1].OK = false
+	failing.Checks[2].OK = false
 	m.SetInfo(failing)
 	a.render()
 	if !contains(texts(a.win.Content()), "Open diagnostics") {

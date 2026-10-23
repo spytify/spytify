@@ -4,6 +4,7 @@
 package model
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -342,6 +343,16 @@ func (m *Model) apply(s *State, ev proto.Event) {
 	case proto.EventTargetState:
 		if ev.Decode(&s.Target) == nil {
 			s.TargetKnown = true
+			// core.info checked once, on connect; keep its answer current.
+			for i := range s.Info.Checks {
+				if s.Info.Checks[i].Name == "player running" {
+					s.Info.Checks[i].OK = s.Target.Running
+					s.Info.Checks[i].Detail = "not running"
+					if s.Target.Running {
+						s.Info.Checks[i].Detail = fmt.Sprintf("pid %d", s.Target.PID)
+					}
+				}
+			}
 		}
 	case proto.EventSettingsChanged:
 		var e proto.SettingsValues

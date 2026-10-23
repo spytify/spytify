@@ -575,6 +575,12 @@
         "$ref": "#/$defs/Empty"
       }
     },
+    "player.launch": {
+      "description": "opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way",
+      "result": {
+        "$ref": "#/$defs/Empty"
+      }
+    },
     "session.start": {
       "description": "fails if the target process is not running or ffmpeg is missing",
       "params": {

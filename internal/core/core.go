@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -231,6 +232,14 @@ func (c *Core) Handle(ctx context.Context, method string, params json.RawMessage
 		}
 		if err := c.Control(p.Cmd); err != nil {
 			return nil, err
+		}
+		return proto.Empty{}, nil
+	case proto.MethodPlayerLaunch:
+		if _, ok := c.find(c.env.Target); ok {
+			return proto.Empty{}, nil
+		}
+		if err := c.launch(); err != nil {
+			return nil, proto.Errorf(proto.CodeTargetNotRunning, "%v", err)
 		}
 		return proto.Empty{}, nil
 	case proto.MethodLogTail:
@@ -495,23 +504,45 @@ func (c *Core) Shutdown() {
 
 // ensureTarget launches the player with SPYTIFY_TARGET_LAUNCH when it is
 // not running, retrying 5 times 3 seconds apart as v1 did.
+// launch starts the player: SPYTIFY_TARGET_LAUNCH when it is set, else the
+// OS's own way to open an app by its bundle id or name.
+func (c *Core) launch() error {
+	t := c.env.Target
+	var cmd *exec.Cmd
+	switch {
+	case t.Launch != "" && runtime.GOOS == "windows":
+		cmd = exec.Command("cmd", "/C", t.Launch)
+	case t.Launch != "":
+		cmd = exec.Command("/bin/sh", "-c", t.Launch)
+	case len(t.ProcessNames) == 0:
+		return errors.New("no player chosen")
+	case runtime.GOOS == "darwin" && t.BundleID != "":
+		cmd = exec.Command("open", "-b", t.BundleID)
+	case runtime.GOOS == "darwin":
+		cmd = exec.Command("open", "-a", t.ProcessNames[0])
+	case runtime.GOOS == "windows":
+		cmd = exec.Command("cmd", "/C", "start", "", t.ProcessNames[0])
+	default:
+		cmd = exec.Command(t.ProcessNames[0])
+	}
+	c.log.Infof("starting the player: %s", strings.Join(cmd.Args, " "))
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start the player: %w", err)
+	}
+	go cmd.Wait()
+	return nil
+}
+
 func (c *Core) ensureTarget() error {
 	if _, ok := c.find(c.env.Target); ok {
 		return nil
 	}
-	launch := c.env.Target.Launch
-	if launch == "" {
+	if c.env.Target.Launch == "" {
 		return proto.Errorf(proto.CodeTargetNotRunning, "%s is not running", joinNames(c.env.Target.ProcessNames))
 	}
-	c.log.Infof("starting the player: %s", launch)
-	cmd := exec.Command("/bin/sh", "-c", launch)
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/C", launch)
+	if err := c.launch(); err != nil {
+		return proto.Errorf(proto.CodeTargetNotRunning, "%v", err)
 	}
-	if err := cmd.Start(); err != nil {
-		return proto.Errorf(proto.CodeTargetNotRunning, "SPYTIFY_TARGET_LAUNCH failed: %v", err)
-	}
-	go cmd.Wait()
 	for i := 0; i < 5; i++ {
 		time.Sleep(3 * time.Second)
 		if _, ok := c.find(c.env.Target); ok {

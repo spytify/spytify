@@ -129,7 +129,13 @@ func (l *logsScreen) renderChecks(s model.State) {
 		if !c.OK {
 			icon = theme.ErrorIcon()
 		}
-		rows = append(rows, container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(c.Name)), nil, clipped(c.Detail)))
+		var fix fyne.CanvasObject
+		if c.Name == "player running" && !c.OK {
+			open := widget.NewButtonWithIcon("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), l.app.launchPlayer)
+			open.Importance = widget.HighImportance
+			fix = open
+		}
+		rows = append(rows, container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(c.Name)), fix, clipped(c.Detail)))
 	}
 	for _, w := range s.Info.Warnings {
 		rows = append(rows, container.NewBorder(nil, nil, widget.NewIcon(theme.WarningIcon()), nil, wrapped(w)))

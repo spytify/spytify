@@ -23,10 +23,12 @@ type recordScreen struct {
 	app  *App
 	root *fyne.Container
 
-	idle      *fyne.Container
-	idleText  *widget.Label
-	attention *fyne.Container
-	session   *fyne.Container
+	idle       *fyne.Container
+	idleText   *widget.Label
+	attention  *fyne.Container
+	openPlayer *widget.Button
+	diagnose   *widget.Button
+	session    *fyne.Container
 
 	card     *fyne.Container
 	cover    *canvas.Image
@@ -67,9 +69,12 @@ func newRecordScreen(a *App) *recordScreen {
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	hint.Wrapping = fyne.TextWrapWord
 	hint.SizeName = theme.SizeNameCaptionText
-	diagnose := widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
-	diagnose.Importance = widget.WarningImportance
-	r.attention = container.NewCenter(diagnose)
+	r.diagnose = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
+	r.diagnose.Importance = widget.WarningImportance
+	diagnose := r.diagnose
+	r.openPlayer = widget.NewButtonWithIcon("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
+	r.openPlayer.Importance = widget.HighImportance
+	r.attention = container.NewCenter(container.NewHBox(r.openPlayer, diagnose))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
 		widget.NewLabelWithStyle("Ready to record", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
@@ -214,7 +219,13 @@ func (r *recordScreen) render(s model.State) {
 			player = "your player"
 		}
 		setLabel(r.idleText, fmt.Sprintf("Press Record, then play music in %s. Each track becomes its own file in %s.", player, r.folder))
-		show(r.attention, failingChecks(s.Info.Checks) > 0)
+		// A player that is not running is the usual failing check: offer
+		// to open it, and the diagnostics only for anything else.
+		down := !playerRunning(s)
+		r.openPlayer.SetText("Open " + player)
+		show(r.openPlayer, down)
+		show(r.diagnose, failingChecks(s.Info.Checks) > btoi(down))
+		show(r.attention, r.openPlayer.Visible() || r.diagnose.Visible())
 		r.idle.Show()
 		r.session.Hide()
 		return
@@ -283,7 +294,7 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 
 // relayout lays the screen out again when a part appeared or went away.
 func (r *recordScreen) relayout() {
-	shape := fmt.Sprint(r.idle.Visible(), r.attention.Visible(), r.card.Visible(), r.waitRow.Visible(), r.restart.Visible(), r.noRows.Visible())
+	shape := fmt.Sprint(r.idle.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), r.waitRow.Visible(), r.restart.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()

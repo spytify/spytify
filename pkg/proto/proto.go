@@ -26,6 +26,7 @@ const (
 	MethodSettingsSet   = "settings.set"
 	MethodSettingsReset = "settings.reset"
 	MethodPlayerControl = "player.control"
+	MethodPlayerLaunch  = "player.launch"
 	MethodLogTail       = "log.tail"
 	MethodEventsRecent  = "events.recent"
 )

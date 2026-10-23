@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -216,4 +217,30 @@ func announced(events []proto.Event, st proto.SessionState) bool {
 		}
 	}
 	return false
+}
+
+func TestPlayerLaunch(t *testing.T) {
+	c, _ := newTestCore(t, true)
+	if err := call(t, c, proto.MethodPlayerLaunch, nil, nil); err != nil {
+		t.Fatalf("launch while running: %v", err)
+	}
+	c, _ = newTestCore(t, false)
+	marker := filepath.Join(t.TempDir(), "launched")
+	c.env.Target.Launch = "touch " + marker
+	if runtime.GOOS == "windows" {
+		c.env.Target.Launch = "type nul > " + marker
+	}
+	if err := call(t, c, proto.MethodPlayerLaunch, nil, nil); err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("SPYTIFY_TARGET_LAUNCH did not run")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }

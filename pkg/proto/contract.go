@@ -25,6 +25,7 @@ var Methods = []MethodSpec{
 	{MethodSettingsSet, SettingsSetParams{}, SettingsSetResult{}, "validated, persisted, then settings.changed fires"},
 	{MethodSettingsReset, SettingsResetParams{}, Empty{}, "back to defaults, all keys or those under a prefix"},
 	{MethodPlayerControl, PlayerControlParams{}, Empty{}, "play, pause, next, previous, restart (from 0:00) through the player's local interface"},
+	{MethodPlayerLaunch, nil, Empty{}, "opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way"},
 	{MethodLogTail, LogTailParams{}, LogTailResult{}, "last N log lines"},
 	{MethodEventsRecent, nil, EventsRecentResult{}, "the last 200 events, for a client that connects mid-session"},
 	{MethodCoreShutdown, nil, Empty{}, "stops the session first"},
