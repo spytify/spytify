@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func poll(t *testing.T, s string) jxaPoll {
@@ -77,6 +78,39 @@ func TestJXATrackerSeesARestart(t *testing.T) {
 	}
 	if evs := at("0.45"); len(evs) != 0 {
 		t.Fatalf("restart reported twice: %+v", evs)
+	}
+}
+
+func TestJXATrackerSeesASeek(t *testing.T) {
+	k := &jxaTracker{}
+	t0 := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	at := func(ms int, state, pos string) []Event {
+		p := poll(t, `{"running":true,"state":"`+state+`","position":`+pos+`,"track":{"id":"vendor:track:7","name":"Song","artist":"A","duration":200000}}`)
+		p.at = t0.Add(time.Duration(ms) * time.Millisecond)
+		return k.next(p)
+	}
+	at(0, "playing", "10.0")
+	if evs := at(250, "playing", "10.25"); len(evs) != 0 {
+		t.Fatalf("progress gave %+v", evs)
+	}
+	// A slow poll is not a seek: the position kept up with the clock.
+	if evs := at(3250, "playing", "13.3"); len(evs) != 0 {
+		t.Fatalf("a late poll gave %+v", evs)
+	}
+	evs := at(3500, "playing", "90.0")
+	if len(evs) != 1 || evs[0].Kind != Seeked || evs[0].PositionMs != 90000 {
+		t.Fatalf("forward seek = %+v", evs)
+	}
+	if evs := at(3750, "paused", "90.1"); len(evs) != 1 || evs[0].Kind != StatusChanged {
+		t.Fatalf("pause = %+v", evs)
+	}
+	// Paused, the position stays put however long the poll waits.
+	if evs := at(9000, "paused", "90.1"); len(evs) != 0 {
+		t.Fatalf("still paused gave %+v", evs)
+	}
+	evs = at(9250, "paused", "30.0")
+	if len(evs) != 1 || evs[0].Kind != Seeked || evs[0].PositionMs != 30000 {
+		t.Fatalf("seek back while paused = %+v", evs)
 	}
 }
 

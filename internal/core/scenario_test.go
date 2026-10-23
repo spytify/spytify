@@ -151,7 +151,7 @@ func loadTimeline(t *testing.T, name string) *fake.Timeline {
 }
 
 func TestScenarios(t *testing.T) {
-	for _, name := range []string{"basic", "jitter", "gapless", "ads", "format-change", "pause-resume", "duplicate", "control"} {
+	for _, name := range []string{"basic", "jitter", "gapless", "ads", "format-change", "pause-resume", "duplicate", "control", "seek"} {
 		t.Run(name, func(t *testing.T) {
 			tl := loadTimeline(t, name)
 			variants := tl.Variants

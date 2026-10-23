@@ -65,6 +65,9 @@ const (
 	SkipTooShort   SkipReason = "too_short"
 	SkipAd         SkipReason = "ad"
 	SkipIncomplete SkipReason = "incomplete"
+	// SkipSeeked is a track whose position jumped while it played: the
+	// audio no longer matches the published track, whatever its length.
+	SkipSeeked SkipReason = "seeked"
 )
 
 // Player transport commands accepted by player.control.

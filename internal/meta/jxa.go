@@ -149,6 +149,8 @@ type jxaPoll struct {
 	Position *float64  `json:"position"`
 	Track    *jxaTrack `json:"track"`
 	Error    string    `json:"error"`
+	// at is when the poll was read; zero leaves seeks undetected.
+	at time.Time
 }
 
 // explain turns a scripting error into what the user can do about it.
@@ -224,12 +226,16 @@ type jxaTracker struct {
 	last    TrackInfo
 	status  Status
 	lastPos int64
+	lastAt  time.Time
 }
 
 // A position that jumps back near zero on the same item is a restart.
 const (
 	restartFromMs = 3000
-	restartToMs   = 1500
+	// seekSlackMs is how far the position may drift from the wall clock
+	// between two polls before it counts as a seek.
+	seekSlackMs = 2000
+	restartToMs = 1500
 )
 
 func (k *jxaTracker) next(p jxaPoll) []Event {
@@ -264,9 +270,17 @@ func (k *jxaTracker) next(p jxaPoll) []Event {
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos})
 	} else if !info.Empty() && pos >= 0 && pos < restartToMs && k.lastPos-pos > restartFromMs {
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos, Restart: true})
+	} else if !info.Empty() && pos >= 0 && k.lastPos >= 0 && !p.at.IsZero() && !k.lastAt.IsZero() {
+		expected := k.lastPos
+		if k.status == Playing {
+			expected += p.at.Sub(k.lastAt).Milliseconds()
+		}
+		if d := pos - expected; d > seekSlackMs || d < -seekSlackMs {
+			out = append(out, Event{Kind: Seeked, Track: info, PositionMs: pos})
+		}
 	}
 	if pos >= 0 {
-		k.lastPos = pos
+		k.lastPos, k.lastAt = pos, p.at
 	}
 	if st := p.status(); st != k.status {
 		k.status = st
@@ -306,6 +320,7 @@ func (j *JXA) Watch(ctx context.Context, t target.Target) (<-chan Event, error) 
 			if json.Unmarshal(sc.Bytes(), &p) != nil {
 				continue
 			}
+			p.at = time.Now()
 			if p.Error != lastErr {
 				lastErr = p.Error
 				if p.Error != "" && j.Logf != nil {

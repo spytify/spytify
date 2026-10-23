@@ -127,6 +127,11 @@ func (s *MPRISServer) Update(ev meta.Event) {
 			return
 		}
 		s.props.SetMust(mprisPlayer, "Metadata", metadataOf(ev.Track))
+	case meta.Seeked:
+		s.mu.Lock()
+		s.itemStart, s.paused = time.Now().Add(-time.Duration(ev.PositionMs)*time.Millisecond), 0
+		s.mu.Unlock()
+		_ = s.conn.Emit(mprisPath, mprisPlayer+".Seeked", ev.PositionMs*1000)
 	case meta.StatusChanged:
 		s.mu.Lock()
 		switch ev.Status {

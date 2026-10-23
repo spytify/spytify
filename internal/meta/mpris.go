@@ -204,10 +204,13 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal) []Event {
 		m.mu.Lock()
 		last := m.last
 		m.mu.Unlock()
-		if us < 1_500_000 && !last.Empty() {
+		if last.Empty() {
+			return nil
+		}
+		if us < 1_500_000 {
 			return []Event{{Kind: TrackChanged, Track: last, PositionMs: us / 1000, Restart: true}}
 		}
-		return nil
+		return []Event{{Kind: Seeked, Track: last, PositionMs: us / 1000}}
 	case propsInterface + ".PropertiesChanged":
 		if _, owner := m.current(); owner == "" || sig.Sender != owner || len(sig.Body) < 2 {
 			return nil

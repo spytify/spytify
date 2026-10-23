@@ -65,6 +65,8 @@ func reasonText(r proto.SkipReason) string {
 		return "too short"
 	case proto.SkipIncomplete:
 		return "incomplete"
+	case proto.SkipSeeked:
+		return "track bar moved"
 	}
 	return string(r)
 }

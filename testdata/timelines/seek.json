@@ -1,0 +1,18 @@
+{
+  "name": "seek",
+  "seed": 9,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "items": [
+    {"artist": "Seek Artist", "title": "Seek One", "album": "Seeks", "track_number": 1, "length_ms": 5000, "gap_ms": 1000},
+    {"artist": "Seek Artist", "title": "Seek Forward", "album": "Seeks", "track_number": 2, "length_ms": 8000, "gap_ms": 1000, "seek_at_ms": 2000, "seek_to_ms": 5000},
+    {"artist": "Seek Artist", "title": "Seek Back", "album": "Seeks", "track_number": 3, "length_ms": 6000, "gap_ms": 1000, "seek_at_ms": 4000, "seek_to_ms": 1500},
+    {"artist": "Seek Artist", "title": "Seek Four", "album": "Seeks", "track_number": 4, "length_ms": 4500, "gap_ms": 1000}
+  ],
+  "expect": [
+    {"item": 0, "saved": true},
+    {"item": 1, "saved": false, "reason": "seeked"},
+    {"item": 2, "saved": false, "reason": "seeked"},
+    {"item": 3, "saved": true}
+  ]
+}
