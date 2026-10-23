@@ -1,0 +1,26 @@
+v1:
+  - title: Overview
+    url: /overview.html
+  - title: Features
+    url: /features.html
+  - title: Settings
+    url: /settings.html
+  - title: F.A.Q
+    url: /faq.html
+v2:
+  - title: Overview
+    url: /v2/overview.html
+  - title: Install
+    url: /v2/install.html
+  - title: Features
+    url: /v2/features.html
+  - title: Settings
+    url: /v2/settings.html
+  - title: CLI
+    url: /v2/cli.html
+  - title: Protocol
+    url: /v2/protocol.html
+  - title: F.A.Q
+    url: /v2/faq.html
+  - title: Legal
+    url: /v2/legal.html

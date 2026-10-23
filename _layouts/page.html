@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+{% assign v2 = false %}{% if page.version == "v2" %}{% assign v2 = true %}{% endif %}
+<html lang="{{ site.lang | default: "en-US" }}">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1ed65d">
+    {% if v2 %}
+    <meta name="description" content="{{ site.description }}"/>
+    <title>Spytify v2 - {{ page.title }}</title>
+    {% else %}
+    <meta name="description" content="{{ site.data.v1.tagline }}"/>
+    <title>{{ site.title }} - {{ site.data.v1.title }} - {{ page.title }}</title>
+    {% endif %}
+    <link rel="shortcut icon" href="{{ site.logo | relative_url }}" />
+    <link rel="apple-touch-icon" href="{{ site.logo | relative_url }}" />
+    <link rel="stylesheet" href="{{ 'assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
+  </head>
+  <body>
+    <header class="page-header" role="banner">
+      <a href="{{ site.repository_url }}" aria-label="Spytify on GitHub"><img class="logo" alt="Spytify logo" src="{{ site.logo | relative_url }}" role="logo" /></a>
+      <h1 class="project-name">{{ site.title }}{% if v2 %} v2{% endif %}</h1>
+      <h2 class="project-tagline">{% if v2 %}{{ site.description }}{% else %}{{ site.data.v1.tagline }}{% endif %}</h2>
+    </header>
+
+    <nav class="nav" role="navigation">
+      {% if v2 %}{% assign items = site.data.nav.v2 %}{% else %}{% assign items = site.data.nav.v1 %}{% endif %}
+      {% for item in items %}
+        <a href="{{ item.url | relative_url }}" aria-label="{{ item.title }}" class="btn">{{ item.title }}</a>
+      {% endfor %}
+      <a href="{{ '/donate.html' | relative_url }}" aria-label="Donate" class="btn -donate">Donate</a>
+      {% if site.show_downloads %}
+        <a href="{% if v2 %}{{ site.repository_download }}{% else %}{{ site.v1_download }}{% endif %}" aria-label="Download" class="btn out">Download</a>
+      {% endif %}
+      <select class="version-switch" aria-label="Documentation version" onchange="switchVersion(this.value)">
+        {% for ver in site.versions %}
+          <option value="{{ ver.id }}"{% if ver.id == page.version %} selected{% endif %}>{{ ver.label }}</option>
+        {% endfor %}
+      </select>
+    </nav>
+
+    <main id="content" class="main-content" role="main">
+      {% unless v2 %}{% if page.url != "/donate.html" %}
+      <p class="version-banner">This is the documentation of Spytify v1, the Windows recorder. Spytify v2 runs on Linux, macOS and Windows: <a href="{{ '/v2/overview.html' | relative_url }}">read the v2 documentation</a>.</p>
+      {% endif %}{% endunless %}
+
+      {{ content }}
+
+      <footer class="site-footer">
+        <span class="site-footer-badges">
+          <a href="{{ site.repository_url }}" aria-label="Spytify on GitHub">
+            <img alt="GitHub stars" src="https://img.shields.io/github/stars/spytify/spytify.svg?logo=github&style=social" />
+          </a>
+          <a href="{{ site.reddit_url }}" aria-label="Spytify subreddit">
+            <img alt="Subreddit subscribers" src="https://img.shields.io/reddit/subreddit-subscribers/spytify.svg?label=%2Fr%2Fspytify&logo=reddit&logoColor=000000&style=social">
+          </a>
+        </span>
+        <span class="site-footer-owner">
+          <a href="{{ site.repository_url }}">{{ site.project_name }}</a> is maintained by <a href="{{ site.owner_url }}">{{ site.owner_name }}</a>.
+        </span>
+        <span class="site-footer-credits">
+          😃 Like Spytify? If you want you can <a href="{{ '/donate.html' | relative_url }}">buy me a beer</a> 🍺.
+        </span>
+      </footer>
+    </main>
+
+    <script>
+      const base = {{ site.baseurl | jsonify }};
+      const pages = {
+        v1: {{ site.data.nav.v1 | map: "url" | jsonify }},
+        v2: {{ site.data.nav.v2 | map: "url" | jsonify }},
+      };
+
+      // The same page in the other version when it has one, else its overview.
+      function switchVersion(version) {
+        const name = window.location.pathname.split("/").pop() || "overview.html";
+        const prefix = version === "v2" ? "/v2/" : "/";
+        const same = prefix + name;
+        const target = pages[version].includes(same) ? same : prefix + "overview.html";
+        window.location.assign(base + target);
+      }
+
+      function setActiveNav() {
+        document.querySelectorAll(`nav[role="navigation"]>a`).forEach(x => {
+          if (x.getAttribute("href") === window.location.pathname) {
+            x.className = `${x.className} active`;
+          }
+        });
+      }
+
+      function isScrollIntoView(scroll = true) {
+        const { hash } = window.location;
+        if (hash) {
+          var el = document.querySelector(`${hash}>details`);
+          if (el) {
+            el.open = true;
+            if (scroll) el.scrollIntoView({ behavior: 'smooth' });
+          }
+        } else if (document.querySelector('details')) {
+          document.querySelector('details').open = true;
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => { setActiveNav(); isScrollIntoView(); });
+      window.addEventListener("hashchange", isScrollIntoView, false);
+    </script>
+  </body>
+</html>

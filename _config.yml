@@ -1,1 +1,45 @@
-theme: jekyll-theme-cayman
+title: Spytify
+description: "Records an application's audio, splits it into tracks and tags them."
+url: "https://spytify.github.io"
+baseurl: /spytify
+lang: en-CA
+logo: /assets/images/logo.png
+project_name: spytify
+owner_name: spytify
+owner_url: "https://github.com/spytify"
+repository_url: "https://github.com/spytify/spytify"
+repository_download: "https://github.com/spytify/spytify/releases"
+# v1 builds stay where they were published.
+v1_download: "https://github.com/jwallet/spy-spotify/releases/latest"
+reddit_url: "https://www.reddit.com/r/spytify/"
+show_downloads: true
+
+# Two versions side by side: v1 at the root, v2 under /v2/. Each page gets
+# its version from its folder; the layout picks the menu and the header.
+default_version: v1
+versions:
+  - id: v1
+    label: "v1 (Windows)"
+    path: /
+  - id: v2
+    label: "v2 (Linux, macOS, Windows)"
+    path: /v2/
+defaults:
+  - scope:
+      path: ""
+    values:
+      version: v1
+  - scope:
+      path: "v2"
+    values:
+      version: v2
+
+collections:
+  faq:
+    output: true
+
+sass:
+  sass_dir: _sass
+  style: compressed
+
+exclude: ["README.md", "Gemfile", "Gemfile.lock", "vendor", ".bundle", ".jekyll-cache", ".sass-cache"]
