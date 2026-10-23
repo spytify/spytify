@@ -1,0 +1,12 @@
+# Per-user service for packaged installs: systemctl --user enable --now spytifyd
+[Unit]
+Description=Spytify recorder (spytifyd)
+After=pipewire.service pipewire-pulse.service
+
+[Service]
+ExecStart=/usr/bin/spytifyd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

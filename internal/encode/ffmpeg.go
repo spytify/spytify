@@ -45,7 +45,9 @@ func Find(name string) (*FFmpeg, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w (%s)", ErrMissing, name)
 	}
-	out, err := exec.Command(path, "-hide_banner", "-version").Output()
+	probe := exec.Command(path, "-hide_banner", "-version")
+	hideConsole(probe)
+	out, err := probe.Output()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s -version: %v", ErrMissing, path, err)
 	}
@@ -55,7 +57,9 @@ func Find(name string) (*FFmpeg, error) {
 
 // HasEncoder reports whether this ffmpeg build has an encoder.
 func (f *FFmpeg) HasEncoder(name string) bool {
-	out, err := exec.Command(f.Path, "-hide_banner", "-encoders").Output()
+	encoders := exec.Command(f.Path, "-hide_banner", "-encoders")
+	hideConsole(encoders)
+	out, err := encoders.Output()
 	if err != nil {
 		return false
 	}

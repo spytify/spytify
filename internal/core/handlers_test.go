@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -129,9 +130,6 @@ func TestSessionErrors(t *testing.T) {
 	if err := call(t, c, proto.MethodSessionStatus, nil, &st); err != nil || st.State != proto.StateIdle {
 		t.Fatalf("status: %+v %v", st, err)
 	}
-	if err := call(t, c, proto.MethodTagsRetag, nil, nil); code(err) != proto.CodeNotAvailable {
-		t.Fatalf("retag: %v", err)
-	}
 	if err := call(t, c, proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: "rewind"}, nil); code(err) != proto.CodeInvalidParams {
 		t.Fatalf("bad control: %v", err)
 	}
@@ -219,4 +217,30 @@ func announced(events []proto.Event, st proto.SessionState) bool {
 		}
 	}
 	return false
+}
+
+func TestPlayerLaunch(t *testing.T) {
+	c, _ := newTestCore(t, true)
+	if err := call(t, c, proto.MethodPlayerLaunch, nil, nil); err != nil {
+		t.Fatalf("launch while running: %v", err)
+	}
+	c, _ = newTestCore(t, false)
+	marker := filepath.Join(t.TempDir(), "launched")
+	c.env.Target.Launch = "touch " + marker
+	if runtime.GOOS == "windows" {
+		c.env.Target.Launch = "type nul > " + marker
+	}
+	if err := call(t, c, proto.MethodPlayerLaunch, nil, nil); err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("SPYTIFY_TARGET_LAUNCH did not run")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }

@@ -47,6 +47,7 @@ type Def struct {
 // recorder.mute_ads. Tags come from the player itself, so the web tag
 // providers' settings are gone, and the UI is English only.
 var Table = []Def{
+	{Key: "app.theme", Tab: "App", Group: "App", Label: "Theme", Kind: KindEnum, Enum: []string{"system", "light", "dark"}, Default: "system"},
 	{Key: "app.minimize_to_tray", Tab: "App", Group: "App", Label: "Minimize to tray", Kind: KindBool, Default: true},
 	{Key: "app.autostart_recording", Tab: "App", Group: "App", Label: "Start recording on launch", Kind: KindBool, Default: false},
 	{Key: "app.check_updates", Tab: "App", Group: "App", Label: "Check for updates", Kind: KindBool, Default: true},
@@ -67,7 +68,6 @@ var Table = []Def{
 	{Key: "tags.track_from_counter", Tab: "Tags", Group: "Encoding", Label: "Replace track number with counter", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "tags.extra_to_subtitle", Tab: "Tags", Group: "Encoding", Label: "Move parenthesised extra title to subtitle", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "tags.artist_separator", Tab: "Tags", Group: "Encoding", Label: "Multiple artists separator", Kind: KindString, Default: ", ", Advanced: true},
-	{Key: "tags.update_existing", Tab: "Tags", Group: "Encoding", Label: "Re-tag existing files", Kind: KindBool, Default: false, Advanced: true},
 
 	{Key: "recorder.min_seconds", Tab: "Recorder", Group: "Recording", Label: "Minimum track length (seconds)", Kind: KindInt, Default: int64(30), Min: 0, Max: 3600, Ranged: true},
 	{Key: "recorder.duplicates", Tab: "Recorder", Group: "Recording", Label: "Already recorded tracks", Kind: KindEnum, Enum: []string{"skip", "suffix", "overwrite"}, Default: "skip"},

@@ -1,0 +1,41 @@
+# .deb and .rpm of the Linux build; scripts/build-linux.sh fills in VERSION,
+# ARCH and DIST.
+name: spytify
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: semver
+section: sound
+priority: optional
+maintainer: Spytify <https://github.com/spytify/spytify>
+description: |
+  Records an application's audio, splits it into tracks and tags them.
+  spytifyd records, spytify-cli and the Spytify app drive it.
+homepage: https://spytify.github.io/spytify/
+license: MIT
+contents:
+  - src: ${DIST}/spytifyd
+    dst: /usr/bin/spytifyd
+  - src: ${DIST}/spytify-cli
+    dst: /usr/bin/spytify-cli
+  - src: ${DIST}/spytify-ui
+    dst: /usr/bin/spytify-ui
+  - src: packaging/linux/spytify.desktop
+    dst: /usr/share/applications/spytify.desktop
+  - src: assets/logo.png
+    dst: /usr/share/icons/hicolor/128x128/apps/spytify.png
+  - src: packaging/linux/spytifyd.service
+    dst: /usr/lib/systemd/user/spytifyd.service
+overrides:
+  deb:
+    depends:
+      - ffmpeg
+    recommends:
+      - pipewire-bin
+      - wireplumber
+    suggests:
+      - pulseaudio-utils
+  rpm:
+    recommends:
+      - ffmpeg
+      - pipewire-utils

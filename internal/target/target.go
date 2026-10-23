@@ -54,7 +54,7 @@ func (t Target) MPRISNames() []string {
 	}
 	names := make([]string, 0, len(t.ProcessNames))
 	for _, p := range t.ProcessNames {
-		names = append(names, mprisPrefix+strings.TrimSuffix(strings.ToLower(p), ".exe"))
+		names = append(names, mprisPrefix+normalizeName(p))
 	}
 	return names
 }
@@ -148,7 +148,17 @@ func Load() Env {
 		DurationUnit: strings.ToLower(strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_DURATION_UNIT"))),
 	}
 	if _, set := os.LookupEnv("SPYTIFY_TARGET_PROCESS"); !set {
-		t = withDefaultPlayer(t, runtime.GOOS)
+		t = withDefaultPlayer(t)
+	}
+	// On macOS the bundle id finds the player's helper processes and names
+	// it for AppleScript; the installed app gives it when it is not set.
+	if runtime.GOOS == "darwin" && t.BundleID == "" {
+		for _, n := range t.ProcessNames {
+			if id := bundleIDOf(n); id != "" {
+				t.BundleID = id
+				break
+			}
+		}
 	}
 	return Env{
 		Target:     t,
@@ -228,25 +238,16 @@ func defaultStateDir() string {
 	return filepath.Join(home, ".local", "state", "spytify")
 }
 
-// DefaultProcess and DefaultBundleID name the player recorded when
-// SPYTIFY_TARGET_PROCESS is not set. Builds fill them in with -ldflags -X
-// from the SPYTIFY_DEFAULT_PROCESS and SPYTIFY_DEFAULT_BUNDLE_ID build
-// variables, so no player is named in the source; left empty, the daemon
-// waits for a player to be chosen.
-var (
-	DefaultProcess  string
-	DefaultBundleID string
-)
+// DefaultProcess names the player recorded when SPYTIFY_TARGET_PROCESS is
+// not set. Builds fill it in with -ldflags -X from the SPYTIFY_DEFAULT_PROCESS
+// build variable, so no player is named in the source; left empty, the
+// daemon waits for a player to be chosen. One bare name serves every OS:
+// it matches "Name.app" on macOS and "Name.exe" on Windows.
+var DefaultProcess string
 
-// withDefaultPlayer fills in the build's default player. Process names match
-// without case and without .exe, so one name serves every OS.
-func withDefaultPlayer(t Target, goos string) Target {
-	if DefaultProcess == "" {
-		return t
-	}
-	t.ProcessNames = []string{DefaultProcess}
-	if goos == "darwin" && t.BundleID == "" {
-		t.BundleID = DefaultBundleID
+func withDefaultPlayer(t Target) Target {
+	if DefaultProcess != "" {
+		t.ProcessNames = []string{DefaultProcess}
 	}
 	return t
 }

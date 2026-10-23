@@ -4,6 +4,7 @@
 package model
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -133,11 +134,27 @@ type Model struct {
 	s         State
 	now       func() time.Time
 	listeners []func()
+	// levels hear the 10 Hz level events, which change nothing else; the
+	// OnChange listeners do not, so the meter does not redraw the window.
+	levels []func()
+	// cleared are the rows the user cleared; a replay of the core's recent
+	// events must not bring them back.
+	cleared map[string]bool
 }
 
 // New returns an empty, disconnected model.
 func New() *Model {
-	return &Model{s: State{Session: proto.StateIdle, Settings: map[string]any{}}, now: time.Now}
+	return &Model{s: State{Session: proto.StateIdle, Settings: map[string]any{}}, now: time.Now, cleared: map[string]bool{}}
+}
+
+// ClearRows empties the list of finished tracks; the current one stays.
+func (m *Model) ClearRows() {
+	m.update(func(s *State) {
+		for _, r := range s.Rows {
+			m.cleared[r.ID] = true
+		}
+		s.Rows = nil
+	})
 }
 
 // OnChange registers fn, called after every change, outside the lock.
@@ -238,7 +255,36 @@ func (m *Model) Replay(events []proto.Event) {
 
 // Apply folds one event into the state.
 func (m *Model) Apply(ev proto.Event) {
+	if ev.Method == proto.EventLevel {
+		m.mu.Lock()
+		_ = ev.Decode(&m.s.Level)
+		levels := append([]func(){}, m.levels...)
+		m.mu.Unlock()
+		for _, l := range levels {
+			l()
+		}
+		return
+	}
 	m.update(func(s *State) { m.apply(s, ev) })
+}
+
+// OnLevel registers fn for level events.
+func (m *Model) OnLevel(fn func()) {
+	m.mu.Lock()
+	m.levels = append(m.levels, fn)
+	m.mu.Unlock()
+}
+
+// Live is the current track, the session state and the level, without
+// copying the rest of the state.
+func (m *Model) Live() (current *Row, session proto.SessionState, level proto.LevelEvent) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.s.Current != nil {
+		c := *m.s.Current
+		current = &c
+	}
+	return current, m.s.Session, m.s.Level
 }
 
 func (m *Model) apply(s *State, ev proto.Event) {
@@ -264,7 +310,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		// A reconnecting client can see a start twice: once replayed, once
 		// live.
-		if s.Current != nil && s.Current.ID == e.ID {
+		if m.cleared[e.ID] || (s.Current != nil && s.Current.ID == e.ID) {
 			return
 		}
 		for _, r := range s.Rows {
@@ -297,6 +343,16 @@ func (m *Model) apply(s *State, ev proto.Event) {
 	case proto.EventTargetState:
 		if ev.Decode(&s.Target) == nil {
 			s.TargetKnown = true
+			// core.info checked once, on connect; keep its answer current.
+			for i := range s.Info.Checks {
+				if s.Info.Checks[i].Name == "player running" {
+					s.Info.Checks[i].OK = s.Target.Running
+					s.Info.Checks[i].Detail = "not running"
+					if s.Target.Running {
+						s.Info.Checks[i].Detail = fmt.Sprintf("pid %d", s.Target.PID)
+					}
+				}
+			}
 		}
 	case proto.EventSettingsChanged:
 		var e proto.SettingsValues

@@ -107,6 +107,12 @@ if (-not (Await $op ([bool]))) { exit 4 }
 type SMTC struct {
 	Interval time.Duration
 	Logf     func(format string, args ...any)
+	// Mixer is the player's volume in the Windows audio sessions; the
+	// media session API has none of its own.
+	Mixer interface {
+		Volume() (float64, error)
+		SetVolume(v float64) error
+	}
 
 	mu    sync.Mutex
 	names []string
@@ -243,6 +249,16 @@ func (m *SMTC) Control(cmd string) error {
 	return nil
 }
 
-// Volume and SetVolume: SMTC has no volume.
-func (m *SMTC) Volume() (float64, error) { return 0, ErrUnsupported }
-func (m *SMTC) SetVolume(float64) error  { return ErrUnsupported }
+func (m *SMTC) Volume() (float64, error) {
+	if m.Mixer == nil {
+		return 0, ErrUnsupported
+	}
+	return m.Mixer.Volume()
+}
+
+func (m *SMTC) SetVolume(v float64) error {
+	if m.Mixer == nil {
+		return ErrUnsupported
+	}
+	return m.Mixer.SetVolume(v)
+}

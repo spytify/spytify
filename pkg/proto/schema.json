@@ -201,28 +201,6 @@
       ],
       "type": "object"
     },
-    "RetagParams": {
-      "properties": {
-        "paths": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    },
-    "RetagResult": {
-      "properties": {
-        "queued": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "queued"
-      ],
-      "type": "object"
-    },
     "SessionStartParams": {
       "properties": {
         "single_track": {
@@ -548,7 +526,7 @@
       }
     },
     "track.skipped": {
-      "description": "decision made: duplicate, too_short, ad, incomplete",
+      "description": "decision made: duplicate, too_short, ad, incomplete, seeked",
       "params": {
         "$ref": "#/$defs/TrackSkippedEvent"
       }
@@ -593,6 +571,12 @@
       "params": {
         "$ref": "#/$defs/PlayerControlParams"
       },
+      "result": {
+        "$ref": "#/$defs/Empty"
+      }
+    },
+    "player.launch": {
+      "description": "opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way",
       "result": {
         "$ref": "#/$defs/Empty"
       }
@@ -646,15 +630,6 @@
       },
       "result": {
         "$ref": "#/$defs/SettingsSetResult"
-      }
-    },
-    "tags.retag": {
-      "description": "not available in the alpha",
-      "params": {
-        "$ref": "#/$defs/RetagParams"
-      },
-      "result": {
-        "$ref": "#/$defs/RetagResult"
       }
     }
   },

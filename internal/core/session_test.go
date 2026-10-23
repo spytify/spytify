@@ -205,6 +205,40 @@ func TestRestartRecordsTheTrackAgain(t *testing.T) {
 	}
 }
 
+func TestTheSameTrackAgainAtItsEndKeepsTheFullTake(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	tl.Items = tl.Items[:1]
+	tl.Items[0].LengthMs = 8000
+	tl.Expect = nil
+	s := newScenario(t, tl, nil)
+	// Repeat one: the item starts over as it ends.
+	s.player.At(500+8000, func() {
+		if err := s.core.Control(proto.CmdRestart); err != nil {
+			t.Errorf("restart: %v", err)
+		}
+	})
+	runWith(t, s, SessionOptions{EndOnStop: true})
+	var skipped []proto.SkipReason
+	for _, ev := range s.events.all() {
+		var sk proto.TrackSkippedEvent
+		if ev.Method == proto.EventTrackSkipped && ev.Decode(&sk) == nil {
+			skipped = append(skipped, sk.Reason)
+		}
+	}
+	files := fake.AudioFiles(s.out)
+	if len(files) != 1 || len(skipped) != 1 || skipped[0] != proto.SkipDuplicate {
+		t.Fatalf("files %v, skipped %v; want the full take kept and the replay a duplicate\n%s", files, skipped, s.logs)
+	}
+	gotF, got, err := pcm.ReadWAV(filepath.Join(s.out, files[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantF, want, _ := tl.ItemAudio(0)
+	if c := pcm.Compare(wantF, want, gotF, got, fake.TrimDB, fake.SearchMs); !c.Matches(fake.MaxLagMs, fake.MaxErrorDB) {
+		t.Fatalf("the kept take does not match the track: %+v\n%s", c, s.logs)
+	}
+}
+
 func TestMuteAdsSilencesThePlayerDuringTheAd(t *testing.T) {
 	tl := loadTimeline(t, "ads")
 	tl.Items[1].LengthMs = 8000

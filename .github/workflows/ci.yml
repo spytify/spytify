@@ -9,11 +9,10 @@ on:
 permissions:
   contents: read
 
-# The default player of the builds lives in repository variables, so the
+# The default player of the builds lives in a repository variable, so the
 # source names none (Settings > Secrets and variables > Actions > Variables).
 env:
   SPYTIFY_DEFAULT_PROCESS: ${{ vars.SPYTIFY_DEFAULT_PROCESS }}
-  SPYTIFY_DEFAULT_BUNDLE_ID: ${{ vars.SPYTIFY_DEFAULT_BUNDLE_ID }}
 
 jobs:
   unit:
@@ -148,6 +147,8 @@ jobs:
           set +e; timeout 5 ./spytify-tap.exe --pid "$pid" > tap.raw; echo "exit $?"; set -e
           head -1 tap.raw
           ls -l tap.raw
+          # No audio device on the runner: exit 4 (no session) is the expected answer.
+          set +e; ./spytify-tap.exe --pid "$pid" --get-volume; echo "get-volume exit $?"; set -e
 
   macos-build:
     runs-on: macos-15

@@ -129,3 +129,23 @@ func TestJXAStatus(t *testing.T) {
 		}
 	}
 }
+
+// Some players report 0:00 at an item's end before naming the next item:
+// that is neither a restart nor a seek.
+func TestJXATrackerIgnoresTheResetAtTheEnd(t *testing.T) {
+	k := &pollTracker{}
+	t0 := time.Date(2026, 10, 23, 18, 23, 0, 0, time.UTC)
+	at := func(ms int, id, pos string) []Event {
+		p := poll(t, `{"running":true,"state":"playing","position":`+pos+`,"track":{"id":"`+id+`","name":"Song `+id+`","artist":"A","duration":171292}}`)
+		p.at = t0.Add(time.Duration(ms) * time.Millisecond)
+		return k.next(p)
+	}
+	at(0, "1", "170.5")
+	if evs := at(250, "1", "0.0"); len(evs) != 0 {
+		t.Fatalf("the reset at the end gave %+v", evs)
+	}
+	evs := at(500, "2", "0.2")
+	if len(evs) != 1 || evs[0].Kind != TrackChanged || evs[0].Restart || evs[0].Track.Title != "Song 2" {
+		t.Fatalf("next item = %+v", evs)
+	}
+}

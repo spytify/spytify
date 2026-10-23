@@ -1,0 +1,101 @@
+name: release
+
+# Pushing a tag such as v2.0.0-alpha.1 builds every platform and prepares a
+# draft GitHub release with the files; publishing the draft is a person's
+# call. A tag with a "-" becomes a pre-release, which the app's update
+# check counts.
+on:
+  push:
+    tags: ["v2.*"]
+
+permissions:
+  contents: read
+
+env:
+  SPYTIFY_DEFAULT_PROCESS: ${{ vars.SPYTIFY_DEFAULT_PROCESS }}
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install the desktop app's build dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+      - name: Tarball, .deb and .rpm
+        run: SPYTIFY_VERSION="${GITHUB_REF_NAME#v}" scripts/build-linux.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.runner }}
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Spytify.app and the command-line tools
+        run: SPYTIFY_VERSION="${GITHUB_REF_NAME#v}" scripts/build-macos.sh dist/macos
+      - name: Disk image and zip
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          hdiutil create -volname Spytify -srcfolder dist/macos/Spytify.app -ov -format UDZO "dist/Spytify-$v-macos.dmg"
+          (cd dist/macos && zip -q -r "../spytify-$v-macos-cli.zip" spytifyd spytify-cli spytify-tap)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: |
+            dist/*.dmg
+            dist/*.zip
+
+  windows:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install MinGW-w64
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64
+      - name: Spytify.exe and the command-line tools, zipped
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          SPYTIFY_VERSION="$v" scripts/build-windows.sh "dist/spytify-$v-windows-amd64"
+          cp README.md LICENSE "dist/spytify-$v-windows-amd64/"
+          (cd dist && zip -q -r "spytify-$v-windows-amd64.zip" "spytify-$v-windows-amd64")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/*.zip
+
+  draft:
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: files
+      - name: Draft release with every file
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""
+          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
+          (cd files && sha256sum * > SHA256SUMS)
+          gh release create "$GITHUB_REF_NAME" files/* --repo "$GITHUB_REPOSITORY" --draft $pre \
+            --title "Spytify $GITHUB_REF_NAME" --generate-notes \
+            --notes "The macOS app is not notarised yet: the first time, allow it in System Settings > Privacy & Security > Open Anyway. The Windows build is a first draft."

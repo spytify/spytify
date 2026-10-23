@@ -108,9 +108,11 @@ func (t Target) MatchesTree(pid int) bool {
 	return false
 }
 
+// normalizeName compares names without case, and without the ".exe" of
+// Windows or the ".app" of a macOS bundle.
 func normalizeName(s string) string {
 	s = strings.ToLower(strings.TrimSpace(filepath.Base(s)))
-	return strings.TrimSuffix(s, ".exe")
+	return strings.TrimSuffix(strings.TrimSuffix(s, ".exe"), ".app")
 }
 
 func listProc() []Process {

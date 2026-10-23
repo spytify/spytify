@@ -25,7 +25,40 @@ func (b Backends) New(t target.Target) (capture.Capture, meta.NowPlaying, error)
 	m := meta.NewSMTC()
 	m.Logf = b.logf
 	m.Target(t)
+	if helper, err := capture.FindTapHelper(b.TapHelper); err == nil {
+		m.Mixer = mixer{helper: helper, t: t}
+	}
 	return c, m, nil
+}
+
+// mixer reaches the player's audio sessions through spytify-tap.exe.
+type mixer struct {
+	helper string
+	t      target.Target
+}
+
+func (x mixer) pid() (int, error) {
+	p, ok := target.FindProcess(x.t)
+	if !ok {
+		return 0, meta.ErrNoPlayer
+	}
+	return p.PID, nil
+}
+
+func (x mixer) Volume() (float64, error) {
+	pid, err := x.pid()
+	if err != nil {
+		return 0, err
+	}
+	return capture.SessionVolume(x.helper, pid)
+}
+
+func (x mixer) SetVolume(v float64) error {
+	pid, err := x.pid()
+	if err != nil {
+		return err
+	}
+	return capture.SetSessionVolume(x.helper, pid, v)
 }
 
 // Probe checks what the Windows backends need.

@@ -83,7 +83,7 @@ func newRoot(out io.Writer) *cobra.Command {
 
 	root.AddCommand(
 		a.infoCmd(), a.startCmd(), a.stopCmd(), a.statusCmd(), a.setCmd(), a.getCmd(), a.resetCmd(),
-		a.tailCmd(), a.eventsCmd(), a.controlCmd(), a.shutdownCmd(),
+		a.tailCmd(), a.eventsCmd(), a.controlCmd(), a.launchCmd(), a.shutdownCmd(), a.serviceCmd(),
 	)
 	return root
 }
@@ -376,6 +376,17 @@ func (a *app) controlCmd() *cobra.Command {
 		ValidArgs: []string{proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.call(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: args[0]}, nil)
+		},
+	}
+}
+
+func (a *app) launchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "launch",
+		Short: "Open the player if it is not running",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return a.call(proto.MethodPlayerLaunch, nil, nil)
 		},
 	}
 }

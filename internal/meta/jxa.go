@@ -233,6 +233,9 @@ type pollTracker struct {
 // A position that jumps back near zero on the same item is a restart.
 const (
 	restartFromMs = 3000
+	// endResetMs: a player that reports 0:00 within this much of an item's
+	// end is between two items, not starting this one over.
+	endResetMs = 3000
 	// seekSlackMs is how far the position may drift from the wall clock
 	// between two polls before it counts as a seek.
 	seekSlackMs = 2000
@@ -269,6 +272,8 @@ func (k *pollTracker) next(p playerPoll) []Event {
 	if !equalInfo(info, k.last) {
 		k.last = info
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos})
+	} else if !info.Empty() && pos >= 0 && pos < restartToMs && info.LengthMs > 0 && k.lastPos >= info.LengthMs-endResetMs {
+		// The item ended; the next one's metadata follows.
 	} else if !info.Empty() && pos >= 0 && pos < restartToMs && k.lastPos-pos > restartFromMs {
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos, Restart: true})
 	} else if !info.Empty() && pos >= 0 && k.lastPos >= 0 && !p.at.IsZero() && !k.lastAt.IsZero() {

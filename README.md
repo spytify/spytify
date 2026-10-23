@@ -1,4 +1,4 @@
-[![Spytify](https://user-images.githubusercontent.com/23088305/29906214-6daad21c-8de1-11e7-80f5-ef6791cc7825.png)](https://spytify.github.io/spytify/)
+[![Spytify](assets/logo-wordmark.png)](https://spytify.github.io/spytify/overview.html)
 
 [![Build](https://github.com/spytify/spytify/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/spytify/spytify/actions/workflows/ci.yml?query=branch%3Amaster)
 [![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspytify%2Fspytify%2Fbadges%2Ftests.json)](https://github.com/spytify/spytify/actions/workflows/ci.yml?query=branch%3Amaster)
@@ -37,6 +37,7 @@ spytify-cli ─┴─ JSON-RPC ──▶ spytifyd ◀── now playing ◀─�
 
 - `ffmpeg` on `PATH` (or `SPYTIFY_FFMPEG`), with `libmp3lame` for MP3 output.
 - Crossfade and gapless playback turned off in the recorded application: two mixed tracks cannot be separated again.
+- If the application can play your own music files, keep Spytify's output folder out of the folders it scans. Otherwise it plays your recording of a track in place of the track itself.
 
 Linux:
 
@@ -78,6 +79,7 @@ Go 1.26 or later.
 
 ```sh
 go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli ./cmd/spytify-ui   # Linux
+scripts/build-linux.sh                                               # Linux packages: dist/*.tar.gz, .deb, .rpm
 scripts/build-macos.sh                                               # macOS: bin/Spytify.app and the command-line tools
 scripts/build-windows.sh                                             # Windows, cross-compiled: bin/windows/*.exe
 ```
@@ -88,9 +90,9 @@ scripts/build-windows.sh                                             # Windows, 
   - macOS: the Xcode command line tools, which also build the Swift helper `spytify-tap`.
   - Windows: MinGW-w64 (`x86_64-w64-mingw32-gcc` and `-g++`), from Linux or macOS; it also builds the C++ helper `spytify-tap.exe`.
 
-A build of your own records nothing until you choose the application. In the app, go to **Settings > App > Advanced > Player**, enter its process name (and its bundle id on macOS), then press **Save and restart spytifyd**. Without the app, set `SPYTIFY_TARGET_PROCESS` (see [Configuration](#configuration)).
+A build of your own records nothing until you choose the application. In the app, go to **Settings > App > Advanced > Player**, enter its name, then press **Save and restart spytifyd**. Without the app, set `SPYTIFY_TARGET_PROCESS` (see [Configuration](#configuration)).
 
-Packagers can set a default application with the build variables `SPYTIFY_DEFAULT_PROCESS` and `SPYTIFY_DEFAULT_BUNDLE_ID`. The build scripts read them from the environment or from an untracked `build.env`; the project's CI takes them from repository variables.
+Packagers can set a default application with the build variable `SPYTIFY_DEFAULT_PROCESS`: its bare name, which matches `Name.app` on macOS, `Name.exe` on Windows and `name` on Linux. On macOS the bundle id is read from the installed app. The build scripts read the variable from the environment or from an untracked `build.env`; the project's CI takes it from a repository variable.
 
 The macOS app is ad-hoc signed. macOS asks for the permissions again after every rebuild, and another Mac refuses to open it until it is signed and notarised. Opened from Finder, the app still finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin`.
 
@@ -125,7 +127,9 @@ bin/spytify-cli stop          # the current track finishes first; --now discards
 | `set key=value...` / `get [key...]` / `reset [prefix]` | settings, validated by the daemon |
 | `tail [-n N] [-f]` / `events` | log lines / every event as JSON lines |
 | `control play\|pause\|next\|previous\|restart` | transport; `restart` plays the current track again from 0:00 |
+| `launch` | opens the application if it is not running (`SPYTIFY_TARGET_LAUNCH`, else the OS's way) |
 | `shutdown` | stops the daemon |
+| `service install\|uninstall\|status` | runs `spytifyd` at login and starts it again after a crash (systemd user unit on Linux, launchd agent on macOS) |
 
 Headless one-shot run, without a socket, until the application stops or stays idle:
 
@@ -143,7 +147,7 @@ The recorded application is set with environment variables, read when the daemon
 | --- | --- | --- |
 | `SPYTIFY_TARGET_PROCESS` | process to record; a comma list for several packagings | the build's default, if any |
 | `SPYTIFY_TARGET_MPRIS` | D-Bus name of the application (Linux) | `org.mpris.MediaPlayer2.<process>` |
-| `SPYTIFY_TARGET_BUNDLE_ID` | bundle id of the application (macOS) | the process name is used |
+| `SPYTIFY_TARGET_BUNDLE_ID` | bundle id of the application (macOS) | read from the installed app |
 | `SPYTIFY_TARGET_DURATION_UNIT` | `ms` or `s`, unit of the AppleScript track length (macOS) | guessed |
 | `SPYTIFY_TARGET_LAUNCH` | command that starts the application when a session starts | none |
 | `SPYTIFY_TAP` | path of `spytify-tap` (macOS, Windows) | next to `spytifyd`, then `PATH` |
@@ -201,7 +205,9 @@ go test -tags macos_capture -v ./test/macos/
 
 ## Contributing
 
-Issues and pull requests are welcome. Run `gofmt` and `go test ./...` before you push; CI also builds every platform and runs the PipeWire scenarios.
+Issues and pull requests are welcome. Run `gofmt` and `go test ./...` before you push; CI also builds every platform, runs the PipeWire scenarios, and runs the tests and the shipped executables on Windows.
+
+Releases: pushing a tag such as `v2.0.0-alpha.1` builds the Linux packages (amd64 and arm64), the macOS disk image and the Windows zip, and drafts a GitHub release with them and their checksums. A tag with a `-` is a pre-release. A maintainer reviews the draft and publishes it.
 
 ## License
 

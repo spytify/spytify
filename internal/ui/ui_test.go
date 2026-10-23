@@ -1,10 +1,16 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"image"
 	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +20,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/bus"
@@ -131,7 +138,11 @@ func texts(o fyne.CanvasObject) []string {
 		case *widget.Label:
 			out = append(out, w.Text)
 		case *widget.RichText:
-			out = append(out, w.String())
+			for _, seg := range w.Segments {
+				if ts, ok := seg.(*widget.TextSegment); ok {
+					out = append(out, ts.Text)
+				}
+			}
 		case *canvas.Text:
 			out = append(out, w.Text)
 		case *widget.Hyperlink:
@@ -174,18 +185,34 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	a.render()
 	all := texts(a.win.Content())
 	for _, want := range []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Tagged", "Skipped: duplicate",
-		"2 saved · 1 skipped · 0 ads", "Stop", "Player is running", "FLAC", "♥ Donate", "Skip"} {
+		"2 saved · 1 skipped · 0 ads", "Stop", "Player is running", "FLAC", "Skip"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
 		}
 	}
+	if contains(all, "♥ Donate") {
+		t.Error("Donate is in the app bar; About has it")
+	}
 	if a.tabs.Items[tabRecord].Text != "Record · 2" {
 		t.Errorf("Record tab title %q", a.tabs.Items[tabRecord].Text)
+	}
+	r := a.screens[tabRecord].(*recordScreen)
+	if r.clear.Disabled() {
+		t.Error("Clear list is disabled with rows in the list")
 	}
 	if a.action.Text != "Stop" || a.action.Importance != widget.DangerImportance {
 		t.Errorf("app bar action %q", a.action.Text)
 	}
 	snapshot(t, a, "record")
+
+	test.Tap(r.clear)
+	a.render()
+	if s := m.Snapshot(); len(s.Rows) != 0 || s.Current == nil {
+		t.Errorf("after Clear list: %d rows, current %v", len(s.Rows), s.Current)
+	}
+	if !r.clear.Disabled() || !contains(texts(a.win.Content()), "No files yet") {
+		t.Error("the cleared list does not say it is empty")
+	}
 }
 
 func TestWaitingOffersToRestartTheTrack(t *testing.T) {
@@ -224,9 +251,23 @@ func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	}
 	snapshot(t, a, "idle")
 
-	// A failing check sends the user to the diagnostics.
+	// A player that is not running is offered to open, not diagnosed.
+	down := info()
+	down.Checks[1].OK = false
+	m.SetInfo(down)
+	a.render()
+	if all := texts(a.win.Content()); !contains(all, "Open Player") || contains(all, "Open diagnostics") {
+		t.Errorf("player not running: %v", all)
+	}
+	// It starts: the check follows the target's state, and the offer goes.
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 99}))
+	a.render()
+	if all := texts(a.win.Content()); contains(all, "Open Player") || !checkOK(m.Snapshot().Info.Checks, "player running") {
+		t.Errorf("player started: %v", all)
+	}
+	// Any other failing check sends the user to the diagnostics.
 	failing := info()
-	failing.Checks[1].OK = false
+	failing.Checks[2].OK = false
 	m.SetInfo(failing)
 	a.render()
 	if !contains(texts(a.win.Content()), "Open diagnostics") {
@@ -303,7 +344,7 @@ func TestOtherScreensRender(t *testing.T) {
 	a.showTab(tabAbout)
 	a.render()
 	all = texts(a.win.Content())
-	for _, want := range []string{"recorder v2.0.0-alpha on darwin/arm64", "Source code on GitHub", "Project page", "Check for updates"} {
+	for _, want := range []string{"recorder v2.0.0-alpha on darwin/arm64", "Source code on GitHub", "Project page", "Check for updates", "♥ Donate"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the about screen", want)
 		}
@@ -338,6 +379,33 @@ func TestLibraryRescansWhenShown(t *testing.T) {
 	}
 }
 
+func TestThemeFollowsTheSetting(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["app.theme"] = "light"
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.render()
+	th := a.fa.Settings().Theme()
+	// The green replaces the blue, whatever variant the OS asks for.
+	if got := th.Color(theme.ColorNamePrimary, theme.VariantDark); got != greenLight {
+		t.Errorf("light theme primary = %v", got)
+	}
+	values["app.theme"] = "dark"
+	m.SetSettings(values)
+	a.render()
+	if got := a.fa.Settings().Theme().Color(theme.ColorNamePrimary, theme.VariantLight); got != greenDark {
+		t.Errorf("dark theme primary = %v", got)
+	}
+	values["app.theme"] = "system"
+	m.SetSettings(values)
+	a.render()
+	if got := a.fa.Settings().Theme().Color(theme.ColorNamePrimary, theme.VariantLight); got != greenLight {
+		t.Errorf("system theme on a light OS = %v", got)
+	}
+}
+
 func TestNewerVersion(t *testing.T) {
 	cases := []struct {
 		latest, current string
@@ -346,7 +414,11 @@ func TestNewerVersion(t *testing.T) {
 		{"v2.0.0", "v2.0.0-alpha+f5dd96e", true},
 		{"v2.0.1", "v2.0.0", true},
 		{"v2.0.0", "v2.0.0", false},
-		{"v2.0.0-beta", "v2.0.0-alpha", false},
+		{"v2.0.0-beta", "v2.0.0-alpha", true},
+		{"v2.0.0-alpha", "v2.0.0-beta", false},
+		{"v2.0.0-alpha.10", "v2.0.0-alpha.9", true},
+		{"v2.0.0-alpha.1", "v2.0.0-alpha", true},
+		{"v2.0.0-alpha", "v2.0.0-alpha+f5dd96e", false},
 		{"1.12", "v2.0.0-alpha", false},
 		{"", "v2.0.0", false},
 	}
@@ -460,6 +532,21 @@ func TestButtonsSendActions(t *testing.T) {
 	if len(sets) != 2 || sets[1]["output.template"] != "{title}" {
 		t.Fatalf("settings.set calls %v", sets)
 	}
+
+	// Quitting the app stops the recorder too.
+	a.stopDaemon()
+	waitCall(t, core, proto.MethodCoreShutdown)
+}
+
+func TestQuitWhileRecordingAsksFirst(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	a.render()
+	a.quit()
+	top := a.win.Canvas().Overlays().Top()
+	if top == nil || !contains(texts(top), "Quit Spytify?") {
+		t.Fatal("quitting during a recording did not ask")
+	}
 }
 
 func waitSets(t *testing.T, c *recordingCore, n int) {
@@ -518,4 +605,69 @@ func buttons(o fyne.CanvasObject, text string) []*widget.Button {
 	}
 	walk(o)
 	return out
+}
+
+func TestLatestReleaseCountsPreReleases(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `[{"tag_name":"v2.1.0","html_url":"https://x/draft","draft":true},
+			{"tag_name":"v2.0.0-alpha.2","html_url":"https://x/a2","draft":false,"prerelease":true},
+			{"tag_name":"v2.0.0-alpha.1","html_url":"https://x/a1","draft":false,"prerelease":true}]`)
+	}))
+	defer srv.Close()
+	defer func(u string) { releasesURL = u }(releasesURL)
+	releasesURL = srv.URL
+	tag, page, err := latestRelease(context.Background())
+	if err != nil || tag != "v2.0.0-alpha.2" || page != "https://x/a2" {
+		t.Fatalf("latest = %q %q %v", tag, page, err)
+	}
+	if !newer(tag, "v2.0.0-alpha.1+f5dd96e") {
+		t.Fatal("alpha.2 is not newer than alpha.1")
+	}
+}
+
+func TestLibraryShowsEmbeddedCovers(t *testing.T) {
+	ff, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	var picture bytes.Buffer
+	if err := png.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	cover := filepath.Join(t.TempDir(), "cover.png")
+	if err := os.WriteFile(cover, picture.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	track := filepath.Join(dir, "Artist - Song.flac")
+	cmd := exec.Command(ff, "-v", "error", "-nostdin", "-f", "lavfi", "-t", "0.5", "-i", "anullsrc", "-i", cover,
+		"-map", "0:a", "-map", "1:v", "-c:a", "flac", "-c:v", "copy", "-disposition:v", "attached_pic", track)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("make the FLAC: %v: %s", err, b)
+	}
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.showTab(tabLibrary)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	if len(lib.shown) != 1 {
+		t.Fatalf("%d files listed", len(lib.shown))
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if res := lib.cover(lib.shown[0]); res != nil {
+			if !bytes.Equal(res.Content(), picture.Bytes()) {
+				t.Fatal("the row shows another picture")
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the cover never loaded")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

@@ -163,3 +163,28 @@ func TestSortRows(t *testing.T) {
 		t.Fatal("SortRows changed its input")
 	}
 }
+
+func TestClearRowsSurvivesAReplay(t *testing.T) {
+	m := New()
+	events := []proto.Event{
+		ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}),
+		started(t, "s-001", "One"),
+		ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-001", Path: "/m/One.flac"}),
+		started(t, "s-002", "Two"),
+	}
+	m.Replay(events)
+	m.ClearRows()
+	s := m.Snapshot()
+	if len(s.Rows) != 0 || s.Current == nil || s.Current.Title != "Two" {
+		t.Fatalf("after clear: rows %+v current %+v", s.Rows, s.Current)
+	}
+	// A reconnect replays the same events: the cleared row stays gone.
+	m.Replay(events)
+	if s = m.Snapshot(); len(s.Rows) != 0 {
+		t.Fatalf("replay brought back %+v", s.Rows)
+	}
+	m.Apply(started(t, "s-003", "Three"))
+	if s = m.Snapshot(); len(s.Rows) != 1 || s.Rows[0].Title != "Two" {
+		t.Fatalf("a later track: rows %+v", s.Rows)
+	}
+}

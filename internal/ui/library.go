@@ -1,17 +1,23 @@
 package ui
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/ui/model"
 )
@@ -39,10 +45,15 @@ type libraryScreen struct {
 	folder string
 	all    []libraryFile
 	shown  []libraryFile
+
+	covers *covers
+	ffOnce sync.Once
+	ff     *encode.FFmpeg
 }
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
+	l.covers = newCovers(func() { fyne.Do(l.list.Refresh) })
 	l.search = widget.NewEntry()
 	l.search.SetPlaceHolder("Search artist, title or album")
 	l.search.OnChanged = func(string) { l.filter() }
@@ -54,13 +65,13 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.list = widget.NewList(
 		func() int { return len(l.shown) },
 		func() fyne.CanvasObject {
-			name := widget.NewLabelWithStyle("Name", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-			name.Truncation = fyne.TextTruncateEllipsis
-			sub := clipped("Folder")
-			return container.NewBorder(nil, nil, nil, container.NewHBox(
+			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
+			img.FillMode = canvas.ImageFillContain
+			img.SetMinSize(fyne.NewSize(40, 40))
+			return container.NewBorder(nil, nil, img, container.NewHBox(
 				&widget.Button{Icon: theme.SearchIcon(), Importance: widget.LowImportance},
 				&widget.Button{Icon: theme.MediaPlayIcon(), Importance: widget.LowImportance}),
-				container.NewVBox(name, sub))
+				rowText())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.shown) {
@@ -68,16 +79,23 @@ func newLibraryScreen(a *App) *libraryScreen {
 			}
 			f := l.shown[id]
 			box := o.(*fyne.Container)
-			text := box.Objects[0].(*fyne.Container)
-			buttons := box.Objects[1].(*fyne.Container)
-			text.Objects[0].(*widget.Label).SetText(strings.TrimSuffix(filepath.Base(f.rel), filepath.Ext(f.rel)))
-			sub := filepath.Dir(f.rel)
-			if sub == "." {
-				sub = ""
+			// Border layout: center first, then the leading and trailing parts.
+			text := box.Objects[0].(*widget.RichText)
+			img := box.Objects[1].(*canvas.Image)
+			buttons := box.Objects[2].(*fyne.Container)
+			if res := l.cover(f); res != nil {
+				setImage(img, res)
 			} else {
-				sub += " · "
+				setImage(img, theme.MediaMusicIcon())
 			}
-			setCaption(text.Objects[1].(*widget.RichText), sub+strings.ToUpper(strings.TrimPrefix(filepath.Ext(f.rel), "."))+" · "+fmtBytes(f.size)+" · "+f.modTime.Format("2006-01-02 15:04"))
+			folder := filepath.Dir(f.rel)
+			if folder == "." {
+				folder = ""
+			} else {
+				folder += " · "
+			}
+			setRowText(text, strings.TrimSuffix(filepath.Base(f.rel), filepath.Ext(f.rel)),
+				folder+strings.ToUpper(strings.TrimPrefix(filepath.Ext(f.rel), "."))+" · "+fmtBytes(f.size)+" · "+f.modTime.Format("2006-01-02 15:04"))
 			path := f.path
 			buttons.Objects[0].(*widget.Button).OnTapped = func() { _ = reveal(path) }
 			buttons.Objects[1].(*widget.Button).OnTapped = func() { _ = openPath(path) }
@@ -89,6 +107,33 @@ func newLibraryScreen(a *App) *libraryScreen {
 	top := container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search)
 	l.root = container.NewBorder(top, container.NewPadded(l.count), nil, nil, container.NewStack(l.list, l.empty))
 	return l
+}
+
+// cover is a file's art: the picture embedded in it, or for WAV, which has
+// no tags, the cover URL in the .json beside it. nil while it loads.
+func (l *libraryScreen) cover(f libraryFile) fyne.Resource {
+	if strings.EqualFold(filepath.Ext(f.path), ".wav") {
+		var side struct {
+			CoverURL string `json:"cover_url"`
+		}
+		if b, err := os.ReadFile(f.path + ".json"); err == nil && json.Unmarshal(b, &side) == nil {
+			return l.covers.get(side.CoverURL)
+		}
+		return nil
+	}
+	l.ffOnce.Do(func() {
+		name := os.Getenv("SPYTIFY_FFMPEG")
+		if name == "" {
+			name = "ffmpeg"
+		}
+		l.ff, _ = encode.Find(name)
+	})
+	if l.ff == nil {
+		return nil
+	}
+	key := fmt.Sprintf("%s\x00%d\x00%d", f.path, f.size, f.modTime.UnixNano())
+	path := f.path
+	return l.covers.load(key, func(ctx context.Context) ([]byte, error) { return l.ff.Cover(ctx, path) })
 }
 
 func (l *libraryScreen) content() fyne.CanvasObject { return l.root }

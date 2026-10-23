@@ -23,10 +23,12 @@ type recordScreen struct {
 	app  *App
 	root *fyne.Container
 
-	idle      *fyne.Container
-	idleText  *widget.Label
-	attention *fyne.Container
-	session   *fyne.Container
+	idle       *fyne.Container
+	idleText   *widget.Label
+	attention  *fyne.Container
+	openPlayer *widget.Button
+	diagnose   *widget.Button
+	session    *fyne.Container
 
 	card     *fyne.Container
 	cover    *canvas.Image
@@ -41,9 +43,16 @@ type recordScreen struct {
 	waiting *widget.Label
 	restart *widget.Button
 
-	rows   []model.Row
-	list   *widget.List
+	rows []model.Row
+	list *widget.List
+	// shape is which parts the screen last showed; it is laid out again
+	// only when that changes.
+	shape string
+	// shown is what the list last drew; refreshing it on every level event
+	// would clear the row the pointer hovers.
+	shown  string
 	noRows fyne.CanvasObject
+	clear  *widget.Button
 	totals *widget.RichText
 	folder string
 }
@@ -60,9 +69,12 @@ func newRecordScreen(a *App) *recordScreen {
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	hint.Wrapping = fyne.TextWrapWord
 	hint.SizeName = theme.SizeNameCaptionText
-	diagnose := widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
-	diagnose.Importance = widget.WarningImportance
-	r.attention = container.NewCenter(diagnose)
+	r.diagnose = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
+	r.diagnose.Importance = widget.WarningImportance
+	diagnose := r.diagnose
+	r.openPlayer = widget.NewButtonWithIcon("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
+	r.openPlayer.Importance = widget.HighImportance
+	r.attention = container.NewCenter(container.NewHBox(r.openPlayer, diagnose))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
 		widget.NewLabelWithStyle("Ready to record", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
@@ -104,16 +116,13 @@ func newRecordScreen(a *App) *recordScreen {
 			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
 			img.FillMode = canvas.ImageFillContain
 			img.SetMinSize(fyne.NewSize(40, 40))
-			title := widget.NewLabelWithStyle("Title", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-			title.Truncation = fyne.TextTruncateEllipsis
-			chip := widget.NewLabel("Skipped: duplicate")
-			chip.SizeName = theme.SizeNameCaptionText
+			chip := caption("Skipped: duplicate")
 			reveal := widget.NewButtonWithIcon("", theme.SearchIcon(), nil)
 			reveal.Importance = widget.LowImportance
 			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
 			return container.NewBorder(nil, nil, img, container.NewHBox(container.NewCenter(chip), container.NewCenter(reveal), container.NewCenter(play)),
-				container.NewVBox(title, clipped("Artist")))
+				rowText())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(r.rows) {
@@ -122,21 +131,21 @@ func newRecordScreen(a *App) *recordScreen {
 			row := r.rows[id]
 			// Border layout: center first, then the leading and trailing parts.
 			box := o.(*fyne.Container)
-			text := box.Objects[0].(*fyne.Container)
+			text := box.Objects[0].(*widget.RichText)
 			img := box.Objects[1].(*canvas.Image)
 			right := box.Objects[2].(*fyne.Container)
-			text.Objects[0].(*widget.Label).SetText(row.Title)
-			setCaption(text.Objects[1].(*widget.RichText), rowSubtitle(row))
+			setRowText(text, row.Title, rowSubtitle(row))
 			if res := a.covers.get(row.CoverURL); res != nil {
-				img.Resource = res
+				setImage(img, res)
 			} else {
-				img.Resource = theme.MediaMusicIcon()
+				setImage(img, theme.MediaMusicIcon())
 			}
-			img.Refresh()
-			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.Label)
-			chip.SetText(row.StatusText())
-			chip.Importance = chipImportance(row)
-			chip.Refresh()
+			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.RichText)
+			seg := chip.Segments[0].(*widget.TextSegment)
+			if c := chipColor(row); seg.Text != row.StatusText() || seg.Style.ColorName != c {
+				seg.Text, seg.Style.ColorName = row.StatusText(), c
+				chip.Refresh()
+			}
 			revealBtn := right.Objects[1].(*fyne.Container).Objects[0].(*widget.Button)
 			playBtn := right.Objects[2].(*fyne.Container).Objects[0].(*widget.Button)
 			if row.Path != "" && (row.Status == model.Saved || row.Status == model.Tagged) {
@@ -161,7 +170,9 @@ func newRecordScreen(a *App) *recordScreen {
 		}
 	})
 	openFolder.Importance = widget.LowImportance
-	footer := container.NewBorder(nil, nil, nil, openFolder, r.totals)
+	r.clear = widget.NewButtonWithIcon("Clear list", theme.ContentClearIcon(), a.m.ClearRows)
+	r.clear.Importance = widget.LowImportance
+	footer := container.NewBorder(nil, nil, nil, container.NewHBox(r.clear, openFolder), r.totals)
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
 	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow, widget.NewSeparator()), container.NewVBox(widget.NewSeparator(), footer), nil, nil,
 		container.NewStack(r.list, r.noRows))
@@ -185,14 +196,15 @@ func rowSubtitle(r model.Row) string {
 	return strings.Join(parts, " · ")
 }
 
-func chipImportance(r model.Row) widget.Importance {
+// chipColor is the status in a soft tone: the row's title is what matters.
+func chipColor(r model.Row) fyne.ThemeColorName {
 	switch r.Status {
 	case model.Tagged, model.Saved:
-		return widget.SuccessImportance
+		return colorSaved
 	case model.Skipped:
-		return widget.WarningImportance
+		return colorSkipped
 	}
-	return widget.MediumImportance
+	return theme.ColorNamePlaceHolder
 }
 
 func (r *recordScreen) content() fyne.CanvasObject { return r.root }
@@ -200,17 +212,20 @@ func (r *recordScreen) content() fyne.CanvasObject { return r.root }
 func (r *recordScreen) render(s model.State) {
 	r.folder, _ = s.Settings["output.dir"].(string)
 	r.folder = settings.ExpandHome(r.folder)
+	defer r.relayout()
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
 		player := s.Info.Target.Process
 		if player == "" {
 			player = "your player"
 		}
-		r.idleText.SetText(fmt.Sprintf("Press Record, then play music in %s. Each track becomes its own file in %s.", player, r.folder))
-		if failingChecks(s.Info.Checks) > 0 {
-			r.attention.Show()
-		} else {
-			r.attention.Hide()
-		}
+		setLabel(r.idleText, fmt.Sprintf("Press Record, then play music in %s. Each track becomes its own file in %s.", player, r.folder))
+		// A player that is not running is the usual failing check: offer
+		// to open it, and the diagnostics only for anything else.
+		down := !playerRunning(s)
+		r.openPlayer.SetText("Open " + player)
+		show(r.openPlayer, down)
+		show(r.diagnose, failingChecks(s.Info.Checks) > btoi(down))
+		show(r.attention, r.openPlayer.Visible() || r.diagnose.Visible())
 		r.idle.Show()
 		r.session.Hide()
 		return
@@ -221,52 +236,77 @@ func (r *recordScreen) render(s model.State) {
 	if c := s.Current; c != nil {
 		r.card.Show()
 		r.waitRow.Hide()
-		r.state.SetText(stateText(s.Session, c))
-		r.title.SetText(c.Title)
+		setLabel(r.state, stateText(s.Session, c))
+		setLabel(r.title, c.Title)
 		sub := c.Artist
 		if c.Album != "" {
 			sub += " · " + c.Album
 		}
 		setCaption(r.subtitle, sub)
-		elapsed := r.app.m.Elapsed(*c)
-		if c.LengthMs > 0 {
-			r.progress.SetValue(float64(elapsed.Milliseconds()) / float64(c.LengthMs))
-			setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds())+" / "+fmtDuration(c.LengthMs))
-		} else {
-			r.progress.SetValue(0)
-			setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds()))
-		}
-		v := (s.Level.RMSDBFS + 60) / 60
-		if v < 0 || s.Session != proto.StateRecording {
-			v = 0
-		}
-		r.level.SetValue(v)
 		if res := r.app.covers.get(c.CoverURL); res != nil {
-			r.cover.Resource = res
+			setImage(r.cover, res)
 		} else {
-			r.cover.Resource = theme.MediaMusicIcon()
+			setImage(r.cover, theme.MediaMusicIcon())
 		}
-		r.cover.Refresh()
 	} else {
 		r.card.Hide()
-		r.waiting.SetText(waitingText(s.Session))
-		if s.Session == proto.StateWaiting {
-			r.restart.Show()
-		} else {
-			r.restart.Hide()
-		}
+		setLabel(r.waiting, waitingText(s.Session))
+		show(r.restart, s.Session == proto.StateWaiting)
 		r.waitRow.Show()
 	}
+	r.renderLive(s.Current, s.Session, s.Level)
 
 	r.rows = s.Rows
-	r.list.Refresh()
+	if shown := fmt.Sprint(r.rows, r.app.covers.count()); shown != r.shown {
+		r.shown = shown
+		r.list.Refresh()
+	}
+	show(r.noRows, len(r.rows) == 0)
 	if len(r.rows) == 0 {
-		r.noRows.Show()
+		r.clear.Disable()
 	} else {
-		r.noRows.Hide()
+		r.clear.Enable()
 	}
 	t := s.Totals()
 	setCaption(r.totals, fmt.Sprintf("%d saved · %d skipped · %d ads · %s", t.Saved, t.Skipped, t.Ads, fmtBytes(t.Bytes)))
+}
+
+// renderLive moves the progress, the elapsed time and the meter, which the
+// level events refresh ten times a second without a full render.
+func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, level proto.LevelEvent) {
+	if c == nil {
+		return
+	}
+	elapsed := r.app.m.Elapsed(*c)
+	if c.LengthMs > 0 {
+		r.progress.SetValue(float64(elapsed.Milliseconds()) / float64(c.LengthMs))
+		setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds())+" / "+fmtDuration(c.LengthMs))
+	} else {
+		r.progress.SetValue(0)
+		setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds()))
+	}
+	v := (level.RMSDBFS + 60) / 60
+	if v < 0 || session != proto.StateRecording {
+		v = 0
+	}
+	r.level.SetValue(v)
+}
+
+// relayout lays the screen out again when a part appeared or went away.
+func (r *recordScreen) relayout() {
+	shape := fmt.Sprint(r.idle.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), r.waitRow.Visible(), r.restart.Visible(), r.noRows.Visible())
+	if shape != r.shape {
+		r.shape = shape
+		r.root.Refresh()
+	}
+}
+
+func show(o fyne.CanvasObject, visible bool) {
+	if visible {
+		o.Show()
+	} else {
+		o.Hide()
+	}
 }
 
 func stateText(st proto.SessionState, c *model.Row) string {

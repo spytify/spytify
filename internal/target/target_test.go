@@ -40,26 +40,28 @@ func TestValidateRequiresProcess(t *testing.T) {
 }
 
 func TestDefaultPlayerWhenUnset(t *testing.T) {
-	defer func(p, b string) { DefaultProcess, DefaultBundleID = p, b }(DefaultProcess, DefaultBundleID)
+	defer func(p string) { DefaultProcess = p }(DefaultProcess)
 	t.Setenv("SPYTIFY_TARGET_PROCESS", "x")
 	os.Unsetenv("SPYTIFY_TARGET_PROCESS")
 
-	DefaultProcess, DefaultBundleID = "", ""
+	DefaultProcess = ""
 	if err := Load().Validate(); !errors.Is(err, ErrNoTarget) {
 		t.Fatalf("a build without a default player: Validate() = %v", err)
 	}
-	DefaultProcess, DefaultBundleID = "Player", "org.example.player"
-	if err := Load().Validate(); err != nil {
+	DefaultProcess = "player"
+	env := Load()
+	if err := env.Validate(); err != nil {
 		t.Fatalf("Validate() = %v with the default player", err)
 	}
-	for goos, want := range map[string]Target{
-		"darwin":  {ProcessNames: []string{"Player"}, BundleID: "org.example.player"},
-		"linux":   {ProcessNames: []string{"Player"}},
-		"windows": {ProcessNames: []string{"Player"}},
-	} {
-		if got := withDefaultPlayer(Target{}, goos); !reflect.DeepEqual(got, want) {
-			t.Errorf("%s: %+v, want %+v", goos, got, want)
+	tg := env.Target
+	// One bare name matches every OS's form of the executable.
+	for _, name := range []string{"player", "Player", "Player.exe", "PLAYER.EXE", "Player.app", "/Applications/Player.app/Contents/MacOS/Player"} {
+		if !tg.Matches(name) {
+			t.Errorf("%q does not match the default player", name)
 		}
+	}
+	if got := tg.MPRISNames(); !reflect.DeepEqual(got, []string{"org.mpris.MediaPlayer2.player"}) {
+		t.Errorf("MPRIS names %v", got)
 	}
 }
 

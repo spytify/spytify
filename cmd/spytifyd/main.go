@@ -94,12 +94,18 @@ func run() int {
 		return 2
 	}
 
+	crashLog := filepath.Join(env.StateDir, "spytifyd.crash.log")
+	crashed := keepCrashes(crashLog)
 	log, err := core.NewLogger(*logPath, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spytifyd: log file:", err)
 		return 1
 	}
 	defer log.Close()
+	if crashed != "" {
+		log.Errorf("the previous run crashed: %s (trace in %s.1)", crashed, crashLog)
+		crashed = fmt.Sprintf("spytifyd crashed last time: %s; the trace is in %s.1", crashed, crashLog)
+	}
 
 	store, err := settings.Open(env.ConfigPath)
 	if err != nil {
@@ -116,7 +122,7 @@ func run() int {
 		backends = platform.Backends{Logf: log.Infof, TapHelper: env.TapHelper, MuteOutput: func() bool { return store.Values().Bool("player.mute_output") }}
 	}
 
-	c := core.New(core.Options{Env: env, Store: store, Log: log, Backends: backends, FindProcess: findProcess})
+	c := core.New(core.Options{Env: env, Store: store, Log: log, Crashed: crashed, Backends: backends, FindProcess: findProcess})
 	events, closeEvents, err := eventSink(*eventsPath)
 	if err != nil {
 		log.Errorf("--events: %v", err)

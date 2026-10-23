@@ -9,15 +9,19 @@ import (
 	_ "embed"
 	"fmt"
 	"net/url"
+	"os"
+	"runtime"
 	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/service"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -28,6 +32,12 @@ var logoPNG []byte
 
 // Logo is the app and tray icon.
 var Logo = fyne.NewStaticResource("logo.png", logoPNG)
+
+//go:embed assets/logo-wordmark.png
+var wordmarkPNG []byte
+
+// Wordmark is the logo with the name beside it, for the About screen.
+var Wordmark = fyne.NewStaticResource("logo-wordmark.png", wordmarkPNG)
 
 // Options are what the UI needs from its environment.
 type Options struct {
@@ -79,15 +89,22 @@ type App struct {
 	bar     *fyne.Container
 	covers  *covers
 	checked bool
+	// themeMode is the app.theme applied: system, light or dark.
+	themeMode string
+	// replaced is set once a recorder of another build was restarted.
+	replaced bool
 
-	pending sync.Mutex
-	queued  bool
-	last    model.State
+	pending     sync.Mutex
+	queued      bool
+	levelQueued bool
+	barKey      string
+	last        model.State
 }
 
 // New builds the window; call ShowAndRun to start.
 func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a := &App{fa: fa, m: m, link: l, opts: opts}
+	a.applyTheme("system")
 	a.covers = newCovers(a.scheduleRender)
 	a.win = fa.NewWindow("Spytify")
 	a.win.SetIcon(Logo)
@@ -117,13 +134,11 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.update = widget.NewButtonWithIcon("", theme.DownloadIcon(), nil)
 	a.update.Importance = widget.SuccessImportance
 	a.update.Hide()
-	donate := widget.NewButton("♥ Donate", func() { a.openURL(donateURL) })
-	donate.Importance = widget.LowImportance
 	a.action = widget.NewButtonWithIcon("Record", theme.MediaRecordIcon(), a.toggleRecording)
 	a.action.Importance = widget.HighImportance
 	brand := container.NewHBox(widget.NewIcon(Logo), widget.NewLabelWithStyle("Spytify", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
-	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, donate, a.action))
+	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.action))
 
 	a.banner = widget.NewLabel("")
 	a.banner.Wrapping = fyne.TextWrapWord
@@ -154,9 +169,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 			a.win.Hide()
 			return
 		}
-		a.fa.Quit()
+		a.quit()
 	})
+	// Every way out (this window, the tray's Quit, Cmd+Q) ends here.
+	fa.Lifecycle().SetOnStopped(a.stopDaemon)
 	m.OnChange(a.scheduleRender)
+	m.OnLevel(a.scheduleLevel)
 	a.render()
 	return a
 }
@@ -172,6 +190,89 @@ func (a *App) ShowAndRun() {
 }
 
 // showTab switches to a tab, from a button elsewhere in the window.
+// playerRunning is the latest word on the player: the target.state events,
+// or core.info's check until the first one.
+func playerRunning(s model.State) bool {
+	return (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running"))
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// launchPlayer asks the recorder to open the player.
+func (a *App) launchPlayer() {
+	a.do(proto.MethodPlayerLaunch, nil, nil)
+}
+
+// replaceOtherBuild restarts a recorder of another build, once and only
+// while it records nothing: an app and a daemon of different builds do not
+// agree on their settings and features.
+func (a *App) replaceOtherBuild(s model.State) {
+	if a.replaced || !s.HaveInfo || s.Info.Version == proto.Version || s.Recording() || a.opts.ManualRender {
+		return
+	}
+	a.replaced = true
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil) == nil {
+			time.Sleep(time.Second)
+		}
+		if err := a.link.StartDaemon(); err != nil {
+			fyne.Do(func() { a.showError(err) })
+		}
+	}()
+}
+
+// quit closes Spytify, the recorder included; a recording in progress is
+// confirmed first, since its current track is not kept.
+func (a *App) quit() {
+	if !a.last.Recording() {
+		a.fa.Quit()
+		return
+	}
+	dialog.ShowConfirm("Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
+		if ok {
+			a.fa.Quit()
+		}
+	}, a.win)
+}
+
+// stopDaemon shuts spytifyd down as the app quits, unless it runs as a
+// login service (spytify-cli service install), which keeps it alive.
+func (a *App) stopDaemon() {
+	if daemonIsService() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil)
+}
+
+// daemonIsService reports whether spytifyd is installed as a login service.
+func daemonIsService() bool {
+	daemon, err := link.FindDaemon()
+	if err != nil {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	p, err := service.For(runtime.GOOS, daemon, home, os.Getuid())
+	return err == nil && service.Installed(p)
+}
+
+// applyTheme switches to the Spytify theme in the given app.theme mode.
+func (a *App) applyTheme(mode string) {
+	a.themeMode = mode
+	a.fa.Settings().SetTheme(spytifyTheme{mode: mode})
+}
+
 func (a *App) showTab(i int) {
 	a.tabs.SelectIndex(i)
 	a.renderCenter(a.last)
@@ -202,7 +303,7 @@ func (a *App) render() {
 	s := a.m.Snapshot()
 	a.last = s
 	connected := s.Conn == model.Connected
-	running := (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running"))
+	running := playerRunning(s)
 	switch {
 	case !connected:
 		a.dot.Importance = widget.LowImportance
@@ -217,7 +318,6 @@ func (a *App) render() {
 		a.dot.Importance = widget.WarningImportance
 		a.status.SetText(s.Info.Target.Process + " is not running")
 	}
-	a.dot.Refresh()
 	setCaption(a.output, outputText(s.Settings))
 	switch {
 	case !connected:
@@ -243,6 +343,12 @@ func (a *App) render() {
 	if n := s.Totals().Saved; s.Recording() && n > 0 {
 		record = fmt.Sprintf("Record · %d", n)
 	}
+	if connected {
+		a.replaceOtherBuild(s)
+	}
+	if mode, _ := s.Settings["app.theme"].(string); mode != "" && mode != a.themeMode {
+		a.applyTheme(mode)
+	}
 	if a.tabs.Items[tabRecord].Text != record {
 		a.tabs.Items[tabRecord].Text = record
 		a.tabs.Refresh()
@@ -255,8 +361,12 @@ func (a *App) render() {
 			}
 		}
 	}
-	// Texts changed width: lay the bar out again.
-	a.bar.Refresh()
+	// Texts changed width: lay the bar out again, only then.
+	if key := fmt.Sprint(a.dot.Importance, a.status.Text, a.output.String(), a.action.Text, a.update.Visible()); key != a.barKey {
+		a.barKey = key
+		a.dot.Refresh()
+		a.bar.Refresh()
+	}
 	a.renderCenter(s)
 }
 
@@ -280,10 +390,36 @@ func (a *App) renderCenter(s model.State) {
 	}
 	if len(a.center.Objects) != 1 || a.center.Objects[0] != a.tabs {
 		a.center.Objects = []fyne.CanvasObject{a.tabs}
+		a.center.Refresh()
 	}
 	a.screens[a.tabs.SelectedIndex()].render(s)
-	// Rows and lists changed size: lay the screen out again.
-	a.center.Refresh()
+}
+
+// scheduleLevel redraws the meter and the progress, at most every 100 ms.
+func (a *App) scheduleLevel() {
+	if a.opts.ManualRender {
+		return
+	}
+	a.pending.Lock()
+	if a.levelQueued {
+		a.pending.Unlock()
+		return
+	}
+	a.levelQueued = true
+	a.pending.Unlock()
+	time.AfterFunc(100*time.Millisecond, func() {
+		a.pending.Lock()
+		a.levelQueued = false
+		a.pending.Unlock()
+		fyne.Do(a.renderLevel)
+	})
+}
+
+func (a *App) renderLevel() {
+	if a.tabs.SelectedIndex() != tabRecord {
+		return
+	}
+	a.screens[tabRecord].(*recordScreen).renderLive(a.m.Live())
 }
 
 func (a *App) checkUpdate() {
