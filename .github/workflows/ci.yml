@@ -1,0 +1,80 @@
+name: ci
+
+on:
+  push:
+    branches: [master, dev, "v2-*"]
+    tags: ["v2.*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install ffmpeg (and the UI's OpenGL and X11 headers on Linux)
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols; else brew install ffmpeg; fi
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - name: go vet
+        run: go vet ./...
+      - name: Schema is generated
+        run: go generate ./pkg/proto && git diff --exit-code pkg/proto/schema.json
+      - name: Unit, scenario, UI and end-to-end tests
+        run: go test -race ./...
+      - name: Desktop UI builds
+        run: go build -o /dev/null ./cmd/spytify-ui
+
+  cross-build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # The desktop UI needs cgo; the unit and macOS jobs build it natively.
+      - run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build ./cmd/spytifyd ./cmd/spytify-cli ./cmd/fakeplayer
+
+  macos-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Spytify.app and universal spytifyd, spytify-cli, spytify-tap
+        run: scripts/build-macos.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spytify-macos
+          path: dist/
+
+  # Gate 1 of M1: the fake player recorded through PipeWire and MPRIS, every
+  # file matched sample by sample against its source.
+  pipewire-gate:
+    runs-on: ubuntu-24.04
+    container: golang:1.26-trixie
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PipeWire, WirePlumber, D-Bus and ffmpeg
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq pipewire pipewire-bin pipewire-pulse wireplumber dbus dbus-bin ffmpeg pulseaudio-utils procps python3
+      - name: Record the eight timelines
+        run: |
+          . scripts/pipewire-session.sh
+          go test -tags integration -v -timeout 20m ./test/integration/

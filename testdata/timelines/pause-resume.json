@@ -1,0 +1,19 @@
+{
+  "name": "pause-resume",
+  "seed": 6,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "pause_silence": true,
+  "items": [
+    {"artist": "Paused Artist", "title": "Interrupted", "album": "Breaks", "length_ms": 8000, "gap_ms": 1000, "pause_at_ms": 3000, "pause_ms": 5000},
+    {"artist": "Paused Artist", "title": "Told Late", "album": "Breaks", "length_ms": 6000, "gap_ms": 1000, "pause_at_ms": 2500, "pause_ms": 3000, "pause_notify_ms": 300, "desync_ms": -200},
+    {"artist": "Paused Artist", "title": "Told Early", "album": "Breaks", "length_ms": 6000, "gap_ms": 1000, "pause_at_ms": 3500, "pause_ms": 2000, "pause_notify_ms": -150, "desync_ms": 250},
+    {"artist": "Paused Artist", "title": "Afterwards", "album": "Breaks", "length_ms": 4000, "gap_ms": 1000}
+  ],
+  "expect": [
+    {"item": 0, "saved": true},
+    {"item": 1, "saved": true},
+    {"item": 2, "saved": true},
+    {"item": 3, "saved": true}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "duplicate",
+  "seed": 7,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "items": [
+    {"artist": "Dup Artist", "title": "Same Song", "album": "Original", "length_ms": 5000, "gap_ms": 800},
+    {"artist": "Dup Artist", "title": "Same Song", "album": "Original", "length_ms": 5000, "gap_ms": 1000}
+  ],
+  "variants": [
+    {"name": "skip", "settings": {"recorder.duplicates": "skip"},
+     "expect": [{"item": 0, "saved": true}, {"item": 1, "saved": false, "reason": "duplicate"}], "files": 1},
+    {"name": "suffix", "settings": {"recorder.duplicates": "suffix"},
+     "expect": [{"item": 0, "saved": true}, {"item": 1, "saved": true}], "files": 2},
+    {"name": "overwrite", "settings": {"recorder.duplicates": "overwrite"},
+     "expect": [{"item": 0, "saved": true}, {"item": 1, "saved": true}], "files": 1}
+  ]
+}

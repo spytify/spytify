@@ -1,0 +1,680 @@
+{
+  "$defs": {
+    "Check": {
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "ok"
+      ],
+      "type": "object"
+    },
+    "CoreInfoResult": {
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/Check"
+          },
+          "type": "array"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "integer"
+        },
+        "target": {
+          "$ref": "#/$defs/TargetInfo"
+        },
+        "version": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "checks",
+        "platform",
+        "protocol",
+        "target",
+        "version"
+      ],
+      "type": "object"
+    },
+    "Counters": {
+      "properties": {
+        "ads": {
+          "type": "integer"
+        },
+        "bytes": {
+          "type": "integer"
+        },
+        "overruns": {
+          "type": "integer"
+        },
+        "recorded": {
+          "type": "integer"
+        },
+        "skipped": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ads",
+        "bytes",
+        "overruns",
+        "recorded",
+        "skipped"
+      ],
+      "type": "object"
+    },
+    "Empty": {
+      "properties": {},
+      "type": "object"
+    },
+    "ErrorEvent": {
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "fatal": {
+          "type": "boolean"
+        },
+        "msg": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "fatal",
+        "msg"
+      ],
+      "type": "object"
+    },
+    "Event": {
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "params": {}
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "EventsRecentResult": {
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/Event"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "events"
+      ],
+      "type": "object"
+    },
+    "LevelEvent": {
+      "properties": {
+        "peak_dbfs": {
+          "type": "number"
+        },
+        "rms_dbfs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "peak_dbfs",
+        "rms_dbfs"
+      ],
+      "type": "object"
+    },
+    "LogEvent": {
+      "properties": {
+        "level": {
+          "type": "string"
+        },
+        "msg": {
+          "type": "string"
+        },
+        "ts": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "msg",
+        "ts"
+      ],
+      "type": "object"
+    },
+    "LogTailParams": {
+      "properties": {
+        "lines": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lines"
+      ],
+      "type": "object"
+    },
+    "LogTailResult": {
+      "properties": {
+        "lines": {
+          "items": {
+            "$ref": "#/$defs/LogEvent"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "lines"
+      ],
+      "type": "object"
+    },
+    "PlayerControlParams": {
+      "properties": {
+        "cmd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cmd"
+      ],
+      "type": "object"
+    },
+    "RetagParams": {
+      "properties": {
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "RetagResult": {
+      "properties": {
+        "queued": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "queued"
+      ],
+      "type": "object"
+    },
+    "SessionStartParams": {
+      "properties": {
+        "single_track": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "SessionStartResult": {
+      "properties": {
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "SessionStateEvent": {
+      "properties": {
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
+    "SessionStatusResult": {
+      "properties": {
+        "counters": {
+          "$ref": "#/$defs/Counters"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "track": {
+          "$ref": "#/$defs/Track"
+        }
+      },
+      "required": [
+        "counters",
+        "state"
+      ],
+      "type": "object"
+    },
+    "SessionStopParams": {
+      "properties": {
+        "now": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "SessionStopResult": {
+      "properties": {
+        "recorded": {
+          "type": "integer"
+        },
+        "skipped": {
+          "type": "integer"
+        },
+        "stopping": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "recorded",
+        "skipped"
+      ],
+      "type": "object"
+    },
+    "SettingsGetParams": {
+      "properties": {
+        "keys": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "SettingsResetParams": {
+      "properties": {
+        "prefix": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SettingsSetParams": {
+      "properties": {
+        "values": {
+          "additionalProperties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "type": "object"
+    },
+    "SettingsSetResult": {
+      "properties": {
+        "applied": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rejected": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "applied",
+        "rejected"
+      ],
+      "type": "object"
+    },
+    "SettingsValues": {
+      "properties": {
+        "values": {
+          "additionalProperties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "type": "object"
+    },
+    "SpotifyConnectResult": {
+      "properties": {
+        "auth_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "auth_url"
+      ],
+      "type": "object"
+    },
+    "TargetInfo": {
+      "properties": {
+        "bundle_id": {
+          "type": "string"
+        },
+        "launch": {
+          "type": "string"
+        },
+        "mpris": {
+          "type": "string"
+        },
+        "process": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "process"
+      ],
+      "type": "object"
+    },
+    "TargetStateEvent": {
+      "properties": {
+        "pid": {
+          "type": "integer"
+        },
+        "running": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "running"
+      ],
+      "type": "object"
+    },
+    "Track": {
+      "properties": {
+        "album": {
+          "type": "string"
+        },
+        "artist": {
+          "type": "string"
+        },
+        "cover_url": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "length_ms": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artist",
+        "id",
+        "length_ms",
+        "title"
+      ],
+      "type": "object"
+    },
+    "TrackFinishedEvent": {
+      "properties": {
+        "bytes": {
+          "type": "integer"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "tagged": {
+          "type": "boolean"
+        },
+        "tagged_by": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bytes",
+        "duration_ms",
+        "id",
+        "path",
+        "tagged"
+      ],
+      "type": "object"
+    },
+    "TrackSkippedEvent": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "TrackStartedEvent": {
+      "properties": {
+        "album": {
+          "type": "string"
+        },
+        "artist": {
+          "type": "string"
+        },
+        "cover_url": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "length_ms": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artist",
+        "id",
+        "length_ms",
+        "title"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Newline-delimited JSON-RPC 2.0. Actions are requests, events are notifications.",
+  "events": {
+    "error": {
+      "description": "capture, encoder or disk failure",
+      "params": {
+        "$ref": "#/$defs/ErrorEvent"
+      }
+    },
+    "level": {
+      "description": "10 Hz while recording",
+      "params": {
+        "$ref": "#/$defs/LevelEvent"
+      }
+    },
+    "log": {
+      "description": "each log line at or above app.log_level",
+      "params": {
+        "$ref": "#/$defs/LogEvent"
+      }
+    },
+    "session.state": {
+      "description": "every transition",
+      "params": {
+        "$ref": "#/$defs/SessionStateEvent"
+      }
+    },
+    "settings.changed": {
+      "description": "after any successful settings.set or settings.reset",
+      "params": {
+        "$ref": "#/$defs/SettingsValues"
+      }
+    },
+    "target.state": {
+      "description": "player process appears or exits",
+      "params": {
+        "$ref": "#/$defs/TargetStateEvent"
+      }
+    },
+    "track.finished": {
+      "description": "file closed and tagged",
+      "params": {
+        "$ref": "#/$defs/TrackFinishedEvent"
+      }
+    },
+    "track.skipped": {
+      "description": "decision made: duplicate, too_short, ad, incomplete",
+      "params": {
+        "$ref": "#/$defs/TrackSkippedEvent"
+      }
+    },
+    "track.started": {
+      "description": "boundary committed",
+      "params": {
+        "$ref": "#/$defs/TrackStartedEvent"
+      }
+    }
+  },
+  "methods": {
+    "core.info": {
+      "description": "versions, resolved target and capability checks; first call on connect",
+      "result": {
+        "$ref": "#/$defs/CoreInfoResult"
+      }
+    },
+    "core.shutdown": {
+      "description": "stops the session first",
+      "result": {
+        "$ref": "#/$defs/Empty"
+      }
+    },
+    "events.recent": {
+      "description": "the last 200 events, for a client that connects mid-session",
+      "result": {
+        "$ref": "#/$defs/EventsRecentResult"
+      }
+    },
+    "log.tail": {
+      "description": "last N log lines",
+      "params": {
+        "$ref": "#/$defs/LogTailParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LogTailResult"
+      }
+    },
+    "player.control": {
+      "description": "play, pause, next, previous, restart (from 0:00) through the player's local interface",
+      "params": {
+        "$ref": "#/$defs/PlayerControlParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Empty"
+      }
+    },
+    "session.start": {
+      "description": "fails if the target process is not running or ffmpeg is missing",
+      "params": {
+        "$ref": "#/$defs/SessionStartParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionStartResult"
+      }
+    },
+    "session.status": {
+      "description": "snapshot for late-joining clients",
+      "result": {
+        "$ref": "#/$defs/SessionStatusResult"
+      }
+    },
+    "session.stop": {
+      "description": "lets the current track finish when past recorder.min_seconds, unless now",
+      "params": {
+        "$ref": "#/$defs/SessionStopParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionStopResult"
+      }
+    },
+    "settings.get": {
+      "description": "secrets come back masked",
+      "params": {
+        "$ref": "#/$defs/SettingsGetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SettingsValues"
+      }
+    },
+    "settings.reset": {
+      "description": "back to defaults, all keys or those under a prefix",
+      "params": {
+        "$ref": "#/$defs/SettingsResetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Empty"
+      }
+    },
+    "settings.set": {
+      "description": "validated, persisted, then settings.changed fires",
+      "params": {
+        "$ref": "#/$defs/SettingsSetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SettingsSetResult"
+      }
+    },
+    "tags.retag": {
+      "description": "not available in the alpha",
+      "params": {
+        "$ref": "#/$defs/RetagParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RetagResult"
+      }
+    },
+    "tags.spotify.connect": {
+      "description": "starts the OAuth loopback listener on the redirect URI",
+      "result": {
+        "$ref": "#/$defs/SpotifyConnectResult"
+      }
+    }
+  },
+  "protocol": 1,
+  "title": "spytify messaging contract"
+}

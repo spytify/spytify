@@ -1,0 +1,312 @@
+// spytify-tap records the audio output of one application with a Core Audio
+// process tap (macOS 14.2 and later) and writes it to stdout: one header line
+//   SPYTIFY-TAP f32le <rate> <channels>
+// then interleaved 32-bit float frames. It is spytifyd's macOS counterpart of
+// pw-record. The processes to tap are matched by bundle id (or a bundle id
+// prefix), executable name, or parent process, so a player that plays from a
+// helper process is found too. When the set of matching processes or the tap
+// format changes, it exits with status 3 and spytifyd starts it again.
+//
+// Usage: spytify-tap [--bundle-id ID]... [--name NAME]... [--pid PID]...
+//                    [--mute] [--list]
+
+import AudioToolbox
+import CoreAudio
+import Darwin
+import Foundation
+
+let exitChanged: Int32 = 3
+let exitNoPermission: Int32 = 4
+
+struct Options {
+    var bundleIDs: [String] = []
+    var names: [String] = []
+    var pids: [pid_t] = []
+    var mute = false
+    var list = false
+}
+
+func parseOptions() -> Options {
+    var o = Options()
+    var args = CommandLine.arguments.dropFirst().makeIterator()
+    while let a = args.next() {
+        switch a {
+        case "--bundle-id": if let v = args.next() { o.bundleIDs.append(v) }
+        case "--name": if let v = args.next() { o.names.append(v) }
+        case "--pid": if let v = args.next(), let p = pid_t(v) { o.pids.append(p) }
+        case "--mute": o.mute = true
+        case "--list": o.list = true
+        default:
+            fputs("spytify-tap: unknown argument \(a)\n", stderr)
+            exit(2)
+        }
+    }
+    return o
+}
+
+func log(_ s: String) { fputs("spytify-tap: \(s)\n", stderr) }
+
+// MARK: - Core Audio property helpers
+
+func address(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
+    AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+}
+
+func objectList(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> [AudioObjectID] {
+    var addr = address(selector)
+    var size: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(object, &addr, 0, nil, &size) == noErr, size > 0 else { return [] }
+    var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+    guard AudioObjectGetPropertyData(object, &addr, 0, nil, &size, &ids) == noErr else { return [] }
+    return ids
+}
+
+func scalar<T: BitwiseCopyable>(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ initial: T) -> T? {
+    var addr = address(selector)
+    var value = initial
+    var size = UInt32(MemoryLayout<T>.size)
+    let status = withUnsafeMutableBytes(of: &value) { AudioObjectGetPropertyData(object, &addr, 0, nil, &size, $0.baseAddress!) }
+    return status == noErr ? value : nil
+}
+
+func string(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {
+    var addr = address(selector)
+    var value: Unmanaged<CFString>?
+    var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    guard AudioObjectGetPropertyData(object, &addr, 0, nil, &size, &value) == noErr, let v = value else { return nil }
+    return v.takeRetainedValue() as String
+}
+
+// MARK: - Process matching
+
+struct AudioProcess {
+    let object: AudioObjectID
+    let pid: pid_t
+    let bundleID: String
+    let name: String
+    let outputting: Bool
+}
+
+func processName(_ pid: pid_t) -> String {
+    var buf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+    if proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 {
+        return URL(fileURLWithPath: String(cString: buf)).lastPathComponent
+    }
+    return ""
+}
+
+func parent(_ pid: pid_t) -> pid_t {
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.size
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+    guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return 0 }
+    return info.kp_eproc.e_ppid
+}
+
+func audioProcesses() -> [AudioProcess] {
+    objectList(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyProcessObjectList).compactMap { obj in
+        guard let pid: pid_t = scalar(obj, kAudioProcessPropertyPID, pid_t(0)) else { return nil }
+        let running: UInt32 = scalar(obj, kAudioProcessPropertyIsRunningOutput, UInt32(0)) ?? 0
+        return AudioProcess(object: obj, pid: pid, bundleID: string(obj, kAudioProcessPropertyBundleID) ?? "",
+                            name: processName(pid), outputting: running != 0)
+    }
+}
+
+func normalized(_ s: String) -> String {
+    var n = s.lowercased()
+    for suffix in [".app", ".exe"] where n.hasSuffix(suffix) { n.removeLast(suffix.count) }
+    return n
+}
+
+let ownPID = getpid()
+
+func matches(_ p: AudioProcess, _ o: Options) -> Bool {
+    // The recorder is an audio client too; never tap it.
+    if p.pid == ownPID || ["spytify-tap", "spytifyd"].contains(p.name) { return false }
+    for id in o.bundleIDs where !id.isEmpty {
+        if p.bundleID == id || p.bundleID.hasPrefix(id + ".") { return true }
+    }
+    let names = o.names.map(normalized)
+    var pid = p.pid
+    for _ in 0..<16 where pid > 1 {
+        if o.pids.contains(pid) || names.contains(normalized(processName(pid))) { return true }
+        pid = parent(pid)
+    }
+    return false
+}
+
+// MARK: - Tap
+
+func defaultOutputUID() -> String? {
+    guard let dev: AudioObjectID = scalar(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultSystemOutputDevice, AudioObjectID(0)) else { return nil }
+    return string(dev, kAudioDevicePropertyDeviceUID)
+}
+
+final class Recorder {
+    let tapID: AudioObjectID
+    let aggregateID: AudioObjectID
+    var procID: AudioDeviceIOProcID?
+    let format: AudioStreamBasicDescription
+    let queue = DispatchQueue(label: "spytify-tap.io", qos: .userInitiated)
+    var interleaved = [Float]()
+
+    init(processes: [AudioObjectID], mute: Bool) throws {
+        let desc = CATapDescription(stereoMixdownOfProcesses: processes)
+        desc.uuid = UUID()
+        desc.name = "spytify-tap"
+        desc.isPrivate = true
+        desc.muteBehavior = mute ? .muted : .unmuted
+        var tap = AudioObjectID(0)
+        var status = AudioHardwareCreateProcessTap(desc, &tap)
+        guard status == noErr else { throw NSError(domain: "spytify-tap", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "AudioHardwareCreateProcessTap failed (\(status))"]) }
+        tapID = tap
+
+        guard let fmt: AudioStreamBasicDescription = scalar(tap, kAudioTapPropertyFormat, AudioStreamBasicDescription()) else {
+            AudioHardwareDestroyProcessTap(tap)
+            throw NSError(domain: "spytify-tap", code: 1, userInfo: [NSLocalizedDescriptionKey: "tap format unavailable"])
+        }
+        if fmt.mFormatID != kAudioFormatLinearPCM || fmt.mFormatFlags & kAudioFormatFlagIsFloat == 0 || fmt.mBitsPerChannel != 32 {
+            AudioHardwareDestroyProcessTap(tap)
+            throw NSError(domain: "spytify-tap", code: 1, userInfo: [NSLocalizedDescriptionKey: "unexpected tap format \(fmt)"])
+        }
+        format = fmt
+
+        var description: [String: Any] = [
+            kAudioAggregateDeviceNameKey: "spytify-tap",
+            kAudioAggregateDeviceUIDKey: "org.spytify.tap." + UUID().uuidString,
+            kAudioAggregateDeviceIsPrivateKey: true,
+            kAudioAggregateDeviceIsStackedKey: false,
+            kAudioAggregateDeviceTapAutoStartKey: true,
+            kAudioAggregateDeviceTapListKey: [[kAudioSubTapDriftCompensationKey: true, kAudioSubTapUIDKey: desc.uuid.uuidString]],
+        ]
+        if let out = defaultOutputUID() {
+            description[kAudioAggregateDeviceMainSubDeviceKey] = out
+            description[kAudioAggregateDeviceSubDeviceListKey] = [[kAudioSubDeviceUIDKey: out]]
+        }
+        var agg = AudioObjectID(0)
+        status = AudioHardwareCreateAggregateDevice(description as CFDictionary, &agg)
+        guard status == noErr else {
+            AudioHardwareDestroyProcessTap(tap)
+            throw NSError(domain: "spytify-tap", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "AudioHardwareCreateAggregateDevice failed (\(status))"])
+        }
+        aggregateID = agg
+    }
+
+    // Frames arrive at the aggregate device's rate, which follows the output
+    // device, not at the rate the tap format reports.
+    var rate: Float64 {
+        scalar(aggregateID, kAudioDevicePropertyNominalSampleRate, Float64(0)) ?? format.mSampleRate
+    }
+
+    func start() throws {
+        let channels = Int(format.mChannelsPerFrame)
+        let nonInterleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+        let stdout = FileHandle.standardOutput
+        let status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) { [self] _, input, _, _, _ in
+            let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
+            guard buffers.count > 0 else { return }
+            if !nonInterleaved {
+                // One buffer, already interleaved.
+                let b = buffers[0]
+                if let data = b.mData, b.mDataByteSize > 0 {
+                    stdout.write(Data(bytes: data, count: Int(b.mDataByteSize)))
+                }
+                return
+            }
+            let frames = Int(buffers[0].mDataByteSize) / MemoryLayout<Float>.size
+            if interleaved.count != frames * channels { interleaved = [Float](repeating: 0, count: frames * channels) }
+            for (c, b) in buffers.prefix(channels).enumerated() {
+                guard let p = b.mData?.assumingMemoryBound(to: Float.self) else { continue }
+                for i in 0..<frames { interleaved[i * channels + c] = p[i] }
+            }
+            interleaved.withUnsafeBytes { stdout.write(Data($0)) }
+        }
+        guard status == noErr, let proc = procID else { throw NSError(domain: "spytify-tap", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "AudioDeviceCreateIOProcIDWithBlock failed (\(status))"]) }
+        let header = "SPYTIFY-TAP f32le \(Int(rate)) \(channels)\n"
+        stdout.write(header.data(using: .utf8)!)
+        let started = AudioDeviceStart(aggregateID, proc)
+        guard started == noErr else { throw NSError(domain: "spytify-tap", code: Int(started), userInfo: [NSLocalizedDescriptionKey: "AudioDeviceStart failed (\(started))"]) }
+    }
+
+    func stop() {
+        if let proc = procID {
+            AudioDeviceStop(aggregateID, proc)
+            AudioDeviceDestroyIOProcID(aggregateID, proc)
+        }
+        AudioHardwareDestroyAggregateDevice(aggregateID)
+        AudioHardwareDestroyProcessTap(tapID)
+    }
+}
+
+// MARK: - Main
+
+let options = parseOptions()
+signal(SIGPIPE, SIG_IGN)
+
+// A command-line tool has no run loop for the HAL's notifications; without
+// this the process list it returns never changes.
+do {
+    var addr = address(kAudioHardwarePropertyRunLoop)
+    var loop: UnsafeMutableRawPointer? = nil // a NULL CFRunLoopRef
+    _ = AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, UInt32(MemoryLayout<UnsafeMutableRawPointer?>.size), &loop)
+}
+
+func pause(_ seconds: TimeInterval) {
+    RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+}
+
+if options.list {
+    for p in audioProcesses() {
+        print("pid=\(p.pid) name=\(p.name) bundle=\(p.bundleID) output=\(p.outputting)")
+    }
+    exit(0)
+}
+if options.bundleIDs.isEmpty && options.names.isEmpty && options.pids.isEmpty {
+    log("give at least one --bundle-id, --name or --pid")
+    exit(2)
+}
+
+var recorder: Recorder?
+func shutdown(_ code: Int32) -> Never {
+    recorder?.stop()
+    exit(code)
+}
+for s in [SIGINT, SIGTERM, SIGHUP] {
+    signal(s) { _ in recorder?.stop(); exit(0) }
+}
+
+var waiting = false
+var current: Set<AudioObjectID> = []
+while recorder == nil {
+    let found = audioProcesses().filter { matches($0, options) }
+    if found.isEmpty {
+        if !waiting { log("waiting for the target's audio"); waiting = true }
+        pause(0.25)
+        continue
+    }
+    current = Set(found.map(\.object))
+    do {
+        let r = try Recorder(processes: Array(current), mute: options.mute)
+        try r.start()
+        recorder = r
+        log("tapping " + found.map { "\($0.name)[\($0.pid)]" }.joined(separator: ", ") + " at \(Int(r.rate)) Hz (tap reports \(Int(r.format.mSampleRate)) Hz)")
+    } catch {
+        log("\(error.localizedDescription)")
+        shutdown(1)
+    }
+}
+
+// Follow the player: a new helper process, an exit, or a new output device
+// means a new tap.
+let startFormat = recorder!.format
+let startRate = recorder!.rate
+let startOutput = defaultOutputUID()
+while true {
+    pause(0.5)
+    let now = Set(audioProcesses().filter { matches($0, options) }.map(\.object))
+    let fmt: AudioStreamBasicDescription? = scalar(recorder!.tapID, kAudioTapPropertyFormat, AudioStreamBasicDescription())
+    if now != current || recorder!.rate != startRate || fmt?.mSampleRate != startFormat.mSampleRate || fmt?.mChannelsPerFrame != startFormat.mChannelsPerFrame || defaultOutputUID() != startOutput {
+        log("target processes or output format changed")
+        shutdown(exitChanged)
+    }
+}
