@@ -39,7 +39,7 @@ Advanced:
 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
-| Output format | `encode.format` | mp3, aac, flac, wav | `mp3` |
+| Output format | `encode.format` | mp3, aac, flac, wav | `flac` |
 | Bitrate | `encode.bitrate_kbps` | 128, 160, 256, 320 | 160 |
 
 Advanced:
@@ -85,6 +85,6 @@ Advanced:
 | --- | --- | --- | --- |
 | Treat items shorter than N seconds with no album as ads (0 = off) | `recorder.skip_short_untitled` | 0 to 600 | 60 |
 | Record everything (podcasts, short untitled items) | `recorder.record_everything` | on, off | off |
-| Mute the player on this computer while recording (macOS) | `player.mute_output` | on, off | off |
+| Mute the player on this computer while recording (macOS, Linux) | `player.mute_output` | on, off | off |
 
 The recorded application is chosen with environment variables, not in `config.toml`: see [Command line](cli.html#configuration).

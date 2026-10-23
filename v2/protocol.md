@@ -216,6 +216,14 @@ An empty object.
 | `album` | string, optional |
 | `length_ms` | integer |
 | `cover_url` | string, optional |
+| `source` | [AudioSource](#audiosource), optional |
+
+#### AudioSource
+
+| Field | Type |
+| --- | --- |
+| `sample_rate` | integer |
+| `channels` | integer |
 
 #### Check
 

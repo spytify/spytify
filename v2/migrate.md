@@ -5,16 +5,31 @@ title: Coming from v1
 
 Spytify v2 is a new program, written in Go, for Linux, macOS and Windows. It keeps what v1 did and drops what v2 no longer needs.
 
+Every v1 setting and feature, and where it is in v2:
+
 | v1 | v2 |
 | --- | --- |
-| A virtual audio cable or a chosen output device | Gone: v2 records the application's own audio stream |
-| Muting other apps while recording | Gone: no other app can be recorded |
+| Output path | **Output folder** (`output.dir`) |
+| Audio device, or a virtual audio cable | Gone: v2 records the application's own audio stream, whatever device it plays on |
+| Muting other apps while recording | Gone: no other app can be recorded. **Mute the player on this computer** (`player.mute_output`) silences the player for you on macOS and Linux |
+| Audio quality, 128 to 320 kbps | **Bitrate** (`encode.bitrate_kbps`), for MP3 and AAC |
+| Audio format, WAV or MP3 | **Output format** (`encode.format`): FLAC by default, MP3, AAC or WAV, all tagged |
+| Minimal length | **Minimum track length** (`recorder.min_seconds`) |
+| Mute ads | **Mute ads** (`recorder.mute_ads`); ads are never recorded |
+| Record everything (podcasts) | **Record everything** (`recorder.record_everything`) |
+| Delay next recording if sound is detected | Always on: each cut is placed in the quietest spot near the change of track (**Boundary search window**) |
+| Timer for the recording session | **Stop the session after** (`recorder.session_timer`) |
+| Counter in front of file names | **File name prefix** set to `counter` |
+| Starting position of the counter | **Counter start value** (`output.counter_start`) |
+| Group artists inside their own folder | **Group by folders**: `artist` or `artist/album` |
+| Replace spaces by underscores | **Add separators** (`output.underscores`) |
+| Record already recorded tracks: skip, number or overwrite | **Already recorded tracks** (`recorder.duplicates`): `skip`, `suffix` or `overwrite` |
+| Replace the track number tag by the counter | **Replace track number with counter** (`tags.track_from_counter`) |
+| Move the extra title to the subtitle tag | **Move parenthesised extra title to subtitle** (`tags.extra_to_subtitle`) |
+| Tags from Last.fm or the web API, with keys of your own | Tags from the application itself, cover included; nothing is looked up on the web. Players do not report a genre, so v2 writes none |
 | Track changes read from the window title | The application's media interface: MPRIS, AppleScript, Windows media controls |
-| Tags from web services, with keys of your own | Tags from the application itself; nothing is looked up on the web |
-| Recording settings in one window | Settings by section, with the rare ones under Advanced; the same keys in `config.toml` and on the command line |
-| Skip, record again or overwrite duplicates | The same three choices, in **Already recorded tracks** |
-| Recording order number | **File name prefix** set to `counter` |
-| Mute ads | **Mute ads**, and ads are never recorded |
-| English and French | English |
+| English, French, Dutch and German | English |
+| The recorded tracks list and the console | The **Record** tab, with the track playing and the session's list, and the **Logs** tab |
+| | New: the **Library** tab, the light and dark themes, the tray, `spytify-cli`, and Linux and macOS |
 
 Your v1 recordings stay where they are. v2 names and groups its files with its own settings, so it does not take v1 files for duplicates unless their names match.

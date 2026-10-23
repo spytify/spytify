@@ -21,11 +21,11 @@ Title, artist, album, album artist, track and disc numbers and the cover come fr
 
 ### [Formats](#formats)
 
-MP3, AAC, FLAC and WAV, each track trimmed of its leading and trailing silence and loudness-normalised (both can be turned off). A FLAC or WAV file avoids a second lossy pass but adds no quality: streaming services send compressed audio.
+FLAC by default, or MP3, AAC and WAV, each track trimmed of its leading and trailing silence and loudness-normalised (both can be turned off). A FLAC or WAV file avoids a second lossy pass but adds no quality: streaming services send compressed audio. The track card shows the stream as it arrives, such as 44.1 kHz stereo.
 
 ### [Ads](#ads)
 
-Ads and short untitled items are not recorded, and **Mute ads** silences the application while one plays.
+Ads and short untitled items are not recorded, and **Mute ads** silences the application while one plays. On macOS and Linux, **Mute the player on this computer** keeps the whole session silent while it records.
 
 ### [Library](#library)
 
