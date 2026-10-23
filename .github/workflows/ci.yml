@@ -141,9 +141,9 @@ jobs:
       - name: The capture helper records a running process
         continue-on-error: true
         run: |
-          powershell -NoProfile -Command 'Start-Sleep 30' &
+          # A process that stays up, by its Windows PID (bash's $! is not one).
+          pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-Command","Start-Sleep 60" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
           sleep 2
-          pid=$(powershell -NoProfile -Command '(Get-Process powershell | Sort-Object StartTime -Descending | Select-Object -First 1).Id' | tr -d '\r')
           set +e; timeout 5 ./spytify-tap.exe --pid "$pid" > tap.raw; echo "exit $?"; set -e
           head -1 tap.raw
           ls -l tap.raw
