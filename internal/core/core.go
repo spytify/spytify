@@ -300,8 +300,8 @@ func (c *Core) Info() proto.CoreInfoResult {
 		info.Warnings = append(info.Warnings, c.crashed)
 	}
 	info.Warnings = append(info.Warnings, "turn crossfade and gapless playback off in the player")
-	if v.Bool("player.mute_output") && runtime.GOOS != "darwin" {
-		info.Warnings = append(info.Warnings, "player.mute_output is only applied on macOS in the alpha")
+	if v.Bool("player.mute_output") && runtime.GOOS == "windows" {
+		info.Warnings = append(info.Warnings, "player.mute_output is not applied on Windows in the alpha")
 	}
 	return info
 }
@@ -393,8 +393,8 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		mute:    adMuter(np),
 	}, opts)
 	restore := c.pinVolume(np)
-	if c.store.Values().Bool("player.mute_output") && runtime.GOOS != "darwin" {
-		c.log.Infof("player.mute_output is only applied on macOS in the alpha; the player stays audible")
+	if c.store.Values().Bool("player.mute_output") && runtime.GOOS == "windows" {
+		c.log.Infof("player.mute_output is not applied on Windows in the alpha; the player stays audible")
 	}
 
 	done := make(chan struct{})

@@ -84,7 +84,7 @@ var Table = []Def{
 	{Key: "recorder.mute_ads", Tab: "Ads", Group: "Ads", Label: "Mute ads", Kind: KindBool, Default: false},
 	{Key: "recorder.skip_short_untitled", Tab: "Advanced", Group: "Ads", Label: "Treat items shorter than N seconds with no album as ads (0 = off)", Kind: KindInt, Default: int64(60), Min: 0, Max: 600, Ranged: true, Advanced: true},
 	{Key: "recorder.record_everything", Tab: "Advanced", Group: "Ads", Label: "Record everything (podcasts, short untitled items)", Kind: KindBool, Default: false, Advanced: true},
-	{Key: "player.mute_output", Tab: "Advanced", Group: "Ads", Label: "Mute the player on this computer while recording (macOS)", Kind: KindBool, Default: false, Advanced: true},
+	{Key: "player.mute_output", Tab: "Advanced", Group: "Ads", Label: "Mute the player on this computer while recording (macOS, Linux)", Kind: KindBool, Default: false, Advanced: true},
 }
 
 var byKey = func() map[string]*Def {

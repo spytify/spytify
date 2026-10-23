@@ -12,5 +12,10 @@
     {"item": 0, "saved": true},
     {"item": 1, "saved": true},
     {"item": 2, "saved": true}
+  ],
+  "variants": [
+    {"name": "default", "expect": [{"item": 0, "saved": true}, {"item": 1, "saved": true}, {"item": 2, "saved": true}]},
+    {"name": "muted", "settings": {"player.mute_output": true},
+     "expect": [{"item": 0, "saved": true}, {"item": 1, "saved": true}, {"item": 2, "saved": true}]}
   ]
 }
