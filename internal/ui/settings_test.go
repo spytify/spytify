@@ -194,3 +194,12 @@ func TestResetResetsItsSection(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// Minimize to tray is off unless chosen: closing the window quits.
+func TestMinimizeToTrayIsOffByDefault(t *testing.T) {
+	for _, d := range settings.Table {
+		if d.Key == "app.minimize_to_tray" && d.Default != false {
+			t.Fatalf("app.minimize_to_tray defaults to %v", d.Default)
+		}
+	}
+}

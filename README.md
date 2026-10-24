@@ -98,15 +98,23 @@ The macOS app is ad-hoc signed. macOS asks for the permissions again after every
 
 ## Desktop app
 
-The app is a client of `spytifyd`. Closing the window does not stop a recording, and the tray menu (Start recording, Stop, Open window) keeps working while the window is hidden.
+The app is a client of `spytifyd`, the recorder, which it starts by itself ("Starting the recorder…"). The recorder needs the application to record: official builds have one; a build of your own asks for it first (Settings > App > Advanced > Player).
 
-The app bar holds the Record button, which becomes Stop while recording and Stop now while the last track finishes. It also shows the application's state, the output format, and an Update button when a newer release is out.
+The app bar shows whether the application runs, the output format, an Update button when a newer release is out, and the one Record button:
 
-- **Record**: the current track (cover, progress, level, Skip), then every file of the session with its status, Reveal and Play, and the session totals.
-- **Library**: every audio file in the output folder, newest first, with a search box. It reads the folder again each time you open the tab.
-- **Settings**: App, Output, Encoding, Recording and Ads. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button. A search box finds any setting.
-- **Logs**: the startup checks, folded while they all pass, then the daemon's log, filtered by level.
+- **Record** is off while the application is not running; the Record screen offers to open it.
+- A track already playing when you press Record is skipped, since its start was missed: recording starts with the next one, or press **Record this track from the start**.
+- **Stop** lets the track playing finish; it then reads **Stop now**, which stops at once and discards that track.
+
+Closing the window quits Spytify and the recorder with it, after asking if a recording is under way. With **Minimize to tray** on (Settings > App, off by default), closing keeps Spytify recording in the system tray, the menu bar on macOS, where the Dock icon goes too. The tray menu starts and stops a recording, opens the window and quits; on macOS, opening Spytify again also brings the window back.
+
+- **Record**: the track playing, with its cover, title, artists, album and the stream's format (44.1 kHz stereo), its progress, the level and Skip. Below it, every track of the session with its status (Saved, Tagged, Skipped and why), and buttons to show the file in Finder or Explorer and to play it. **Clear list** empties the list, not the folder; **Open folder** opens the output folder.
+- **Library**: every audio file in the output folder, with its cover, newest first or by name, and a search box. It reads the folder again each time you open the tab, so nothing recorded is missing from it.
+- **Settings**: App, Output, Encoding, Recording and Ads, App first. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button; a search box finds any setting. App holds the theme (system, light or dark).
+- **Logs**: the startup checks, folded while they all pass, then the recorder's log, with a choice of levels, Copy and Open log file. A failed check reads as what is wrong, such as "ffmpeg not found".
 - **About**: versions, the project page, the source code, Check for updates and Donate.
+
+If the application plays and no audio arrives for 10 seconds, the app says so and where to look: on macOS, usually the System Audio Recording permission, which macOS asks for again after each build of your own.
 
 ## Command line
 
