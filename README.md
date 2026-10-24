@@ -35,7 +35,7 @@ spytify-cli ─┴─ JSON-RPC ──▶ spytifyd ◀── now playing ◀─�
 
 ## Requirements
 
-- `ffmpeg` on `PATH` (or `SPYTIFY_FFMPEG`), with `libmp3lame` for MP3 output.
+- `ffmpeg` on `PATH` (or `SPYTIFY_FFMPEG`), with `libmp3lame` for MP3 output. The Windows zip ships `ffmpeg.exe` beside `spytifyd.exe` (an LGPL build from BtbN/FFmpeg-Builds; see `ffmpeg-README.txt`), and Spytify also finds one installed by winget, Chocolatey or Scoop.
 - Crossfade and gapless playback turned off in the recorded application: two mixed tracks cannot be separated again.
 - If the application can play your own music files, keep Spytify's output folder out of the folders it scans. Otherwise it plays your recording of a track in place of the track itself.
 
@@ -153,7 +153,7 @@ The recorded application is set with environment variables, read when the daemon
 | `SPYTIFY_TAP` | path of `spytify-tap` (macOS, Windows) | next to `spytifyd`, then `PATH` |
 | `SPYTIFY_CONFIG` | settings file | `~/.config/spytify/config.toml` |
 | `SPYTIFY_SOCKET` | daemon socket | `$XDG_RUNTIME_DIR/spytify.sock`; `%LOCALAPPDATA%\Spytify\spytify.sock` on Windows |
-| `SPYTIFY_FFMPEG` | ffmpeg binary | `ffmpeg` on `PATH` |
+| `SPYTIFY_FFMPEG` | ffmpeg binary | `ffmpeg` on `PATH`, then beside `spytifyd` and in the usual install folders |
 
 Everything else is a setting in `config.toml`, changed in the app or with `spytify-cli set`; `spytify-cli get` lists them all.
 
