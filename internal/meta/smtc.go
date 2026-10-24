@@ -50,6 +50,13 @@ function Save-Thumbnail($ref, [string]$path) {
     try { $in.CopyTo($f) } finally { $f.Close() }
   } finally { $in.Close() }
 }
+function Find-Session {
+  foreach ($s in $manager.GetSessions()) {
+    $id = $s.SourceAppUserModelId.ToLowerInvariant()
+    foreach ($n in $names) { if ($n -and $id.Contains($n)) { return $s } }
+  }
+  $null
+}
 `
 
 // smtcPoll prints one JSON line per interval, in the shape the macOS poller
