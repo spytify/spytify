@@ -177,5 +177,8 @@ func metadataOf(t meta.TrackInfo) map[string]dbus.Variant {
 	if t.TrackNumber > 0 {
 		md["xesam:trackNumber"] = dbus.MakeVariant(int32(t.TrackNumber))
 	}
+	if t.ArtURL != "" {
+		md["mpris:artUrl"] = dbus.MakeVariant(t.ArtURL)
+	}
 	return md
 }

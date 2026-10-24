@@ -7,7 +7,8 @@ import (
 )
 
 // reveal shows a file in the OS file manager, selected where possible.
-func reveal(path string) error {
+// Tests replace it.
+var reveal = func(path string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", "-R", path).Start()
@@ -17,8 +18,9 @@ func reveal(path string) error {
 	return exec.Command("xdg-open", filepath.Dir(path)).Start()
 }
 
-// openPath opens a file or folder with its default application.
-func openPath(path string) error {
+// openPath opens a file or folder with its default application. Tests
+// replace it.
+var openPath = func(path string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", path).Start()

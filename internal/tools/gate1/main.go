@@ -125,7 +125,7 @@ func export(ffmpeg string, tl *fake.Timeline, dir, format string) error {
 		}
 		name := filepath.Join(dir, fmt.Sprintf("%02d %s.%s", i+1, it.Title, format))
 		cmd := exec.Command(ffmpeg, "-v", "error", "-nostdin", "-y", "-i", wav,
-			"-metadata", "title="+it.Title, "-metadata", "artist="+it.Artist, "-metadata", "album="+it.Album,
+			"-metadata", "title="+it.Title, "-metadata", "artist="+strings.Join(it.Artists, ", "), "-metadata", "album="+it.Album,
 			"-metadata", fmt.Sprintf("track=%d", i+1), name)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("ffmpeg %s: %v %s", name, err, out)

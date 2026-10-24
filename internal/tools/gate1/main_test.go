@@ -34,7 +34,9 @@ func TestCheckFindsANeighbourInARecording(t *testing.T) {
 		}
 	}
 	ref := func(i int) string { return filepath.Join(dir, fmt.Sprintf("%02d %s.flac", i+1, tl.Items[i].Title)) }
-	rec := func(i int) string { return filepath.Join(out, "Jitter Band - "+tl.Items[i].Title+".wav") }
+	rec := func(i int) string {
+		return filepath.Join(out, strings.Join(tl.Items[i].Artists, ", ")+" - "+tl.Items[i].Title+".wav")
+	}
 	for i := range tl.Items {
 		run("-i", ref(i), "-af", "adelay=300:all=1,volume=0.8,apad=pad_dur=0.2", "-c:a", "pcm_s16le", rec(i))
 	}

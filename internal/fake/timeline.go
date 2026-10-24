@@ -7,8 +7,10 @@ package fake
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/spytify/spytify/internal/pcm"
 )
@@ -24,11 +26,14 @@ type Timeline struct {
 	Seed     int64  `json:"seed"`
 	// PauseSilence makes the stream carry silence while paused, as some
 	// players do; otherwise no frames flow during a pause.
-	PauseSilence bool           `json:"pause_silence"`
-	Items        []Item         `json:"items"`
-	Actions      []Action       `json:"actions"`
-	Settings     map[string]any `json:"settings"`
-	Expect       []Expect       `json:"expect"`
+	PauseSilence bool `json:"pause_silence"`
+	// Volume is the player's volume when it starts, from 0 to 1 (1 when
+	// unset).
+	Volume   *float64       `json:"volume"`
+	Items    []Item         `json:"items"`
+	Actions  []Action       `json:"actions"`
+	Settings map[string]any `json:"settings"`
+	Expect   []Expect       `json:"expect"`
 	// Variants run the same timeline again with other settings and
 	// expectations, such as each recorder.duplicates policy.
 	Variants []Variant `json:"variants"`
@@ -71,6 +76,10 @@ type Item struct {
 	// LeadMs is silence at the start of the item's own audio, inside its
 	// length, as in a master that begins quietly.
 	LeadMs int64 `json:"lead_ms"`
+	// Art is the item's cover, relative to the timeline, or "none". Left
+	// empty, a track gets one of the covers in ../covers, picked from the
+	// timeline's seed; an ad gets none.
+	Art string `json:"art"`
 }
 
 // Action is a command a test sends to the core while the timeline plays.
@@ -113,6 +122,17 @@ func Load(path string) (*Timeline, error) {
 }
 
 func (tl *Timeline) validate() error {
+	// The covers a player shows: shuffled by the seed, so the same on every
+	// run, and repeated only once all are used.
+	covers, _ := filepath.Glob(filepath.Join(tl.dir, "..", "covers", "*.jpg"))
+	sort.Strings(covers)
+	for i, c := range covers {
+		if abs, err := filepath.Abs(c); err == nil {
+			covers[i] = abs
+		}
+	}
+	order := rand.New(rand.NewSource(tl.Seed)).Perm(len(covers))
+	next := 0
 	if tl.Rate == 0 {
 		tl.Rate = 44100
 	}
@@ -144,6 +164,15 @@ func (tl *Timeline) validate() error {
 		}
 		if it.Seed == 0 {
 			it.Seed = tl.Seed*1000 + int64(i) + 1
+		}
+		switch {
+		case it.Art == "none":
+			it.Art = ""
+		case it.Art != "" && !filepath.IsAbs(it.Art):
+			it.Art = filepath.Join(tl.dir, it.Art)
+		case it.Art == "" && it.Kind != "ad" && len(covers) > 0:
+			it.Art = covers[order[next%len(covers)]]
+			next++
 		}
 		if len(it.Artists) == 0 && it.Artist != "" {
 			it.Artists = []string{it.Artist}
