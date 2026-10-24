@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
+	"strings"
 	"time"
 )
 
@@ -24,7 +26,7 @@ func FetchCover(ctx context.Context, client *http.Client, raw string) ([]byte, s
 	var r io.ReadCloser
 	switch u.Scheme {
 	case "file":
-		f, err := os.Open(u.Path)
+		f, err := os.Open(filePath(u.Path, runtime.GOOS))
 		if err != nil {
 			return nil, "", err
 		}
@@ -62,4 +64,16 @@ func FetchCover(ctx context.Context, client *http.Client, raw string) ([]byte, s
 		return nil, "", fmt.Errorf("cover: unsupported image type %s", mime)
 	}
 	return data, mime, nil
+}
+
+// filePath is the file a file URL's path names. On Windows the path of
+// file:///C:/Users/x is /C:/Users/x, which no file has.
+func filePath(p, goos string) string {
+	if goos == "windows" {
+		if len(p) > 2 && p[0] == '/' && p[2] == ':' {
+			p = p[1:]
+		}
+		return strings.ReplaceAll(p, "/", `\`)
+	}
+	return p
 }

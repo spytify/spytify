@@ -93,3 +93,15 @@ func TestWriterTagsFLACAndMP3(t *testing.T) {
 		t.Fatalf("sidecar: %v %s", err, b)
 	}
 }
+// Windows covers come as file:///C:/... from the media session poller.
+func TestFilePathOfAFileURL(t *testing.T) {
+	for _, c := range []struct{ path, goos, want string }{
+		{"/C:/Users/u/AppData/Local/Temp/spytify-cover-1", "windows", `C:\Users\u\AppData\Local\Temp\spytify-cover-1`},
+		{"/tmp/cover.png", "darwin", "/tmp/cover.png"},
+		{"/home/u/cover.jpg", "linux", "/home/u/cover.jpg"},
+	} {
+		if got := filePath(c.path, c.goos); got != c.want {
+			t.Errorf("filePath(%q, %s) = %q, want %q", c.path, c.goos, got, c.want)
+		}
+	}
+}
