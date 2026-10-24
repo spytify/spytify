@@ -16,8 +16,9 @@ import (
 
 // TestSMTCWithAPlayer reads a real media session: a Windows PowerShell
 // process playing through MediaPlayer (scripts/ci/tone.ps1 -Smtc), then
-// pauses and plays it. It needs an audio output; CI installs a virtual
-// one and sets SPYTIFY_SMTC_PLAYER.
+// pauses and plays it. Run it on a Windows desktop with an audio output,
+// with SPYTIFY_SMTC_PLAYER set. CI's Windows Server runners list no media
+// session at all, even with that player and a virtual audio output.
 func TestSMTCWithAPlayer(t *testing.T) {
 	if os.Getenv("SPYTIFY_SMTC_PLAYER") == "" {
 		t.Skip("set SPYTIFY_SMTC_PLAYER on a machine with an audio output")

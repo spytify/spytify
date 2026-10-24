@@ -111,12 +111,7 @@ jobs:
       - name: Install ffmpeg
         shell: pwsh
         run: choco install ffmpeg -y --no-progress
-      - name: An audio output for the runner (the Scream virtual driver)
-        shell: pwsh
-        run: scripts/ci/windows-audio-device.ps1
       - name: Unit tests (all but the desktop UI, which windows-build cross-compiles)
-        env:
-          SPYTIFY_SMTC_PLAYER: "1"
         run: CGO_ENABLED=0 go test $(go list ./... | grep -v -e /internal/ui$ -e /cmd/spytify-ui)
 
   windows-build:
