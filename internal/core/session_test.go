@@ -336,6 +336,37 @@ func TestNoAudioWhileThePlayerPlaysIsReported(t *testing.T) {
 	}
 }
 
+// A player that quits while playing sends no audio either: that is no
+// stalled capture.
+func TestAPlayerThatQuitIsNotAStalledCapture(t *testing.T) {
+	old := captureStall
+	captureStall = 300 * time.Millisecond
+	s, rec, _ := directSession(t)
+	frames := make(chan capture.Chunk)
+	events := make(chan meta.Event)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.Run(ctx, frames, events)
+	}()
+	defer func() {
+		cancel()
+		<-done
+		captureStall = old
+	}()
+	events <- meta.Event{Kind: meta.TrackChanged, Track: meta.TrackInfo{ID: "/x/track/a", Title: "A", LengthMs: 60000}, PositionMs: 0}
+	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: 0}
+	events <- meta.Event{Kind: meta.PlayerGone, PositionMs: -1}
+	time.Sleep(4 * captureStall)
+	for _, ev := range rec.all() {
+		var e proto.ErrorEvent
+		if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == "capture_stalled" {
+			t.Fatalf("a player that quit was reported as a stalled capture: %s", e.Msg)
+		}
+	}
+}
+
 func TestSessionStartedMidTrackWaitsForNextTrack(t *testing.T) {
 	s, rec, out := directSession(t)
 	f := pcm.Format{Rate: 8000, Channels: 1, Sample: pcm.S16LE}

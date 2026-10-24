@@ -554,6 +554,8 @@ func (s *Session) onMeta(ev meta.Event) {
 		s.onStatus(ev.Status, ev.PositionMs, at, first)
 	case meta.PlayerGone:
 		s.deps.log.Infof("player interface gone")
+		// A player that is gone plays nothing, whatever it said last.
+		s.status = meta.Stopped
 		s.endOfPlayback()
 	case meta.Seeked:
 		s.deps.log.Debugf("%q: the player jumped to %d ms", ev.Track.Title, ev.PositionMs)
