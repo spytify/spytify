@@ -94,6 +94,10 @@ type App struct {
 	themeMode string
 	// replaced is set once a recorder of another build was restarted.
 	replaced bool
+	// tray says the platform has a system tray (menu bar on macOS);
+	// quitApp quits, replaced by tests.
+	tray    bool
+	quitApp func()
 
 	pending     sync.Mutex
 	queued      bool
@@ -172,13 +176,9 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	if !opts.ManualRender {
 		onReopen(func() { fyne.Do(a.showWindow) })
 	}
-	a.win.SetCloseIntercept(func() {
-		if _, tray := a.fa.(desktop.App); tray && a.last.Settings["app.minimize_to_tray"] == true {
-			a.hideToTray()
-			return
-		}
-		a.quit()
-	})
+	_, a.tray = fa.(desktop.App)
+	a.quitApp = fa.Quit
+	a.win.SetCloseIntercept(a.closeWindow)
 	// Every way out (this window, the tray's Quit, Cmd+Q) ends here.
 	fa.Lifecycle().SetOnStopped(a.stopDaemon)
 	m.OnChange(a.scheduleRender)
@@ -240,14 +240,25 @@ func (a *App) replaceOtherBuild(s model.State) {
 // confirmed first, since its current track is not kept.
 func (a *App) quit() {
 	if !a.last.Recording() {
-		a.fa.Quit()
+		a.quitApp()
 		return
 	}
 	dialog.ShowConfirm("Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
 		if ok {
-			a.fa.Quit()
+			a.quitApp()
 		}
 	}, a.win)
+}
+
+// closeWindow answers the window's close button: with Minimize to tray on
+// and a tray to go to, the window hides there and the recording goes on;
+// otherwise the app quits, which stops the recorder too.
+func (a *App) closeWindow() {
+	if a.tray && a.last.Settings["app.minimize_to_tray"] == true {
+		a.hideToTray()
+		return
+	}
+	a.quit()
 }
 
 // stopDaemon shuts spytifyd down as the app quits, unless it runs as a
@@ -425,6 +436,11 @@ func (a *App) scheduleLevel() {
 
 func (a *App) renderLevel() {
 	if a.tabs.SelectedIndex() != tabRecord {
+		return
+	}
+	// Under a dialog the meter is hidden, and moving it repaints the whole
+	// dimmed window: two thirds of a core with the first-run dialog open.
+	if a.win.Canvas().Overlays().Top() != nil {
 		return
 	}
 	a.screens[tabRecord].(*recordScreen).renderLive(a.m.Live())
