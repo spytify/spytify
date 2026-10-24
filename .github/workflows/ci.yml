@@ -176,10 +176,38 @@ jobs:
           go-version-file: go.mod
       - name: Spytify.app and universal spytifyd, spytify-cli, spytify-tap
         run: scripts/build-macos.sh dist
+      # A disk image keeps the app's executable bits, which an artifact's zip
+      # drops.
+      - name: Disk image and command-line zip
+        run: |
+          hdiutil create -volname Spytify -srcfolder dist/Spytify.app -ov -format UDZO dist/Spytify-macos.dmg
+          (cd dist && zip -q -y -r spytify-macos-cli.zip spytifyd spytify-cli spytify-tap)
       - uses: actions/upload-artifact@v4
         with:
           name: spytify-macos
-          path: dist/
+          path: |
+            dist/Spytify-macos.dmg
+            dist/spytify-macos-cli.zip
+
+  # The Linux packages of a release, from every push: a tarball, .deb, .rpm.
+  linux-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install the desktop app's build dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+      - name: Tarball, .deb and .rpm
+        run: scripts/build-linux.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spytify-linux
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
 
   # Gate 1 of M1: the fake player recorded through PipeWire and MPRIS, every
   # file matched sample by sample against its source.
