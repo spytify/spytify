@@ -220,12 +220,12 @@ func (r *recordScreen) render(s model.State) {
 			player = "your player"
 		}
 		setLabel(r.idleText, fmt.Sprintf("Press Record, then play music in %s. Each track becomes its own file in %s.", player, r.folder))
-		// A player that is not running is the usual failing check: offer
-		// to open it, and the diagnostics only for anything else.
+		// A player that is not running is shown in the app bar and offered
+		// to open here; the diagnostics are for anything else.
 		down := !playerRunning(s)
 		r.openPlayer.SetText("Open " + player)
 		show(r.openPlayer, down)
-		show(r.diagnose, failingChecks(s.Info.Checks) > btoi(down))
+		show(r.diagnose, failingChecks(s.Info.Checks) > 0)
 		show(r.attention, r.openPlayer.Visible() || r.diagnose.Visible())
 		r.idle.Show()
 		r.session.Hide()

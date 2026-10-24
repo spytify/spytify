@@ -7,6 +7,7 @@ package ui
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -52,6 +53,9 @@ type Options struct {
 	ManualRender bool
 	// NoUpdateCheck skips the GitHub release check (tests).
 	NoUpdateCheck bool
+	// AutoStart says the app starts spytifyd itself: until it answers, the
+	// app shows that it is starting rather than asking for it.
+	AutoStart bool
 }
 
 type screen interface {
@@ -98,6 +102,12 @@ type App struct {
 	// quitApp quits, replaced by tests.
 	tray    bool
 	quitApp func()
+	// starting is set while spytifyd is being started; startErr is why
+	// the last start failed.
+	starting   bool
+	startErr   string
+	startView  fyne.CanvasObject
+	offlineErr *widget.Label
 
 	pending     sync.Mutex
 	queued      bool
@@ -154,19 +164,29 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.banner.Importance = widget.DangerImportance
 	a.banner.Hide()
 
-	start := widget.NewButtonWithIcon("Start spytifyd", theme.MediaPlayIcon(), a.StartDaemon)
+	start := widget.NewButtonWithIcon("Start the recorder", theme.MediaPlayIcon(), a.StartDaemon)
 	start.Importance = widget.HighImportance
 	a.player = newPlayerCard(a)
-	intro := widget.NewLabel("The recorder runs on its own, so it keeps recording when this window is closed. Choose the player it records, then start it.")
+	intro := widget.NewLabel("Spytify records through spytifyd, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set.")
 	intro.Wrapping = fyne.TextWrapWord
+	a.offlineErr = widget.NewLabel("")
+	a.offlineErr.Wrapping = fyne.TextWrapWord
+	a.offlineErr.Importance = widget.DangerImportance
 	a.offline = container.NewVScroll(container.NewPadded(container.NewVBox(
-		heading("spytifyd is not running"),
+		heading("The recorder is not running"),
+		a.offlineErr,
 		intro,
 		container.NewHBox(start),
 		caption(opts.Socket),
 		widget.NewSeparator(),
 		a.player.form,
 	)))
+	startIcon := canvas.NewImageFromResource(Logo)
+	startIcon.FillMode = canvas.ImageFillContain
+	startIcon.SetMinSize(fyne.NewSize(72, 72))
+	a.startView = container.NewCenter(container.NewVBox(container.NewCenter(startIcon),
+		widget.NewLabelWithStyle("Starting the recorder…", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})))
+	a.starting = opts.AutoStart
 
 	a.center = container.NewStack(a.tabs)
 	body := container.NewBorder(container.NewVBox(container.NewPadded(a.bar), a.banner), nil, nil, nil, a.center)
@@ -202,13 +222,6 @@ func (a *App) ShowAndRun() {
 // or core.info's check until the first one.
 func playerRunning(s model.State) bool {
 	return (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running"))
-}
-
-func btoi(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // launchPlayer asks the recorder to open the player.
@@ -348,6 +361,11 @@ func (a *App) render() {
 	case s.Recording():
 		a.action.Enable()
 		a.setAction("Stop", theme.MediaStopIcon(), widget.DangerImportance)
+	case s.HaveInfo && !running:
+		// Nothing would play: the app bar says the player is not running,
+		// and the Record screen offers to open it.
+		a.action.Disable()
+		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	default:
 		a.action.Enable()
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
@@ -400,9 +418,23 @@ func (a *App) setAction(text string, icon fyne.Resource, imp widget.Importance) 
 }
 
 func (a *App) renderCenter(s model.State) {
+	if s.Conn == model.Connected {
+		a.starting, a.startErr = false, ""
+	}
 	if s.Conn != model.Connected && !s.HaveInfo {
-		if len(a.center.Objects) != 1 || a.center.Objects[0] != a.offline {
-			a.center.Objects = []fyne.CanvasObject{a.offline}
+		view := a.offline
+		if a.starting {
+			view = a.startView
+		} else {
+			reason := a.startErr
+			if reason == "" {
+				reason = s.ConnError
+			}
+			setLabel(a.offlineErr, reason)
+			show(a.offlineErr, reason != "")
+		}
+		if len(a.center.Objects) != 1 || a.center.Objects[0] != view {
+			a.center.Objects = []fyne.CanvasObject{view}
 			a.center.Refresh()
 		}
 		return
@@ -474,10 +506,12 @@ func checkOK(checks []proto.Check, name string) bool {
 	return false
 }
 
+// failingChecks counts the failing checks but the player's, which the app
+// bar already shows.
 func failingChecks(checks []proto.Check) int {
 	n := 0
 	for _, c := range checks {
-		if !c.OK {
+		if !c.OK && c.Name != "player running" {
 			n++
 		}
 	}
@@ -546,11 +580,31 @@ func (a *App) showError(err error) {
 
 // StartDaemon starts spytifyd and reports why when it stops at once.
 func (a *App) StartDaemon() {
+	fyne.Do(func() {
+		a.starting, a.startErr = true, ""
+		a.render()
+	})
 	go func() {
-		if err := a.link.StartDaemon(); err != nil {
-			fyne.Do(func() { a.showError(err) })
+		err := a.link.StartDaemon()
+		if err == nil {
+			// Started: it answers in a moment, or this says it did not.
+			time.Sleep(startAnswerTimeout)
+			err = errors.New("spytifyd started but does not answer; see its log in Logs")
+			if a.m.Snapshot().Conn == model.Connected {
+				return
+			}
 		}
+		fyne.Do(func() { a.startFailed(err) })
 	}()
+}
+
+// startAnswerTimeout is how long a started spytifyd has to answer.
+const startAnswerTimeout = 15 * time.Second
+
+// startFailed shows the offline screen with why the recorder did not start.
+func (a *App) startFailed(err error) {
+	a.starting, a.startErr = false, err.Error()
+	a.render()
 }
 
 func (a *App) setupTray() {
