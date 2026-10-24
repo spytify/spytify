@@ -35,27 +35,20 @@ function Await($op, [Type]$type) {
 $managerType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
 $propsType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties, Windows.Media.Control, ContentType = WindowsRuntime]
 $streamType = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime]
-$null = [Windows.Storage.Streams.DataReader, Windows.Storage.Streams, ContentType = WindowsRuntime]
+$inputType = [Windows.Storage.Streams.IInputStream, Windows.Storage.Streams, ContentType = WindowsRuntime]
+$asStreamForRead = [System.IO.WindowsRuntimeStreamExtensions].GetMethod('AsStreamForRead', [Type[]]@($inputType))
 $manager = Await ($managerType::RequestAsync()) $managerType
-# Save-Thumbnail writes a thumbnail to path through a DataReader: Windows
-# PowerShell cannot pass the stream to the .NET AsStreamForRead.
+# Save-Thumbnail writes a thumbnail to path. Windows PowerShell sees the
+# stream as a bare COM object, with no methods of its own and no overload
+# that takes it; called through reflection, as Await calls AsTask, the
+# runtime casts it.
 function Save-Thumbnail($ref, [string]$path) {
   $stream = Await ($ref.OpenReadAsync()) $streamType
+  $in = $asStreamForRead.Invoke($null, @($stream))
   try {
-    $size = [uint32]$stream.Size
-    $reader = [Windows.Storage.Streams.DataReader]::new($stream.GetInputStreamAt(0))
-    $null = Await ($reader.LoadAsync($size)) ([uint32])
-    $bytes = New-Object byte[] $size
-    $reader.ReadBytes($bytes)
-    [System.IO.File]::WriteAllBytes($path, $bytes)
-  } finally { $null = [System.Runtime.InteropServices.Marshal]::ReleaseComObject($stream) }
-}
-function Find-Session {
-  foreach ($s in $manager.GetSessions()) {
-    $id = $s.SourceAppUserModelId.ToLowerInvariant()
-    foreach ($n in $names) { if ($n -and $id.Contains($n)) { return $s } }
-  }
-  $null
+    $f = [System.IO.File]::Create($path)
+    try { $in.CopyTo($f) } finally { $f.Close() }
+  } finally { $in.Close() }
 }
 `
 
