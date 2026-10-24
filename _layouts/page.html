@@ -33,16 +33,16 @@
       {% for item in items %}
         <a href="{{ item.url | relative_url }}" aria-label="{{ item.title }}" class="btn">{{ item.title }}</a>
       {% endfor %}
-      <a href="{{ '/donate.html' | relative_url }}" aria-label="Donate" class="btn -donate">Donate</a>
+      {% if v2 %}<a href="{{ '/v2/donate.html' | relative_url }}" aria-label="Donate" class="btn -donate">Donate</a>{% endif %}
       {% if site.show_downloads %}
         <a href="{% if v2 %}{{ site.repository_download }}{% else %}{{ site.v1_download }}{% endif %}" aria-label="Download" class="btn out">Download</a>
       {% endif %}
     </nav>
 
     <main id="content" class="main-content" role="main">
-      {% unless v2 %}{% if page.url != "/donate.html" %}
+      {% unless v2 %}
       <p class="version-banner">This is the documentation of Spytify v1, the Windows recorder. Spytify v2 runs on Linux, macOS and Windows: <a href="{{ '/v2/overview.html' | relative_url }}">read the v2 documentation</a>.</p>
-      {% endif %}{% endunless %}
+      {% endunless %}
 
       {{ content }}
 
@@ -58,9 +58,9 @@
         <span class="site-footer-owner">
           <a href="{{ site.repository_url }}">{{ site.project_name }}</a> is maintained by <a href="{{ site.owner_url }}">{{ site.owner_name }}</a>.
         </span>
-        <span class="site-footer-credits">
-          😃 Like Spytify? If you want you can <a href="{{ '/donate.html' | relative_url }}">buy me a beer</a> 🍺.
-        </span>
+        {% if v2 %}<span class="site-footer-credits">
+          😃 Like Spytify? If you want you can <a href="{{ '/v2/donate.html' | relative_url }}">buy me a beer</a> 🍺.
+        </span>{% endif %}
       </footer>
     </main>
 
@@ -68,7 +68,7 @@
       const base = {{ site.baseurl | jsonify }};
       const pages = {
         v1: {{ site.data.nav.v1 | map: "url" | jsonify }},
-        v2: {{ site.data.nav.v2 | map: "url" | jsonify }},
+        v2: {{ site.data.nav.v2 | map: "url" | push: "/v2/donate.html" | jsonify }},
       };
 
       // The same page in the other version when it has one, else its overview.
