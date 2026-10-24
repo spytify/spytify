@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
@@ -36,7 +37,7 @@ var Logo = fyne.NewStaticResource("logo.png", logoPNG)
 //go:embed assets/logo-wordmark.png
 var wordmarkPNG []byte
 
-// Wordmark is the logo with the name beside it, for the About screen.
+// Wordmark is the logo with the name beside it, for the app bar and the About screen.
 var Wordmark = fyne.NewStaticResource("logo-wordmark.png", wordmarkPNG)
 
 // Options are what the UI needs from its environment.
@@ -136,7 +137,11 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.update.Hide()
 	a.action = widget.NewButtonWithIcon("Record", theme.MediaRecordIcon(), a.toggleRecording)
 	a.action.Importance = widget.HighImportance
-	brand := container.NewHBox(widget.NewIcon(Logo), widget.NewLabelWithStyle("Spytify", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+	// The wordmark: the logo with the name in its green.
+	mark := canvas.NewImageFromResource(Wordmark)
+	mark.FillMode = canvas.ImageFillContain
+	mark.SetMinSize(fyne.NewSize(26*622/204, 26))
+	brand := container.NewCenter(mark)
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
 	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.action))
 

@@ -1,11 +1,11 @@
-[![Spytify](assets/logo-wordmark.png)](https://spytify.github.io/spytify/overview.html)
+[![Spytify](assets/logo-wordmark.png)](https://spytify.github.io/spytify/v2/overview.html)
 
 [![Build](https://github.com/spytify/spytify/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/spytify/spytify/actions/workflows/ci.yml?query=branch%3Amaster)
 [![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspytify%2Fspytify%2Fbadges%2Ftests.json)](https://github.com/spytify/spytify/actions/workflows/ci.yml?query=branch%3Amaster)
 [![Latest release](https://img.shields.io/github/v/release/spytify/spytify?include_prereleases&label=version)](https://github.com/spytify/spytify/releases)
 [![Downloads](https://img.shields.io/github/downloads/spytify/spytify/total.svg?color=yellow&label=downloads)](https://github.com/spytify/spytify/releases)
 [![Sub Reddit](https://img.shields.io/reddit/subreddit-subscribers/spytify.svg?label=r%2Fspytify)](https://www.reddit.com/r/spytify)
-[![Donate](https://img.shields.io/badge/support-donate-ff69b4)](https://spytify.github.io/spytify/donate.html)
+[![Donate](https://img.shields.io/badge/support-donate-ff69b4)](https://spytify.github.io/spytify/v2/donate.html)
 
 **Records an application's audio, splits it into tracks and tags them.**
 
