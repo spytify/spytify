@@ -19,6 +19,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -707,5 +708,56 @@ func TestAFailedCheckReadsAsWhatIsWrong(t *testing.T) {
 		if got := checkLabel(proto.Check{Name: name, OK: true}); got != name {
 			t.Errorf("a passing %q reads %q", name, got)
 		}
+	}
+}
+
+// Under a dialog the meter stays still: moving it there repaints the whole
+// dimmed window, two thirds of a core with the first-run dialog open.
+func TestTheMeterWaitsUnderADialog(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	a.render()
+	meter := a.screens[tabRecord].(*recordScreen).level
+	before := meter.value
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -3}))
+	d := dialog.NewInformation("A dialog", "covering the meter", a.win)
+	d.Show()
+	a.renderLevel()
+	if meter.value != before {
+		t.Fatalf("the meter moved under a dialog: %v to %v", before, meter.value)
+	}
+	d.Hide()
+	a.renderLevel()
+	if meter.value == before {
+		t.Fatal("the meter did not move once the dialog closed")
+	}
+}
+
+// QA found closing the window on macOS left the app running with Minimize
+// to tray off. Closing quits unless the setting is on and there is a tray.
+func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		tray, mini bool
+		quits      bool
+	}{
+		{"setting on, tray", true, true, false},
+		{"setting off, tray", true, false, true},
+		{"setting on, no tray", false, true, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+			values := defaults()
+			values["app.minimize_to_tray"] = c.mini
+			m.SetConn(model.Connected, "")
+			m.SetSettings(values)
+			a.render()
+			quits := 0
+			a.tray, a.quitApp = c.tray, func() { quits++ }
+			a.closeWindow()
+			if (quits == 1) != c.quits {
+				t.Fatalf("quit %d times, want quitting %v", quits, c.quits)
+			}
+		})
 	}
 }
