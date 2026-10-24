@@ -82,10 +82,10 @@ func TestGracefulStopFinishesCurrentTrack(t *testing.T) {
 	// With no minimum length the stop, sent as the track starts, always
 	// takes the "let it finish" path.
 	s := newScenario(t, tl, map[string]any{"recorder.min_seconds": 0})
-	onTrackStart(s.events, "Basic Two", func() { s.core.StopSession(false) })
+	onTrackStart(s.events, "Paper Lanterns", func() { s.core.StopSession(false) })
 	runWith(t, s, SessionOptions{EndOnStop: true})
 	saved, skipped := outcome(t, s)
-	if len(saved) != 2 || saved[0] != "Basic One" || saved[1] != "Basic Two" || len(skipped) != 0 {
+	if len(saved) != 2 || saved[0] != "Midnight Ferry" || saved[1] != "Paper Lanterns" || len(skipped) != 0 {
 		t.Fatalf("saved %v skipped %v\n%s", saved, skipped, s.logs)
 	}
 	sawStopping := false
@@ -103,10 +103,10 @@ func TestGracefulStopFinishesCurrentTrack(t *testing.T) {
 func TestStopNowDiscardsCurrentTrack(t *testing.T) {
 	tl := loadTimeline(t, "basic")
 	s := newScenario(t, tl, nil)
-	onTrackStart(s.events, "Basic Two", func() { s.core.StopSession(true) })
+	onTrackStart(s.events, "Paper Lanterns", func() { s.core.StopSession(true) })
 	runWith(t, s, SessionOptions{EndOnStop: true})
 	saved, skipped := outcome(t, s)
-	if len(saved) != 1 || saved[0] != "Basic One" || skipped["Basic Two"] != proto.SkipIncomplete {
+	if len(saved) != 1 || saved[0] != "Midnight Ferry" || skipped["Paper Lanterns"] != proto.SkipIncomplete {
 		t.Fatalf("saved %v skipped %v", saved, skipped)
 	}
 	if files := fake.AudioFiles(s.out); len(files) != 1 {
@@ -119,7 +119,7 @@ func TestSingleTrack(t *testing.T) {
 	s := newScenario(t, tl, nil)
 	runWith(t, s, SessionOptions{EndOnStop: true, SingleTrack: true})
 	saved, _ := outcome(t, s)
-	if len(saved) != 1 || saved[0] != "Basic One" {
+	if len(saved) != 1 || saved[0] != "Midnight Ferry" {
 		t.Fatalf("saved %v", saved)
 	}
 }
@@ -152,7 +152,7 @@ func TestSkipDuplicateForward(t *testing.T) {
 	s.core.backends = countingBackends{fakeBackends: s.core.backends.(fakeBackends), controls: &controls}
 	runWith(t, s, SessionOptions{EndOnStop: true})
 	saved, skipped := outcome(t, s)
-	if len(saved) != 1 || skipped["Same Song"] != proto.SkipDuplicate {
+	if len(saved) != 1 || skipped["Hollow Moon"] != proto.SkipDuplicate {
 		t.Fatalf("saved %v skipped %v", saved, skipped)
 	}
 	if controls.Load() != 1 {

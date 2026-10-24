@@ -4,8 +4,8 @@
   "lead_in_ms": 500,
   "tail_ms": 1500,
   "items": [
-    {"artist": "Skipped Artist", "title": "Skipped Early", "album": "Queue", "length_ms": 30000},
-    {"artist": "Next Artist", "title": "Played Through", "album": "Queue", "length_ms": 20000, "gap_ms": 1000, "notify_offset_ms": 400}
+    {"artist": "Ada Okoro", "title": "Fast Forward", "album": "Queue Up", "length_ms": 30000},
+    {"artist": "Ada Okoro", "title": "Stay Awhile (Radio Edit)", "album": "Queue Up", "length_ms": 20000, "gap_ms": 1000, "notify_offset_ms": 400}
   ],
   "actions": [{"at_ms": 10000, "cmd": "next"}],
   "expect": [

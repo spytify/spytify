@@ -5,8 +5,8 @@
   "lead_in_ms": 500,
   "tail_ms": 1500,
   "items": [
-    {"artist": "Music Act", "title": "Album Track", "album": "Record", "length_ms": 6000, "gap_ms": 1500},
-    {"kind": "podcast", "artist": "Host", "title": "Episode 12", "album": "Daily Show", "rate": 48000, "length_ms": 7000, "gap_ms": 1000, "notify_offset_ms": 400}
+    {"artist": "Nils Arden", "title": "Northern Lights - Live at the Harbor Hall", "album": "Live in Bergen", "length_ms": 6000, "gap_ms": 1500},
+    {"kind": "podcast", "artist": "Morning Wire", "title": "Episode 12: The Sound of Rain", "album": "Morning Wire", "rate": 48000, "length_ms": 7000, "gap_ms": 1000, "notify_offset_ms": 400}
   ],
   "expect": [
     {"item": 0, "saved": true},

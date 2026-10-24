@@ -4,16 +4,16 @@
   "lead_in_ms": 500,
   "tail_ms": 1500,
   "items": [
-    {"artist": "Jitter Band", "title": "Jitter 01", "album": "Offsets", "length_ms": 5200, "gap_ms": 500,  "notify_offset_ms": -300},
-    {"artist": "Jitter Band", "title": "Jitter 02", "album": "Offsets", "length_ms": 4700, "gap_ms": 200,  "notify_offset_ms": 800},
-    {"artist": "Jitter Band", "title": "Jitter 03", "album": "Offsets", "length_ms": 6100, "gap_ms": 0,    "notify_offset_ms": 0},
-    {"artist": "Jitter Band", "title": "Jitter 04", "album": "Offsets", "length_ms": 4000, "gap_ms": 800,  "notify_offset_ms": 450},
-    {"artist": "Jitter Band", "title": "Jitter 05", "album": "Offsets", "length_ms": 5500, "gap_ms": 300,  "notify_offset_ms": -150},
-    {"artist": "Jitter Band", "title": "Jitter 06", "album": "Offsets", "length_ms": 6600, "gap_ms": 0,    "notify_offset_ms": 650},
-    {"artist": "Jitter Band", "title": "Jitter 07", "album": "Offsets", "length_ms": 4300, "gap_ms": 1000, "notify_offset_ms": 200},
-    {"artist": "Jitter Band", "title": "Jitter 08", "album": "Offsets", "length_ms": 5000, "gap_ms": 150,  "notify_offset_ms": -300},
-    {"artist": "Jitter Band", "title": "Jitter 09", "album": "Offsets", "length_ms": 5800, "gap_ms": 400,  "notify_offset_ms": 800},
-    {"artist": "Jitter Band", "title": "Jitter 10", "album": "Offsets", "length_ms": 4900, "gap_ms": 1000, "notify_offset_ms": 100, "jitter_ms": 200}
+    {"artist": "Saffron Tide", "title": "Static Bloom", "album": "Tidal", "length_ms": 5200, "gap_ms": 500,  "notify_offset_ms": -300},
+    {"artist": "Saffron Tide", "title": "Northbound (Live)", "album": "Tidal", "length_ms": 4700, "gap_ms": 200,  "notify_offset_ms": 800},
+    {"artist": "Mara Quill", "title": "Glass Orchard", "album": "Orchard", "length_ms": 6100, "gap_ms": 0,    "notify_offset_ms": 0},
+    {"artists": ["Mara Quill", "Theo Lund"], "title": "Slow Satellites", "album": "Orchard", "length_ms": 4000, "gap_ms": 800,  "notify_offset_ms": 450},
+    {"artist": "Copper Lanterns", "title": "Driftwood - 2015 Remaster", "album": "Night Shift", "length_ms": 5500, "gap_ms": 300,  "notify_offset_ms": -150},
+    {"artist": "Copper Lanterns", "title": "Ember", "album": "Night Shift", "length_ms": 6600, "gap_ms": 0,    "notify_offset_ms": 650},
+    {"artists": ["Ada Okoro", "Saffron Tide", "Kenji Mori"], "title": "Electric Fields", "album": "Fields", "length_ms": 4300, "gap_ms": 1000, "notify_offset_ms": 200},
+    {"artist": "Velvet Static", "title": "Paper Planes (Acoustic)", "album": "Lighthouse Radio", "length_ms": 5000, "gap_ms": 150,  "notify_offset_ms": -300},
+    {"artist": "Velvet Static", "title": "Lighthouse Radio", "album": "Lighthouse Radio", "length_ms": 5800, "gap_ms": 400,  "notify_offset_ms": 800},
+    {"artist": "Nils Arden", "title": "Last Train Home (Live at the Harbor Hall)", "album": "Live in Bergen", "length_ms": 4900, "gap_ms": 1000, "notify_offset_ms": 100, "jitter_ms": 200}
   ],
   "expect": [
     {"item": 0, "saved": true}, {"item": 1, "saved": true}, {"item": 2, "saved": true}, {"item": 3, "saved": true},

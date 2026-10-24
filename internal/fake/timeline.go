@@ -7,8 +7,10 @@ package fake
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/spytify/spytify/internal/pcm"
 )
@@ -74,6 +76,10 @@ type Item struct {
 	// LeadMs is silence at the start of the item's own audio, inside its
 	// length, as in a master that begins quietly.
 	LeadMs int64 `json:"lead_ms"`
+	// Art is the item's cover, relative to the timeline, or "none". Left
+	// empty, a track gets one of the covers in ../covers, picked from the
+	// timeline's seed; an ad gets none.
+	Art string `json:"art"`
 }
 
 // Action is a command a test sends to the core while the timeline plays.
@@ -116,6 +122,15 @@ func Load(path string) (*Timeline, error) {
 }
 
 func (tl *Timeline) validate() error {
+	// The covers a player shows: the same pick for the same seed.
+	covers, _ := filepath.Glob(filepath.Join(tl.dir, "..", "covers", "*.jpg"))
+	sort.Strings(covers)
+	for i, c := range covers {
+		if abs, err := filepath.Abs(c); err == nil {
+			covers[i] = abs
+		}
+	}
+	pick := rand.New(rand.NewSource(tl.Seed))
 	if tl.Rate == 0 {
 		tl.Rate = 44100
 	}
@@ -147,6 +162,14 @@ func (tl *Timeline) validate() error {
 		}
 		if it.Seed == 0 {
 			it.Seed = tl.Seed*1000 + int64(i) + 1
+		}
+		switch {
+		case it.Art == "none":
+			it.Art = ""
+		case it.Art != "" && !filepath.IsAbs(it.Art):
+			it.Art = filepath.Join(tl.dir, it.Art)
+		case it.Art == "" && it.Kind != "ad" && len(covers) > 0:
+			it.Art = covers[pick.Intn(len(covers))]
 		}
 		if len(it.Artists) == 0 && it.Artist != "" {
 			it.Artists = []string{it.Artist}

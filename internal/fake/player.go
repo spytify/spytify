@@ -3,7 +3,10 @@ package fake
 import (
 	"context"
 	"math/rand"
+	"net/url"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -115,7 +118,20 @@ func (p *Player) Info(i int) meta.TrackInfo {
 		TrackNumber: it.TrackNumber,
 		Year:        it.Year,
 		LengthMs:    it.LengthMs,
+		ArtURL:      fileURL(it.Art),
 	}
+}
+
+// fileURL is a file's URL, file:///C:/... on Windows.
+func fileURL(path string) string {
+	if path == "" {
+		return ""
+	}
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
 }
 
 func (p *Player) push(pos int64, ev meta.Event) {

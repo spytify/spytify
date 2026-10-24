@@ -2,15 +2,18 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/spytify/spytify/internal/capture"
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/settings"
@@ -206,5 +209,42 @@ func TestRecordingRaisesThePlayerVolumeAndPutsItBack(t *testing.T) {
 	}
 	if v, _ := s.player.Volume(); v != low {
 		t.Errorf("volume after the session %.2f, want %.2f", v, low)
+	}
+}
+
+// The fake player shows a cover for each track, as a player does: it is
+// in track.started and embedded in the saved file.
+func TestTheCoverGoesIntoTheFile(t *testing.T) {
+	ff, err := encode.Find("ffmpeg")
+	if err != nil {
+		t.Skip(err)
+	}
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
+	s.run(t, tl)
+	saved := 0
+	for _, ev := range s.events.all() {
+		switch ev.Method {
+		case proto.EventTrackStarted:
+			var tr proto.TrackStartedEvent
+			if ev.Decode(&tr) == nil && !strings.Contains(tr.CoverURL, "testdata/covers/cover-") {
+				t.Errorf("%q started with cover %q", tr.Title, tr.CoverURL)
+			}
+		case proto.EventTrackFinished:
+			var f proto.TrackFinishedEvent
+			if ev.Decode(&f) != nil {
+				continue
+			}
+			saved++
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			art, err := ff.Cover(ctx, f.Path)
+			cancel()
+			if err != nil || len(art) == 0 {
+				t.Errorf("%s has no cover: %v", filepath.Base(f.Path), err)
+			}
+		}
+	}
+	if saved != len(tl.Items) {
+		t.Fatalf("%d files saved, want %d", saved, len(tl.Items))
 	}
 }

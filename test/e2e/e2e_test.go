@@ -167,7 +167,7 @@ func TestDaemonAndCLI(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	files := fake.AudioFiles(e.out)
-	want := []string{"001 Basic Artist - Basic One.wav", "002 Basic Artist - Basic Two.wav", "003 Basic Artist - Basic Three.wav"}
+	want := []string{"001 Neon Harbor - Midnight Ferry.wav", "002 Juno Vale - Paper Lanterns.wav", "003 Marlow Keys - Golden Hour - 2011 Remaster.wav"}
 	if strings.Join(files, "|") != strings.Join(want, "|") {
 		t.Fatalf("files = %v, want %v\nlog:\n%s", files, want, logs)
 	}

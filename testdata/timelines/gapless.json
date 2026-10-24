@@ -4,11 +4,11 @@
   "lead_in_ms": 500,
   "tail_ms": 1500,
   "items": [
-    {"artist": "Seamless", "title": "Movement I",   "album": "Suite", "length_ms": 4000, "fade_ms": 0, "notify_offset_ms": 0},
-    {"artist": "Seamless", "title": "Movement II",  "album": "Suite", "length_ms": 5200, "fade_ms": 0, "notify_offset_ms": 500},
-    {"artist": "Seamless", "title": "Movement III", "album": "Suite", "length_ms": 3700, "fade_ms": 0, "notify_offset_ms": -200},
-    {"artist": "Seamless", "title": "Movement IV",  "album": "Suite", "length_ms": 6100, "fade_ms": 0, "notify_offset_ms": 800},
-    {"artist": "Seamless", "title": "Movement V",   "album": "Suite", "length_ms": 4400, "fade_ms": 0, "notify_offset_ms": -300, "gap_ms": 1000}
+    {"artists": ["Kestrel String Quartet", "Lena Ward"], "title": "Suite No. 2: I. Allegro",   "album": "Suite No. 2 in D", "length_ms": 4000, "fade_ms": 0, "notify_offset_ms": 0},
+    {"artists": ["Kestrel String Quartet", "Lena Ward"], "title": "Suite No. 2: II. Adagio",  "album": "Suite No. 2 in D", "length_ms": 5200, "fade_ms": 0, "notify_offset_ms": 500},
+    {"artists": ["Kestrel String Quartet", "Lena Ward"], "title": "Suite No. 2: III. Scherzo", "album": "Suite No. 2 in D", "length_ms": 3700, "fade_ms": 0, "notify_offset_ms": -200},
+    {"artists": ["Kestrel String Quartet", "Lena Ward"], "title": "Suite No. 2: IV. Interlude",  "album": "Suite No. 2 in D", "length_ms": 6100, "fade_ms": 0, "notify_offset_ms": 800},
+    {"artists": ["Kestrel String Quartet", "Lena Ward"], "title": "Suite No. 2: V. Finale",   "album": "Suite No. 2 in D", "length_ms": 4400, "fade_ms": 0, "notify_offset_ms": -300, "gap_ms": 1000}
   ],
   "expect": [
     {"item": 0, "saved": true}, {"item": 1, "saved": true}, {"item": 2, "saved": true},
