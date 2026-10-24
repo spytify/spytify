@@ -67,10 +67,15 @@ type SessionOptions struct {
 }
 
 type segment struct {
-	id      string
-	info    meta.TrackInfo
-	format  pcm.Format
-	start   int64
+	id     string
+	info   meta.TrackInfo
+	format pcm.Format
+	start  int64
+	// origin is where the item may have begun: the cut. A take that waits
+	// for its first sound moves start there, so the file skips an advert's
+	// tail, but the item's own quiet beginning counts in its length: its end
+	// is searched from origin + length to first sound + length.
+	origin  int64
 	length  int64
 	drained int64
 	w       *pcm.WAVWriter
@@ -475,7 +480,7 @@ func (s *Session) drain() {
 		limit = c.start
 	}
 	if c.length > 0 {
-		if e := c.start + c.length - s.window; limit > e {
+		if e := c.origin + c.length - s.window; limit > e {
 			limit = e
 		}
 	}
@@ -549,6 +554,8 @@ func (s *Session) onMeta(ev meta.Event) {
 		s.onStatus(ev.Status, ev.PositionMs, at, first)
 	case meta.PlayerGone:
 		s.deps.log.Infof("player interface gone")
+		// A player that is gone plays nothing, whatever it said last.
+		s.status = meta.Stopped
 		s.endOfPlayback()
 	case meta.Seeked:
 		s.deps.log.Debugf("%q: the player jumped to %d ms", ev.Track.Title, ev.PositionMs)
@@ -640,11 +647,11 @@ func (s *Session) plan(info meta.TrackInfo, at int64, restart bool) *change {
 		ch.kind = changeFirst
 		ch.lo = at - s.ms(lateNotifyMs)
 		ch.expected = at
-	case c.length > 0 && at >= c.start+c.length-s.window-s.ms(earlySlackMs):
+	case c.length > 0 && at >= c.origin+c.length-s.window-s.ms(earlySlackMs):
 		// At its end, the same item again is a new take (repeat), and the
 		// one before it is complete.
 		ch.restart = false
-		e := c.start + c.length
+		e := c.origin + c.length
 		late := s.soundAt(c) + c.length
 		ch.kind, ch.lo, ch.hi, ch.expected = changeBoundary, e-s.window, late+s.window, e
 	default:
@@ -852,6 +859,7 @@ func (s *Session) newSegment(info meta.TrackInfo, start int64) *segment {
 		info:    info,
 		format:  f,
 		start:   start,
+		origin:  start,
 		drained: start,
 		length:  f.FramesFromMs(info.LengthMs),
 		soundAt: -1,
@@ -1108,10 +1116,10 @@ func (s *Session) endOfPlayback() {
 		if c.length > 0 && late+s.window < end {
 			// Cut at the declared end so trailing audio of whatever comes
 			// next is not appended.
-			if q, db := s.ring.Quietest(c.start+c.length-s.window, late+s.window, s.frame, s.step); db <= s.silenceDB {
+			if q, db := s.ring.Quietest(c.origin+c.length-s.window, late+s.window, s.frame, s.step); db <= s.silenceDB {
 				end = q
 			} else {
-				end = c.start + c.length
+				end = c.origin + c.length
 			}
 			if end < c.drained {
 				end = c.drained
@@ -1199,7 +1207,7 @@ func (s *Session) formatChange(f pcm.Format) {
 		// stream.
 		s.dropWriter(c)
 		s.ring = saved
-		c.format, c.start, c.drained, c.soundAt = f, 0, 0, -1
+		c.format, c.start, c.origin, c.drained, c.soundAt = f, 0, 0, 0, -1
 		c.length = f.FramesFromMs(c.info.LengthMs)
 		c.awaitStart, c.startDeadline = true, s.ms(startTimeoutMs)
 		if c.reason == "" {

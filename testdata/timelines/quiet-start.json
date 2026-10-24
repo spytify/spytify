@@ -1,0 +1,18 @@
+{
+  "name": "quiet-start",
+  "seed": 9,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "items": [
+    {"artist": "Quiet Artist", "title": "Before The Ad", "album": "Quiet", "length_ms": 5000, "gap_ms": 500},
+    {"kind": "ad", "artist": "Sponsor", "title": "Sponsored", "length_ms": 6000, "fade_ms": 0, "gap_ms": 1000, "notify_offset_ms": 300},
+    {"artist": "Quiet Artist", "title": "Starts Quietly", "album": "Quiet", "length_ms": 7000, "lead_ms": 800, "gap_ms": 100, "notify_offset_ms": 100},
+    {"artist": "Quiet Artist", "title": "Right After", "album": "Quiet", "length_ms": 5000, "gap_ms": 1000, "notify_offset_ms": 100}
+  ],
+  "expect": [
+    {"item": 0, "saved": true},
+    {"item": 1, "saved": false, "reason": "ad"},
+    {"item": 2, "saved": true},
+    {"item": 3, "saved": true}
+  ]
+}

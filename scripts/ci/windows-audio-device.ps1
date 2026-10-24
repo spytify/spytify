@@ -22,5 +22,11 @@ $store.Close()
 Push-Location $sys.DirectoryName
 & $devcon.FullName install $inf "*Scream"
 Pop-Location
-Restart-Service -Name Audiosrv -Force
+# The service picks up the new output once it starts again; on a runner it
+# sometimes refuses the first time.
+Stop-Service -Name Audiosrv -Force -ErrorAction SilentlyContinue
+for ($i = 1; $i -le 10; $i++) {
+  try { Start-Service -Name Audiosrv; break } catch { Write-Host "Windows Audio did not start ($i): $($_.Exception.Message)"; Start-Sleep -Seconds 3 }
+}
+if ((Get-Service -Name Audiosrv).Status -ne "Running") { throw "Windows Audio is not running" }
 Get-CimInstance Win32_SoundDevice | Format-Table Name, Status
