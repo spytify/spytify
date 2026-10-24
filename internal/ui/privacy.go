@@ -319,7 +319,7 @@ func (a *App) askPrivacy(then func()) {
 	}
 	stats := a.statsCheck()
 	body := widget.NewLabel("Spytify can tell its developers how it is doing: how many people use it, how long its steps take and the problems it runs into. " +
-		"Nothing in it names you, your computer or your music. You can change this in Settings > Privacy.")
+		"Nothing in it names you or your computer. You can change this in Settings > Privacy.")
 	body.Wrapping = fyne.TextWrapWord
 	d := dialog.NewCustom("Help fix bugs", "OK", container.NewVBox(body, stats), a.win)
 	d.SetOnClosed(func() {
@@ -373,7 +373,7 @@ func (a *App) askCrash(cr telemetry.Crash, then func()) {
 		who = "The recorder"
 	}
 	body := widget.NewLabel(who + " stopped on an error. Send the report to the developers? It holds the error and where it happened in the code; " +
-		"your home folder, user name and track names are replaced.")
+		"your home folder and user name are replaced.")
 	body.Wrapping = fyne.TextWrapWord
 	preview := widget.NewLabelWithStyle(a.tel.CrashPreview(cr), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	scroll := container.NewScroll(preview)
@@ -422,7 +422,7 @@ func (a *App) sendChecks(s model.State, sent func()) {
 	}
 	report := telemetry.Checks{Failing: failing, Log: log}
 	body := widget.NewLabel("Send the checks that fail and the end of the recorder's log to the developers? " +
-		"Your home folder, user name and track names are replaced.")
+		"Your home folder and user name are replaced; the log can name tracks you recorded, so look at what will be sent.")
 	body.Wrapping = fyne.TextWrapWord
 	preview := widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	scroll := container.NewScroll(preview)

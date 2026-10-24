@@ -88,7 +88,7 @@ Spytify sends nothing you did not agree to. Only official builds can send anythi
 
   Off, nothing is collected, not even in memory.
 
-Never sent: an install or user ID, your computer's name, your user name, your home folder (it becomes `~`), and the names of the tracks, artists and albums you record. Sentry uses the connection's IP address to tell the country and keeps no IP; the country falls back on your system's region setting. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
+Never sent: an install or user ID, your computer's name, your user name and your home folder (it becomes `~`). The tracks, artists and albums in the app's list become `<name>`; one the list does not hold, such as from an earlier session in the recorder's log, can still go out. Sentry uses the connection's IP address to tell the country and keeps no IP; the country falls back on your system's region setting. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
 
 ## Build
 
