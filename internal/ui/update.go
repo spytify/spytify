@@ -15,7 +15,7 @@ import (
 var releasesURL = "https://api.github.com/repos/spytify/spytify/releases?per_page=10"
 
 const (
-	donateURL = "https://spytify.github.io/spytify/donate.html"
+	donateURL = "https://spytify.github.io/spytify/v2/donate.html"
 	siteURL   = "https://spytify.github.io/spytify/v2/overview.html"
 	sourceURL = "https://github.com/spytify/spytify"
 )
