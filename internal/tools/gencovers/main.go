@@ -120,8 +120,8 @@ func burst(x, y float64, c cover) rgb {
 
 func circles(x, y float64, c cover) rgb {
 	px := mix(c.from, c.to, y)
-	a := edge((math.Hypot(x-0.4, y-0.45)-0.25)*size)
-	b := edge((math.Hypot(x-0.6, y-0.55)-0.25)*size)
+	a := edge((math.Hypot(x-0.4, y-0.45) - 0.25) * size)
+	b := edge((math.Hypot(x-0.6, y-0.55) - 0.25) * size)
 	px = mix(px, c.ink, a*0.85)
 	px = mix(px, c.accent, b*0.6)
 	return px

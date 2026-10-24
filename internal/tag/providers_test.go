@@ -93,6 +93,7 @@ func TestWriterTagsFLACAndMP3(t *testing.T) {
 		t.Fatalf("sidecar: %v %s", err, b)
 	}
 }
+
 // Windows covers come as file:///C:/... from the media session poller.
 func TestFilePathOfAFileURL(t *testing.T) {
 	for _, c := range []struct{ path, goos, want string }{
