@@ -13,7 +13,7 @@ Every setting is in `config.toml`, which the recorder validates. Change them in 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
 | Theme | `app.theme` | system, light, dark | `system` |
-| Minimize to tray | `app.minimize_to_tray` | on, off | on |
+| Minimize to tray | `app.minimize_to_tray` | on, off | off |
 | Start recording on launch | `app.autostart_recording` | on, off | off |
 | Check for updates | `app.check_updates` | on, off | on |
 
