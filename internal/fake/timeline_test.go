@@ -15,8 +15,8 @@ func load(t *testing.T, name string) *Timeline {
 	return tl
 }
 
-// Tracks get a cover from testdata/covers, picked from the seed: the same
-// on every run, not the same for every track. Ads get none.
+// Tracks get a cover from testdata/covers, shuffled by the seed: the same
+// on every run, and a different one for each of ten tracks. Ads get none.
 func TestTracksGetACoverAndAdsDoNot(t *testing.T) {
 	tl := load(t, "jitter")
 	picked := map[string]bool{}
@@ -26,7 +26,7 @@ func TestTracksGetACoverAndAdsDoNot(t *testing.T) {
 		}
 		picked[it.Art] = true
 	}
-	if len(picked) < 4 {
+	if len(picked) != 10 {
 		t.Errorf("ten tracks share %d covers", len(picked))
 	}
 	again := load(t, "jitter")

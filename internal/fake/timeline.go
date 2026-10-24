@@ -122,7 +122,8 @@ func Load(path string) (*Timeline, error) {
 }
 
 func (tl *Timeline) validate() error {
-	// The covers a player shows: the same pick for the same seed.
+	// The covers a player shows: shuffled by the seed, so the same on every
+	// run, and repeated only once all are used.
 	covers, _ := filepath.Glob(filepath.Join(tl.dir, "..", "covers", "*.jpg"))
 	sort.Strings(covers)
 	for i, c := range covers {
@@ -130,7 +131,8 @@ func (tl *Timeline) validate() error {
 			covers[i] = abs
 		}
 	}
-	pick := rand.New(rand.NewSource(tl.Seed))
+	order := rand.New(rand.NewSource(tl.Seed)).Perm(len(covers))
+	next := 0
 	if tl.Rate == 0 {
 		tl.Rate = 44100
 	}
@@ -169,7 +171,8 @@ func (tl *Timeline) validate() error {
 		case it.Art != "" && !filepath.IsAbs(it.Art):
 			it.Art = filepath.Join(tl.dir, it.Art)
 		case it.Art == "" && it.Kind != "ad" && len(covers) > 0:
-			it.Art = covers[pick.Intn(len(covers))]
+			it.Art = covers[order[next%len(covers)]]
+			next++
 		}
 		if len(it.Artists) == 0 && it.Artist != "" {
 			it.Artists = []string{it.Artist}
