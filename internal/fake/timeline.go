@@ -24,11 +24,14 @@ type Timeline struct {
 	Seed     int64  `json:"seed"`
 	// PauseSilence makes the stream carry silence while paused, as some
 	// players do; otherwise no frames flow during a pause.
-	PauseSilence bool           `json:"pause_silence"`
-	Items        []Item         `json:"items"`
-	Actions      []Action       `json:"actions"`
-	Settings     map[string]any `json:"settings"`
-	Expect       []Expect       `json:"expect"`
+	PauseSilence bool `json:"pause_silence"`
+	// Volume is the player's volume when it starts, from 0 to 1 (1 when
+	// unset).
+	Volume   *float64       `json:"volume"`
+	Items    []Item         `json:"items"`
+	Actions  []Action       `json:"actions"`
+	Settings map[string]any `json:"settings"`
+	Expect   []Expect       `json:"expect"`
 	// Variants run the same timeline again with other settings and
 	// expectations, such as each recorder.duplicates policy.
 	Variants []Variant `json:"variants"`

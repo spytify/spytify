@@ -558,8 +558,6 @@ type crashMarker struct {
 
 func (c *Core) markerPath() string { return filepath.Join(c.env.StateDir, "session.json") }
 
-// pinVolume sets the player to 100% for the session and returns the undo.
-// A marker file lets the next start undo it after a crash.
 // adMuter sets the player's volume to 0 and back, for recorder.mute_ads.
 func adMuter(np meta.NowPlaying) func(on bool) error {
 	saved := 1.0
@@ -576,6 +574,8 @@ func adMuter(np meta.NowPlaying) func(on bool) error {
 	}
 }
 
+// pinVolume sets the player to 100% for the session and returns the undo.
+// A marker file lets the next start undo it after a crash.
 func (c *Core) pinVolume(np meta.NowPlaying) func() {
 	vol, err := np.Volume()
 	if err != nil || vol >= 0.999 {

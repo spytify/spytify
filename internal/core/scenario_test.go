@@ -182,3 +182,29 @@ func TestScenarios(t *testing.T) {
 		})
 	}
 }
+
+// A player turned down to 5 % records at 100 %, and is turned back down
+// once the session ends.
+func TestRecordingRaisesThePlayerVolumeAndPutsItBack(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	low := 0.05
+	tl.Volume = &low
+	s := newScenario(t, tl, nil)
+	during := make(chan float64, 1)
+	s.player.At(3000, func() {
+		v, _ := s.player.Volume()
+		during <- v
+	})
+	s.run(t, tl)
+	select {
+	case v := <-during:
+		if v != 1 {
+			t.Errorf("volume while recording %.2f, want 1", v)
+		}
+	default:
+		t.Error("the player never reached 3 s")
+	}
+	if v, _ := s.player.Volume(); v != low {
+		t.Errorf("volume after the session %.2f, want %.2f", v, low)
+	}
+}

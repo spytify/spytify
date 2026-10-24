@@ -85,6 +85,9 @@ func NewPlayer(tl *Timeline, realtime bool) (*Player, error) {
 		status:   meta.Stopped,
 		rng:      rand.New(rand.NewSource(tl.Seed + 7)),
 	}
+	if tl.Volume != nil {
+		p.volume = *tl.Volume
+	}
 	for i := range tl.Items {
 		f, data, err := tl.ItemAudio(i)
 		if err != nil {
