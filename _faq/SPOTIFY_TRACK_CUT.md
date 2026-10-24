@@ -13,4 +13,4 @@ Just delete those that are incomplete tracks in your music directory or in the S
 
 You can also remove your _Music library_ from the setting **Show songs from**.
 
-<p align="center"><img alt="Spotify local files settings" src="./assets/images/faq_local_file_issue.png" /></p>
+<p align="center"><img alt="Spotify local files settings" src="../assets/images/faq_local_file_issue.png" /></p>

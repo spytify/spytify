@@ -14,19 +14,24 @@ v1_download: "https://github.com/jwallet/spy-spotify/releases/latest"
 reddit_url: "https://www.reddit.com/r/spytify/"
 show_downloads: true
 
-# Two versions side by side: v1 at the root, v2 under /v2/, which the site opens on. Each page gets
-# its version from its folder; the layout picks the menu and the header.
+# Two versions side by side, v1 under /v1/ and v2 under /v2/; the root opens
+# v2. Each page gets its version from its folder; the layout picks the menu
+# and the header.
 default_version: v2
 versions:
   - id: v1
     label: "v1 (Windows)"
-    path: /
+    path: /v1/
   - id: v2
     label: "v2 (Linux, macOS, Windows)"
     path: /v2/
 defaults:
   - scope:
       path: ""
+    values:
+      version: v2
+  - scope:
+      path: "v1"
     values:
       version: v1
   - scope:

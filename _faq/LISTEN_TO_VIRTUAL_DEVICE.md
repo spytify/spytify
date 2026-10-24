@@ -21,4 +21,4 @@ Right click on the Audio 🔉 icon in the taskbar and select **Open Sound settin
 
 Click **Apply** and you should now hear it (and it won't record YouTube or other background noise).
 
-<p align="center"><img alt="Listen to the virtual device output" src="./assets/images/faq_listen_to_cable_output.png" /></p>
+<p align="center"><img alt="Listen to the virtual device output" src="../assets/images/faq_listen_to_cable_output.png" /></p>

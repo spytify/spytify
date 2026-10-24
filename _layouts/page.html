@@ -24,7 +24,6 @@
         {% endfor %}
       </select>
       <a href="{{ site.repository_url }}" aria-label="Spytify on GitHub"><img class="logo" alt="Spytify logo" src="{{ site.logo | relative_url }}" role="logo" /></a>
-      <h1 class="project-name">{{ site.title }}{% if v2 %} v2{% endif %}</h1>
       <h2 class="project-tagline">{% if v2 %}{{ site.description }}{% else %}{{ site.data.v1.tagline }}{% endif %}</h2>
     </header>
 
@@ -74,7 +73,7 @@
       // The same page in the other version when it has one, else its overview.
       function switchVersion(version) {
         const name = window.location.pathname.split("/").pop() || "overview.html";
-        const prefix = version === "v2" ? "/v2/" : "/";
+        const prefix = "/" + version + "/";
         const same = prefix + name;
         const target = pages[version].includes(same) ? same : prefix + "overview.html";
         window.location.assign(base + target);

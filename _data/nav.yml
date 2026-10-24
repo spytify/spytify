@@ -1,12 +1,12 @@
 v1:
   - title: Overview
-    url: /overview.html
+    url: /v1/overview.html
   - title: Features
-    url: /features.html
+    url: /v1/features.html
   - title: Settings
-    url: /settings.html
+    url: /v1/settings.html
   - title: F.A.Q
-    url: /faq.html
+    url: /v1/faq.html
 v2:
   - title: Overview
     url: /v2/overview.html

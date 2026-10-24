@@ -10,11 +10,11 @@ You can switch between last.fm API to Spotify API to get more accurate metadata,
 
 Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications/), log in using your Spotify account and register a new local application:
 
-<p align="center"><img alt="Spotify API Dashboard - Create App" src="./assets/images/faq_spotify_api_create_app.png" /></p>
+<p align="center"><img alt="Spotify API Dashboard - Create App" src="../assets/images/faq_spotify_api_create_app.png" /></p>
 
 Once created, click on your new spotify application and click on _Edit the settings_
 
-<p align="center"><img alt="Spotify API Dashboard - Edit App" src="./assets/images/faq_spotify_api_edit_app.png" /></p>
+<p align="center"><img alt="Spotify API Dashboard - Edit App" src="../assets/images/faq_spotify_api_edit_app.png" /></p>
 
 Add a _Redirect URI_ :
 
@@ -24,7 +24,7 @@ Add a _Redirect URI_ :
 
 Click on **Add**, and on **Save** at the bottom.
 
-<p align="center"><img alt="Spotify API Dashboard - Set App" src="./assets/images/faq_spotify_api_dashboard.png" /></p>
+<p align="center"><img alt="Spotify API Dashboard - Set App" src="../assets/images/faq_spotify_api_dashboard.png" /></p>
 
 Now, copy some information to Spytfiy to be able to connect Spotify API to Spytify.
 
@@ -34,4 +34,4 @@ Open Spytify settings, open _Spotify API Credentials_ modal using the key 🔑 i
 - _Client Secret_ (expand the _Show Client Secret_ on the dashboard to reveal the key.)
 - _Redirect URI_ (if you added an URI different than `http://locahost:4002`)
 
-<p align="center"><img alt="Set Spotify API credentials in app" src="./assets/images/faq_spotify_credentials.png" /></p>
+<p align="center"><img alt="Set Spotify API credentials in app" src="../assets/images/faq_spotify_credentials.png" /></p>

@@ -9,7 +9,7 @@ Any background noises can be removed by [isolating both apps on a different audi
 
 Make sure Spytify successfully muted all applications in the _Volume Mixer_ while recording. Only Spotify and Spytify should not be muted.
 
-<p align="center"><img alt="Volume mixer muted other apps" src="./assets/images/faq_volume_mixer_mute.png" /></p>
+<p align="center"><img alt="Volume mixer muted other apps" src="../assets/images/faq_volume_mixer_mute.png" /></p>
 
 Cracking/popping sounds may come from :
 
@@ -18,4 +18,4 @@ Cracking/popping sounds may come from :
 
 On Windows set your power plan to performance and in the taskbar set the performance to 100% (if you are on a laptop for instance).
 
-<p align="center"><img alt="Set power mode to Best performance" src="./assets/images/faq_performance.png" /></p>
+<p align="center"><img alt="Set power mode to Best performance" src="../assets/images/faq_performance.png" /></p>

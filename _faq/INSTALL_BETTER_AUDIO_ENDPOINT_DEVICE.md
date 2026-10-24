@@ -16,7 +16,7 @@ In Spytify **Settings** tab, under **Audio Device**, you will find a list of har
     <figcaption>Normal <i style="font-size:85%">(RealTek High Definition)</i></figcaption>
     <audio
         controls
-        src="./assets/audio/worst-2CH-24bits-44kHz-160kbps.mp3">
+        src="../assets/audio/worst-2CH-24bits-44kHz-160kbps.mp3">
             <code>Your browser does not support the <kbd>audio</kbd> element.</code>
     </audio>
 </figure>
@@ -24,7 +24,7 @@ In Spytify **Settings** tab, under **Audio Device**, you will find a list of har
     <figcaption>Decent <i style="font-size:85%">(Crystal Sound 3)</i></figcaption>
     <audio
         controls
-        src="./assets/audio/better-2CH-24bits-44kHz-160kbps.mp3">
+        src="../assets/audio/better-2CH-24bits-44kHz-160kbps.mp3">
             <code>Your browser does not support the <kbd>audio</kbd> element.</code>
     </audio>
 </figure>
@@ -32,7 +32,7 @@ In Spytify **Settings** tab, under **Audio Device**, you will find a list of har
     <figcaption>Virtual <i style="font-size:85%">(Virtual Audio Cable)</i></figcaption>
     <audio
         controls
-        src="./assets/audio/virtual-2CH-24bits-44kHz-160kbps.mp3">
+        src="../assets/audio/virtual-2CH-24bits-44kHz-160kbps.mp3">
             <code>Your browser does not support the <kbd>audio</kbd> element.</code>
     </audio>
 </figure>
@@ -40,7 +40,7 @@ In Spytify **Settings** tab, under **Audio Device**, you will find a list of har
 Spytify comes with a Virtual device that you can install from the app, or download it yourself: [Virtual Audio Cable Device](https://www.vb-audio.com/Cable/)
 Go to Settings, at the far right of **Audio Device**, click on the **Speakers** button and the click on _Install Driver_
 
-<p align="center"><img alt="Open Virtual Audio Cable device" src="./assets/images/faq_open_vac.png" /></p>
+<p align="center"><img alt="Open Virtual Audio Cable device" src="../assets/images/faq_open_vac.png" /></p>
 
 After installing the driver, it will appear in the audio device list.
 

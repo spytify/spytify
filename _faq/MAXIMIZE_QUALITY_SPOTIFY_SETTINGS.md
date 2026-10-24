@@ -18,7 +18,7 @@ When encoding, `.mp3` has a limitation of 2 channels (stereo) and a sample rate 
 
 You can increase the bitrate in Spytify settings, but if you have _Spotify Free_ it normally delivers music to `160kbps` and `320kbps` on Premium.
 
-<p align="center"><img alt="Spytify audio settings" src="./assets/images/faq_audio_profile.png" /></p>
+<p align="center"><img alt="Spytify audio settings" src="../assets/images/faq_audio_profile.png" /></p>
 
 ---
 
@@ -41,4 +41,4 @@ If you want to avoid recording suggested songs by Spotify when the music ends.
 
 Don't forget to max out the Spotify volume bar inner-app (bottom-right corner).
 
-<p align="center"><img alt="Maximize Spotify audio quality" src="./assets/images/maximize_spotify_settings.gif" /></p>
+<p align="center"><img alt="Maximize Spotify audio quality" src="../assets/images/maximize_spotify_settings.gif" /></p>

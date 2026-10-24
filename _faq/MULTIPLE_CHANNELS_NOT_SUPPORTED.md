@@ -13,4 +13,4 @@ Multi channels audio endpoint device are not supported when encoding to MP3, it 
 - Click on **Configure**
 - Make sure _Stereo_ channels is selected, otherwise select it, then applies the changes.
 
-<p align="center"><img alt="Spotify audio device multi-channel fallback" src="./assets/images/faq_fallback_stereo_channels.gif" /></p>
+<p align="center"><img alt="Spotify audio device multi-channel fallback" src="../assets/images/faq_fallback_stereo_channels.gif" /></p>

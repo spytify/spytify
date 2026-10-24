@@ -18,4 +18,4 @@ If the Spytify fails to route Spotify to your audio device, you can move it manu
 
 If you can't find the Windows 10 setting, try the section **_Windows 10 Settings 🡂 System 🡂 Sound_**, scroll down to the **_Advanced sound options 🡂 App volume and device preferences_** setting.
 
-<p align="center"><img alt="Spotify and Spytify using a different audio device" src="./assets/images/audio_output_device.gif" /></p>
+<p align="center"><img alt="Spotify and Spytify using a different audio device" src="../assets/images/audio_output_device.gif" /></p>
