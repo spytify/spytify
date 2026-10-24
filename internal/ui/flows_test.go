@@ -238,7 +238,9 @@ func TestClosingToTheTrayKeepsSpytifyThere(t *testing.T) {
 	a := New(tray, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true})
 	m.SetConn(model.Connected, "")
 	m.SetInfo(info())
-	m.SetSettings(defaults())
+	values := defaults()
+	values["app.minimize_to_tray"] = true
+	m.SetSettings(values)
 	a.render()
 	quits := 0
 	a.quitApp = func() { quits++ }
