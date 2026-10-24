@@ -436,6 +436,7 @@ type recordingCore struct {
 	mu    sync.Mutex
 	calls []string
 	sets  []map[string]any
+	stops []proto.SessionStopParams
 }
 
 func (c *recordingCore) handle(ctx context.Context, method string, params json.RawMessage) (any, error) {
@@ -445,6 +446,11 @@ func (c *recordingCore) handle(ctx context.Context, method string, params json.R
 		var p proto.SettingsSetParams
 		_ = json.Unmarshal(params, &p)
 		c.sets = append(c.sets, p.Values)
+	}
+	if method == proto.MethodSessionStop {
+		var p proto.SessionStopParams
+		_ = json.Unmarshal(params, &p)
+		c.stops = append(c.stops, p)
 	}
 	c.mu.Unlock()
 	switch method {
