@@ -429,7 +429,7 @@ func (a *App) sendChecks(s model.State, sent func()) {
 	scroll.SetMinSize(fyne.NewSize(0, 160))
 	what := widget.NewAccordion(widget.NewAccordionItem("What will be sent", scroll))
 	message := widget.NewMultiLineEntry()
-	message.SetPlaceHolder("What were you trying to do? (optional)")
+	message.SetPlaceHolder("Comment (optional)")
 	message.Wrapping = fyne.TextWrapWord
 	d := dialog.NewCustomConfirm("Send to the developers", "Send", "Cancel", container.NewVBox(body, what, message), func(send bool) {
 		if !send {
