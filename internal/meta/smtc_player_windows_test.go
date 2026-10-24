@@ -3,6 +3,7 @@
 package meta
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -24,10 +25,20 @@ func TestSMTCWithAPlayer(t *testing.T) {
 	script, _ := filepath.Abs(filepath.Join("..", "..", "scripts", "ci", "tone.ps1"))
 	player := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
 		"-Path", filepath.Join(t.TempDir(), "tone.wav"), "-Smtc")
+	var playerOut bytes.Buffer
+	player.Stdout, player.Stderr = &playerOut, &playerOut
 	if err := player.Start(); err != nil {
 		t.Fatal(err)
 	}
 	defer player.Process.Kill()
+	defer func() {
+		if t.Failed() {
+			t.Logf("player output:\n%s", playerOut.String())
+			list := smtcPrelude + "foreach ($s in $manager.GetSessions()) { $s.SourceAppUserModelId }"
+			out, err := exec.Command("powershell", "-NoProfile", "-Command", list).CombinedOutput()
+			t.Logf("media sessions (%v):\n%s", err, out)
+		}
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
