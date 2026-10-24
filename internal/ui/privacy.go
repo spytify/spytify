@@ -372,8 +372,7 @@ func (a *App) askCrash(cr telemetry.Crash, then func()) {
 	if cr.Program == "spytifyd" {
 		who = "The recorder"
 	}
-	body := widget.NewLabel(who + " stopped on an error. Send the report to the developers? It holds the error and where it happened in the code; " +
-		"your home folder and user name are replaced.")
+	body := widget.NewLabel(who + " stopped on an error. Send the report to the developers? It holds the error and where it happened in the code.")
 	body.Wrapping = fyne.TextWrapWord
 	preview := widget.NewLabelWithStyle(a.tel.CrashPreview(cr), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	scroll := container.NewScroll(preview)
@@ -421,8 +420,7 @@ func (a *App) sendChecks(s model.State, sent func()) {
 		log = append(log, l.TS+" "+l.Level+" "+l.Msg)
 	}
 	report := telemetry.Checks{Failing: failing, Log: log}
-	body := widget.NewLabel("Send the checks that fail and the end of the recorder's log to the developers? " +
-		"Your home folder and user name are replaced; the log can name tracks you recorded, so look at what will be sent.")
+	body := widget.NewLabel("Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded.")
 	body.Wrapping = fyne.TextWrapWord
 	preview := widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	scroll := container.NewScroll(preview)
