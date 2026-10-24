@@ -48,7 +48,7 @@ function Save-Thumbnail($ref, [string]$path) {
     $bytes = New-Object byte[] $size
     $reader.ReadBytes($bytes)
     [System.IO.File]::WriteAllBytes($path, $bytes)
-  } finally { $stream.Dispose() }
+  } finally { $null = [System.Runtime.InteropServices.Marshal]::ReleaseComObject($stream) }
 }
 function Find-Session {
   foreach ($s in $manager.GetSessions()) {
