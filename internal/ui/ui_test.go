@@ -695,3 +695,17 @@ func TestSourceText(t *testing.T) {
 		}
 	}
 }
+
+func TestAFailedCheckReadsAsWhatIsWrong(t *testing.T) {
+	for name, want := range map[string]string{
+		"ffmpeg found": "ffmpeg not found", "player running": "player not running",
+		"output folder writable": "output folder not writable", "capture helper": "capture helper",
+	} {
+		if got := checkLabel(proto.Check{Name: name}); got != want {
+			t.Errorf("checkLabel(%q) = %q, want %q", name, got, want)
+		}
+		if got := checkLabel(proto.Check{Name: name, OK: true}); got != name {
+			t.Errorf("a passing %q reads %q", name, got)
+		}
+	}
+}
