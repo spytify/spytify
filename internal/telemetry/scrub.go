@@ -1,0 +1,155 @@
+package telemetry
+
+import (
+	"os"
+	"os/user"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
+)
+
+// Scrubber replaces what could tell who the user is: the home folder
+// becomes ~, the user name <user>, and the artists, titles and albums the
+// app knows <name>.
+type Scrubber struct {
+	home  []string
+	user  *regexp.Regexp
+	names func() []string
+}
+
+// NewScrubber reads the home folder and user name of this computer.
+func NewScrubber(names func() []string) *Scrubber {
+	s := &Scrubber{names: names}
+	if home, err := os.UserHomeDir(); err == nil && len(home) > 1 {
+		s.home = []string{home}
+		if slash := filepath.ToSlash(home); slash != home {
+			s.home = append(s.home, slash)
+		}
+	}
+	if u, err := user.Current(); err == nil {
+		name := u.Username
+		// DOMAIN\name on Windows.
+		if i := strings.LastIndexAny(name, `\/`); i >= 0 {
+			name = name[i+1:]
+		}
+		s.setUser(name)
+	}
+	return s
+}
+
+func (s *Scrubber) setUser(name string) {
+	s.user = nil
+	if len(name) >= 3 {
+		s.user = regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(name) + `\b`)
+	}
+}
+
+// String scrubs one text.
+func (s *Scrubber) String(in string) string {
+	if s == nil || in == "" {
+		return in
+	}
+	out := in
+	for _, h := range s.home {
+		out = replaceFold(out, h, "~")
+	}
+	if s.user != nil {
+		out = s.user.ReplaceAllString(out, "<user>")
+	}
+	if s.names != nil {
+		names := s.names()
+		// Longest first: "Paper Lanterns (Live)" before "Paper Lanterns".
+		sort.Slice(names, func(i, j int) bool { return len(names[i]) > len(names[j]) })
+		for _, n := range names {
+			if n = strings.TrimSpace(n); len(n) >= 3 {
+				out = strings.ReplaceAll(out, n, "<name>")
+			}
+		}
+	}
+	return out
+}
+
+// replaceFold replaces old in s, ignoring case: Windows paths come in any
+// case.
+func replaceFold(s, old, repl string) string {
+	if old == "" {
+		return s
+	}
+	lower, lowerOld := strings.ToLower(s), strings.ToLower(old)
+	if len(lower) != len(s) {
+		return strings.ReplaceAll(s, old, repl)
+	}
+	var b strings.Builder
+	for {
+		i := strings.Index(lower, lowerOld)
+		if i < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		b.WriteString(s[:i])
+		b.WriteString(repl)
+		s, lower = s[i+len(old):], lower[i+len(old):]
+	}
+}
+
+// beforeSend is the last look at an event or a timing before it leaves.
+func (c *Client) beforeSend(ev *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+	s := c.scrub
+	ev.ServerName = ""
+	ev.User = sentry.User{IPAddress: "{{auto}}"}
+	ev.Message = s.String(ev.Message)
+	ev.Transaction = s.String(ev.Transaction)
+	for i := range ev.Exception {
+		ex := &ev.Exception[i]
+		ex.Value = s.String(ex.Value)
+		if ex.Stacktrace != nil {
+			for j := range ex.Stacktrace.Frames {
+				f := &ex.Stacktrace.Frames[j]
+				f.AbsPath, f.Filename = s.String(f.AbsPath), s.String(f.Filename)
+			}
+		}
+	}
+	for _, b := range ev.Breadcrumbs {
+		c.beforeBreadcrumb(b, nil)
+	}
+	for k, v := range ev.Tags {
+		ev.Tags[k] = s.String(v)
+	}
+	for _, ctx := range ev.Contexts {
+		for k, v := range ctx {
+			if str, ok := v.(string); ok {
+				ctx[k] = s.String(str)
+			}
+		}
+	}
+	for _, sp := range ev.Spans {
+		sp.Description = s.String(sp.Description)
+	}
+	return ev
+}
+
+func (c *Client) beforeBreadcrumb(b *sentry.Breadcrumb, _ *sentry.BreadcrumbHint) *sentry.Breadcrumb {
+	b.Message = c.scrub.String(b.Message)
+	for k, v := range b.Data {
+		if str, ok := v.(string); ok {
+			b.Data[k] = c.scrub.String(str)
+		}
+	}
+	return b
+}
+
+func (c *Client) beforeSendLog(l *sentry.Log) *sentry.Log {
+	// The SDK adds the host name when the client has no server name.
+	delete(l.Attributes, "sentry.server.address")
+	l.Body = c.scrub.String(l.Body)
+	for k, v := range l.Attributes {
+		if v.Type() == attribute.STRING {
+			l.Attributes[k] = attribute.StringValue(c.scrub.String(v.AsString()))
+		}
+	}
+	return l
+}

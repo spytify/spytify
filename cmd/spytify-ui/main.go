@@ -5,11 +5,15 @@ package main
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"fyne.io/fyne/v2/app"
 
+	"github.com/spytify/spytify/internal/crash"
+	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
@@ -19,14 +23,20 @@ func main() {
 	target.LoadDotEnv()
 	env := target.Load()
 
+	// A crash of the app leaves its trace for the next launch to offer.
+	crash.Keep(filepath.Join(env.StateDir, "spytify-ui.crash.log"))
+
 	fa := app.NewWithID("org.spytify.ui")
 	fa.SetIcon(ui.Logo)
 	m := model.New()
 	l := link.New(env.SocketPath, m)
+	tel := telemetry.New(telemetry.Options{Prefs: fa.Preferences(), Names: m.Names})
+	defer tel.Close()
 	// With a player to record, the app starts spytifyd itself; with none,
 	// it asks for one first.
 	auto := len(env.Target.ProcessNames) > 0
-	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto})
+	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
+		Telemetry: tel, Privacy: privacySettings(env.ConfigPath)})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -39,4 +49,17 @@ func main() {
 		}
 	}()
 	w.ShowAndRun()
+}
+
+// privacySettings are the privacy settings of config.toml, which the app
+// needs before the recorder answers, or when it does not.
+func privacySettings(path string) map[string]any {
+	v := settings.Defaults()
+	if store, err := settings.Open(path); err == nil {
+		v = store.Values()
+	}
+	return map[string]any{
+		"privacy.anonymous_stats": v.Bool("privacy.anonymous_stats"),
+		"privacy.crash_reports":   v.String("privacy.crash_reports"),
+	}
 }

@@ -186,6 +186,8 @@ func (f *finisher) process(j finishJob) {
 	}()
 	defer os.Remove(j.tmp)
 
+	began := time.Now()
+	since := func(t time.Time) int64 { return time.Since(t).Milliseconds() }
 	v := f.values()
 	minMs := v.Int("recorder.min_seconds") * 1000
 	playedMs := j.format.MsFromFrames(j.played)
@@ -202,8 +204,11 @@ func (f *finisher) process(j finishJob) {
 
 	var trimStart, trimEnd int64
 	keptFrames := j.played
+	timings := &proto.FinishTimings{Format: v.String("encode.format")}
 	if v.Bool("recorder.trim_silence") {
+		step := time.Now()
 		s, e, ok, err := scanTrim(j.tmp, v.Float("recorder.silence_db"))
+		timings.TrimMs = since(step)
 		if err != nil {
 			f.fail(j, "read", err)
 			return
@@ -224,7 +229,10 @@ func (f *finisher) process(j finishJob) {
 	defer cancel()
 	tags := tag.FromLocal(j.info, topts)
 	if topts.Cover && tags.CoverURL != "" {
-		if data, mime, err := tag.FetchCover(ctx, nil, tags.CoverURL); err == nil {
+		step := time.Now()
+		data, mime, err := tag.FetchCover(ctx, nil, tags.CoverURL)
+		timings.CoverMs = since(step)
+		if err == nil {
 			tags.Cover, tags.CoverMIME = data, mime
 		} else {
 			f.log.Infof("%q: cover not embedded: %v", j.info.Title, err)
@@ -258,7 +266,8 @@ func (f *finisher) process(j finishJob) {
 	}
 	final := filepath.Join(dir, name)
 	part := final + ".part"
-	format := v.String("encode.format")
+	format := timings.Format
+	step := time.Now()
 	err := f.ffmpeg.Encode(ctx, encode.Job{
 		In:          j.tmp,
 		Out:         part,
@@ -270,13 +279,17 @@ func (f *finisher) process(j finishJob) {
 		Normalize:   v.Bool("recorder.normalize"),
 		TargetLUFS:  v.Float("recorder.target_lufs"),
 	})
+	timings.EncodeMs = since(step)
 	if err != nil {
 		os.Remove(part)
 		f.fail(j, "encode", err)
 		return
 	}
 	tagged := true
-	if err := (tag.Writer{FFmpeg: f.ffmpeg.Path}).Write(ctx, part, format, tags, topts); err != nil {
+	step = time.Now()
+	err = (tag.Writer{FFmpeg: f.ffmpeg.Path}).Write(ctx, part, format, tags, topts)
+	timings.TagMs = since(step)
+	if err != nil {
 		f.log.Errorf("%q: tags not written: %v", j.info.Title, err)
 		tagged = false
 	}
@@ -300,6 +313,7 @@ func (f *finisher) process(j finishJob) {
 	f.cnt.Bytes += size
 	f.mu.Unlock()
 	f.index.add(trackKey(j.info.Artist(), j.info.Title), final)
+	timings.TotalMs = since(began)
 	f.log.Infof("saved %s", final)
 	f.emit(proto.EventTrackFinished, proto.TrackFinishedEvent{
 		ID:         j.id,
@@ -308,6 +322,7 @@ func (f *finisher) process(j finishJob) {
 		Bytes:      size,
 		Tagged:     tagged,
 		TaggedBy:   tags.Source,
+		Timings:    timings,
 	})
 }
 

@@ -32,6 +32,8 @@ type logsScreen struct {
 	diag      *widget.Accordion
 	checks    *fyne.Container
 	lastState string
+	// sent is the state of the checks last sent to the developers.
+	sent string
 }
 
 func newLogsScreen(a *App) *logsScreen {
@@ -140,6 +142,21 @@ func (l *logsScreen) renderChecks(s model.State) {
 	for _, w := range s.Info.Warnings {
 		rows = append(rows, container.NewBorder(nil, nil, widget.NewIcon(theme.WarningIcon()), nil, wrapped(w)))
 	}
+	// Stuck on a check: the user may send it to the developers, once for
+	// these results.
+	if failing > 0 && l.app.tel.Available() {
+		send := widget.NewButtonWithIcon("Send to the developers", theme.MailSendIcon(), nil)
+		done := func() {
+			l.sent = state
+			send.SetText("Sent")
+			send.Disable()
+		}
+		send.OnTapped = func() { l.app.sendChecks(s, done) }
+		if l.sent == state {
+			done()
+		}
+		rows = append(rows, container.NewHBox(send))
+	}
 	l.checks.Objects = rows
 	l.checks.Refresh()
 	l.diag.Items[0].Title = title
@@ -150,6 +167,8 @@ func (l *logsScreen) renderChecks(s model.State) {
 		l.diag.Close(0)
 	}
 	l.diag.Refresh()
+	// The diagnostics changed height: lay the log out below them again.
+	l.root.Refresh()
 }
 
 func (l *logsScreen) filter() {

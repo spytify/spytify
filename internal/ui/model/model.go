@@ -6,6 +6,7 @@ package model
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -140,6 +141,8 @@ type Model struct {
 	// levels hear the 10 Hz level events, which change nothing else; the
 	// OnChange listeners do not, so the meter does not redraw the window.
 	levels []func()
+	// events hear each live event once applied, not the replayed ones.
+	events []func(proto.Event)
 	// cleared are the rows the user cleared; a replay of the core's recent
 	// events must not bring them back.
 	cleared map[string]bool
@@ -277,9 +280,44 @@ func (m *Model) Apply(ev proto.Event) {
 				l()
 			}
 		}
+		m.notify(ev)
 		return
 	}
 	m.update(func(s *State) { m.apply(s, ev) })
+	m.notify(ev)
+}
+
+// Names are the artists, titles and albums of the session's tracks.
+func (m *Model) Names() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rows := m.s.Rows
+	if m.s.Current != nil {
+		rows = append([]Row{*m.s.Current}, rows...)
+	}
+	var names []string
+	for _, r := range rows {
+		names = append(names, r.Artist, r.Title, r.Album)
+		// Each artist of a collaboration, too.
+		names = append(names, strings.Split(r.Artist, ", ")...)
+	}
+	return names
+}
+
+// OnEvent registers fn for each live event, after the state took it in.
+func (m *Model) OnEvent(fn func(proto.Event)) {
+	m.mu.Lock()
+	m.events = append(m.events, fn)
+	m.mu.Unlock()
+}
+
+func (m *Model) notify(ev proto.Event) {
+	m.mu.Lock()
+	events := append([]func(proto.Event){}, m.events...)
+	m.mu.Unlock()
+	for _, fn := range events {
+		fn(ev)
+	}
 }
 
 // OnLevel registers fn for level events.

@@ -213,6 +213,18 @@ type TrackFinishedEvent struct {
 	Bytes      int64  `json:"bytes"`
 	Tagged     bool   `json:"tagged"`
 	TaggedBy   string `json:"tagged_by,omitempty"`
+	// Timings is how long saving the file took, step by step.
+	Timings *FinishTimings `json:"timings,omitempty"`
+}
+
+// FinishTimings are the steps between the end of a track and its file.
+type FinishTimings struct {
+	Format   string `json:"format"`
+	TrimMs   int64  `json:"trim_ms"`
+	CoverMs  int64  `json:"cover_ms"`
+	EncodeMs int64  `json:"encode_ms"`
+	TagMs    int64  `json:"tag_ms"`
+	TotalMs  int64  `json:"total_ms"`
 }
 
 type TrackSkippedEvent struct {

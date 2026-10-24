@@ -73,6 +73,23 @@ Spytify is a general-purpose application audio recorder, like Audio Hijack, Loop
 
 **For personal use of content you are entitled to listen to. You are responsible for the terms of the services you record.**
 
+## Privacy
+
+Spytify sends nothing you did not agree to. Only official builds can send anything: a build of your own has no reporting project (see [Build](#build)) and sends nothing.
+
+- **Crash reports** (Settings > Privacy > Crash reports, **ask** by default): when Spytify or the recorder stopped on an error, the app shows the report and asks before sending it, with an optional message. **always** sends without asking and **never** sends nothing; **Don't ask again** in that dialog chooses one of them.
+- **Send to the developers** (Logs, when a check fails): sends the checks that fail and the end of the recorder's log, with an optional message, once you have seen them.
+- **Anonymous stats** (Settings > Privacy, **off** by default, offered unticked at the first launch). Once on, the app sends:
+  - a count once a day, saying whether it is this install's first of the month or first ever, so the developers see active and new installs without any ID;
+  - how far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track;
+  - at each launch, whether the recorder got ready, how long it took and the names of the checks that fail;
+  - how long saving a track takes, for one track in ten;
+  - the problems that are not crashes, such as no sound reaching the recorder or a file that could not be encoded, with the steps that led there; each is counted, and one install in ten sends its details, once per version.
+
+  Off, nothing is collected, not even in memory.
+
+Never sent: an install or user ID, your computer's name, your user name, your home folder (it becomes `~`), and the names of the tracks, artists and albums you record. Sentry uses the connection's IP address to tell the country and keeps no IP; the country falls back on your system's region setting. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
+
 ## Build
 
 Go 1.26 or later.
@@ -94,6 +111,8 @@ A build of your own records nothing until you choose the application. In the app
 
 Packagers can set a default application with the build variable `SPYTIFY_DEFAULT_PROCESS`: its bare name, which matches `Name.app` on macOS, `Name.exe` on Windows and `name` on Linux. On macOS the bundle id is read from the installed app. The build scripts read the variable from the environment or from an untracked `build.env`; the project's CI takes it from a repository variable.
 
+Crash reports and anonymous stats (see [Privacy](#privacy)) go to the Sentry project of the build variable `SPYTIFY_SENTRY_DSN`, read the same way. Without it, the app sends nothing and offers neither. Builds whose version has `dev` or `+` in it, such as CI's, report as the `development` environment.
+
 The macOS app is ad-hoc signed. macOS asks for the permissions again after every rebuild, and another Mac refuses to open it until it is signed and notarised. Opened from Finder, the app still finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ## Desktop app
@@ -110,8 +129,8 @@ Closing the window quits Spytify and the recorder with it, after asking if a rec
 
 - **Record**: the track playing, with its cover, title, artists, album and the stream's format (44.1 kHz stereo), its progress, the level and Skip. Below it, every track of the session with its status (Saved, Tagged, Skipped and why), and buttons to show the file in Finder or Explorer and to play it. **Clear list** empties the list, not the folder; **Open folder** opens the output folder.
 - **Library**: every audio file in the output folder, with its cover, newest first or by name, and a search box. It reads the folder again each time you open the tab, so nothing recorded is missing from it.
-- **Settings**: App, Output, Encoding, Recording and Ads, App first. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button; a search box finds any setting. App holds the theme (system, light or dark).
-- **Logs**: the startup checks, folded while they all pass, then the recorder's log, with a choice of levels, Copy and Open log file. A failed check reads as what is wrong, such as "ffmpeg not found".
+- **Settings**: App, Output, Encoding, Recording, Ads and Privacy, App first. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button; a search box finds any setting. App holds the theme (system, light or dark).
+- **Logs**: the startup checks, folded while they all pass, then the recorder's log, with a choice of levels, Copy and Open log file. A failed check reads as what is wrong, such as "ffmpeg not found", and **Send to the developers** sends the checks that fail (see [Privacy](#privacy)).
 - **About**: versions, the project page, the source code, Check for updates and Donate.
 
 If the application plays and no audio arrives for 10 seconds, the app says so and where to look: on macOS, usually the System Audio Recording permission, which macOS asks for again after each build of your own.
@@ -197,6 +216,8 @@ The scenarios in [`testdata/timelines`](testdata/timelines) drive the real core 
 - seeks.
 
 Each file is compared with its source by cross-correlation: the peak must be within 2 ms of zero and the residual under −50 dBFS.
+
+Crash reports and anonymous stats are tested against a fake Sentry server ([`internal/telemetry/fakesentry`](internal/telemetry/fakesentry)). With everything off, a launch, a recording, a problem, a failed start and a crash must send it nothing.
 
 The same timelines run against real PipeWire and MPRIS through `cmd/fakeplayer`. CI does this in a container with no sound card:
 

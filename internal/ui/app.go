@@ -24,6 +24,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/service"
+	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -56,6 +57,11 @@ type Options struct {
 	// AutoStart says the app starts spytifyd itself: until it answers, the
 	// app shows that it is starting rather than asking for it.
 	AutoStart bool
+	// Telemetry sends what the user agrees to send; nil sends nothing.
+	Telemetry *telemetry.Client
+	// Privacy are the privacy.* settings read at launch, used until the
+	// recorder answers.
+	Privacy map[string]any
 }
 
 type screen interface {
@@ -109,6 +115,19 @@ type App struct {
 	startView  fyne.CanvasObject
 	offlineErr *widget.Label
 
+	// tel sends crash reports and anonymous stats; launch times the way to
+	// a recorder that answers.
+	tel          *telemetry.Client
+	launch       launchTrace
+	shown        bool
+	wasConnected bool
+	crashOpen    bool
+	diagNoted    bool
+	// heard and incomplete are the link goroutine's: the first sound, and
+	// the incomplete tracks in a row.
+	heard      bool
+	incomplete int
+
 	pending     sync.Mutex
 	queued      bool
 	levelQueued bool
@@ -118,7 +137,7 @@ type App struct {
 
 // New builds the window; call ShowAndRun to start.
 func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
-	a := &App{fa: fa, m: m, link: l, opts: opts}
+	a := &App{fa: fa, m: m, link: l, opts: opts, tel: opts.Telemetry, launch: launchTrace{start: time.Now()}}
 	a.applyTheme("system")
 	a.covers = newCovers(a.scheduleRender)
 	a.win = fa.NewWindow("Spytify")
@@ -139,6 +158,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		if l, ok := a.screens[a.tabs.SelectedIndex()].(*libraryScreen); ok {
 			l.scan()
 		}
+		a.noteTab(a.tabs.SelectedIndex())
 		a.renderCenter(a.last)
 	}
 
@@ -203,6 +223,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	fa.Lifecycle().SetOnStopped(a.stopDaemon)
 	m.OnChange(a.scheduleRender)
 	m.OnLevel(a.scheduleLevel)
+	m.OnEvent(a.onEvent)
 	a.render()
 	return a
 }
@@ -213,7 +234,12 @@ func (a *App) Window() fyne.Window { return a.win }
 // ShowAndRun shows the window and runs the toolkit's loop.
 func (a *App) ShowAndRun() {
 	a.win.Show()
-	a.maybeShowFirstRun()
+	a.maybeShowFirstRun(func() {
+		a.shown = true
+		a.tel.Step("launched")
+		a.tel.Breadcrumb("app", "launched", nil)
+		a.checkCrashes()
+	})
 	a.fa.Run()
 }
 
@@ -398,6 +424,7 @@ func (a *App) render() {
 			}
 		}
 	}
+	a.renderPrivacy(s)
 	// Texts changed width: lay the bar out again, only then.
 	if key := fmt.Sprint(a.dot.Importance, a.status.Text, a.output.String(), a.action.Text, a.update.Visible()); key != a.barKey {
 		a.barKey = key
@@ -547,10 +574,13 @@ func (a *App) toggleRecording() {
 		var err error
 		switch {
 		case s.Session == proto.StateStopping:
+			a.noteAction("stop now")
 			err = a.link.Do(ctx, proto.MethodSessionStop, proto.SessionStopParams{Now: true}, nil)
 		case s.Recording():
+			a.noteAction("stop")
 			err = a.link.Do(ctx, proto.MethodSessionStop, proto.SessionStopParams{}, nil)
 		default:
+			a.noteAction("record")
 			err = a.link.Do(ctx, proto.MethodSessionStart, proto.SessionStartParams{}, nil)
 		}
 		if err != nil {
@@ -582,6 +612,9 @@ func (a *App) showError(err error) {
 func (a *App) StartDaemon() {
 	fyne.Do(func() {
 		a.starting, a.startErr = true, ""
+		if a.launch.started.IsZero() {
+			a.launch.started = time.Now()
+		}
 		a.render()
 	})
 	go func() {
@@ -604,6 +637,7 @@ const startAnswerTimeout = 15 * time.Second
 // startFailed shows the offline screen with why the recorder did not start.
 func (a *App) startFailed(err error) {
 	a.starting, a.startErr = false, err.Error()
+	a.launchFailed(err)
 	a.render()
 }
 

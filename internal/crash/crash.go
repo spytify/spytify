@@ -1,4 +1,6 @@
-package main
+// Package crash keeps the trace of a fatal panic in a file, so the next run
+// of a program, or the app, can report it.
+package crash
 
 import (
 	"bytes"
@@ -8,15 +10,15 @@ import (
 	"strings"
 )
 
-// keepCrashes copies a fatal panic's trace to path as well as stderr, so a
-// crash leaves a trace whoever started the daemon: the app drops stderr once
-// spytifyd is up. It returns the summary of the trace the previous run left,
-// which moves to path.1.
-func keepCrashes(path string) (previous string) {
+// Keep copies a fatal panic's trace to path as well as stderr, so a
+// crash leaves a trace whoever started the program: the app drops
+// spytifyd's stderr once it is up. It returns the summary of the trace the
+// previous run left, which moves to path.1.
+func Keep(path string) (previous string) {
 	// Let go of a file set before, which Windows would not rename.
 	_ = debug.SetCrashOutput(nil, debug.CrashOptions{})
 	if b, err := os.ReadFile(path); err == nil && len(bytes.TrimSpace(b)) > 0 {
-		previous = crashSummary(string(b))
+		previous = Summary(string(b))
 		_ = os.Rename(path, path+".1")
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -31,9 +33,9 @@ func keepCrashes(path string) (previous string) {
 	return previous
 }
 
-// crashSummary is the panic message and where it happened: the first line,
+// Summary is the panic message and where it happened: the first line,
 // and the first source line of the goroutine that panicked.
-func crashSummary(trace string) string {
+func Summary(trace string) string {
 	lines := strings.Split(strings.TrimSpace(trace), "\n")
 	summary := strings.TrimSpace(lines[0])
 	for i, l := range lines {

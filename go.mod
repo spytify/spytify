@@ -5,10 +5,11 @@ go 1.26.0
 require (
 	fyne.io/fyne/v2 v2.8.2
 	github.com/BurntSushi/toml v1.6.0
+	github.com/getsentry/sentry-go v0.50.0
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.43.0
 )
 
@@ -17,7 +18,7 @@ require (
 	github.com/FyshOS/fancyfs v0.0.1 // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fyne-io/gl-js v0.2.1-0.20260315212741-029c47fd27e8 // indirect
 	github.com/fyne-io/glfw-js v0.4.0 // indirect
@@ -35,7 +36,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.5.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rymdport/portal v0.4.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect

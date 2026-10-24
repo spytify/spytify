@@ -213,7 +213,8 @@ func TestRecordingRaisesThePlayerVolumeAndPutsItBack(t *testing.T) {
 }
 
 // The fake player shows a cover for each track, as a player does: it is
-// in track.started and embedded in the saved file.
+// in track.started and embedded in the saved file, whose track.finished
+// says how long each step took.
 func TestTheCoverGoesIntoTheFile(t *testing.T) {
 	ff, err := encode.Find("ffmpeg")
 	if err != nil {
@@ -236,6 +237,10 @@ func TestTheCoverGoesIntoTheFile(t *testing.T) {
 				continue
 			}
 			saved++
+			// The app times saving a file from these.
+			if tm := f.Timings; tm == nil || tm.Format != "flac" || tm.EncodeMs <= 0 || tm.TotalMs < tm.TrimMs+tm.CoverMs+tm.EncodeMs+tm.TagMs {
+				t.Errorf("%s timings %+v", filepath.Base(f.Path), f.Timings)
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			art, err := ff.Cover(ctx, f.Path)
 			cancel()

@@ -85,6 +85,9 @@ var Table = []Def{
 	{Key: "recorder.skip_short_untitled", Tab: "Advanced", Group: "Ads", Label: "Treat items shorter than N seconds with no album as ads (0 = off)", Kind: KindInt, Default: int64(60), Min: 0, Max: 600, Ranged: true, Advanced: true},
 	{Key: "recorder.record_everything", Tab: "Advanced", Group: "Ads", Label: "Record everything (podcasts, short untitled items)", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "player.mute_output", Tab: "Advanced", Group: "Ads", Label: "Mute the player on this computer while recording (macOS, Linux)", Kind: KindBool, Default: false, Advanced: true},
+
+	{Key: "privacy.anonymous_stats", Tab: "App", Group: "Privacy", Label: "Send anonymous stats to the developers to help fix bugs", Kind: KindBool, Default: false, Note: "counts, timings and the problems the app runs into; no IP address, names or paths"},
+	{Key: "privacy.crash_reports", Tab: "App", Group: "Privacy", Label: "Crash reports", Kind: KindEnum, Enum: []string{"ask", "always", "never"}, Default: "ask", Note: "ask before sending, send without asking, or never send"},
 }
 
 var byKey = func() map[string]*Def {

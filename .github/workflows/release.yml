@@ -23,6 +23,8 @@ permissions:
 
 env:
   SPYTIFY_DEFAULT_PROCESS: ${{ vars.SPYTIFY_DEFAULT_PROCESS }}
+  # The developers' Sentry project, for crash reports and anonymous stats.
+  SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
 
 jobs:
   # The version every job builds, from the tag or the run's input.
