@@ -2,11 +2,15 @@ package telemetry
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
+	"github.com/spytify/spytify/internal/crash"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -195,6 +199,43 @@ func TestParseTrace(t *testing.T) {
 	}
 }
 
+// crashTo has the child of TestParseARealCrash crash into this file.
+const crashTo = "TELEMETRY_TEST_CRASH_TO"
+
+// A trace the Go runtime really wrote, where spytifyd keeps it, reads as
+// an exception whose last frame is where the panic happened.
+func TestParseARealCrash(t *testing.T) {
+	if path := os.Getenv(crashTo); path != "" {
+		crash.Keep(path)
+		go crashHere()
+		select {}
+	}
+	path := filepath.Join(t.TempDir(), "spytifyd.crash.log")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestParseARealCrash$")
+	cmd.Env = append(os.Environ(), crashTo+"="+path)
+	if out, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("the child did not crash:\n%s", out)
+	}
+	trace, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex := crashEvent(Crash{Program: "spytifyd", Trace: string(trace)}).Exception[0]
+	if ex.Type != "panic" || ex.Value != "boom in a real crash" {
+		t.Errorf("exception %s %q from:\n%s", ex.Type, ex.Value, trace)
+	}
+	frames := ex.Stacktrace.Frames
+	if len(frames) == 0 {
+		t.Fatalf("no frames in:\n%s", trace)
+	}
+	last := frames[len(frames)-1]
+	if last.Function != "crashHere" || !last.InApp || filepath.Base(last.Filename) != "telemetry_test.go" || last.Lineno == 0 {
+		t.Errorf("crashing frame %+v from:\n%s", last, trace)
+	}
+}
+
+func crashHere() { panic("boom in a real crash") }
+
 // A crash left after the first look is offered once, with its trace, the
 // user's message as feedback, and nothing that names the user.
 func TestCrashReport(t *testing.T) {
@@ -270,6 +311,29 @@ func TestSendChecks(t *testing.T) {
 	}
 }
 
+// A message is cut to the 4096 characters Sentry takes, not bytes, and a
+// blank one is not sent; the fake server holds the rest of the feedback
+// to Sentry's spec.
+func TestFeedbackFollowsTheSpec(t *testing.T) {
+	srv := fakesentry.New(t)
+	c := newClient(t, srv, Options{})
+	r := Checks{Failing: []proto.Check{{Name: "ffmpeg found", Detail: "not on PATH"}}}
+	if err := c.SendChecks(r, " \n "); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SendChecks(r, strings.Repeat("é", maxFeedback+10)); err != nil {
+		t.Fatal(err)
+	}
+	feedback := srv.Items("feedback")
+	if len(feedback) != 1 {
+		t.Fatalf("%d feedbacks for one message", len(feedback))
+	}
+	msg := feedback[0].JSON()["contexts"].(map[string]any)["feedback"].(map[string]any)["message"].(string)
+	if n := utf8.RuneCountInString(msg); n != maxFeedback || !utf8.ValidString(msg) {
+		t.Errorf("message of %d characters, valid UTF-8 %v", n, utf8.ValidString(msg))
+	}
+}
+
 func TestScrubber(t *testing.T) {
 	s := &Scrubber{home: []string{`C:\Users\Jose`, "C:/Users/Jose"}, names: func() []string { return []string{"Paper Lanterns", "Paper Lanterns (Live)", "AB"} }}
 	s.setUser("Jose")
@@ -304,6 +368,17 @@ func TestParseLocale(t *testing.T) {
 	env := map[string]string{"LANG": "fr_CA.UTF-8", "LC_ALL": "C"}
 	if got := envRegion(func(k string) string { return env[k] }); got != "CA" {
 		t.Errorf("envRegion = %q", got)
+	}
+}
+
+// The system's own region setting reads as a country; Windows always has
+// one.
+func TestOSRegion(t *testing.T) {
+	raw := osLocale()
+	got := parseLocale(raw)
+	t.Logf("system region %q, country %q", raw, got)
+	if runtime.GOOS == "windows" && got == "" {
+		t.Errorf("no country in Windows's region setting %q", raw)
 	}
 }
 

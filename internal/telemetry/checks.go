@@ -84,7 +84,8 @@ func (c *Client) SendChecks(r Checks, message string) error {
 	return nil
 }
 
-// maxFeedback is the longest message Sentry takes.
+// maxFeedback is the longest message Sentry takes, in characters: it
+// refuses a longer one rather than cutting it.
 const maxFeedback = 4096
 
 // sendFeedback sends the user's message as Sentry user feedback tied to
@@ -95,12 +96,10 @@ func (c *Client) sendFeedback(event sentry.EventID, message string) error {
 		return err
 	}
 	message = c.scrub.String(strings.TrimSpace(message))
-	if len(message) > maxFeedback {
-		message = message[:maxFeedback]
+	if r := []rune(message); len(r) > maxFeedback {
+		message = string(r[:maxFeedback])
 	}
-	var raw [16]byte
-	_, _ = rand.Read(raw[:])
-	id := hex.EncodeToString(raw[:])
+	id := uuid4()
 	now := c.opts.Now()
 	header, _ := json.Marshal(map[string]any{"event_id": id, "sent_at": now.UTC().Format(time.RFC3339)})
 	item, _ := json.Marshal(map[string]any{"type": "feedback"})
@@ -132,4 +131,14 @@ func (c *Client) sendFeedback(event sentry.EventID, message string) error {
 		return fmt.Errorf("your message did not reach the developers: %s", resp.Status)
 	}
 	return nil
+}
+
+// uuid4 is a new event ID as Sentry wants it: a random, version 4 UUID in
+// hex.
+func uuid4() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = b[6]&0x0f | 0x40
+	b[8] = b[8]&0x3f | 0x80
+	return hex.EncodeToString(b[:])
 }

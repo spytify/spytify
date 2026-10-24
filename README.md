@@ -217,7 +217,7 @@ The scenarios in [`testdata/timelines`](testdata/timelines) drive the real core 
 
 Each file is compared with its source by cross-correlation: the peak must be within 2 ms of zero and the residual under −50 dBFS.
 
-Crash reports and anonymous stats are tested against a fake Sentry server ([`internal/telemetry/fakesentry`](internal/telemetry/fakesentry)). With everything off, a launch, a recording, a problem, a failed start and a crash must send it nothing.
+Crash reports and anonymous stats are tested against a fake Sentry server ([`internal/telemetry/fakesentry`](internal/telemetry/fakesentry)), which fails the test on a user feedback Sentry would refuse. With everything off, a launch, a recording, a problem, a failed start and a crash must send it nothing. To see that a real Sentry project takes every report, run `SPYTIFY_SENTRY_LIVE_DSN=<a test project's DSN> go test -run TestLiveSentry -v ./internal/telemetry/` and look there for the run's mark.
 
 The same timelines run against real PipeWire and MPRIS through `cmd/fakeplayer`. CI does this in a container with no sound card:
 
