@@ -3,8 +3,11 @@
 package meta
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -48,5 +51,38 @@ func TestSMTCPollerRunsOnWindows(t *testing.T) {
 	defer mu.Unlock()
 	if len(logs) > 0 {
 		t.Fatalf("poller errors: %v", logs)
+	}
+}
+
+// A thumbnail stream, as a player hands one over, is saved whole: here
+// the stream of a file, which Windows opens the same way.
+func TestSMTCSavesAThumbnail(t *testing.T) {
+	dir := t.TempDir()
+	src, dst := filepath.Join(dir, "cover.jpg"), filepath.Join(dir, "saved.jpg")
+	want := make([]byte, 70000)
+	for i := range want {
+		want[i] = byte(i * 7)
+	}
+	if err := os.WriteFile(src, want, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body := `
+$null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
+$null = [Windows.Storage.Streams.RandomAccessStreamReference, Windows.Storage.Streams, ContentType = WindowsRuntime]
+$file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($src)) ([Windows.Storage.StorageFile])
+Save-Thumbnail ([Windows.Storage.Streams.RandomAccessStreamReference]::CreateFromFile($file)) $dst
+`
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	out, err := powershell(ctx, smtcScript(nil, map[string]string{"src": psQuote(src), "dst": psQuote(dst)}, body)).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("%v (output: %s)", err, out)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("saved %d bytes, want %d", len(got), len(want))
 	}
 }
