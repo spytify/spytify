@@ -210,3 +210,20 @@ func TestTrackStartedKeepsTheSourceFormat(t *testing.T) {
 		t.Fatalf("current %+v", c)
 	}
 }
+
+// QA found the app taking a whole core while recording: every 10 Hz level
+// event ran a full redraw. Level events reach only the level listeners.
+func TestLevelEventsDoNotRedrawTheWindow(t *testing.T) {
+	m := New()
+	var full, level int
+	m.OnChange(func() { full++ })
+	m.OnLevel(func() { level++ })
+	m.Apply(started(t, "s-001", "A"))
+	full = 0
+	for i := 0; i < 50; i++ {
+		m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -20}))
+	}
+	if full != 0 || level != 50 {
+		t.Fatalf("50 level events ran %d full redraws and %d level updates", full, level)
+	}
+}

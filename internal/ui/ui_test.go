@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -19,6 +20,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -280,7 +282,7 @@ func TestOfflineScreen(t *testing.T) {
 	m.SetConn(model.Disconnected, "spytifyd is not running")
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"spytifyd is not running", "Start spytifyd", "/tmp/spytify.sock", "Player process", "Save and restart spytifyd"} {
+	for _, want := range []string{"The recorder is not running", "spytifyd is not running", "Start the recorder", "/tmp/spytify.sock", "Player process", "Save and restart spytifyd"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the offline screen", want)
 		}
@@ -693,5 +695,148 @@ func TestSourceText(t *testing.T) {
 		if got := sourceText(c.rate, c.ch); got != c.want {
 			t.Errorf("sourceText(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
 		}
+	}
+}
+
+func TestAFailedCheckReadsAsWhatIsWrong(t *testing.T) {
+	for name, want := range map[string]string{
+		"ffmpeg found": "ffmpeg not found", "player running": "player not running",
+		"output folder writable": "output folder not writable", "capture helper": "capture helper",
+	} {
+		if got := checkLabel(proto.Check{Name: name}); got != want {
+			t.Errorf("checkLabel(%q) = %q, want %q", name, got, want)
+		}
+		if got := checkLabel(proto.Check{Name: name, OK: true}); got != name {
+			t.Errorf("a passing %q reads %q", name, got)
+		}
+	}
+}
+
+// Under a dialog the meter stays still: moving it there repaints the whole
+// dimmed window, two thirds of a core with the first-run dialog open.
+func TestTheMeterWaitsUnderADialog(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	a.render()
+	meter := a.screens[tabRecord].(*recordScreen).level
+	before := meter.value
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -3}))
+	d := dialog.NewInformation("A dialog", "covering the meter", a.win)
+	d.Show()
+	a.renderLevel()
+	if meter.value != before {
+		t.Fatalf("the meter moved under a dialog: %v to %v", before, meter.value)
+	}
+	d.Hide()
+	a.renderLevel()
+	if meter.value == before {
+		t.Fatal("the meter did not move once the dialog closed")
+	}
+}
+
+// QA found closing the window on macOS left the app running with Minimize
+// to tray off. Closing quits unless the setting is on and there is a tray.
+func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		tray, mini bool
+		quits      bool
+	}{
+		{"setting on, tray", true, true, false},
+		{"setting off, tray", true, false, true},
+		{"setting on, no tray", false, true, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+			values := defaults()
+			values["app.minimize_to_tray"] = c.mini
+			m.SetConn(model.Connected, "")
+			m.SetSettings(values)
+			a.render()
+			quits := 0
+			a.tray, a.quitApp = c.tray, func() { quits++ }
+			a.closeWindow()
+			if (quits == 1) != c.quits {
+				t.Fatalf("quit %d times, want quitting %v", quits, c.quits)
+			}
+		})
+	}
+}
+
+// The app starts the recorder itself: it says so instead of asking, and
+// only a start that failed shows the offline screen, with the reason.
+func TestTheAppStartsTheRecorderItself(t *testing.T) {
+	fa := test.NewTempApp(t)
+	fa.Preferences().SetBool(firstRunKey, true)
+	m := model.New()
+	l := link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
+	a := New(fa, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, AutoStart: true})
+	m.SetConn(model.Disconnected, "spytifyd is not running")
+	a.render()
+	all := texts(a.win.Content())
+	if !contains(all, "Starting the recorder…") || contains(all, "Start the recorder") {
+		t.Fatalf("starting: %v", all)
+	}
+	a.startFailed(errors.New("spytifyd not found next to Spytify"))
+	all = texts(a.win.Content())
+	for _, want := range []string{"The recorder is not running", "spytifyd not found next to Spytify", "Start the recorder"} {
+		if !contains(all, want) {
+			t.Errorf("%q not shown after a failed start: %v", want, all)
+		}
+	}
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	a.render()
+	if contains(texts(a.win.Content()), "Starting the recorder…") {
+		t.Error("still starting once connected")
+	}
+}
+
+// Record needs the player: with it closed the button is off, and the app
+// bar says why. A recording under way keeps its Stop.
+func TestRecordWaitsForThePlayer(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(defaults())
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
+	a.render()
+	if !a.action.Disabled() || !strings.Contains(a.status.Text, "is not running") {
+		t.Fatalf("player closed: Record disabled %v, status %q", a.action.Disabled(), a.status.Text)
+	}
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 7}))
+	a.render()
+	if a.action.Disabled() {
+		t.Fatal("Record stays disabled once the player runs")
+	}
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
+	a.render()
+	if a.action.Disabled() || a.action.Text != "Stop" {
+		t.Fatalf("player quit while recording: %q disabled %v", a.action.Text, a.action.Disabled())
+	}
+}
+
+// A player that is off is in the app bar and offered to open; the
+// diagnostics are not, even while its check still says so.
+func TestNoDiagnosticsForAPlayerThatIsOff(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	stale := info()
+	stale.Checks[1].OK = false
+	m.SetInfo(stale)
+	m.SetSettings(defaults())
+	a.render()
+	all := texts(a.win.Content())
+	if !contains(all, "Open Player") || contains(all, "Open diagnostics") {
+		t.Errorf("player off: %v", all)
+	}
+	// The check can lag behind the player's state, which the app bar
+	// shows: it sends nobody to the diagnostics either.
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 7}))
+	m.SetInfo(stale)
+	a.render()
+	if all := texts(a.win.Content()); contains(all, "Open diagnostics") {
+		t.Errorf("a stale player check sends to the diagnostics: %v", all)
 	}
 }

@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"fyne.io/fyne/v2/app"
@@ -24,7 +23,10 @@ func main() {
 	fa.SetIcon(ui.Logo)
 	m := model.New()
 	l := link.New(env.SocketPath, m)
-	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath})
+	// With a player to record, the app starts spytifyd itself; with none,
+	// it asks for one first.
+	auto := len(env.Target.ProcessNames) > 0
+	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -32,7 +34,7 @@ func main() {
 	go func() {
 		// Give an already running daemon a moment to answer first.
 		time.Sleep(800 * time.Millisecond)
-		if m.Snapshot().Conn != model.Connected && os.Getenv("SPYTIFY_TARGET_PROCESS") != "" {
+		if m.Snapshot().Conn != model.Connected && auto {
 			w.StartDaemon()
 		}
 	}()

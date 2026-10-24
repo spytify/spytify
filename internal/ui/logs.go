@@ -135,7 +135,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 			open.Importance = widget.HighImportance
 			fix = open
 		}
-		rows = append(rows, container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(c.Name)), fix, clipped(c.Detail)))
+		rows = append(rows, container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail)))
 	}
 	for _, w := range s.Info.Warnings {
 		rows = append(rows, container.NewBorder(nil, nil, widget.NewIcon(theme.WarningIcon()), nil, wrapped(w)))
@@ -165,4 +165,18 @@ func (l *logsScreen) filter() {
 	}
 	l.lines = lines
 	l.list.Refresh()
+}
+
+// checkLabel names a check as it stands: a failed "ffmpeg found" reads
+// "ffmpeg not found". Code keeps finding checks by their names.
+func checkLabel(c proto.Check) string {
+	if c.OK {
+		return c.Name
+	}
+	for _, word := range []string{"found", "running", "configured", "writable"} {
+		if strings.HasSuffix(c.Name, " "+word) {
+			return strings.TrimSuffix(c.Name, word) + "not " + word
+		}
+	}
+	return c.Name
 }

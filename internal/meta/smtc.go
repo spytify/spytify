@@ -35,7 +35,21 @@ function Await($op, [Type]$type) {
 $managerType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
 $propsType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties, Windows.Media.Control, ContentType = WindowsRuntime]
 $streamType = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime]
+$inputType = [Windows.Storage.Streams.IInputStream, Windows.Storage.Streams, ContentType = WindowsRuntime]
+$asStreamForRead = [System.IO.WindowsRuntimeStreamExtensions].GetMethod('AsStreamForRead', [Type[]]@($inputType))
 $manager = Await ($managerType::RequestAsync()) $managerType
+# Save-Thumbnail writes a thumbnail to path. Windows PowerShell sees the
+# stream as a bare COM object, with no methods of its own and no overload
+# that takes it; called through reflection, as Await calls AsTask, the
+# runtime casts it.
+function Save-Thumbnail($ref, [string]$path) {
+  $stream = Await ($ref.OpenReadAsync()) $streamType
+  $in = $asStreamForRead.Invoke($null, @($stream))
+  try {
+    $f = [System.IO.File]::Create($path)
+    try { $in.CopyTo($f) } finally { $f.Close() }
+  } finally { $in.Close() }
+}
 function Find-Session {
   foreach ($s in $manager.GetSessions()) {
     $id = $s.SourceAppUserModelId.ToLowerInvariant()
@@ -50,7 +64,7 @@ function Find-Session {
 // reports the position as of its last update; the cover is a thumbnail
 // stream, saved to a temporary file once per track.
 const smtcPoll = `
-$lastKey = ''; $cover = ''; $coverFile = ''
+$lastKey = ''; $cover = ''; $coverFile = ''; $coverKey = ''
 while ($true) {
   $out = [ordered]@{ running = $false }
   try {
@@ -66,15 +80,19 @@ while ($true) {
       $p = Await ($s.TryGetMediaPropertiesAsync()) $propsType
       if ($p -and $p.Title) {
         $key = "$($p.Artist)|$($p.AlbumTitle)|$($p.Title)"
-        if ($key -ne $lastKey -or (-not $cover -and $p.Thumbnail)) {
-          $lastKey = $key; $cover = ''
+        if ($key -ne $lastKey) { $lastKey = $key; $cover = ''; $coverKey = '' }
+        # The thumbnail often comes a moment after the title; a cover that
+        # cannot be read is tried once per track and never costs the track.
+        if (-not $cover -and $p.Thumbnail -and $coverKey -ne $key) {
+          $coverKey = $key
           if ($coverFile) { Remove-Item -LiteralPath $coverFile -ErrorAction SilentlyContinue; $coverFile = '' }
-          if ($p.Thumbnail) {
-            $stream = Await ($p.Thumbnail.OpenReadAsync()) $streamType
-            $in = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
+          try {
             $coverFile = Join-Path $env:TEMP ('spytify-cover-' + [guid]::NewGuid().ToString('N'))
-            $f = [System.IO.File]::Create($coverFile); $in.CopyTo($f); $f.Close(); $in.Close()
+            Save-Thumbnail $p.Thumbnail $coverFile
             $cover = ([Uri]$coverFile).AbsoluteUri
+          } catch {
+            $coverFile = ''
+            $out.error = "cover: $($_.Exception.Message)"
           }
         }
         $out.track = [ordered]@{

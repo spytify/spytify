@@ -12,6 +12,8 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -28,14 +30,45 @@ type FFmpeg struct {
 var ErrMissing = errors.New("ffmpeg not found; install it or set SPYTIFY_FFMPEG")
 
 // wellKnown are tried when ffmpeg is not on PATH, as for an app started
-// from a desktop launcher with a minimal PATH.
-var wellKnown = []string{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "/snap/bin/ffmpeg"}
+// from a desktop launcher with a minimal PATH, or on Windows, where PATH
+// rarely has it: first the copy shipped beside spytifyd, then where
+// package managers and people put it.
+func wellKnown(goos string, getenv func(string) string) []string {
+	var c []string
+	exe := "ffmpeg"
+	if goos == "windows" {
+		exe = "ffmpeg.exe"
+	}
+	if self, err := os.Executable(); err == nil {
+		c = append(c, filepath.Join(filepath.Dir(self), exe))
+	}
+	if goos != "windows" {
+		return append(c, "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "/snap/bin/ffmpeg")
+	}
+	join := func(env string, parts ...string) {
+		if base := getenv(env); base != "" {
+			c = append(c, filepath.Join(append([]string{base}, parts...)...))
+		}
+	}
+	join("LOCALAPPDATA", "Microsoft", "WinGet", "Links", exe)
+	if base := getenv("LOCALAPPDATA"); base != "" {
+		// winget's Gyan.FFmpeg packages, whose link PATH only sees after a
+		// new sign-in.
+		found, _ := filepath.Glob(filepath.Join(base, "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg*", "*", "bin", exe))
+		c = append(c, found...)
+	}
+	join("ProgramData", "chocolatey", "bin", exe)
+	join("USERPROFILE", "scoop", "shims", exe)
+	join("ProgramFiles", "ffmpeg", "bin", exe)
+	join("SystemDrive", string(filepath.Separator)+"ffmpeg", "bin", exe)
+	return c
+}
 
 // Find resolves name (a path or a command on PATH) and reads its version.
 func Find(name string) (*FFmpeg, error) {
 	path, err := exec.LookPath(name)
 	if err != nil && name == "ffmpeg" {
-		for _, p := range wellKnown {
+		for _, p := range wellKnown(runtime.GOOS, os.Getenv) {
 			if _, serr := os.Stat(p); serr == nil {
 				path, err = p, nil
 				break
