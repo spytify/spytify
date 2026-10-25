@@ -34,7 +34,7 @@ const (
 	// privacySeenKey is set once the bug tracker choice was shown.
 	privacySeenKey = "bug-tracker-choice-seen"
 	trackerLabel   = "Sentry bug tracker: send crashes, errors and traces"
-	optedOut       = "You opted out of the Sentry bug tracker (Settings > Privacy)"
+	optedOut       = "You opted out of the Sentry bug tracker"
 )
 
 // launchTrace times the way from launch to a recorder that answers.
@@ -332,8 +332,7 @@ func (a *App) askPrivacy(then func()) {
 		return
 	}
 	tracker := a.trackerCheck()
-	body := widget.NewLabel("Spytify can send its crashes, errors and traces to its developers through Sentry, to help them fix issues. " +
-		"You can change this in Settings > Privacy.")
+	body := widget.NewLabel("Spytify can send its crashes, errors and traces to its developers through Sentry, to help them fix issues.")
 	body.Wrapping = fyne.TextWrapWord
 	d := dialog.NewCustom("Help fix issues", "OK", container.NewVBox(body, tracker), a.win)
 	d.SetOnClosed(func() {

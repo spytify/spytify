@@ -166,7 +166,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 		}
 	}
 	for _, w := range s.Info.Warnings {
-		advice = append(advice, container.NewBorder(nil, nil, widget.NewIcon(theme.ErrorIcon()), nil, wrapped(w)))
+		advice = append(advice, container.NewBorder(nil, nil, widget.NewIcon(theme.InfoIcon()), nil, wrapped(w)))
 	}
 	rows := append(append(passed, advice...), failed...)
 	// Stuck on a check: the user may send it to the developers, once for
