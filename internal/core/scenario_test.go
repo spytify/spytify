@@ -249,59 +249,6 @@ func TestTheCoverGoesIntoTheFile(t *testing.T) {
 	}
 }
 
-// fleetingCovers stands between the fake player and the session and deletes
-// a track's cover file once the next track's cover is out, as the Windows
-// watcher does with its temporary files.
-type fleetingCovers struct {
-	fakeBackends
-	dir string
-}
-
-type fleetingNP struct {
-	*fake.Backend
-	dir string
-}
-
-func (f fleetingCovers) New(target.Target) (capture.Capture, meta.NowPlaying, error) {
-	return f.b, fleetingNP{f.b, f.dir}, nil
-}
-
-func (n fleetingNP) Watch(ctx context.Context, t target.Target) (<-chan meta.Event, error) {
-	in, err := n.Backend.Watch(ctx, t)
-	if err != nil {
-		return nil, err
-	}
-	out := make(chan meta.Event)
-	go func() {
-		defer close(out)
-		last := ""
-		for {
-			var ev meta.Event
-			select {
-			case e, ok := <-in:
-				if !ok {
-					return
-				}
-				ev = e
-			case <-ctx.Done():
-				return
-			}
-			if u := ev.Track.ArtURL; ev.Kind == meta.TrackChanged && u != "" && u != last {
-				if last != "" {
-					_ = os.Remove(filepath.Join(n.dir, filepath.Base(last)))
-				}
-				last = u
-			}
-			select {
-			case out <- ev:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return out, nil
-}
-
 // A cover the watcher deletes when the next track's comes out still goes
 // into its own track's file.
 func TestACoverFileGoneAtTheNextTrackStillGoesIntoItsFile(t *testing.T) {
@@ -330,7 +277,14 @@ func TestACoverFileGoneAtTheNextTrackStillGoesIntoItsFile(t *testing.T) {
 		covers[filepath.Base(f.Name())] = b
 	}
 	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
-	s.core.backends = fleetingCovers{fakeBackends: s.core.backends.(fakeBackends), dir: dir}
+	// As the Windows watcher does with its temporary files, a track's cover
+	// file goes as the next track starts, before the player says so.
+	start := tl.LeadInMs
+	for i := range len(tl.Items) - 1 {
+		start += tl.Items[i].LengthMs + tl.Items[i].GapMs
+		art := tl.Items[i].Art
+		s.player.At(start, func() { _ = os.Remove(art) })
+	}
 	s.run(t, tl)
 	want := map[string][]byte{}
 	saved := 0
