@@ -29,6 +29,8 @@ type MPRIS struct {
 	name  string
 	owner string
 	last  TrackInfo
+	// clock tells a Seeked signal that restates the position from a jump.
+	clock posClock
 }
 
 // NewMPRIS returns a backend; nothing connects until Watch or Control.
@@ -112,7 +114,7 @@ func (m *MPRIS) Watch(ctx context.Context, t target.Target) (<-chan Event, error
 		}
 		if name, owner, err := m.resolve(conn); err == nil {
 			m.setOwner(name, owner)
-			for _, e := range m.snapshot(conn) {
+			for _, e := range m.snapshot(conn, time.Now()) {
 				if !send(e) {
 					return
 				}
@@ -129,7 +131,7 @@ func (m *MPRIS) Watch(ctx context.Context, t target.Target) (<-chan Event, error
 				if !ok {
 					return
 				}
-				for _, e := range m.handle(conn, sig) {
+				for _, e := range m.handle(conn, sig, time.Now()) {
 					if !send(e) {
 						return
 					}
@@ -153,7 +155,7 @@ func (m *MPRIS) current() (name, owner string) {
 }
 
 // snapshot reads the current item, status and position.
-func (m *MPRIS) snapshot(conn *dbus.Conn) []Event {
+func (m *MPRIS) snapshot(conn *dbus.Conn, at time.Time) []Event {
 	name, _ := m.current()
 	obj := conn.Object(name, mprisPath)
 	var props map[string]dbus.Variant
@@ -161,22 +163,24 @@ func (m *MPRIS) snapshot(conn *dbus.Conn) []Event {
 		return []Event{{Kind: TrackChanged, PositionMs: -1}, {Kind: StatusChanged, Status: Stopped, PositionMs: -1}}
 	}
 	info := ParseMetadata(props["Metadata"])
-	m.mu.Lock()
-	m.last = info
-	m.mu.Unlock()
 	pos := int64(-1)
 	if v, ok := props["Position"]; ok {
 		if us, ok := toInt64(v.Value()); ok {
 			pos = us / 1000
 		}
 	}
+	status := parseStatus(props["PlaybackStatus"])
+	m.mu.Lock()
+	m.last = info
+	m.clock = posClock{ms: pos, at: at, playing: status == Playing}
+	m.mu.Unlock()
 	return []Event{
 		{Kind: TrackChanged, Track: info, PositionMs: pos},
-		{Kind: StatusChanged, Status: parseStatus(props["PlaybackStatus"]), PositionMs: pos},
+		{Kind: StatusChanged, Status: status, PositionMs: pos},
 	}
 }
 
-func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal) []Event {
+func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal, at time.Time) []Event {
 	switch sig.Name {
 	case "org.freedesktop.DBus.NameOwnerChanged":
 		if len(sig.Body) != 3 {
@@ -195,22 +199,30 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal) []Event {
 			return nil
 		}
 		m.setOwner(name, newOwner)
-		return append([]Event{{Kind: PlayerAppeared, PositionMs: -1}}, m.snapshot(conn)...)
+		return append([]Event{{Kind: PlayerAppeared, PositionMs: -1}}, m.snapshot(conn, at)...)
 	case mprisPlayer + ".Seeked":
 		if _, owner := m.current(); owner == "" || sig.Sender != owner || len(sig.Body) < 1 {
 			return nil
 		}
 		us, _ := toInt64(sig.Body[0])
+		ms := us / 1000
 		m.mu.Lock()
 		last := m.last
+		want := m.clock.read(at)
+		m.clock.ms, m.clock.at = ms, at
 		m.mu.Unlock()
 		if last.Empty() {
 			return nil
 		}
-		if us < 1_500_000 {
-			return []Event{{Kind: TrackChanged, Track: last, PositionMs: us / 1000, Restart: true}}
+		// Some players restate where they are, when their window comes back
+		// for one: a position where the clock says is no jump.
+		if want >= 0 && ms-want <= seekSlackMs && want-ms <= seekSlackMs {
+			return nil
 		}
-		return []Event{{Kind: Seeked, Track: last, PositionMs: us / 1000}}
+		if us < 1_500_000 {
+			return []Event{{Kind: TrackChanged, Track: last, PositionMs: ms, Restart: true}}
+		}
+		return []Event{{Kind: Seeked, Track: last, PositionMs: ms}}
 	case propsInterface + ".PropertiesChanged":
 		if _, owner := m.current(); owner == "" || sig.Sender != owner || len(sig.Body) < 2 {
 			return nil
@@ -229,13 +241,17 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal) []Event {
 		st, hasStatus := changed["PlaybackStatus"]
 		for _, k := range invalidated {
 			if k == "Metadata" || k == "PlaybackStatus" {
-				return m.snapshot(conn)
+				return m.snapshot(conn, at)
 			}
 		}
 		if hasMeta {
 			info := ParseMetadata(md)
 			m.mu.Lock()
 			changedItem := !equalInfo(info, m.last)
+			if !sameItem(info, m.last) {
+				// A new item starts at its beginning.
+				m.clock.ms, m.clock.at = 0, at
+			}
 			m.last = info
 			m.mu.Unlock()
 			if changedItem {
@@ -243,7 +259,14 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal) []Event {
 			}
 		}
 		if hasStatus {
-			out = append(out, Event{Kind: StatusChanged, Status: parseStatus(st), PositionMs: -1})
+			status := parseStatus(st)
+			m.mu.Lock()
+			if ms := m.clock.read(at); ms >= 0 {
+				m.clock.ms, m.clock.at = ms, at
+			}
+			m.clock.playing = status == Playing
+			m.mu.Unlock()
+			out = append(out, Event{Kind: StatusChanged, Status: status, PositionMs: -1})
 		}
 		return out
 	}
@@ -253,6 +276,35 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal) []Event {
 func equalInfo(a, b TrackInfo) bool {
 	return a.ID == b.ID && a.Title == b.Title && a.Album == b.Album && a.LengthMs == b.LengthMs &&
 		strings.Join(a.Artists, "\x00") == strings.Join(b.Artists, "\x00") && a.ArtURL == b.ArtURL
+}
+
+// sameItem tells whether two infos name the same item, whatever their cover
+// or length says.
+func sameItem(a, b TrackInfo) bool {
+	if a.ID != "" || b.ID != "" {
+		return a.ID == b.ID
+	}
+	return a.Title == b.Title && a.Album == b.Album && strings.Join(a.Artists, "\x00") == strings.Join(b.Artists, "\x00")
+}
+
+// posClock is the item's position as the player last told it, and whether
+// it runs.
+type posClock struct {
+	ms      int64
+	at      time.Time
+	playing bool
+}
+
+// read is where the clock says the item stands at t, or -1 when it does not
+// know.
+func (c posClock) read(t time.Time) int64 {
+	if c.ms < 0 || c.at.IsZero() {
+		return -1
+	}
+	if c.playing {
+		return c.ms + t.Sub(c.at).Milliseconds()
+	}
+	return c.ms
 }
 
 func (m *MPRIS) player() (dbus.BusObject, error) {
