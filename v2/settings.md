@@ -87,4 +87,10 @@ Advanced:
 | Record everything (podcasts, short untitled items) | `recorder.record_everything` | on, off | off |
 | Mute the player on this computer while recording (macOS, Linux) | `player.mute_output` | on, off | off |
 
+### Privacy
+
+| Setting | Key | Values | Default |
+| --- | --- | --- | --- |
+| Sentry bug tracker: send crashes, errors and traces | `privacy.bug_tracker` | on, off | on |
+
 The recorded application is chosen with environment variables, not in `config.toml`: see [Configuration](advanced.html#configuration).

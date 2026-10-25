@@ -192,6 +192,7 @@ An empty object.
 | `bytes` | integer |
 | `tagged` | boolean |
 | `tagged_by` | string, optional |
+| `timings` | [FinishTimings](#finishtimings), optional |
 
 #### TrackSkippedEvent
 
@@ -243,6 +244,17 @@ An empty object.
 | --- | --- |
 | `method` | string |
 | `params` | any JSON |
+
+#### FinishTimings
+
+| Field | Type |
+| --- | --- |
+| `format` | string |
+| `trim_ms` | integer |
+| `cover_ms` | integer |
+| `encode_ms` | integer |
+| `tag_ms` | integer |
+| `total_ms` | integer |
 
 #### TargetInfo
 
