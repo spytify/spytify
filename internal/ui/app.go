@@ -147,6 +147,10 @@ type App struct {
 	wasConnected bool
 	checksNoted  string
 	diagNoted    bool
+	// reports are the reports on their way to the bug tracker, which
+	// tests wait for: one still going must not touch the next test's
+	// window.
+	reports sync.WaitGroup
 	// heard and incomplete are the link goroutine's: the first sound, and
 	// the incomplete tracks in a row.
 	heard      bool

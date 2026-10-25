@@ -35,6 +35,7 @@ func privacyApp(t *testing.T, srv *fakesentry.Server, on bool) (*App, *model.Mod
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, AutoStart: true, Telemetry: tel,
 		Privacy: map[string]any{trackerKey: on}})
 	a.shown = true
+	t.Cleanup(a.reports.Wait)
 	return a, m
 }
 

@@ -491,10 +491,10 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 		text := message.Text
 		// A report that does not leave is no error to show: the button
 		// says so and the app goes on.
-		go func() {
+		a.reports.Go(func() {
 			err := a.tel.SendChecks(report, text)
 			fyne.Do(func() { sent(err == nil) })
-		}()
+		})
 	}, a.win)
 	d.Resize(fyne.NewSize(560, 420))
 	d.Show()
