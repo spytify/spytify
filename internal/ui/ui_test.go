@@ -658,6 +658,11 @@ func TestANewerReleaseShowsTheBadge(t *testing.T) {
 		t.Fatalf("Update: visible %v, text %q", a.update.Visible(), a.update.Text)
 	}
 	snapshot(t, a, "update")
+	light := defaults()
+	light["app.theme"] = "light"
+	m.SetSettings(light)
+	a.render()
+	snapshot(t, a, "update-light")
 }
 
 func TestLibraryShowsEmbeddedCovers(t *testing.T) {

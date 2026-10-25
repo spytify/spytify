@@ -51,19 +51,19 @@ var openInNewSVG []byte
 // Design's open_in_new, like Fyne's own icons, in the button's colour.
 var openInNewIcon = theme.NewThemedResource(fyne.NewStaticResource("open-in-new.svg", openInNewSVG))
 
-//go:embed assets/heart.svg
-var heartSVG []byte
+//go:embed assets/heart.png
+var heartPNG []byte
 
-// heartIcon is the app bar's way to Donate: Material Design's favorite, in
-// v1's pink in both themes.
-var heartIcon = fyne.NewStaticResource("heart.svg", heartSVG)
+// heartIcon is the app bar's way to Donate: v1's heart, from its icons, in
+// its pink in both themes.
+var heartIcon = fyne.NewStaticResource("heart.png", heartPNG)
 
-//go:embed assets/new-releases.svg
-var newReleasesSVG []byte
+//go:embed assets/new-releases.png
+var newReleasesPNG []byte
 
-// newReleasesIcon marks a newer release, as v1's badge did: Material
-// Design's new_releases, in the button's colour.
-var newReleasesIcon = theme.NewThemedResource(fyne.NewStaticResource("new-releases.svg", newReleasesSVG))
+// newReleasesIcon marks a newer release: v1's badge, from its icons, in its
+// green with the mark cut out.
+var newReleasesIcon = fyne.NewStaticResource("new-releases.png", newReleasesPNG)
 
 // Options are what the UI needs from its environment.
 type Options struct {
@@ -191,7 +191,8 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	// Secondary, but readable in both themes, unlike a low-importance label.
 	a.output = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
 	a.update = widget.NewButtonWithIcon("", newReleasesIcon, nil)
-	a.update.Importance = widget.SuccessImportance
+	// No fill: the badge's own green says it, as the heart's pink does.
+	a.update.Importance = widget.LowImportance
 	a.update.Hide()
 	a.donate = ttwidget.NewButtonWithIcon("", heartIcon, func() { a.openURL(donateURL) })
 	a.donate.Importance = widget.LowImportance
