@@ -80,11 +80,11 @@ var Table = []Def{
 	{Key: "recorder.session_timer", Tab: "Recorder", Group: "Recording", Label: "Stop the session after (0s = never)", Kind: KindDuration, Default: "0s", Advanced: true},
 	{Key: "recorder.target_lufs", Tab: "Advanced", Group: "Recording", Label: "Target loudness (LUFS)", Kind: KindFloat, Default: -14.0, Min: -30, Max: -5, Ranged: true, Advanced: true},
 	{Key: "recorder.pause_on_disk_full", Tab: "Advanced", Group: "Recording", Label: "Pause player when disk is full", Kind: KindBool, Default: true, Advanced: true},
+	{Key: "player.mute_output", Tab: "Advanced", Group: "Recording", Label: "Mute the player on this computer while recording (macOS, Linux)", Kind: KindBool, Default: false, Advanced: true, Note: "the files are recorded as usual; only the speakers stay silent"},
 
 	{Key: "recorder.mute_ads", Tab: "Ads", Group: "Ads", Label: "Mute ads", Kind: KindBool, Default: false},
 	{Key: "recorder.skip_short_untitled", Tab: "Advanced", Group: "Ads", Label: "Treat items shorter than N seconds with no album as ads (0 = off)", Kind: KindInt, Default: int64(60), Min: 0, Max: 600, Ranged: true, Advanced: true},
-	{Key: "recorder.record_everything", Tab: "Advanced", Group: "Ads", Label: "Record everything (podcasts, short untitled items)", Kind: KindBool, Default: false, Advanced: true},
-	{Key: "player.mute_output", Tab: "Advanced", Group: "Ads", Label: "Mute the player on this computer while recording (macOS, Linux)", Kind: KindBool, Default: false, Advanced: true},
+	{Key: "recorder.record_everything", Tab: "Advanced", Group: "Ads", Label: "Record ads and short untitled items too", Kind: KindBool, Default: false, Advanced: true, Note: "turns the ad filter off: nothing is skipped as an ad"},
 
 	{Key: "privacy.bug_tracker", Tab: "App", Group: "Privacy", Label: "Sentry bug tracker: send crashes, errors, traces and recording counts", Kind: KindBool, Default: true, Note: "sends crashes, errors, traces and recording counts to help the developers fix issues"},
 }
