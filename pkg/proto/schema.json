@@ -146,6 +146,37 @@
       ],
       "type": "object"
     },
+    "FinishTimings": {
+      "properties": {
+        "cover_ms": {
+          "type": "integer"
+        },
+        "encode_ms": {
+          "type": "integer"
+        },
+        "format": {
+          "type": "string"
+        },
+        "tag_ms": {
+          "type": "integer"
+        },
+        "total_ms": {
+          "type": "integer"
+        },
+        "trim_ms": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cover_ms",
+        "encode_ms",
+        "format",
+        "tag_ms",
+        "total_ms",
+        "trim_ms"
+      ],
+      "type": "object"
+    },
     "LevelEvent": {
       "properties": {
         "peak_dbfs": {
@@ -439,6 +470,9 @@
         },
         "tagged_by": {
           "type": "string"
+        },
+        "timings": {
+          "$ref": "#/$defs/FinishTimings"
         }
       },
       "required": [
