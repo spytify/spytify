@@ -230,8 +230,11 @@ func (p *Player) scheduleFrom(from int, base int64, first, restart bool) {
 	}
 }
 
-// At runs fn once the stream reaches ms (in the base format), on its own
-// goroutine. Tests use it to send player.control at a given moment.
+// At runs fn once the stream reaches ms (in the base format), before the
+// events due there and the next chunk, so a command it sends lands where
+// the timeline puts it however the goroutines are scheduled. Tests use it
+// to send player.control at a given moment; fn must not wait on the player
+// (Control only queues).
 func (p *Player) At(ms int64, fn func()) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -371,7 +374,7 @@ func (p *Player) Run(ctx context.Context, sink Sink) error {
 		p.hooks = kept
 		p.mu.Unlock()
 		for _, fn := range fire {
-			go fn()
+			fn()
 		}
 		for _, ev := range due {
 			if err := p.deliver(ctx, sink, ev); err != nil {
