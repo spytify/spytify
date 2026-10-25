@@ -125,7 +125,8 @@ func FileName(p Plan, o Options, counter int64, trackNumber int) string {
 // Example is the path, from the output folder, a sample track gets with o
 // and the counter at counter: the settings show it under the template.
 func Example(o Options, counter int64) string {
-	t := Track{Artists: []string{"Neon Harbor"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Midnight Ferry",
+	// Its accents show what removing diacritics does.
+	t := Track{Artists: []string{"Neon Harbor"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Café Lumière",
 		Album: "Harbor Lights", TrackNumber: 4, Year: 2024}
 	p := Build(t, o)
 	return filepath.Join(p.Dir, FileName(p, o, counter, t.TrackNumber))

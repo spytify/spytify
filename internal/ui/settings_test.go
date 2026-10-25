@@ -168,16 +168,17 @@ func TestTheTemplateShowsAnExample(t *testing.T) {
 	m.SetSettings(v)
 	a.render()
 	// By default the files go in artist and album folders.
-	if got, want := example(), "e.g. "+filepath.Join("Neon Harbor", "Harbor Lights (2024)", "Neon Harbor - Midnight Ferry.flac"); got != want {
+	if got, want := example(), "e.g. "+filepath.Join("Neon Harbor", "Harbor Lights (2024)", "Neon Harbor - Café Lumière.flac"); got != want {
 		t.Errorf("example %q, want %q", got, want)
 	}
 	v["output.underscores"] = true
 	v["output.prefix"] = "counter"
+	v["output.ascii_filenames"] = true
 	m.SetSettings(v)
 	s.search.SetText("output")
 	a.render()
-	if got, want := example(), "e.g. "+filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "001_Neon_Harbor_-_Midnight_Ferry.flac"); got != want {
-		t.Errorf("with underscores and the counter, example %q, want %q", got, want)
+	if got, want := example(), "e.g. "+filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "001_Neon_Harbor_-_Cafe_Lumiere.flac"); got != want {
+		t.Errorf("with underscores, the counter and no diacritics, example %q, want %q", got, want)
 	}
 	if all := texts(s.sections); !contains(all, "Underscores instead of spaces") {
 		t.Errorf("no Underscores instead of spaces in %v", all)

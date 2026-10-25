@@ -62,15 +62,19 @@ func TestCounterPrefix(t *testing.T) {
 // The settings' example follows every option, folders included.
 func TestExample(t *testing.T) {
 	o := Options{Template: "{artist} - {title}", Prefix: "none", GroupBy: "none", Extension: "mp3"}
-	if got := Example(o, 1); got != "Neon Harbor - Midnight Ferry.mp3" {
+	if got := Example(o, 1); got != "Neon Harbor - Café Lumière.mp3" {
 		t.Errorf("plain %q", got)
 	}
-	o.Underscores, o.Prefix, o.CounterWidth = true, "counter", 3
-	if got := Example(o, 7); got != "007_Neon_Harbor_-_Midnight_Ferry.mp3" {
+	o.ASCII = true
+	if got := Example(o, 1); got != "Neon Harbor - Cafe Lumiere.mp3" {
+		t.Errorf("without diacritics %q", got)
+	}
+	o.ASCII, o.Underscores, o.Prefix, o.CounterWidth = false, true, "counter", 3
+	if got := Example(o, 7); got != "007_Neon_Harbor_-_Café_Lumière.mp3" {
 		t.Errorf("underscores and counter %q", got)
 	}
 	o.GroupBy, o.Prefix = "artist/album", "album_track"
-	if got, want := Example(o, 1), filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "04_Neon_Harbor_-_Midnight_Ferry.mp3"); got != want {
+	if got, want := Example(o, 1), filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
 		t.Errorf("grouped %q, want %q", got, want)
 	}
 }
