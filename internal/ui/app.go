@@ -43,6 +43,13 @@ var wordmarkPNG []byte
 // Wordmark is the logo with the name beside it, for the app bar and the About screen.
 var Wordmark = fyne.NewStaticResource("logo-wordmark.png", wordmarkPNG)
 
+//go:embed assets/open-in-new.svg
+var openInNewSVG []byte
+
+// openInNewIcon marks a button that opens a page in the browser: Material
+// Design's open_in_new, like Fyne's own icons, in the button's colour.
+var openInNewIcon = theme.NewThemedResource(fyne.NewStaticResource("open-in-new.svg", openInNewSVG))
+
 // Options are what the UI needs from its environment.
 type Options struct {
 	// StateDir holds the daemon's log file.

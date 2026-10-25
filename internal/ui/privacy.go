@@ -385,7 +385,7 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 	if cr.Program == "spytifyd" {
 		who = "The recorder"
 	}
-	why := "the Sentry bug tracker is off (Settings > Privacy)"
+	why := "the Sentry bug tracker is off"
 	if !a.tel.Available() {
 		why = "this build has no bug tracker"
 	}
@@ -427,7 +427,7 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 	copyButton := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
 		a.fa.Clipboard().SetContent(title + "\n\n" + details)
 	})
-	report := widget.NewButtonWithIcon("Report on GitHub", theme.MailComposeIcon(), func() { a.openURL(issueURL(title, details)) })
+	report := widget.NewButtonWithIcon("Report on GitHub", openInNewIcon, func() { a.openURL(issueURL(title, details)) })
 	report.Importance = widget.HighImportance
 	d.SetButtons([]fyne.CanvasObject{closeButton, copyButton, report})
 	d.SetOnClosed(then)
