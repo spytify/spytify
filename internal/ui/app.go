@@ -22,6 +22,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
 
 	"github.com/spytify/spytify/internal/service"
 	"github.com/spytify/spytify/internal/telemetry"
@@ -115,13 +116,13 @@ type App struct {
 	startView  fyne.CanvasObject
 	offlineErr *widget.Label
 
-	// tel sends crash reports and anonymous stats; launch times the way to
-	// a recorder that answers.
+	// tel is the Sentry bug tracker; launch times the way to a recorder
+	// that answers; checksNoted are the checks last left as a breadcrumb.
 	tel          *telemetry.Client
 	launch       launchTrace
 	shown        bool
 	wasConnected bool
-	crashOpen    bool
+	checksNoted  string
 	diagNoted    bool
 	// heard and incomplete are the link goroutine's: the first sound, and
 	// the incomplete tracks in a row.
@@ -210,7 +211,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 
 	a.center = container.NewStack(a.tabs)
 	body := container.NewBorder(container.NewVBox(container.NewPadded(a.bar), a.banner), nil, nil, nil, a.center)
-	a.win.SetContent(body)
+	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
 
 	a.setupTray()
 	if !opts.ManualRender {
@@ -236,6 +237,7 @@ func (a *App) ShowAndRun() {
 	a.win.Show()
 	a.maybeShowFirstRun(func() {
 		a.shown = true
+		a.renderPrivacy(a.last)
 		a.tel.Step("launched")
 		a.tel.Breadcrumb("app", "launched", nil)
 		a.checkCrashes()
@@ -252,6 +254,7 @@ func playerRunning(s model.State) bool {
 
 // launchPlayer asks the recorder to open the player.
 func (a *App) launchPlayer() {
+	a.noteAction("open the player")
 	a.do(proto.MethodPlayerLaunch, nil, nil)
 }
 
@@ -519,6 +522,7 @@ func (a *App) checkUpdate() {
 }
 
 func (a *App) openURL(raw string) {
+	a.noteAction("open " + raw)
 	if u, err := url.Parse(raw); err == nil {
 		_ = a.fa.OpenURL(u)
 	}
@@ -612,6 +616,7 @@ func (a *App) showError(err error) {
 func (a *App) StartDaemon() {
 	fyne.Do(func() {
 		a.starting, a.startErr = true, ""
+		a.tel.Breadcrumb("app", "starting the recorder", nil)
 		if a.launch.started.IsZero() {
 			a.launch.started = time.Now()
 		}
@@ -648,8 +653,14 @@ func (a *App) setupTray() {
 	}
 	desk.SetSystemTrayIcon(Logo)
 	desk.SetSystemTrayMenu(fyne.NewMenu("Spytify",
-		fyne.NewMenuItem("Start recording", func() { a.do(proto.MethodSessionStart, proto.SessionStartParams{}, nil) }),
-		fyne.NewMenuItem("Stop", func() { a.do(proto.MethodSessionStop, proto.SessionStopParams{}, nil) }),
+		fyne.NewMenuItem("Start recording", func() {
+			a.noteAction("record (tray)")
+			a.do(proto.MethodSessionStart, proto.SessionStartParams{}, nil)
+		}),
+		fyne.NewMenuItem("Stop", func() {
+			a.noteAction("stop (tray)")
+			a.do(proto.MethodSessionStop, proto.SessionStopParams{}, nil)
+		}),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Open window", a.showWindow),
 	))

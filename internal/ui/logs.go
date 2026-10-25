@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -40,6 +41,7 @@ func newLogsScreen(a *App) *logsScreen {
 	l := &logsScreen{app: a, path: filepath.Join(a.opts.StateDir, "spytifyd.log")}
 	l.checks = container.NewVBox()
 	refresh := widget.NewButtonWithIcon("Run the checks again", theme.ViewRefreshIcon(), func() {
+		a.noteAction("run the checks again")
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
@@ -85,6 +87,7 @@ func newLogsScreen(a *App) *logsScreen {
 	// SetSelected runs the callback, which needs the list.
 	l.level.SetSelected(logLevels)
 	copyAll := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+		a.noteAction("copy the log")
 		var b strings.Builder
 		for _, line := range l.lines {
 			b.WriteString(line.TS + " " + line.Level + " " + line.Msg + "\n")
@@ -92,7 +95,10 @@ func newLogsScreen(a *App) *logsScreen {
 		a.fa.Clipboard().SetContent(b.String())
 	})
 	copyAll.Importance = widget.LowImportance
-	open := widget.NewButtonWithIcon("Open log file", theme.DocumentIcon(), func() { _ = openPath(l.path) })
+	open := widget.NewButtonWithIcon("Open log file", theme.DocumentIcon(), func() {
+		a.noteAction("open the log file")
+		_ = openPath(l.path)
+	})
 	open.Importance = widget.LowImportance
 	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open))
 	l.root = container.NewBorder(container.NewVBox(l.diag, widget.NewSeparator(), tools), nil, nil, nil, l.list)
@@ -121,10 +127,13 @@ func (l *logsScreen) renderChecks(s model.State) {
 		title = fmt.Sprintf("Diagnostics · %d of %d checks need attention", failing, len(s.Info.Checks))
 	}
 	state := fmt.Sprint(title, s.Info.Checks, s.Info.Warnings)
-	if state == l.lastState {
+	// The send button follows the bug tracker's switch too.
+	on, _ := l.app.privacy(trackerKey).(bool)
+	redraw := fmt.Sprint(state, on)
+	if redraw == l.lastState {
 		return
 	}
-	l.lastState = state
+	l.lastState = redraw
 	var rows []fyne.CanvasObject
 	for _, c := range s.Info.Checks {
 		icon := theme.ConfirmIcon()
@@ -143,16 +152,28 @@ func (l *logsScreen) renderChecks(s model.State) {
 		rows = append(rows, container.NewBorder(nil, nil, widget.NewIcon(theme.WarningIcon()), nil, wrapped(w)))
 	}
 	// Stuck on a check: the user may send it to the developers, once for
-	// these results.
+	// these results, unless they opted out of the bug tracker.
 	if failing > 0 && l.app.tel.Available() {
-		send := widget.NewButtonWithIcon("Send to the developers", theme.MailSendIcon(), nil)
+		send := ttwidget.NewButtonWithIcon("Send to the developers", theme.MailSendIcon(), nil)
 		done := func() {
 			l.sent = state
 			send.SetText("Sent")
 			send.Disable()
 		}
-		send.OnTapped = func() { l.app.sendChecks(s, done) }
-		if l.sent == state {
+		send.OnTapped = func() {
+			l.app.sendChecks(s, func(ok bool) {
+				if !ok {
+					send.SetText("Not sent, try again")
+					return
+				}
+				done()
+			})
+		}
+		switch {
+		case !on:
+			send.Disable()
+			send.SetToolTip(optedOut)
+		case l.sent == state:
 			done()
 		}
 		rows = append(rows, container.NewHBox(send))

@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/denisbrodbeck/machineid"
+
 	"github.com/spytify/spytify/internal/crash"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/pkg/proto"
@@ -26,81 +28,113 @@ func newClient(t *testing.T, srv *fakesentry.Server, opts Options) *Client {
 	return c
 }
 
-// With anonymous stats off, nothing at all reaches Sentry.
-func TestNothingLeavesWithStatsOff(t *testing.T) {
+// With the bug tracker off, nothing at all reaches Sentry, and a report
+// asked for says so.
+func TestNothingLeavesWhenOff(t *testing.T) {
 	srv := fakesentry.New(t)
 	c := newClient(t, srv, Options{TracesSampleRate: 1, ProblemSampleRate: 1})
 	c.Breadcrumb("ui", "Record", nil)
 	c.Log("launch", map[string]any{"ready": true})
-	c.Daily()
 	c.Step("launched")
 	c.Problem("capture_stalled", "")
 	now := time.Now()
 	c.Measure("launch", now.Add(-time.Second), now, nil, nil)
+	if err := c.SendCrash(Crash{Program: "spytifyd", Trace: trace}); err != errOff {
+		t.Errorf("SendCrash with the bug tracker off: %v", err)
+	}
+	if err := c.SendChecks(Checks{Failing: []proto.Check{{Name: "ffmpeg found"}}}, "hello"); err != errOff {
+		t.Errorf("SendChecks with the bug tracker off: %v", err)
+	}
 	c.Flush(time.Second)
 	time.Sleep(100 * time.Millisecond)
 	if n := srv.Requests(); n != 0 {
-		t.Fatalf("%d requests with stats off", n)
+		t.Fatalf("%d requests with the bug tracker off", n)
 	}
 }
 
-// The counts carry no ID and no host name: a daily line, the first one
-// ever and of the month, and each step once.
-func TestStatsCountWithoutAnID(t *testing.T) {
+// A Sentry out of reach changes nothing for the app: every call returns,
+// a comment that did not leave says so, and closing gives up after 2 s.
+func TestASentryOutOfReachIsIgnored(t *testing.T) {
+	c := New(Options{DSN: "http://public@127.0.0.1:1/1", TracesSampleRate: 1, ProblemSampleRate: 1})
+	c.SetEnabled(true)
+	c.Breadcrumb("ui", "record", nil)
+	c.Log("launch", map[string]any{"ready": true})
+	c.Step("launched")
+	c.Problem("capture_stalled", "")
+	now := time.Now()
+	c.Measure("launch", now.Add(-time.Second), now, nil, nil)
+	_ = c.SendCrash(Crash{Program: "spytifyd", Trace: trace})
+	if err := c.SendChecks(Checks{Failing: []proto.Check{{Name: "ffmpeg found"}}}, "a comment"); err == nil {
+		t.Error("a comment that did not leave reads as sent")
+	}
+	start := time.Now()
+	c.Close()
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("closing took %v", d)
+	}
+}
+
+// A scrubbing that fails drops what it was scrubbing: never the app, and
+// nothing leaves unscrubbed.
+func TestAFailingScrubDropsTheReport(t *testing.T) {
 	srv := fakesentry.New(t)
-	day := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
-	c := newClient(t, srv, Options{Now: func() time.Time { return day }})
-	c.SetStats(true)
-	c.Daily()
-	c.Daily()
+	c := newClient(t, srv, Options{Names: func() []string { panic("no names") }, ProblemSampleRate: 1})
+	c.SetEnabled(true)
+	c.Breadcrumb("ui", "record", nil)
+	c.Problem("capture_stalled", "detail")
+	_ = c.SendCrash(Crash{Program: "spytifyd", Trace: trace})
+	c.Flush(2 * time.Second)
+	if n := len(srv.Items("event")) + len(srv.Logs()); n != 0 {
+		t.Errorf("%d reports left unscrubbed", n)
+	}
+}
+
+// Every launch leaves, whatever the share of timings, naming the computer
+// only by its hash, with its system; no host name. Each step leaves once.
+func TestEveryLaunchCountsTheComputer(t *testing.T) {
+	srv := fakesentry.New(t)
+	c := newClient(t, srv, Options{TracesSampleRate: 1e-9})
+	c.SetEnabled(true)
+	now := time.Now()
+	c.Measure("launch", now.Add(-time.Second), now, nil, nil)
+	c.Measure("track.finish", now.Add(-time.Second), now, nil, nil)
 	c.Step("launched")
 	c.Step("launched")
 	c.Flush(5 * time.Second)
 
-	var daily, steps []fakesentry.Log
-	for _, l := range srv.Logs() {
-		switch l.Body {
-		case "daily":
-			daily = append(daily, l)
-		case "step":
-			steps = append(steps, l)
+	txs := srv.Wait(t, "transaction", 1)
+	time.Sleep(100 * time.Millisecond)
+	if txs = srv.Items("transaction"); len(txs) != 1 || txs[0].JSON()["transaction"] != "launch" {
+		t.Fatalf("%d transactions, want the launch alone", len(txs))
+	}
+	tx := txs[0].JSON()
+	user, _ := tx["user"].(map[string]any)
+	if id := computerID(); id != "" {
+		raw, _ := machineid.ID()
+		if user["id"] != id || len(id) != 64 || strings.Contains(srv.Raw(), raw) {
+			t.Errorf("user %v, want the hash %s and never the machine ID", user, id)
 		}
 	}
-	if len(daily) != 1 || daily[0].Attrs["first_install"] != "true" || daily[0].Attrs["first_month"] != "true" {
-		t.Fatalf("daily lines %+v", daily)
+	if user["ip_address"] != "{{auto}}" {
+		t.Errorf("user %v, want the country lookup", user)
 	}
-	if len(steps) != 1 || steps[0].Attrs["step"] != "launched" {
-		t.Fatalf("step lines %+v", steps)
+	if system, _ := tx["contexts"].(map[string]any)["os"].(map[string]any); system["name"] != runtime.GOOS {
+		t.Errorf("os context %v", system)
 	}
-	for k := range daily[0].Attrs {
-		if strings.Contains(k, "user") || k == "sentry.server.address" {
-			t.Errorf("a count carries %s", k)
-		}
+	if _, ok := tx["server_name"]; ok {
+		t.Error("the launch has a server name")
 	}
 	if host, _ := os.Hostname(); host != "" && strings.Contains(srv.Raw(), host) {
 		t.Errorf("the host name %q left", host)
 	}
-}
-
-// The next day counts again, not as a new install; a new month says so.
-func TestDailyCountsOncePerDay(t *testing.T) {
-	srv := fakesentry.New(t)
-	now := time.Date(2026, 10, 31, 23, 0, 0, 0, time.UTC)
-	prefs := &memPrefs{m: map[string]string{keyLastDay: "2026-10-30"}}
-	c := newClient(t, srv, Options{Prefs: prefs, Now: func() time.Time { return now }})
-	c.SetStats(true)
-	c.Daily()
-	now = now.Add(2 * time.Hour)
-	c.Daily()
-	c.Flush(5 * time.Second)
-	var got []string
+	steps := 0
 	for _, l := range srv.Logs() {
-		if l.Body == "daily" {
-			got = append(got, l.Attrs["first_month"]+"/"+l.Attrs["first_install"])
+		if l.Body == "step" {
+			steps++
 		}
 	}
-	if strings.Join(got, " ") != "false/false true/false" {
-		t.Fatalf("daily first_month/first_install: %v", got)
+	if steps != 1 {
+		t.Errorf("%d step lines, want 1", steps)
 	}
 }
 
@@ -110,7 +144,7 @@ func TestProblemsAreCountedAndSampled(t *testing.T) {
 	srv := fakesentry.New(t)
 	roll := 0.05
 	c := newClient(t, srv, Options{Rand: func() float64 { return roll }})
-	c.SetStats(true)
+	c.SetEnabled(true)
 	c.Breadcrumb("session", "recording", map[string]any{"format": "flac"})
 	c.Problem("capture_stalled", "No audio from the player for 10 s")
 	c.Problem("capture_stalled", "again")
@@ -130,8 +164,8 @@ func TestProblemsAreCountedAndSampled(t *testing.T) {
 	if crumbs, _ := ev["breadcrumbs"].([]any); len(crumbs) != 1 || crumbs[0].(map[string]any)["message"] != "recording" {
 		t.Errorf("breadcrumbs %v, want the recording one", ev["breadcrumbs"])
 	}
-	if user, _ := ev["user"].(map[string]any); user["ip_address"] != "{{auto}}" || len(user) != 1 {
-		t.Errorf("user %v, want only the country lookup", ev["user"])
+	if user, _ := ev["user"].(map[string]any); user["ip_address"] != "{{auto}}" || user["id"] != computerUser().ID {
+		t.Errorf("user %v, want the computer's hash and the country lookup", ev["user"])
 	}
 	if _, ok := ev["server_name"]; ok {
 		t.Error("the event has a server name")
@@ -151,7 +185,7 @@ func TestProblemsAreCountedAndSampled(t *testing.T) {
 func TestMeasureSendsATransaction(t *testing.T) {
 	srv := fakesentry.New(t)
 	c := newClient(t, srv, Options{TracesSampleRate: 1})
-	c.SetStats(true)
+	c.SetEnabled(true)
 	start := time.Now().Add(-3 * time.Second)
 	c.Measure("track.finish", start, start.Add(2*time.Second), map[string]string{"format": "mp3"}, []Span{
 		{Op: "encode", Start: start, End: start.Add(1500 * time.Millisecond)},
@@ -236,8 +270,8 @@ func TestParseARealCrash(t *testing.T) {
 
 func crashHere() { panic("boom in a real crash") }
 
-// A crash left after the first look is offered once, with its trace, the
-// user's message as feedback, and nothing that names the user.
+// A crash left after the first look leaves once, with its trace, and
+// nothing that names the user or the track.
 func TestCrashReport(t *testing.T) {
 	srv := fakesentry.New(t)
 	dir := t.TempDir()
@@ -255,22 +289,14 @@ func TestCrashReport(t *testing.T) {
 		t.Fatalf("crashes %+v", crashes)
 	}
 	c := newClient(t, srv, Options{})
-	preview := c.CrashPreview(crashes[0])
-	if strings.Contains(preview, home) || strings.Contains(preview, "Neon Harbor") || !strings.Contains(preview, "~") {
-		t.Errorf("preview not scrubbed:\n%s", preview)
-	}
-	if err := c.SendCrash(crashes[0], "It stopped when "+home+" filled up"); err != nil {
+	c.SetEnabled(true)
+	if err := c.SendCrash(crashes[0]); err != nil {
 		t.Fatal(err)
 	}
 	ev := srv.Wait(t, "event", 1)[0].JSON()
 	exc := ev["exception"].([]any)[0].(map[string]any)
 	if exc["type"] != "panic" || ev["level"] != "fatal" {
 		t.Errorf("exception %v, level %v", exc, ev["level"])
-	}
-	feedback := srv.Wait(t, "feedback", 1)[0].JSON()
-	fb := feedback["contexts"].(map[string]any)["feedback"].(map[string]any)
-	if fb["associated_event_id"] != ev["event_id"] || !strings.Contains(fb["message"].(string), "~ filled up") {
-		t.Errorf("feedback %v for event %v", fb, ev["event_id"])
 	}
 	if att := srv.Items("attachment"); len(att) != 1 || strings.Contains(string(att[0].Payload), home) {
 		t.Errorf("trace attachment %v", att)
@@ -289,6 +315,7 @@ func TestCrashReport(t *testing.T) {
 func TestSendChecks(t *testing.T) {
 	srv := fakesentry.New(t)
 	c := newClient(t, srv, Options{})
+	c.SetEnabled(true)
 	home, _ := os.UserHomeDir()
 	r := Checks{
 		Failing: []proto.Check{{Name: "ffmpeg found", Detail: "not in " + filepath.Join(home, "bin")}},
@@ -317,6 +344,7 @@ func TestSendChecks(t *testing.T) {
 func TestFeedbackFollowsTheSpec(t *testing.T) {
 	srv := fakesentry.New(t)
 	c := newClient(t, srv, Options{})
+	c.SetEnabled(true)
 	r := Checks{Failing: []proto.Check{{Name: "ffmpeg found", Detail: "not on PATH"}}}
 	if err := c.SendChecks(r, " \n "); err != nil {
 		t.Fatal(err)

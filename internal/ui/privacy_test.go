@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
@@ -19,9 +20,9 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// privacyApp is a test app whose reports go to a fake Sentry, with the
-// privacy settings given (anonymous stats and crash reports).
-func privacyApp(t *testing.T, srv *fakesentry.Server, stats bool, crashes string) (*App, *model.Model) {
+// privacyApp is a test app past its first-run notice, whose bug tracker,
+// on or off, reports to a fake Sentry.
+func privacyApp(t *testing.T, srv *fakesentry.Server, on bool) (*App, *model.Model) {
 	t.Helper()
 	fa := test.NewTempApp(t)
 	fa.Preferences().SetBool(firstRunKey, true)
@@ -31,18 +32,27 @@ func privacyApp(t *testing.T, srv *fakesentry.Server, stats bool, crashes string
 	tel := telemetry.New(telemetry.Options{DSN: srv.DSN(), Prefs: fa.Preferences(), Names: m.Names, TracesSampleRate: 1, ProblemSampleRate: 1})
 	t.Cleanup(tel.Close)
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, Telemetry: tel,
-		Privacy: map[string]any{statsKey: stats, crashesKey: crashes}})
+		Privacy: map[string]any{trackerKey: on}})
+	a.shown = true
 	return a, m
 }
 
-// connect gives the app a recorder with these privacy settings.
-func connect(t *testing.T, a *App, m *model.Model, stats bool, crashes string) {
+// connect gives the app a recorder with the bug tracker on or off.
+func connect(t *testing.T, a *App, m *model.Model, on bool) {
 	t.Helper()
 	m.SetConn(model.Connected, "")
 	m.SetInfo(info())
 	values := defaults()
-	values[statsKey], values[crashesKey] = stats, crashes
+	values[trackerKey] = on
 	m.SetSettings(values)
+	a.render()
+}
+
+// failCheck makes ffmpeg's check fail.
+func failCheck(a *App, m *model.Model) {
+	in := info()
+	in.Checks = append(in.Checks, proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
+	m.SetInfo(in)
 	a.render()
 }
 
@@ -74,6 +84,41 @@ func tapButton(t *testing.T, o fyne.CanvasObject, text string) {
 		t.Fatalf("%d %q buttons", len(b), text)
 	}
 	test.Tap(b[0])
+}
+
+// sendButton is the diagnostics' Send to the developers button, with its
+// tooltip.
+func sendButton(t *testing.T, a *App) *ttwidget.Button {
+	t.Helper()
+	var found []*ttwidget.Button
+	var walk func(fyne.CanvasObject)
+	walk = func(o fyne.CanvasObject) {
+		if o == nil || !o.Visible() {
+			return
+		}
+		switch w := o.(type) {
+		case *ttwidget.Button:
+			if w.Text == "Send to the developers" {
+				found = append(found, w)
+			}
+			return
+		case *fyne.Container:
+			for _, child := range w.Objects {
+				walk(child)
+			}
+			return
+		}
+		if w, ok := o.(fyne.Widget); ok {
+			for _, child := range test.WidgetRenderer(w).Objects() {
+				walk(child)
+			}
+		}
+	}
+	walk(a.win.Content())
+	if len(found) != 1 {
+		t.Fatalf("%d Send to the developers buttons", len(found))
+	}
+	return found[0]
 }
 
 // checkBoxes are the visible check boxes with this label.
@@ -114,14 +159,14 @@ func quiet(a *App, srv *fakesentry.Server) int {
 	return srv.Requests()
 }
 
-// With anonymous stats off and crash reports set to never, the app sends
-// nothing at all: not at launch, not while recording, not on a problem, a
-// failed start or a crash.
-func TestNothingLeavesWhenEverythingIsOff(t *testing.T) {
+// With the bug tracker off, the app sends nothing at all, not at launch,
+// not while recording, not on a problem, a failed start or a crash, and
+// asks nothing: no dialog, and the diagnostics' button says why it is off.
+func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	srv := fakesentry.New(t)
-	a, m := privacyApp(t, srv, false, "never")
+	a, m := privacyApp(t, srv, false)
 	leaveACrash(t, a, "boom")
-	connect(t, a, m, false, "never")
+	connect(t, a, m, false)
 	a.checkCrashes()
 	a.launchFailed(errors.New("spytifyd started but does not answer; see its log in Logs"))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
@@ -133,83 +178,66 @@ func TestNothingLeavesWhenEverythingIsOff(t *testing.T) {
 	}
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "No audio"}))
 	a.showTab(tabLogs)
-	a.render()
+	failCheck(a, m)
 	if a.win.Canvas().Overlays().Top() != nil {
-		t.Error("a dialog asks about the crash although crash reports are set to never")
+		t.Error("a dialog shows with the bug tracker off")
+	}
+	send := sendButton(t, a)
+	if !send.Disabled() || send.ToolTip() != optedOut {
+		t.Errorf("Send to the developers: disabled %v, tooltip %q", send.Disabled(), send.ToolTip())
+	}
+	snapshot(t, a, "privacy-diagnostics-off")
+	// The tooltip shows through fyne.Do, which the test driver runs on the
+	// tooltip's timer goroutine, not a main loop: hovering races here, so
+	// only for the picture, made without -race.
+	if os.Getenv("SPYTIFY_UI_SNAPSHOTS") != "" {
+		test.MoveMouse(a.win.Canvas(), a.fa.Driver().AbsolutePositionForObject(send).AddXY(20, 10))
+		time.Sleep(time.Second)
+		snapshot(t, a, "privacy-diagnostics-off-tooltip")
 	}
 	if n := quiet(a, srv); n != 0 {
-		t.Fatalf("%d requests reached Sentry with everything off", n)
+		t.Fatalf("%d requests reached Sentry with the bug tracker off", n)
 	}
 	if left := telemetry.FindCrashes(a.opts.StateDir, a.fa.Preferences(), time.Now()); len(left) != 0 {
-		t.Error("the crash is still waiting to be offered")
+		t.Error("the crash would leave once the bug tracker is on")
 	}
 }
 
-// A crash is offered with what would leave; Don't send sends nothing, and
-// Send sends it with the message.
-func TestACrashLeavesOnlyOnSend(t *testing.T) {
+// With the bug tracker on, a crash leaves on its own, with no dialog.
+func TestACrashLeavesOnItsOwn(t *testing.T) {
 	srv := fakesentry.New(t)
-	a, m := privacyApp(t, srv, false, "ask")
-	connect(t, a, m, false, "ask")
-	leaveACrash(t, a, "first")
-	a.checkCrashes()
-	tapButton(t, overlay(t, a), "Don't send")
-	if n := quiet(a, srv); n != 0 {
-		t.Fatalf("%d requests after Don't send", n)
-	}
-
-	leaveACrash(t, a, "second")
-	a.checkCrashes()
-	d := overlay(t, a)
-	snapshot(t, a, "privacy-crash")
-	if !contains(texts(d), "The recorder stopped unexpectedly") {
-		t.Errorf("dialog texts %v", texts(d))
-	}
-	tapButton(t, d, "Send")
-	ev := srv.Wait(t, "event", 1)[0].JSON()
-	if ex := ev["exception"].([]any)[0].(map[string]any); ex["value"] != "second" {
-		t.Errorf("sent %v", ex)
-	}
-	if a.win.Canvas().Overlays().Top() != nil {
-		t.Error("the dialog stayed")
-	}
-}
-
-// Don't ask again with Send makes crash reports leave without asking.
-func TestDontAskAgainRemembersTheAnswer(t *testing.T) {
-	srv := fakesentry.New(t)
-	a, m := privacyApp(t, srv, false, "ask")
-	connect(t, a, m, false, "ask")
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
 	leaveACrash(t, a, "boom")
 	a.checkCrashes()
-	d := overlay(t, a)
-	again := checkBoxes(d, "Don't ask again")
-	if len(again) != 1 {
-		t.Fatal("no Don't ask again box")
+	if a.win.Canvas().Overlays().Top() != nil {
+		t.Error("a dialog asks about the crash")
 	}
-	again[0].SetChecked(true)
-	tapButton(t, d, "Don't send")
-	if got := a.privacy(crashesKey); got != "never" {
-		t.Errorf("crash reports %v after Don't ask again and Don't send", got)
+	ev := srv.Wait(t, "event", 1)[0].JSON()
+	if ex := ev["exception"].([]any)[0].(map[string]any); ex["value"] != "boom" {
+		t.Errorf("sent %v", ex)
+	}
+	if left := telemetry.FindCrashes(a.opts.StateDir, a.fa.Preferences(), time.Now()); len(left) != 0 {
+		t.Error("the crash would leave again")
 	}
 }
 
 // The diagnostics offer to send the checks only when one fails, and send
-// them on the click.
+// them on the click, with the comment.
 func TestSendToTheDevelopers(t *testing.T) {
 	srv := fakesentry.New(t)
-	a, m := privacyApp(t, srv, false, "ask")
-	connect(t, a, m, false, "ask")
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
 	a.showTab(tabLogs)
 	a.render()
 	if b := buttons(a.win.Content(), "Send to the developers"); len(b) != 0 {
 		t.Fatal("a Send button while every check passes")
 	}
-	in := info()
-	in.Checks = append(in.Checks, proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
-	m.SetInfo(in)
-	a.render()
+	failCheck(a, m)
 	snapshot(t, a, "privacy-diagnostics")
+	if send := sendButton(t, a); send.Disabled() || send.ToolTip() != "" {
+		t.Fatalf("Send to the developers: disabled %v, tooltip %q", send.Disabled(), send.ToolTip())
+	}
 	tapButton(t, a.win.Content(), "Send to the developers")
 	snapshot(t, a, "privacy-send-checks")
 	tapButton(t, overlay(t, a), "Send")
@@ -219,57 +247,68 @@ func TestSendToTheDevelopers(t *testing.T) {
 	}
 }
 
-// The first-run notice offers anonymous stats, unticked; ticking it turns
-// them on.
-func TestFirstRunOffersAnonymousStatsUnticked(t *testing.T) {
+// The first-run notice shows the bug tracker ticked; nothing starts
+// before it closes, and unticking it keeps it off.
+func TestFirstRunShowsTheBugTrackerTicked(t *testing.T) {
 	srv := fakesentry.New(t)
-	a, _ := privacyApp(t, srv, false, "ask")
+	a, _ := privacyApp(t, srv, true)
+	a.shown = false
 	a.fa.Preferences().SetBool(firstRunKey, false)
 	a.fa.Preferences().SetBool(privacySeenKey, false)
 	closed := false
-	a.maybeShowFirstRun(func() { closed = true })
+	a.maybeShowFirstRun(func() {
+		closed = true
+		a.shown = true
+		a.renderPrivacy(a.last)
+	})
 	d := overlay(t, a)
 	snapshot(t, a, "privacy-first-run")
-	box := checkBoxes(d, statsLabel)
-	if len(box) != 1 {
-		t.Fatalf("the notice has %d stats boxes", len(box))
+	box := checkBoxes(d, trackerLabel)
+	if len(box) != 1 || !box[0].Checked {
+		t.Fatalf("the notice has %d bug tracker boxes, ticked %v", len(box), len(box) == 1 && box[0].Checked)
 	}
-	if box[0].Checked {
-		t.Fatal("anonymous stats are ticked by default")
+	if a.tel.Enabled() {
+		t.Fatal("the bug tracker started before the notice closed")
 	}
-	box[0].SetChecked(true)
+	box[0].SetChecked(false)
 	tapButton(t, d, "OK")
-	if !closed || !a.tel.Stats() {
-		t.Fatalf("closed %v, stats on %v", closed, a.tel.Stats())
+	if !closed || a.tel.Enabled() {
+		t.Fatalf("closed %v, bug tracker on %v", closed, a.tel.Enabled())
 	}
 	if !a.fa.Preferences().Bool(privacySeenKey) {
-		t.Error("the choice would be offered again")
+		t.Error("the choice would be shown again")
+	}
+	if n := quiet(a, srv); n != 0 {
+		t.Errorf("%d requests after opting out at first run", n)
 	}
 }
 
-// Anonymous stats follow the setting, and with them on, the recorder's
-// problems leave with their breadcrumbs, a full disk excepted.
-func TestStatsFollowTheSetting(t *testing.T) {
+// The bug tracker follows the setting; on, the recorder's problems leave
+// with the steps and clicks that led there, a full disk excepted.
+func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	srv := fakesentry.New(t)
-	a, m := privacyApp(t, srv, false, "ask")
-	connect(t, a, m, false, "ask")
-	if a.tel.Stats() {
-		t.Fatal("stats on with the setting off")
+	a, m := privacyApp(t, srv, false)
+	connect(t, a, m, false)
+	if a.tel.Enabled() {
+		t.Fatal("the bug tracker is on with the setting off")
 	}
 	a.showTab(tabSettings)
 	a.render()
 	set := a.screens[tabSettings].(*settingsScreen)
 	set.search.SetText("privacy")
-	if all := texts(set.root); !contains(all, statsLabel) || !contains(all, "Crash reports") {
+	if all := texts(set.root); !contains(all, "Sentry bug tracker") {
 		t.Errorf("the Privacy section shows %v", all)
 	}
 	snapshot(t, a, "privacy-settings")
 	set.search.SetText("")
-	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{statsKey: true}}))
+	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{trackerKey: true}}))
 	a.render()
-	if !a.tel.Stats() {
-		t.Fatal("stats off with the setting on")
+	if !a.tel.Enabled() {
+		t.Fatal("the bug tracker is off with the setting on")
 	}
+	a.showTab(tabLogs)
+	failCheck(a, m)
+	tapButton(t, a.win.Content(), "Run the checks again")
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "No audio from the player for 10 s"}))
@@ -282,12 +321,12 @@ func TestStatsFollowTheSetting(t *testing.T) {
 	for _, c := range crumbs {
 		trail = append(trail, c.(map[string]any)["message"].(string))
 	}
-	if !strings.Contains(strings.Join(trail, " "), "recording") {
+	if all := strings.Join(trail, " | "); !strings.Contains(all, "run the checks again") || !strings.Contains(all, "recording") {
 		t.Errorf("breadcrumbs %v", trail)
 	}
-	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{statsKey: false}}))
+	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{trackerKey: false}}))
 	a.render()
-	if a.tel.Stats() {
-		t.Fatal("stats still on")
+	if a.tel.Enabled() {
+		t.Fatal("the bug tracker is still on")
 	}
 }

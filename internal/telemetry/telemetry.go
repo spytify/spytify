@@ -1,17 +1,20 @@
-// Package telemetry sends the developers what the user agreed to send: a
-// crash report or the checks that fail, each on a click, and, with
-// privacy.anonymous_stats on, anonymous counts, timings and the problems
-// the app runs into. It goes to the developers' Sentry project, set at
-// build time; a build without one sends nothing.
+// Package telemetry is the Sentry bug tracker. With privacy.bug_tracker
+// on, the app sends its crashes, the problems it runs into with the steps
+// that led there, its launches and timings, and, on a click, the checks
+// that fail. Off, nothing is sent: the Sentry client is not even made. It
+// goes to the developers' Sentry project, set at build time; a build
+// without one sends nothing.
 //
-// Nothing sent identifies the user: there is no install ID and no host
-// name, the IP address only lets Sentry tell the country (the project
-// keeps no IP), and the home folder, the user name and the names of the
-// tracks are replaced before anything leaves.
+// Reports name the computer only by a hash of its machine ID made for this
+// app. There is no host name, the IP address only lets Sentry tell the
+// country (the project keeps no IP), and the home folder, the user name
+// and the names of the tracks the app knows are replaced before anything
+// leaves.
 package telemetry
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"sync"
@@ -27,9 +30,9 @@ import (
 // SPYTIFY_SENTRY_DSN replaces it, to try another project.
 var DSN string
 
-// Prefs keeps the little this package remembers between runs: the day of
-// the last count, the steps and problems already reported, the crashes
-// already handled. Fyne's preferences fit.
+// Prefs keeps the little this package remembers between runs: the steps
+// and problems already reported, the crashes already handled. Fyne's
+// preferences fit.
 type Prefs interface {
 	String(key string) string
 	SetString(key, value string)
@@ -43,9 +46,10 @@ type Options struct {
 	// Names lists the artists, titles and albums the app knows: they are
 	// replaced in everything sent.
 	Names func() []string
-	// TracesSampleRate is the share of timings sent, 0.1 when zero.
+	// TracesSampleRate is the share of timings sent, 0.01 when zero; every
+	// launch is sent.
 	TracesSampleRate float64
-	// ProblemSampleRate is the share of installs that send a problem's
+	// ProblemSampleRate is the share of computers that send a problem's
 	// details, 0.1 when zero; the logs count every problem.
 	ProblemSampleRate float64
 	// Now and Rand replace the clock and the dice (tests).
@@ -61,14 +65,18 @@ type Client struct {
 	scrub *Scrubber
 
 	mu      sync.Mutex
-	dailyMu sync.Mutex
-	stats   *sentry.Hub // set while anonymous stats are on
+	tracker *sentry.Hub // set while the bug tracker is on
 	log     sentry.Logger
-	stop    chan struct{}
 	seen    map[string]bool
 }
 
-// New makes a client; anonymous stats stay off until SetStats(true).
+var (
+	// errOff answers a report made while the bug tracker is off.
+	errOff     = errors.New("the Sentry bug tracker is off")
+	errNotSent = errors.New("the report did not reach the developers; try again later")
+)
+
+// New makes a client; the bug tracker stays off until SetEnabled(true).
 func New(opts Options) *Client {
 	dsn := opts.DSN
 	if dsn == "" {
@@ -78,7 +86,7 @@ func New(opts Options) *Client {
 		dsn = DSN
 	}
 	if opts.TracesSampleRate == 0 {
-		opts.TracesSampleRate = 0.1
+		opts.TracesSampleRate = 0.01
 	}
 	if opts.ProblemSampleRate == 0 {
 		opts.ProblemSampleRate = 0.1
@@ -92,56 +100,59 @@ func New(opts Options) *Client {
 	if opts.Prefs == nil {
 		opts.Prefs = &memPrefs{m: map[string]string{}}
 	}
-	return &Client{opts: opts, dsn: dsn, scrub: NewScrubber(opts.Names), seen: map[string]bool{}}
+	c := &Client{opts: opts, dsn: dsn, scrub: NewScrubber(opts.Names), seen: map[string]bool{}}
+	if c.Available() {
+		// Both may run a command: not on the UI's thread when it turns on.
+		go func() {
+			defer quietly()
+			computerID()
+			Region()
+		}()
+	}
+	return c
 }
 
 // Available says this build can send anything at all.
 func (c *Client) Available() bool { return c != nil && c.dsn != "" }
 
-// Stats says anonymous stats are on.
-func (c *Client) Stats() bool {
+// Enabled says the bug tracker is on.
+func (c *Client) Enabled() bool {
 	if c == nil {
 		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.stats != nil
+	return c.tracker != nil
 }
 
-// SetStats turns anonymous stats on or off. Off, the Sentry client is
+// SetEnabled turns the bug tracker on or off. Off, the Sentry client is
 // closed: nothing is collected, not even breadcrumbs.
-func (c *Client) SetStats(on bool) {
+func (c *Client) SetEnabled(on bool) {
+	defer quietly()
 	if !c.Available() {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	switch {
-	case on && c.stats == nil:
+	case on && c.tracker == nil:
 		hub, err := c.newHub()
 		if err != nil {
 			return
 		}
-		c.stats = hub
+		c.tracker = hub
 		c.log = sentry.NewLogger(sentry.SetHubOnContext(context.Background(), hub))
-		c.stop = make(chan struct{})
-		go c.daily(c.stop)
-	case !on && c.stats != nil:
-		close(c.stop)
-		c.stats.Flush(2 * time.Second)
-		c.stats.Client().Close()
-		c.stats, c.log, c.stop = nil, nil, nil
+	case !on && c.tracker != nil:
+		c.tracker.Flush(2 * time.Second)
+		c.tracker.Client().Close()
+		c.tracker, c.log = nil, nil
 	}
 }
 
 // Flush waits for what is queued to leave.
 func (c *Client) Flush(timeout time.Duration) bool {
-	if c == nil {
-		return true
-	}
-	c.mu.Lock()
-	hub := c.stats
-	c.mu.Unlock()
+	defer quietly()
+	hub := c.hub()
 	if hub == nil {
 		return true
 	}
@@ -149,7 +160,7 @@ func (c *Client) Flush(timeout time.Duration) bool {
 }
 
 // Close sends what is queued and stops.
-func (c *Client) Close() { c.SetStats(false) }
+func (c *Client) Close() { c.SetEnabled(false) }
 
 func (c *Client) newHub() (*sentry.Hub, error) {
 	cl, err := sentry.NewClient(sentry.ClientOptions{
@@ -158,7 +169,7 @@ func (c *Client) newHub() (*sentry.Hub, error) {
 		Environment:           environment(proto.Version),
 		SampleRate:            1,
 		EnableTracing:         true,
-		TracesSampleRate:      c.opts.TracesSampleRate,
+		TracesSampler:         c.sample,
 		MaxBreadcrumbs:        100,
 		BeforeSend:            c.beforeSend,
 		BeforeSendTransaction: c.beforeSend,
@@ -170,10 +181,24 @@ func (c *Client) newHub() (*sentry.Hub, error) {
 		return nil, err
 	}
 	scope := sentry.NewScope()
-	// "{{auto}}" lets Sentry find the country from the connection; the
-	// project is set to keep no IP address.
-	scope.SetUser(sentry.User{IPAddress: "{{auto}}"})
+	scope.SetUser(computerUser())
 	return sentry.NewHub(cl, scope), nil
+}
+
+// computerUser is who every report comes from: this computer, by its hash, and
+// "{{auto}}" so that Sentry tells the country from the connection; the
+// project is set to keep no IP address.
+func computerUser() sentry.User {
+	return sentry.User{ID: computerID(), IPAddress: "{{auto}}"}
+}
+
+// sample sends every launch, each one counting the computer with its
+// system, version and country, and a share of the other timings.
+func (c *Client) sample(ctx sentry.SamplingContext) float64 {
+	if ctx.Span.Name == "launch" {
+		return 1
+	}
+	return c.opts.TracesSampleRate
 }
 
 // environment tells development builds, such as CI's 2.0.0-alpha+3f2c1d,
@@ -185,32 +210,18 @@ func environment(version string) string {
 	return "production"
 }
 
-// hub is the stats hub, or nil while anonymous stats are off.
+// quietly lets a call to Sentry fail without the app noticing: what
+// cannot be collected or sent is dropped, and the app goes on.
+func quietly() { _ = recover() }
+
+// hub is the bug tracker's hub, or nil while it is off.
 func (c *Client) hub() *sentry.Hub {
 	if c == nil {
 		return nil
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.stats
-}
-
-// oneShot is the hub for something the user clicked to send: the stats
-// hub when it runs, with its breadcrumbs, otherwise a client for this one
-// send, closed by done.
-func (c *Client) oneShot() (hub *sentry.Hub, done func() bool, err error) {
-	if hub := c.hub(); hub != nil {
-		return hub, func() bool { return hub.Flush(10 * time.Second) }, nil
-	}
-	hub, err = c.newHub()
-	if err != nil {
-		return nil, nil, err
-	}
-	return hub, func() bool {
-		ok := hub.Flush(10 * time.Second)
-		hub.Client().Close()
-		return ok
-	}, nil
+	return c.tracker
 }
 
 // memPrefs forget everything at exit: for a client made without

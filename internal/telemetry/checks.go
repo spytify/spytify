@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -51,14 +50,16 @@ func (c *Client) ChecksPreview(r Checks) string {
 	return b.String()
 }
 
-// SendChecks sends the checks that fail and the user's message, if any.
-func (c *Client) SendChecks(r Checks, message string) error {
-	if !c.Available() {
-		return errors.New("this build cannot send reports")
-	}
-	hub, done, err := c.oneShot()
-	if err != nil {
-		return err
+// SendChecks sends the checks that fail and the user's comment, if any.
+func (c *Client) SendChecks(r Checks, message string) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errNotSent
+		}
+	}()
+	hub := c.hub()
+	if hub == nil {
+		return errOff
 	}
 	names := r.failingNames()
 	ev := sentry.NewEvent()
@@ -75,8 +76,8 @@ func (c *Client) SendChecks(r Checks, message string) error {
 		ev.Attachments = []*sentry.Attachment{{Filename: "spytifyd.log", ContentType: "text/plain", Payload: []byte(c.scrub.String(strings.Join(r.Log, "\n")))}}
 	}
 	id := hub.CaptureEvent(ev)
-	if !done() || id == nil {
-		return errors.New("the report did not reach the developers; try again later")
+	if id == nil || !hub.Flush(10*time.Second) {
+		return errNotSent
 	}
 	if strings.TrimSpace(message) != "" {
 		return c.sendFeedback(*id, message)

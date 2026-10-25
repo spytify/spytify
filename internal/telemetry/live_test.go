@@ -20,15 +20,15 @@ func TestLiveSentry(t *testing.T) {
 	mark := "live check " + time.Now().Format("20060102-150405")
 	c := New(Options{DSN: dsn, Names: func() []string { return []string{"Neon Harbor"} }, TracesSampleRate: 1, ProblemSampleRate: 1})
 	defer c.Close()
+	c.SetEnabled(true)
 	cr := Crash{Program: "spytifyd", Time: time.Now(), Trace: strings.Replace(trace, "index out of range", mark+": index out of range", 1)}
-	if err := c.SendCrash(cr, mark+": the crash's message, about Neon Harbor"); err != nil {
+	if err := c.SendCrash(cr); err != nil {
 		t.Fatal(err)
 	}
 	checks := Checks{Failing: []proto.Check{{Name: "ffmpeg found", Detail: mark}}, Log: []string{"saved ~/Music/Neon Harbor - Midnight Ferry.flac"}}
 	if err := c.SendChecks(checks, mark+": the checks' message"); err != nil {
 		t.Fatal(err)
 	}
-	c.SetStats(true)
 	c.Step("launched")
 	c.Problem("live_check", mark)
 	now := time.Now()
@@ -36,7 +36,7 @@ func TestLiveSentry(t *testing.T) {
 	if !c.Flush(10 * time.Second) {
 		t.Fatal("the stats did not leave in 10 s")
 	}
-	t.Logf("In Sentry, look for %q: a crash and a stuck: ffmpeg found issue, each with its user feedback and attachment; "+
-		"a blocked: live_check issue; a launch transaction; and the logs daily, step and problem. "+
-		"No server name, no IP address, and <name> for Neon Harbor.", mark)
+	t.Logf("In Sentry, look for %q: a crash with its trace; a stuck: ffmpeg found issue with "+
+		"its user feedback and log; a blocked: live_check issue; a launch transaction from a user, the computer's hash, "+
+		"with its OS and country; and the logs step and problem. No server name, no IP address, and <name> for Neon Harbor.", mark)
 }

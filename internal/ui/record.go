@@ -96,6 +96,7 @@ func newRecordScreen(a *App) *recordScreen {
 	r.elapsed = caption("0:00 / 0:00")
 	r.level = newBar(theme.ColorNameSuccess)
 	skip := widget.NewButtonWithIcon("Skip", theme.MediaSkipNextIcon(), func() {
+		a.noteAction("skip")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdNext}, nil)
 	})
 	info := container.NewVBox(r.state, r.title, r.subtitle,
@@ -107,6 +108,7 @@ func newRecordScreen(a *App) *recordScreen {
 	// A track already playing when the session starts is not recorded;
 	// playing it again from 0:00 makes it the next track.
 	r.restart = widget.NewButtonWithIcon("Record this track from the start", theme.MediaReplayIcon(), func() {
+		a.noteAction("record this track from the start")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
 	r.waitRow = container.NewPadded(container.NewHBox(r.waiting, layout.NewSpacer(), r.restart))
@@ -151,8 +153,8 @@ func newRecordScreen(a *App) *recordScreen {
 			playBtn := right.Objects[2].(*fyne.Container).Objects[0].(*widget.Button)
 			if row.Path != "" && (row.Status == model.Saved || row.Status == model.Tagged) {
 				path := row.Path
-				revealBtn.OnTapped = func() { _ = reveal(path) }
-				playBtn.OnTapped = func() { _ = openPath(path) }
+				revealBtn.OnTapped = func() { a.noteAction("show a track in its folder"); _ = reveal(path) }
+				playBtn.OnTapped = func() { a.noteAction("play a track"); _ = openPath(path) }
 				revealBtn.Enable()
 				playBtn.Enable()
 			} else {
@@ -166,12 +168,16 @@ func newRecordScreen(a *App) *recordScreen {
 
 	r.totals = caption("")
 	openFolder := widget.NewButtonWithIcon("Open folder", theme.FolderOpenIcon(), func() {
+		a.noteAction("open folder")
 		if r.folder != "" {
 			_ = openPath(r.folder)
 		}
 	})
 	openFolder.Importance = widget.LowImportance
-	r.clear = widget.NewButtonWithIcon("Clear list", theme.ContentClearIcon(), a.m.ClearRows)
+	r.clear = widget.NewButtonWithIcon("Clear list", theme.ContentClearIcon(), func() {
+		a.noteAction("clear list")
+		a.m.ClearRows()
+	})
 	r.clear.Importance = widget.LowImportance
 	footer := container.NewBorder(nil, nil, nil, container.NewHBox(r.clear, openFolder), r.totals)
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))

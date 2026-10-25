@@ -11,11 +11,12 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// What anonymous stats send, all of it dropped while they are off.
+// What the bug tracker sends while it is on.
 
 // Breadcrumb notes a step on the way to a problem or a crash: it leaves
 // only with one of them.
 func (c *Client) Breadcrumb(category, message string, data map[string]any) {
+	defer quietly()
 	hub := c.hub()
 	if hub == nil {
 		return
@@ -23,8 +24,9 @@ func (c *Client) Breadcrumb(category, message string, data map[string]any) {
 	hub.AddBreadcrumb(&sentry.Breadcrumb{Category: category, Message: message, Data: data, Level: sentry.LevelInfo}, nil)
 }
 
-// Log sends one anonymous log line, counted in Sentry's Explore > Logs.
+// Log sends one log line, counted in Sentry's Explore > Logs.
 func (c *Client) Log(name string, attrs map[string]any) {
+	defer quietly()
 	if c == nil {
 		return
 	}
@@ -55,52 +57,15 @@ func (c *Client) Log(name string, attrs map[string]any) {
 }
 
 const (
-	keyLastDay = "telemetry.last-day"
 	keyStep    = "telemetry.step."
 	keyProblem = "telemetry.problem."
 )
-
-// Daily counts this install once a day, saying whether it is its first
-// count this month, or ever: daily and monthly active installs and new
-// installs, with no ID.
-func (c *Client) Daily() {
-	if c.hub() == nil {
-		return
-	}
-	c.dailyMu.Lock()
-	defer c.dailyMu.Unlock()
-	day := c.opts.Now().Format("2006-01-02")
-	last := c.opts.Prefs.String(keyLastDay)
-	if last >= day {
-		return
-	}
-	c.opts.Prefs.SetString(keyLastDay, day)
-	c.Log("daily", map[string]any{
-		"first_month":   len(last) < 7 || last[:7] != day[:7],
-		"first_install": last == "",
-	})
-}
-
-// daily counts the install as stats turn on, and again each day for an
-// app left open for days.
-func (c *Client) daily(stop chan struct{}) {
-	c.Daily()
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
-	for {
-		select {
-		case <-stop:
-			return
-		case <-t.C:
-			c.Daily()
-		}
-	}
-}
 
 // Step reports, once per install, that the user got this far: the app
 // launched, the recorder ready, a first recording, its first sound, its
 // first saved track.
 func (c *Client) Step(name string) {
+	defer quietly()
 	if c.hub() == nil || c.once(keyStep+name) {
 		return
 	}
@@ -127,6 +92,7 @@ func (c *Client) once(key string) bool {
 // breadcrumbs that led to it, go as a Sentry issue once per install and
 // version, from a share of the installs.
 func (c *Client) Problem(reason, detail string) {
+	defer quietly()
 	hub := c.hub()
 	if hub == nil {
 		return
@@ -160,6 +126,7 @@ type Span struct {
 // Measure sends how long something took, from start to end, with its
 // steps. A share of them leaves (TracesSampleRate).
 func (c *Client) Measure(name string, start, end time.Time, tags map[string]string, spans []Span) {
+	defer quietly()
 	hub := c.hub()
 	if hub == nil {
 		return

@@ -19,19 +19,20 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// What the app sends the developers, and only what the user agreed to: a
-// crash report or the failing checks on a click, and, with anonymous stats
-// on, counts, timings and the problems it runs into (package telemetry).
+// The Sentry bug tracker, all or nothing (package telemetry). On, the app
+// sends its crashes, the problems it runs into with the steps that led
+// there, its launches and timings, and, on a click, the checks that fail.
+// Off, it sends nothing and asks nothing.
 
 const (
-	statsKey   = "privacy.anonymous_stats"
-	crashesKey = "privacy.crash_reports"
+	trackerKey = "privacy.bug_tracker"
 	// pendingKey holds privacy choices made before the recorder answered,
 	// sent to it once it does.
 	pendingKey = "privacy-pending"
-	// privacySeenKey is set once the anonymous stats choice was shown.
-	privacySeenKey = "privacy-choice-seen"
-	statsLabel     = "Send anonymous stats to the developers to help fix bugs"
+	// privacySeenKey is set once the bug tracker choice was shown.
+	privacySeenKey = "bug-tracker-choice-seen"
+	trackerLabel   = "Sentry bug tracker: send crashes, errors and traces to help the developers fix issues"
+	optedOut       = "You opted out of the Sentry bug tracker (Settings > Privacy)"
 )
 
 // launchTrace times the way from launch to a recorder that answers.
@@ -65,9 +66,10 @@ func (a *App) setPrivacy(key string, v any) {
 	p[key] = v
 	b, _ := json.Marshal(p)
 	a.fa.Preferences().SetString(pendingKey, string(b))
-	if key == statsKey {
+	if key == trackerKey {
 		on, _ := v.(bool)
-		a.tel.SetStats(on)
+		a.tel.SetEnabled(on && a.shown)
+		a.tel.Breadcrumb("settings", trackerKey, map[string]any{"value": on})
 	}
 	if a.last.Conn == model.Connected {
 		a.flushPrivacy()
@@ -99,8 +101,9 @@ func (a *App) flushPrivacy() {
 	}()
 }
 
-// renderPrivacy follows the connection and the settings: anonymous stats
-// start or stop, a crash left behind is offered, the launch is timed.
+// renderPrivacy follows the connection and the settings: the bug tracker
+// starts or stops, a crash left behind leaves, the launch is timed and the
+// checks noted. Nothing starts before the first-run notice had its say.
 func (a *App) renderPrivacy(s model.State) {
 	connected := s.Conn == model.Connected
 	if connected != a.wasConnected {
@@ -109,17 +112,26 @@ func (a *App) renderPrivacy(s model.State) {
 			a.launch.connected = time.Now()
 			a.flushPrivacy()
 		}
+		a.tel.Breadcrumb("app", map[bool]string{true: "recorder connected", false: "recorder gone"}[connected], nil)
 		// A recorder that went away may have crashed; one that came back
 		// moved its trace aside.
 		if a.shown {
 			a.checkCrashes()
 		}
 	}
-	on, _ := a.privacy(statsKey).(bool)
-	a.tel.SetStats(on)
-	if s.HaveInfo && !a.launch.done {
+	on, _ := a.privacy(trackerKey).(bool)
+	a.tel.SetEnabled(on && a.shown)
+	if !a.shown || !s.HaveInfo {
+		return
+	}
+	if !a.launch.done {
 		a.launch.done = true
 		a.launchReady(s)
+	}
+	if checks := fmt.Sprint(s.Info.Checks); checks != a.checksNoted {
+		a.checksNoted = checks
+		a.tel.Breadcrumb("checks", fmt.Sprintf("%d of %d pass", len(s.Info.Checks)-len(failingNames(s.Info.Checks)), len(s.Info.Checks)),
+			map[string]any{"failing": strings.Join(failingNames(s.Info.Checks), ", ")})
 	}
 }
 
@@ -184,7 +196,7 @@ var problemCodes = map[string]bool{
 // onEvent turns the recorder's events into breadcrumbs, steps and problem
 // reports. It runs on the link's goroutine.
 func (a *App) onEvent(ev proto.Event) {
-	if !a.tel.Stats() {
+	if !a.tel.Enabled() {
 		return
 	}
 	switch ev.Method {
@@ -303,108 +315,61 @@ func (a *App) noteTab(i int) {
 		return
 	}
 	a.tel.Breadcrumb("ui", "tab "+a.tabs.Items[i].Text, nil)
-	if i == tabLogs && !a.diagNoted && a.tel.Stats() {
+	if i == tabLogs && !a.diagNoted && a.tel.Enabled() {
 		a.diagNoted = true
 		a.tel.Log("diagnostics", map[string]any{"failing": failingNames(a.last.Info.Checks)})
 	}
 }
 
-// askPrivacy shows, once, the anonymous stats choice to someone who saw
-// the first-run notice before it had one.
+// askPrivacy shows, once, the bug tracker choice to someone who saw the
+// first-run notice before it had one.
 func (a *App) askPrivacy(then func()) {
 	prefs := a.fa.Preferences()
 	if !a.tel.Available() || prefs.Bool(privacySeenKey) {
 		then()
 		return
 	}
-	stats := a.statsCheck()
-	body := widget.NewLabel("Spytify can tell its developers how it is doing: how many people use it, how long its steps take and the problems it runs into. " +
-		"Nothing in it names you or your computer. You can change this in Settings > Privacy.")
+	tracker := a.trackerCheck()
+	body := widget.NewLabel("Spytify can send its crashes, errors and traces to its developers through Sentry, to help them fix issues. " +
+		"You can change this in Settings > Privacy.")
 	body.Wrapping = fyne.TextWrapWord
-	d := dialog.NewCustom("Help fix bugs", "OK", container.NewVBox(body, stats), a.win)
+	d := dialog.NewCustom("Help fix issues", "OK", container.NewVBox(body, tracker), a.win)
 	d.SetOnClosed(func() {
 		prefs.SetBool(privacySeenKey, true)
-		a.setPrivacy(statsKey, stats.Checked)
+		a.setPrivacy(trackerKey, tracker.Checked)
 		then()
 	})
 	d.Resize(fyne.NewSize(460, 220))
 	d.Show()
 }
 
-// statsCheck is the anonymous stats box, as the setting is now.
-func (a *App) statsCheck() *widget.Check {
-	c := widget.NewCheck(statsLabel, nil)
-	on, _ := a.privacy(statsKey).(bool)
+// trackerCheck is the bug tracker box, as the setting is now.
+func (a *App) trackerCheck() *widget.Check {
+	c := widget.NewCheck(trackerLabel, nil)
+	on, _ := a.privacy(trackerKey).(bool)
 	c.SetChecked(on)
 	return c
 }
 
-// checkCrashes offers, sends or forgets the crashes left behind, as the
-// crash reports setting says.
+// checkCrashes sends the crashes left behind with the bug tracker on, and
+// forgets them with it off.
 func (a *App) checkCrashes() {
-	if !a.tel.Available() || a.crashOpen {
+	if !a.tel.Available() {
 		return
 	}
 	prefs := a.fa.Preferences()
-	crashes := telemetry.FindCrashes(a.opts.StateDir, prefs, time.Now())
-	if len(crashes) == 0 {
-		return
+	on := a.tel.Enabled()
+	for _, cr := range telemetry.FindCrashes(a.opts.StateDir, prefs, time.Now()) {
+		telemetry.MarkHandled(prefs, cr)
+		if on {
+			go func(cr telemetry.Crash) { _ = a.tel.SendCrash(cr) }(cr)
+		}
 	}
-	switch a.privacy(crashesKey) {
-	case "never":
-		for _, cr := range crashes {
-			telemetry.MarkHandled(prefs, cr)
-		}
-	case "always":
-		for _, cr := range crashes {
-			telemetry.MarkHandled(prefs, cr)
-			go func(cr telemetry.Crash) { _ = a.tel.SendCrash(cr, "") }(cr)
-		}
-	default:
-		a.askCrash(crashes[0], a.checkCrashes)
-	}
-}
-
-// askCrash asks before sending a crash, showing what would leave.
-func (a *App) askCrash(cr telemetry.Crash, then func()) {
-	a.crashOpen = true
-	who := "Spytify"
-	if cr.Program == "spytifyd" {
-		who = "The recorder"
-	}
-	body := widget.NewLabel(who + " stopped on an error. Send the report to the developers? It holds the error and where it happened in the code.")
-	body.Wrapping = fyne.TextWrapWord
-	preview := widget.NewLabelWithStyle(a.tel.CrashPreview(cr), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
-	scroll := container.NewScroll(preview)
-	scroll.SetMinSize(fyne.NewSize(0, 160))
-	what := widget.NewAccordion(widget.NewAccordionItem("What will be sent", scroll))
-	message := widget.NewMultiLineEntry()
-	message.SetPlaceHolder("What were you doing? (optional)")
-	message.Wrapping = fyne.TextWrapWord
-	again := widget.NewCheck("Don't ask again", nil)
-	d := dialog.NewCustomConfirm(who+" stopped unexpectedly", "Send", "Don't send", container.NewVBox(body, what, message, again), func(send bool) {
-		telemetry.MarkHandled(a.fa.Preferences(), cr)
-		if again.Checked {
-			a.setPrivacy(crashesKey, map[bool]string{true: "always", false: "never"}[send])
-		}
-		if send {
-			text := message.Text
-			go func() {
-				if err := a.tel.SendCrash(cr, text); err != nil {
-					fyne.Do(func() { a.showError(err) })
-				}
-			}()
-		}
-		a.crashOpen = false
-		then()
-	}, a.win)
-	d.Resize(fyne.NewSize(560, 420))
-	d.Show()
 }
 
 // sendChecks shows what the diagnostics' report holds, and sends it on
 // Send.
-func (a *App) sendChecks(s model.State, sent func()) {
+func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	var failing []proto.Check
 	for _, c := range s.Info.Checks {
 		if !c.OK && c.Name != "player running" {
@@ -434,15 +399,11 @@ func (a *App) sendChecks(s model.State, sent func()) {
 			return
 		}
 		text := message.Text
+		// A report that does not leave is no error to show: the button
+		// says so and the app goes on.
 		go func() {
 			err := a.tel.SendChecks(report, text)
-			fyne.Do(func() {
-				if err != nil {
-					a.showError(err)
-					return
-				}
-				sent()
-			})
+			fyne.Do(func() { sent(err == nil) })
 		}()
 	}, a.win)
 	d.Resize(fyne.NewSize(560, 420))

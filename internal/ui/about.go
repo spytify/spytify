@@ -63,6 +63,7 @@ func (s *aboutScreen) render(st model.State) {
 }
 
 func (s *aboutScreen) checkNow() {
+	s.app.noteAction("check for updates")
 	go func() {
 		tag, page, err := latestRelease(context.Background())
 		fyne.Do(func() {
@@ -85,8 +86,8 @@ func (s *aboutScreen) checkNow() {
 const firstRunKey = "first-run-seen"
 
 // maybeShowFirstRun explains, once, what the recording's quality is and
-// whose responsibility the recording is, and offers to send anonymous
-// stats, unticked. then runs once it is closed.
+// whose responsibility the recording is, and shows the Sentry bug
+// tracker's switch, ticked. then runs once it is closed.
 func (a *App) maybeShowFirstRun(then func()) {
 	prefs := a.fa.Preferences()
 	if prefs.Bool(firstRunKey) {
@@ -99,10 +100,10 @@ func (a *App) maybeShowFirstRun(then func()) {
 	again := widget.NewCheck("Don't show this again", nil)
 	again.SetChecked(true)
 	box := container.NewVBox(body)
-	var stats *widget.Check
+	var tracker *widget.Check
 	if a.tel.Available() {
-		stats = a.statsCheck()
-		box.Add(stats)
+		tracker = a.trackerCheck()
+		box.Add(tracker)
 	}
 	box.Add(again)
 	d := dialog.NewCustom("Before you record", "OK", box, a.win)
@@ -110,9 +111,9 @@ func (a *App) maybeShowFirstRun(then func()) {
 		if again.Checked {
 			prefs.SetBool(firstRunKey, true)
 		}
-		if stats != nil {
+		if tracker != nil {
 			prefs.SetBool(privacySeenKey, true)
-			a.setPrivacy(statsKey, stats.Checked)
+			a.setPrivacy(trackerKey, tracker.Checked)
 		}
 		then()
 	})

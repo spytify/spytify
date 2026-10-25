@@ -140,7 +140,10 @@ func (s *settingsScreen) header(group string, keys []string) fyne.CanvasObject {
 	if len(keys) == 0 {
 		return heading(group)
 	}
-	reset := widget.NewButtonWithIcon("Reset", theme.HistoryIcon(), func() { s.resetKeys(keys) })
+	reset := widget.NewButtonWithIcon("Reset", theme.HistoryIcon(), func() {
+		s.app.noteAction("reset " + group)
+		s.resetKeys(keys)
+	})
 	reset.Importance = widget.LowImportance
 	return container.NewBorder(nil, nil, heading(group), reset)
 }
@@ -347,6 +350,7 @@ func (p *playerCard) render(s model.State) {
 }
 
 func (p *playerCard) save() {
+	p.app.noteAction("save the player and restart spytifyd")
 	values := map[string]string{
 		"SPYTIFY_TARGET_PROCESS":   p.process.Text,
 		"SPYTIFY_TARGET_BUNDLE_ID": p.bundle.Text,

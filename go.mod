@@ -5,6 +5,8 @@ go 1.26.0
 require (
 	fyne.io/fyne/v2 v2.8.2
 	github.com/BurntSushi/toml v1.6.0
+	github.com/denisbrodbeck/machineid v1.0.1
+	github.com/dweymouth/fyne-tooltip v0.4.0
 	github.com/getsentry/sentry-go v0.50.0
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/joho/godotenv v1.5.1

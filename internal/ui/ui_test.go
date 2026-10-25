@@ -24,6 +24,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/bus"
 	"github.com/spytify/spytify/internal/settings"
@@ -597,6 +598,11 @@ func buttons(o fyne.CanvasObject, text string) []*widget.Button {
 		case *widget.Button:
 			if w.Text == text {
 				out = append(out, w)
+			}
+			return
+		case *ttwidget.Button:
+			if w.Text == text {
+				out = append(out, &w.Button)
 			}
 			return
 		case *fyne.Container:

@@ -3,18 +3,13 @@ package telemetry
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
-
-	"github.com/spytify/spytify/pkg/proto"
 )
 
 // Crash is the trace a program left when it stopped on a fatal error.
@@ -43,9 +38,10 @@ const (
 )
 
 // FindCrashes returns the crashes not sent nor dismissed yet. The first
-// call only notes the time: a crash from before it, by a version that did
-// not offer to send it, is not offered now.
-func FindCrashes(stateDir string, prefs Prefs, now time.Time) []Crash {
+// call only notes the time: a crash from before it, by a version without
+// the bug tracker, is not sent now.
+func FindCrashes(stateDir string, prefs Prefs, now time.Time) (found []Crash) {
+	defer quietly()
 	since, err := time.Parse(time.RFC3339, prefs.String(keyCrashSince))
 	if err != nil {
 		prefs.SetString(keyCrashSince, now.UTC().Format(time.RFC3339))
@@ -75,8 +71,9 @@ func FindCrashes(stateDir string, prefs Prefs, now time.Time) []Crash {
 	return out
 }
 
-// MarkHandled keeps cr from being offered again.
+// MarkHandled keeps cr from being sent again.
 func MarkHandled(prefs Prefs, cr Crash) {
+	defer quietly()
 	handled := append(strings.Fields(prefs.String(keyCrashHandled)), cr.key)
 	if len(handled) > 20 {
 		handled = handled[len(handled)-20:]
@@ -102,13 +99,6 @@ func containsKey(crashes []Crash, key string) bool {
 	return false
 }
 
-// CrashPreview is the report as it will leave: what the user sees before
-// sending it.
-func (c *Client) CrashPreview(cr Crash) string {
-	return fmt.Sprintf("Program: %s\nVersion: %s\nSystem: %s/%s\nCountry: from the connection, or %s\n\n%s",
-		cr.Program, proto.Version, runtime.GOOS, runtime.GOARCH, orUnknown(Region()), c.scrub.String(cr.Trace))
-}
-
 func orUnknown(s string) string {
 	if s == "" {
 		return "unknown"
@@ -116,23 +106,21 @@ func orUnknown(s string) string {
 	return s
 }
 
-// SendCrash sends a crash, and the user's message when there is one.
-func (c *Client) SendCrash(cr Crash, message string) error {
-	if !c.Available() {
-		return errors.New("this build has no crash reporting")
-	}
-	hub, done, err := c.oneShot()
-	if err != nil {
-		return err
+// SendCrash sends a crash with its trace.
+func (c *Client) SendCrash(cr Crash) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errNotSent
+		}
+	}()
+	hub := c.hub()
+	if hub == nil {
+		return errOff
 	}
 	ev := crashEvent(cr)
 	ev.Attachments = []*sentry.Attachment{{Filename: cr.Program + "-trace.txt", ContentType: "text/plain", Payload: []byte(c.scrub.String(cr.Trace))}}
-	id := hub.CaptureEvent(ev)
-	if !done() || id == nil {
-		return errors.New("the report did not reach the developers; try again later")
-	}
-	if strings.TrimSpace(message) != "" {
-		return c.sendFeedback(*id, message)
+	if id := hub.CaptureEvent(ev); id == nil || !hub.Flush(10*time.Second) {
+		return errNotSent
 	}
 	return nil
 }

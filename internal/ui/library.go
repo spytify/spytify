@@ -63,7 +63,10 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.search.SetPlaceHolder("Search artist, title or album")
 	l.search.OnChanged = func(string) { l.filter() }
 	l.sortBy = widget.NewSelect([]string{"Newest", "Name"}, func(string) { l.filter() })
-	refresh := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { l.scan() })
+	refresh := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() {
+		a.noteAction("rescan the library")
+		l.scan()
+	})
 	l.count = caption("")
 	l.hint = widget.NewLabel("")
 	l.empty = emptyState("No recordings yet", l.hint)
@@ -102,8 +105,8 @@ func newLibraryScreen(a *App) *libraryScreen {
 			setRowText(text, strings.TrimSuffix(filepath.Base(f.rel), filepath.Ext(f.rel)),
 				folder+strings.ToUpper(strings.TrimPrefix(filepath.Ext(f.rel), "."))+" · "+fmtBytes(f.size)+" · "+f.modTime.Format("2006-01-02 15:04"))
 			path := f.path
-			buttons.Objects[0].(*widget.Button).OnTapped = func() { _ = reveal(path) }
-			buttons.Objects[1].(*widget.Button).OnTapped = func() { _ = openPath(path) }
+			buttons.Objects[0].(*widget.Button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
+			buttons.Objects[1].(*widget.Button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
 			box.Refresh()
 		},
 	)

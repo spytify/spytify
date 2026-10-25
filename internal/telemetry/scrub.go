@@ -97,10 +97,16 @@ func replaceFold(s, old, repl string) string {
 }
 
 // beforeSend is the last look at an event or a timing before it leaves.
-func (c *Client) beforeSend(ev *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+func (c *Client) beforeSend(ev *sentry.Event, _ *sentry.EventHint) (out *sentry.Event) {
+	// Nothing leaves unscrubbed: an event the scrubbing fails on is dropped.
+	defer func() {
+		if recover() != nil {
+			out = nil
+		}
+	}()
 	s := c.scrub
 	ev.ServerName = ""
-	ev.User = sentry.User{IPAddress: "{{auto}}"}
+	ev.User = computerUser()
 	ev.Message = s.String(ev.Message)
 	ev.Transaction = s.String(ev.Transaction)
 	for i := range ev.Exception {
@@ -132,7 +138,12 @@ func (c *Client) beforeSend(ev *sentry.Event, _ *sentry.EventHint) *sentry.Event
 	return ev
 }
 
-func (c *Client) beforeBreadcrumb(b *sentry.Breadcrumb, _ *sentry.BreadcrumbHint) *sentry.Breadcrumb {
+func (c *Client) beforeBreadcrumb(b *sentry.Breadcrumb, _ *sentry.BreadcrumbHint) (out *sentry.Breadcrumb) {
+	defer func() {
+		if recover() != nil {
+			out = nil
+		}
+	}()
 	b.Message = c.scrub.String(b.Message)
 	for k, v := range b.Data {
 		if str, ok := v.(string); ok {
@@ -142,7 +153,12 @@ func (c *Client) beforeBreadcrumb(b *sentry.Breadcrumb, _ *sentry.BreadcrumbHint
 	return b
 }
 
-func (c *Client) beforeSendLog(l *sentry.Log) *sentry.Log {
+func (c *Client) beforeSendLog(l *sentry.Log) (out *sentry.Log) {
+	defer func() {
+		if recover() != nil {
+			out = nil
+		}
+	}()
 	// The SDK adds the host name when the client has no server name.
 	delete(l.Attributes, "sentry.server.address")
 	l.Body = c.scrub.String(l.Body)

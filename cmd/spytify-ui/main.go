@@ -23,7 +23,7 @@ func main() {
 	target.LoadDotEnv()
 	env := target.Load()
 
-	// A crash of the app leaves its trace for the next launch to offer.
+	// A crash of the app leaves its trace for the next launch to send.
 	crash.Keep(filepath.Join(env.StateDir, "spytify-ui.crash.log"))
 
 	fa := app.NewWithID("org.spytify.ui")
@@ -31,6 +31,7 @@ func main() {
 	m := model.New()
 	l := link.New(env.SocketPath, m)
 	tel := telemetry.New(telemetry.Options{Prefs: fa.Preferences(), Names: m.Names})
+	// At quit, what is queued leaves within 2 s or is dropped.
 	defer tel.Close()
 	// With a player to record, the app starts spytifyd itself; with none,
 	// it asks for one first.
@@ -58,8 +59,5 @@ func privacySettings(path string) map[string]any {
 	if store, err := settings.Open(path); err == nil {
 		v = store.Values()
 	}
-	return map[string]any{
-		"privacy.anonymous_stats": v.Bool("privacy.anonymous_stats"),
-		"privacy.crash_reports":   v.String("privacy.crash_reports"),
-	}
+	return map[string]any{"privacy.bug_tracker": v.Bool("privacy.bug_tracker")}
 }

@@ -75,20 +75,21 @@ Spytify is a general-purpose application audio recorder, like Audio Hijack, Loop
 
 ## Privacy
 
-Spytify sends nothing you did not agree to. Only official builds can send anything: a build of your own has no reporting project (see [Build](#build)) and sends nothing.
+Spytify has one switch for what it sends its developers: the **Sentry bug tracker** (Settings > Privacy), on by default and shown at the first launch, where you can untick it. Only official builds can send anything: a build of your own has no reporting project (see [Build](#build)) and sends nothing.
 
-- **Crash reports** (Settings > Privacy > Crash reports, **ask** by default): when Spytify or the recorder stopped on an error, the app shows the report and asks before sending it, with an optional message. **always** sends without asking and **never** sends nothing; **Don't ask again** in that dialog chooses one of them.
-- **Send to the developers** (Logs, when a check fails): sends the checks that fail and the end of the recorder's log, with an optional message, once you have seen them.
-- **Anonymous stats** (Settings > Privacy, **off** by default, offered unticked at the first launch). Once on, the app sends:
-  - a count once a day, saying whether it is this install's first of the month or first ever, so the developers see active and new installs without any ID;
-  - how far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track;
-  - at each launch, whether the recorder got ready, how long it took and the names of the checks that fail;
-  - how long saving a track takes, for one track in ten;
-  - the problems that are not crashes, such as no sound reaching the recorder or a file that could not be encoded, with the steps that led there; each is counted, and one install in ten sends its details, once per version.
+On, the app sends:
+- the crashes of Spytify and of the recorder, with their trace, at the next launch, without asking;
+- the problems that are not crashes, such as no sound reaching the recorder or a file that could not be encoded, with the steps and clicks that led there; each is counted, and one computer in ten sends its details, once per version;
+- each launch: whether the recorder got ready, how long it took and the names of the checks that fail;
+- how far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track;
+- how long saving a track takes, for one track in a hundred;
+- **Send to the developers** (Logs, when a check fails): the checks that fail and the end of the recorder's log, with an optional comment, once you have seen them.
 
-  Off, nothing is collected, not even in memory.
+Off, nothing is sent or collected, not even in memory, and nothing asks: **Send to the developers** is disabled.
 
-Never sent: an install or user ID, your computer's name, your user name and your home folder (it becomes `~`). The tracks, artists and albums in the app's list become `<name>`; one the list does not hold, such as from an earlier session in the recorder's log, can still go out. Sentry uses the connection's IP address to tell the country and keeps no IP; the country falls back on your system's region setting. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
+Reports name your computer only by a code made from its machine ID for Spytify alone, the same after a reinstall and of no use to any other app. They carry the system, the version and the country: Sentry tells it from the connection's IP address and keeps no IP; the country falls back on your system's region setting. Never sent: your computer's name, your user name and your home folder (it becomes `~`). The tracks, artists and albums in the app's list become `<name>`; one the list does not hold, such as from an earlier session in the recorder's log, can still go out. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
+
+The bug tracker never gets in the way: a report that cannot be made or sent is dropped, and at quit the app waits at most 2 seconds for what is queued.
 
 ## Build
 
@@ -111,7 +112,7 @@ A build of your own records nothing until you choose the application. In the app
 
 Packagers can set a default application with the build variable `SPYTIFY_DEFAULT_PROCESS`: its bare name, which matches `Name.app` on macOS, `Name.exe` on Windows and `name` on Linux. On macOS the bundle id is read from the installed app. The build scripts read the variable from the environment or from an untracked `build.env`; the project's CI takes it from a repository variable.
 
-Crash reports and anonymous stats (see [Privacy](#privacy)) go to the Sentry project of the build variable `SPYTIFY_SENTRY_DSN`, read the same way. Without it, the app sends nothing and offers neither. Builds whose version has `dev` or `+` in it, such as CI's, report as the `development` environment.
+The Sentry bug tracker (see [Privacy](#privacy)) reports to the Sentry project of the build variable `SPYTIFY_SENTRY_DSN`, read the same way. Without it, the app sends nothing and shows no switch. Builds whose version has `dev` or `+` in it, such as CI's, report as the `development` environment.
 
 The macOS app is ad-hoc signed. macOS asks for the permissions again after every rebuild, and another Mac refuses to open it until it is signed and notarised. Opened from Finder, the app still finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin`.
 
@@ -217,7 +218,7 @@ The scenarios in [`testdata/timelines`](testdata/timelines) drive the real core 
 
 Each file is compared with its source by cross-correlation: the peak must be within 2 ms of zero and the residual under −50 dBFS.
 
-Crash reports and anonymous stats are tested against a fake Sentry server ([`internal/telemetry/fakesentry`](internal/telemetry/fakesentry)), which fails the test on a user feedback Sentry would refuse. With everything off, a launch, a recording, a problem, a failed start and a crash must send it nothing. To see that a real Sentry project takes every report, run `SPYTIFY_SENTRY_LIVE_DSN=<a test project's DSN> go test -run TestLiveSentry -v ./internal/telemetry/` and look there for the run's mark.
+The Sentry bug tracker is tested against a fake Sentry server ([`internal/telemetry/fakesentry`](internal/telemetry/fakesentry)), which fails the test on a user feedback Sentry would refuse. With the bug tracker off, a launch, a recording, a problem, a failed start and a crash must send it nothing; with Sentry out of reach, every call must return. To see that a real Sentry project takes every report, run `SPYTIFY_SENTRY_LIVE_DSN=<a test project's DSN> go test -run TestLiveSentry -v ./internal/telemetry/` and look there for the run's mark.
 
 The same timelines run against real PipeWire and MPRIS through `cmd/fakeplayer`. CI does this in a container with no sound card:
 
