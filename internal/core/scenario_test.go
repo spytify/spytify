@@ -248,3 +248,114 @@ func TestTheCoverGoesIntoTheFile(t *testing.T) {
 		t.Fatalf("%d files saved, want %d", saved, len(tl.Items))
 	}
 }
+
+// fleetingCovers stands between the fake player and the session and deletes
+// a track's cover file once the next track's cover is out, as the Windows
+// watcher does with its temporary files.
+type fleetingCovers struct {
+	fakeBackends
+	dir string
+}
+
+type fleetingNP struct {
+	*fake.Backend
+	dir string
+}
+
+func (f fleetingCovers) New(target.Target) (capture.Capture, meta.NowPlaying, error) {
+	return f.b, fleetingNP{f.b, f.dir}, nil
+}
+
+func (n fleetingNP) Watch(ctx context.Context, t target.Target) (<-chan meta.Event, error) {
+	in, err := n.Backend.Watch(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan meta.Event)
+	go func() {
+		defer close(out)
+		last := ""
+		for {
+			var ev meta.Event
+			select {
+			case e, ok := <-in:
+				if !ok {
+					return
+				}
+				ev = e
+			case <-ctx.Done():
+				return
+			}
+			if u := ev.Track.ArtURL; ev.Kind == meta.TrackChanged && u != "" && u != last {
+				if last != "" {
+					_ = os.Remove(filepath.Join(n.dir, filepath.Base(last)))
+				}
+				last = u
+			}
+			select {
+			case out <- ev:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return out, nil
+}
+
+// A cover the watcher deletes when the next track's comes out still goes
+// into its own track's file.
+func TestACoverFileGoneAtTheNextTrackStillGoesIntoItsFile(t *testing.T) {
+	ff, err := encode.Find("ffmpeg")
+	if err != nil {
+		t.Skip(err)
+	}
+	tl := loadTimeline(t, "basic")
+	dir := t.TempDir()
+	covers := map[string][]byte{}
+	for i := range tl.Items {
+		b, err := os.ReadFile(tl.Items[i].Art)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.CreateTemp(dir, "cover-*.jpg")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.Write(b)
+		f.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tl.Items[i].Art = f.Name()
+		covers[filepath.Base(f.Name())] = b
+	}
+	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
+	s.core.backends = fleetingCovers{fakeBackends: s.core.backends.(fakeBackends), dir: dir}
+	s.run(t, tl)
+	want := map[string][]byte{}
+	saved := 0
+	for _, ev := range s.events.all() {
+		switch ev.Method {
+		case proto.EventTrackStarted:
+			var tr proto.TrackStartedEvent
+			if ev.Decode(&tr) == nil {
+				want[tr.ID] = covers[filepath.Base(tr.CoverURL)]
+			}
+		case proto.EventTrackFinished:
+			var f proto.TrackFinishedEvent
+			if ev.Decode(&f) != nil {
+				continue
+			}
+			saved++
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			art, err := ff.Cover(ctx, f.Path)
+			cancel()
+			if w := want[f.ID]; len(w) == 0 || !bytes.Equal(art, w) {
+				t.Errorf("%s: cover of %d bytes, want its own of %d: %v", filepath.Base(f.Path), len(art), len(w), err)
+			}
+		}
+	}
+	if saved != len(tl.Items) {
+		t.Fatalf("%d files saved, want %d; log:\n%s", saved, len(tl.Items), s.logs)
+	}
+}
