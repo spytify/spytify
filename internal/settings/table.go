@@ -30,6 +30,8 @@ type Def struct {
 	Kind    Kind
 	Default any
 	Enum    []string
+	// Choices name Enum's values on the settings screen, in its order.
+	Choices []string
 	Ints    []int64
 	Min     float64
 	Max     float64
@@ -54,18 +56,18 @@ var Table = []Def{
 
 	{Key: "output.dir", Tab: "Recorder", Group: "Output", Label: "Output folder", Kind: KindPath, Default: "~/Music/Spytify"},
 	{Key: "output.group_by", Tab: "Recorder", Group: "Output", Label: "Group by folders", Kind: KindEnum, Enum: []string{"none", "artist", "artist/album"}, Default: "artist/album"},
-	{Key: "output.prefix", Tab: "Recorder", Group: "Output", Label: "File name prefix", Kind: KindEnum, Enum: []string{"none", "counter", "album_track"}, Default: "none", Advanced: true},
-	{Key: "output.underscores", Tab: "Recorder", Group: "Output", Label: "Underscores instead of spaces", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "output.template", Tab: "Recorder", Group: "Output", Label: "File name template", Kind: KindTemplate, Default: "{artist} - {title}", Note: "placeholders {artist}, {title}, {album}, {track}, {year}", Advanced: true},
-	{Key: "output.counter_start", Tab: "Recorder", Group: "Output", Label: "Counter start value", Kind: KindInt, Default: int64(1), Min: 0, Max: 999999999, Ranged: true, Advanced: true},
-	{Key: "output.counter_width", Tab: "Recorder", Group: "Output", Label: "Counter digits", Kind: KindInt, Default: int64(3), Min: 1, Max: 9, Ranged: true, Advanced: true},
+	{Key: "output.underscores", Tab: "Recorder", Group: "Output", Label: "Underscores instead of spaces", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "output.ascii_filenames", Tab: "Recorder", Group: "Output", Label: "Remove diacritics from file names", Kind: KindBool, Default: false, Advanced: true},
+	{Key: "output.prefix", Tab: "Recorder", Group: "Output", Label: "File name prefix", Kind: KindEnum, Enum: []string{"none", "counter", "album_track"}, Choices: []string{"None", "Counter (001)", "Album track number (04)"}, Default: "none", Advanced: true},
+	{Key: "tags.track_from_counter", Tab: "Tags", Group: "Output", Label: "Counter as the track number tag", Kind: KindBool, Default: false, Advanced: true, Note: "the counter's number replaces the track number in the file's tags"},
+	{Key: "output.counter_start", Tab: "Recorder", Group: "Output", Label: "Counter starts at", Kind: KindInt, Default: int64(1), Min: 0, Max: 999999999, Ranged: true, Advanced: true, Note: "each recording numbers its saved files from this"},
+	{Key: "output.counter_width", Tab: "Recorder", Group: "Output", Label: "Counter digits", Kind: KindInt, Default: int64(3), Min: 1, Max: 9, Ranged: true, Advanced: true, Note: "in the file name prefix: 3 makes 001"},
 
 	{Key: "encode.format", Tab: "Recorder", Group: "Encoding", Label: "Output format", Kind: KindEnum, Enum: []string{"mp3", "aac", "flac", "wav"}, Default: "flac"},
 	{Key: "encode.bitrate_kbps", Tab: "Recorder", Group: "Encoding", Label: "Bitrate", Kind: KindIntEnum, Ints: []int64{128, 160, 256, 320}, Default: int64(160), Note: "ignored for flac and wav"},
 	{Key: "tags.cover", Tab: "Tags", Group: "Encoding", Label: "Embed album cover", Kind: KindBool, Default: true, Advanced: true},
 	{Key: "tags.cover_size", Tab: "Tags", Group: "Encoding", Label: "Cover size", Kind: KindEnum, Enum: []string{"small", "medium", "large"}, Default: "medium", Advanced: true},
-	{Key: "tags.track_from_counter", Tab: "Tags", Group: "Encoding", Label: "Replace track number with counter", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "tags.extra_to_subtitle", Tab: "Tags", Group: "Encoding", Label: "Move parenthesised extra title to subtitle", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "tags.artist_separator", Tab: "Tags", Group: "Encoding", Label: "Multiple artists separator", Kind: KindString, Default: ", ", Advanced: true},
 

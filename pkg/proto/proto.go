@@ -225,7 +225,11 @@ type AudioSource struct {
 }
 
 type TrackFinishedEvent struct {
-	ID         string `json:"id"`
+	ID string `json:"id"`
+	// Counter is the session counter's number for this file: its prefix
+	// with output.prefix counter, its track number tag with
+	// tags.track_from_counter. The next file gets one more.
+	Counter    int64  `json:"counter"`
 	Path       string `json:"path"`
 	DurationMs int64  `json:"duration_ms"`
 	Bytes      int64  `json:"bytes"`

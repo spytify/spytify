@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -283,6 +284,28 @@ func TestTrackStartedSaysHowItWasCut(t *testing.T) {
 		if c.Kind != kind || c.By != by || c.OffsetMs < -2000 || c.OffsetMs > 2000 {
 			t.Errorf("track %d cut %+v, want %s by %s within 2 s of the notice", i, c, kind, by)
 		}
+	}
+}
+
+// Each saved file says its counter number, the one in its name with the
+// counter prefix: from the start value, one more per file.
+func TestEachFileSaysItsCounter(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, map[string]any{"output.prefix": "counter", "output.counter_start": 5})
+	s.run(t, tl)
+	var got []int64
+	for _, ev := range s.events.all() {
+		var f proto.TrackFinishedEvent
+		if ev.Method != proto.EventTrackFinished || ev.Decode(&f) != nil {
+			continue
+		}
+		got = append(got, f.Counter)
+		if want := fmt.Sprintf("%03d ", f.Counter); !strings.HasPrefix(filepath.Base(f.Path), want) {
+			t.Errorf("%s does not start with its counter %q", filepath.Base(f.Path), want)
+		}
+	}
+	if len(got) != 3 || got[0] != 5 || got[1] != 6 || got[2] != 7 {
+		t.Fatalf("counters %v, want 5 6 7", got)
 	}
 }
 

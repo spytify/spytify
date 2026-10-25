@@ -37,6 +37,15 @@ func TestEveryDefaultIsValid(t *testing.T) {
 	}
 }
 
+// A choice list names every value of its setting, in order.
+func TestChoicesNameEveryValue(t *testing.T) {
+	for _, d := range Table {
+		if d.Choices != nil && len(d.Choices) != len(d.Enum) {
+			t.Errorf("%s: %d choices for %d values", d.Key, len(d.Choices), len(d.Enum))
+		}
+	}
+}
+
 func TestSetPersistsAndReloads(t *testing.T) {
 	s, path := openTemp(t)
 	applied, rejected, changed, err := s.Set(map[string]any{

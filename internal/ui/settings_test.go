@@ -186,6 +186,46 @@ func TestTheTemplateShowsAnExample(t *testing.T) {
 	snapshot(t, a, "settings-file-name")
 }
 
+// The counter's settings wake up with what uses the counter, and say the
+// number the next file gets.
+func TestTheCounterSettings(t *testing.T) {
+	a, m, s := settingsApp(t)
+	start := s.fields["output.counter_start"].input.(*applyEntry)
+	digits := s.fields["output.counter_width"].input.(*applyEntry)
+	next := func() string { return s.next.Segments[0].(*widget.TextSegment).Text }
+	if !start.Disabled() || !digits.Disabled() || s.next.Visible() {
+		t.Error("the counter's settings are on while nothing uses the counter")
+	}
+	if sel := s.fields["output.prefix"].input.(*widget.Select); sel.Selected != "None" || !contains(sel.Options, "Counter (001)") {
+		t.Errorf("the prefix shows %q of %v", sel.Selected, sel.Options)
+	}
+	v := defaults()
+	v["tags.track_from_counter"] = true
+	m.SetSettings(v)
+	a.render()
+	if start.Disabled() || !digits.Disabled() || !s.next.Visible() || next() != "The next recording starts at 1" {
+		t.Errorf("counter in the tag: start disabled %v, digits disabled %v, %q", start.Disabled(), digits.Disabled(), next())
+	}
+	v["output.prefix"] = "counter"
+	m.SetSettings(v)
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	a.render()
+	if digits.Disabled() || next() != "Next file in this recording: 001" {
+		t.Errorf("counter prefix while recording: digits disabled %v, %q", digits.Disabled(), next())
+	}
+	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-1", Path: "/x.flac", Counter: 4}))
+	s.search.SetText("counter")
+	a.render()
+	if got := next(); got != "Next file in this recording: 005" {
+		t.Errorf("after file 004, %q", got)
+	}
+	// The prefix is found by its choices' words too.
+	if all := texts(s.sections); !contains(all, "File name prefix") {
+		t.Errorf("searching counter shows %v", all)
+	}
+	snapshot(t, a, "settings-counter")
+}
+
 // A section's Reset resets each of its settings, and only those.
 func TestResetResetsItsSection(t *testing.T) {
 	a, _, core := connectedApp(t)

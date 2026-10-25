@@ -543,6 +543,17 @@ func TestButtonsSendActions(t *testing.T) {
 		t.Fatalf("settings.set calls %v", sets)
 	}
 
+	// A choice shows its words and applies its value.
+	sel := s.fields["output.prefix"].input.(*widget.Select)
+	sel.SetSelected("Album track number (04)")
+	waitSets(t, core, 3)
+	core.mu.Lock()
+	last = core.sets[len(core.sets)-1]
+	core.mu.Unlock()
+	if last["output.prefix"] != "album_track" {
+		t.Fatalf("choosing Album track number sent %v", last)
+	}
+
 	// Quitting the app stops the recorder too.
 	a.stopDaemon()
 	waitCall(t, core, proto.MethodCoreShutdown)

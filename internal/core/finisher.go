@@ -317,6 +317,7 @@ func (f *finisher) process(j finishJob) {
 	f.log.Infof("saved %s", final)
 	f.emit(proto.EventTrackFinished, proto.TrackFinishedEvent{
 		ID:         j.id,
+		Counter:    counter,
 		Path:       final,
 		DurationMs: j.format.MsFromFrames(keptFrames),
 		Bytes:      size,

@@ -37,7 +37,9 @@ type settingsScreen struct {
 	// example shows, under the file name template, the file a sample
 	// track gets with the output settings as they are.
 	example *widget.RichText
-	player  *playerCard
+	// next shows, under Counter starts at, the number the next file gets.
+	next   *widget.RichText
+	player *playerCard
 	// advanced remembers which Advanced parts the user opened.
 	advanced  map[string]*widget.Accordion
 	open      map[string]bool
@@ -84,7 +86,8 @@ func groups() []string {
 }
 
 func matches(q string, d settings.Def) bool {
-	return q == "" || strings.Contains(strings.ToLower(d.Label), q) || strings.Contains(d.Key, q)
+	return q == "" || strings.Contains(strings.ToLower(d.Label), q) || strings.Contains(d.Key, q) ||
+		strings.Contains(strings.ToLower(strings.Join(d.Choices, " ")), q)
 }
 
 func (s *settingsScreen) layout() {
@@ -207,8 +210,21 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 				opts = append(opts, strconv.FormatInt(n, 10))
 			}
 		}
-		sel := widget.NewSelect(opts, func(v string) { s.apply(key, v) })
-		f.set = func(v any) { sel.SetSelected(fmt.Sprint(number(v))) }
+		// The list shows a choice's words, the setting keeps its value.
+		shown := opts
+		if len(d.Choices) == len(opts) {
+			shown = d.Choices
+		}
+		swap := func(s string, from, to []string) string {
+			for i, x := range from {
+				if x == s {
+					return to[i]
+				}
+			}
+			return s
+		}
+		sel := widget.NewSelect(shown, func(c string) { s.apply(key, swap(c, shown, opts)) })
+		f.set = func(v any) { sel.SetSelected(swap(fmt.Sprint(number(v)), opts, shown)) }
 		f.input = sel
 	case settings.KindPath:
 		e := newApplyEntry(func(v string) { s.apply(key, v) })
@@ -232,6 +248,10 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			e.SetPlaceHolder(d.Note)
 			s.example = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
 			under = s.example
+		}
+		if key == "output.counter_start" {
+			s.next = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
+			under = s.next
 		}
 		f.set = func(v any) {
 			if !s.focused(e) {
@@ -306,7 +326,56 @@ func (s *settingsScreen) render(st model.State) {
 	if s.example != nil {
 		setCaption(s.example, "e.g. "+exampleName(st.Settings))
 	}
+	// The counter's settings mean something only once a setting uses it.
+	prefix, _ := st.Settings["output.prefix"].(string)
+	inTag, _ := st.Settings["tags.track_from_counter"].(bool)
+	s.enable("output.counter_start", prefix == "counter" || inTag)
+	s.enable("output.counter_width", prefix == "counter")
+	if s.next != nil {
+		if text := nextCounter(st, prefix == "counter"); text != "" && (prefix == "counter" || inTag) {
+			setCaption(s.next, text)
+			s.next.Show()
+		} else {
+			s.next.Hide()
+		}
+	}
 	s.player.render(st)
+}
+
+// enable turns a setting's input on or off.
+func (s *settingsScreen) enable(key string, on bool) {
+	f, ok := s.fields[key]
+	if !ok {
+		return
+	}
+	if d, ok := f.input.(fyne.Disableable); ok {
+		if on {
+			d.Enable()
+		} else {
+			d.Disable()
+		}
+	}
+}
+
+// nextCounter says the number the next saved file gets: in this recording,
+// one more than its last file's, or the start value; padded as in a file
+// name when the prefix is the counter.
+func nextCounter(st model.State, padded bool) string {
+	start, _ := number(st.Settings["output.counter_start"]).(int64)
+	width, _ := number(st.Settings["output.counter_width"]).(int64)
+	show := func(n int64) string {
+		if padded {
+			return fmt.Sprintf("%0*d", width, n)
+		}
+		return strconv.FormatInt(n, 10)
+	}
+	switch {
+	case st.Recording() && st.Counted:
+		return "Next file in this recording: " + show(st.Counter+1)
+	case st.Recording():
+		return "Next file in this recording: " + show(start)
+	}
+	return "The next recording starts at " + show(start)
 }
 
 // exampleName is the path a sample track gets with the output settings in

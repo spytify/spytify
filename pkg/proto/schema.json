@@ -475,6 +475,9 @@
         "bytes": {
           "type": "integer"
         },
+        "counter": {
+          "type": "integer"
+        },
         "duration_ms": {
           "type": "integer"
         },
@@ -496,6 +499,7 @@
       },
       "required": [
         "bytes",
+        "counter",
         "duration_ms",
         "id",
         "path",
