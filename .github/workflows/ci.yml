@@ -194,7 +194,7 @@ jobs:
       # drops.
       - name: Disk image and command-line zip
         run: |
-          hdiutil create -volname Spytify -srcfolder dist/Spytify.app -ov -format UDZO dist/Spytify-macos.dmg
+          scripts/dmg-macos.sh dist/Spytify.app dist/Spytify-macos.dmg
           (cd dist && zip -q -y -r spytify-macos-cli.zip spytifyd spytify-cli spytify-tap)
       - uses: actions/upload-artifact@v4
         with:
