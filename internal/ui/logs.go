@@ -138,7 +138,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 	for _, c := range s.Info.Checks {
 		icon := theme.ConfirmIcon()
 		if !c.OK {
-			icon = theme.ErrorIcon()
+			icon = theme.WarningIcon()
 		}
 		var fix fyne.CanvasObject
 		if c.Name == "player running" && !c.OK {
@@ -149,7 +149,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 		rows = append(rows, container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail)))
 	}
 	for _, w := range s.Info.Warnings {
-		rows = append(rows, container.NewBorder(nil, nil, widget.NewIcon(theme.WarningIcon()), nil, wrapped(w)))
+		rows = append(rows, container.NewBorder(nil, nil, widget.NewIcon(theme.ErrorIcon()), nil, wrapped(w)))
 	}
 	// Stuck on a check: the user may send it to the developers, once for
 	// these results, unless they opted out of the bug tracker.
