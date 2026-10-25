@@ -285,6 +285,30 @@ func TestClosingToTheTrayKeepsSpytifyThere(t *testing.T) {
 	open.Action()
 }
 
+// With Minimize to tray off, the default, Spytify puts nothing in the tray;
+// turned on, its icon and menu come at once.
+func TestTheTrayIconComesWithMinimizeToTray(t *testing.T) {
+	tray := &trayApp{App: test.NewTempApp(t)}
+	tray.Preferences().SetBool(firstRunKey, true)
+	m := model.New()
+	l := link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
+	a := New(tray, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true})
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	values := defaults()
+	m.SetSettings(values)
+	a.render()
+	if tray.menu != nil {
+		t.Fatal("a tray menu with Minimize to tray off")
+	}
+	values["app.minimize_to_tray"] = true
+	m.SetSettings(values)
+	a.render()
+	if tray.menu == nil || tray.menu.Items[0].Label != "Record" {
+		t.Fatalf("tray menu %v once Minimize to tray is on", tray.menu)
+	}
+}
+
 // iconButtons are the visible buttons that show only icon.
 func iconButtons(o fyne.CanvasObject, icon fyne.Resource) []*widget.Button {
 	var out []*widget.Button

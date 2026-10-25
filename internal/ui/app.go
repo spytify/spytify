@@ -243,7 +243,6 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	body := container.NewBorder(container.NewVBox(container.NewPadded(a.bar), a.banner), nil, nil, nil, a.center)
 	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
 
-	a.setupTray()
 	if !opts.ManualRender {
 		onReopen(func() { fyne.Do(a.showWindow) })
 	}
@@ -431,6 +430,11 @@ func (a *App) render() {
 	default:
 		a.action.Enable()
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
+	}
+	// The tray icon comes with Minimize to tray; the toolkit cannot take
+	// it away, so turned off, it goes when Spytify restarts.
+	if a.tray && a.trayMenu == nil && s.Settings["app.minimize_to_tray"] == true {
+		a.setupTray()
 	}
 	a.syncTray()
 	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {
