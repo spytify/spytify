@@ -310,6 +310,9 @@ func TestSendToTheDevelopers(t *testing.T) {
 	}
 	failCheck(a, m)
 	snapshot(t, a, "privacy-diagnostics")
+	if logs := a.screens[tabLogs].(*logsScreen); logs.checksScroll.Offset.Y <= 0 {
+		t.Error("the checks are not scrolled down to the one that fails")
+	}
 	if send := sendButton(t, a); send.Disabled() || send.ToolTip() != "" {
 		t.Fatalf("Send to the developers: disabled %v, tooltip %q", send.Disabled(), send.ToolTip())
 	}

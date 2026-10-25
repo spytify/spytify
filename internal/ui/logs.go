@@ -31,8 +31,8 @@ type logsScreen struct {
 	path  string
 
 	diag *widget.Accordion
-	// checks scroll past checksMaxHeight, above actions: Send to the
-	// developers, when a check fails, and Run the checks again.
+	// checks scroll past checksMaxHeight, above actions: Run the checks
+	// again, and Send to the developers when a check fails.
 	checks       *fyne.Container
 	checksScroll *container.Scroll
 	actions      *fyne.Container
@@ -144,8 +144,8 @@ func (l *logsScreen) renderChecks(s model.State) {
 		return
 	}
 	l.lastState = redraw
-	// What needs attention comes first, above the scroll's fold: the checks
-	// that fail, the advice, then the checks that pass.
+	// What needs attention comes last, the list scrolled to it: the checks
+	// that pass, the advice, then the checks that fail.
 	var failed, advice, passed []fyne.CanvasObject
 	for _, c := range s.Info.Checks {
 		icon := theme.ConfirmIcon()
@@ -168,7 +168,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 	for _, w := range s.Info.Warnings {
 		advice = append(advice, container.NewBorder(nil, nil, widget.NewIcon(theme.ErrorIcon()), nil, wrapped(w)))
 	}
-	rows := append(append(failed, advice...), passed...)
+	rows := append(append(passed, advice...), failed...)
 	// Stuck on a check: the user may send it to the developers, once for
 	// these results, unless they opted out of the bug tracker.
 	if failing > 0 && l.app.tel.Available() {
@@ -194,7 +194,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 		case l.sent == state:
 			done()
 		}
-		l.actions.Objects = []fyne.CanvasObject{send, l.refresh}
+		l.actions.Objects = []fyne.CanvasObject{l.refresh, send}
 	} else {
 		l.actions.Objects = []fyne.CanvasObject{l.refresh}
 	}
@@ -214,6 +214,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 	l.diag.Refresh()
 	// The diagnostics changed height: lay the log out below them again.
 	l.root.Refresh()
+	l.checksScroll.ScrollToBottom()
 }
 
 func (l *logsScreen) filter() {
