@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,7 @@ import (
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/tag"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -152,6 +154,9 @@ type Session struct {
 	done     bool
 	n        int
 	tmpDir   string
+	// covers maps a cover URL the watcher published to the session's own
+	// copy of it in tmpDir.
+	covers map[string]string
 
 	silenceDB float64
 	window    int64
@@ -322,13 +327,17 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 				events = nil
 				continue
 			}
-			s.onMeta(ev)
+			s.onMeta(ctx, ev)
 		case <-tick.C:
 			s.onTick()
 		}
 	}
 	s.setState(proto.StateStopping)
 	s.deps.fin.wait()
+	for _, p := range s.covers {
+		_ = os.Remove(p)
+	}
+	s.covers = nil
 	s.setState(proto.StateIdle)
 }
 
@@ -532,13 +541,14 @@ func (s *Session) dropWriter(c *segment) {
 	}
 }
 
-func (s *Session) onMeta(ev meta.Event) {
+func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 	if s.ring == nil {
 		s.formatChange(s.defaultFormat())
 	}
 	at := s.ring.End()
 	switch ev.Kind {
 	case meta.TrackChanged:
+		s.claimCover(ctx, ev.Track.ArtURL)
 		if !s.gotStatus {
 			info := ev.Track
 			s.initial, s.initPos = &info, ev.PositionMs
@@ -592,6 +602,46 @@ func (s *Session) onSeek(posMs, at int64) {
 
 func (s *Session) defaultFormat() pcm.Format {
 	return pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
+}
+
+// claimCover copies a cover the watcher published as a file into the
+// session's temp dir. On Windows the poller replaces its temporary cover
+// file when the next track's art arrives — before the finisher reads it
+// at the track's end — so a file cover must be claimed while it exists.
+// The track's ArtURL keeps naming the watcher's file for everyone else;
+// the copy's URL replaces it only in the track info given to the job.
+func (s *Session) claimCover(ctx context.Context, u string) {
+	if !strings.HasPrefix(u, "file://") || s.tmpDir == "" {
+		return
+	}
+	if s.covers == nil {
+		s.covers = map[string]string{}
+	}
+	if _, ok := s.covers[u]; ok {
+		return
+	}
+	data, mime, err := tag.FetchCover(ctx, nil, u)
+	if err != nil {
+		return
+	}
+	ext := ".jpg"
+	if mime == "image/png" {
+		ext = ".png"
+	}
+	dst := filepath.Join(s.tmpDir, fmt.Sprintf("cover-%d%s", len(s.covers), ext))
+	if err := os.WriteFile(dst, data, 0o600); err != nil {
+		return
+	}
+	s.covers[u] = dst
+}
+
+// coverURL is the file URL of a local path: file:///C:/x on Windows.
+func coverURL(p string) string {
+	u := url.URL{Scheme: "file", Path: filepath.ToSlash(p)}
+	if !strings.HasPrefix(u.Path, "/") {
+		u.Path = "/" + u.Path
+	}
+	return u.String()
 }
 
 func sameItem(a, b meta.TrackInfo) bool {
@@ -943,9 +993,13 @@ func (s *Session) closeSegment(c *segment, end int64) {
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "write", Msg: err.Error()})
 	}
 	c.w = nil
+	info := c.info
+	if p := s.covers[info.ArtURL]; p != "" {
+		info.ArtURL = coverURL(p)
+	}
 	s.deps.fin.enqueue(finishJob{
 		id:      c.id,
-		info:    c.info,
+		info:    info,
 		tmp:     path,
 		format:  c.format,
 		played:  played,

@@ -3,6 +3,7 @@ package meta
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -59,6 +60,54 @@ func TestParseStatus(t *testing.T) {
 	for in, want := range map[string]Status{"Playing": Playing, "Paused": Paused, "Stopped": Stopped, "": Stopped} {
 		if got := parseStatus(dbus.MakeVariant(in)); got != want {
 			t.Errorf("parseStatus(%q) = %v", in, got)
+		}
+	}
+}
+
+// A player that restates where it is, when its window comes back or near
+// an item's end, has not jumped; a seek and a restart still count.
+func TestSeekedOnlyWhenThePositionJumps(t *testing.T) {
+	const owner = ":1.42"
+	m := NewMPRIS()
+	m.setOwner("org.mpris.MediaPlayer2.player", owner)
+	changed := func(props map[string]dbus.Variant) *dbus.Signal {
+		return &dbus.Signal{Sender: owner, Name: propsInterface + ".PropertiesChanged", Body: []any{mprisPlayer, props, []string{}}}
+	}
+	seeked := func(ms int64) *dbus.Signal {
+		return &dbus.Signal{Sender: owner, Name: mprisPlayer + ".Seeked", Body: []any{ms * 1000}}
+	}
+	metadata := func(art string) dbus.Variant {
+		return dbus.MakeVariant(map[string]dbus.Variant{
+			"mpris:trackid": dbus.MakeVariant(dbus.ObjectPath("/track/1")),
+			"mpris:length":  dbus.MakeVariant(uint64(300_000_000)),
+			"xesam:title":   dbus.MakeVariant("Song"),
+			"mpris:artUrl":  dbus.MakeVariant(art),
+		})
+	}
+	status := func(s string) map[string]dbus.Variant {
+		return map[string]dbus.Variant{"PlaybackStatus": dbus.MakeVariant(s)}
+	}
+	t0 := time.Unix(1_700_000_000, 0)
+	m.handle(nil, changed(map[string]dbus.Variant{"Metadata": metadata("https://img.example/a.jpg"), "PlaybackStatus": dbus.MakeVariant("Playing")}), t0)
+	song, withArt := ParseMetadata(metadata("https://img.example/a.jpg")), ParseMetadata(metadata("https://img.example/b.jpg"))
+	for _, st := range []struct {
+		what string
+		at   time.Duration
+		sig  *dbus.Signal
+		want []Event
+	}{
+		{"the window comes back 48 s in", 48 * time.Second, seeked(49_167), nil},
+		{"a seek forward", 60 * time.Second, seeked(120_000), []Event{{Kind: Seeked, Track: song, PositionMs: 120_000}}},
+		{"said again after the seek", 90 * time.Second, seeked(150_400), nil},
+		{"paused", 100 * time.Second, changed(status("Paused")), []Event{{Kind: StatusChanged, Status: Paused, PositionMs: -1}}},
+		{"said again while paused", 130 * time.Second, seeked(160_000), nil},
+		{"played again", 140 * time.Second, changed(status("Playing")), []Event{{Kind: StatusChanged, Status: Playing, PositionMs: -1}}},
+		{"another cover, the same item", 150 * time.Second, changed(map[string]dbus.Variant{"Metadata": metadata("https://img.example/b.jpg")}), []Event{{Kind: TrackChanged, Track: withArt, PositionMs: -1}}},
+		{"said again near the end", 278 * time.Second, seeked(298_000), nil},
+		{"started over", 280 * time.Second, seeked(300), []Event{{Kind: TrackChanged, Track: withArt, PositionMs: 300, Restart: true}}},
+	} {
+		if got := m.handle(nil, st.sig, t0.Add(st.at)); !reflect.DeepEqual(got, st.want) {
+			t.Errorf("%s: got %+v, want %+v", st.what, got, st.want)
 		}
 	}
 }

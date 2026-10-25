@@ -253,3 +253,68 @@ func TestTheCoverGoesIntoTheFile(t *testing.T) {
 		t.Fatalf("%d files saved, want %d", saved, len(tl.Items))
 	}
 }
+
+// A cover the watcher deletes when the next track's comes out still goes
+// into its own track's file.
+func TestACoverFileGoneAtTheNextTrackStillGoesIntoItsFile(t *testing.T) {
+	ff, err := encode.Find("ffmpeg")
+	if err != nil {
+		t.Skip(err)
+	}
+	tl := loadTimeline(t, "basic")
+	dir := t.TempDir()
+	covers := map[string][]byte{}
+	for i := range tl.Items {
+		b, err := os.ReadFile(tl.Items[i].Art)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.CreateTemp(dir, "cover-*.jpg")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.Write(b)
+		f.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tl.Items[i].Art = f.Name()
+		covers[filepath.Base(f.Name())] = b
+	}
+	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
+	// As the Windows watcher does with its temporary files, a track's cover
+	// file goes as the next track starts, before the player says so.
+	start := tl.LeadInMs
+	for i := range len(tl.Items) - 1 {
+		start += tl.Items[i].LengthMs + tl.Items[i].GapMs
+		art := tl.Items[i].Art
+		s.player.At(start, func() { _ = os.Remove(art) })
+	}
+	s.run(t, tl)
+	want := map[string][]byte{}
+	saved := 0
+	for _, ev := range s.events.all() {
+		switch ev.Method {
+		case proto.EventTrackStarted:
+			var tr proto.TrackStartedEvent
+			if ev.Decode(&tr) == nil {
+				want[tr.ID] = covers[filepath.Base(tr.CoverURL)]
+			}
+		case proto.EventTrackFinished:
+			var f proto.TrackFinishedEvent
+			if ev.Decode(&f) != nil {
+				continue
+			}
+			saved++
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			art, err := ff.Cover(ctx, f.Path)
+			cancel()
+			if w := want[f.ID]; len(w) == 0 || !bytes.Equal(art, w) {
+				t.Errorf("%s: cover of %d bytes, want its own of %d: %v", filepath.Base(f.Path), len(art), len(w), err)
+			}
+		}
+	}
+	if saved != len(tl.Items) {
+		t.Fatalf("%d files saved, want %d; log:\n%s", saved, len(tl.Items), s.logs)
+	}
+}
