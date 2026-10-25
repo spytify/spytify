@@ -259,10 +259,25 @@ func TestClosingToTheTrayKeepsSpytifyThere(t *testing.T) {
 			open = it
 		}
 	}
-	for _, want := range []string{"Start recording", "Stop", "Open window"} {
-		if !contains(labels, want) {
-			t.Errorf("tray menu %v has no %q", labels, want)
+	if len(labels) != 3 || labels[0] != "Record" || labels[2] != "Open window" {
+		t.Errorf("tray menu %v, want Record, a separator and Open window", labels)
+	}
+	// The tray's action follows the session, as the app bar's does.
+	action := tray.menu.Items[0]
+	for _, step := range []struct {
+		state proto.SessionState
+		want  string
+	}{{proto.StateIdle, "Record"}, {proto.StateRecording, "Stop"}, {proto.StateStopping, "Stop now"}, {proto.StateIdle, "Record"}} {
+		m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: step.state}))
+		a.render()
+		if action.Label != step.want || action.Disabled || action.Label != a.action.Text {
+			t.Errorf("%s: tray action %q (disabled %v), app bar %q; want %q", step.state, action.Label, action.Disabled, a.action.Text, step.want)
 		}
+	}
+	m.SetConn(model.Disconnected, "")
+	a.render()
+	if !action.Disabled {
+		t.Error("the tray's action is enabled with no recorder")
 	}
 	if open == nil {
 		t.Fatal("no way back to the window from the tray")

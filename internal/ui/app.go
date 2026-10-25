@@ -133,6 +133,10 @@ type App struct {
 	// quitApp quits, replaced by tests.
 	tray    bool
 	quitApp func()
+	// trayMenu is the tray's menu, whose trayAction is the app bar's
+	// Record or Stop.
+	trayMenu   *fyne.Menu
+	trayAction *fyne.MenuItem
 	// starting is set while spytifyd is being started; startErr is why
 	// the last start failed.
 	starting   bool
@@ -428,6 +432,7 @@ func (a *App) render() {
 		a.action.Enable()
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	}
+	a.syncTray()
 	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {
 		a.banner.SetText(s.LastError.Msg)
 		a.banner.Show()
@@ -681,18 +686,30 @@ func (a *App) setupTray() {
 		return
 	}
 	desk.SetSystemTrayIcon(Logo)
-	desk.SetSystemTrayMenu(fyne.NewMenu("Spytify",
-		fyne.NewMenuItem("Start recording", func() {
-			a.noteAction("record (tray)")
-			a.do(proto.MethodSessionStart, proto.SessionStartParams{}, nil)
-		}),
-		fyne.NewMenuItem("Stop", func() {
-			a.noteAction("stop (tray)")
-			a.do(proto.MethodSessionStop, proto.SessionStopParams{}, nil)
-		}),
+	// The tray's action is the app bar's, which render copies there:
+	// Record, Stop, or Stop now while the last track is being saved.
+	a.trayAction = fyne.NewMenuItem("Record", a.toggleRecording)
+	a.trayAction.Disabled = true
+	a.trayMenu = fyne.NewMenu("Spytify",
+		a.trayAction,
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Open window", a.showWindow),
-	))
+	)
+	desk.SetSystemTrayMenu(a.trayMenu)
+}
+
+// syncTray gives the tray the app bar's action, rebuilding the tray menu
+// only when it changes.
+func (a *App) syncTray() {
+	if a.trayMenu == nil {
+		return
+	}
+	label, off := a.action.Text, a.action.Disabled()
+	if a.trayAction.Label == label && a.trayAction.Disabled == off {
+		return
+	}
+	a.trayAction.Label, a.trayAction.Disabled = label, off
+	a.trayMenu.Refresh()
 }
 
 const trayNoticeKey = "tray-notice-seen"
