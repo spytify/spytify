@@ -55,8 +55,9 @@ type Options struct {
 	ManualRender bool
 	// NoUpdateCheck skips the GitHub release check (tests).
 	NoUpdateCheck bool
-	// AutoStart says the app starts spytifyd itself: until it answers, the
-	// app shows that it is starting rather than asking for it.
+	// AutoStart says the app starts spytifyd itself, a player being set:
+	// until it answers, the tabs show that it is starting rather than the
+	// offline screen asking for it.
 	AutoStart bool
 	// Telemetry sends what the user agrees to send; nil sends nothing.
 	Telemetry *telemetry.Client
@@ -113,7 +114,6 @@ type App struct {
 	// the last start failed.
 	starting   bool
 	startErr   string
-	startView  fyne.CanvasObject
 	offlineErr *widget.Label
 
 	// tel is the Sentry bug tracker; launch times the way to a recorder
@@ -202,11 +202,6 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		widget.NewSeparator(),
 		a.player.form,
 	)))
-	startIcon := canvas.NewImageFromResource(Logo)
-	startIcon.FillMode = canvas.ImageFillContain
-	startIcon.SetMinSize(fyne.NewSize(72, 72))
-	a.startView = container.NewCenter(container.NewVBox(container.NewCenter(startIcon),
-		widget.NewLabelWithStyle("Starting the recorder…", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})))
 	a.starting = opts.AutoStart
 
 	a.center = container.NewStack(a.tabs)
@@ -366,6 +361,9 @@ func (a *App) render() {
 	connected := s.Conn == model.Connected
 	running := playerRunning(s)
 	switch {
+	case !connected && a.starting:
+		a.dot.Importance = widget.LowImportance
+		a.status.SetText(startingText)
 	case !connected:
 		a.dot.Importance = widget.LowImportance
 		a.status.SetText("Not connected")
@@ -451,20 +449,17 @@ func (a *App) renderCenter(s model.State) {
 	if s.Conn == model.Connected {
 		a.starting, a.startErr = false, ""
 	}
-	if s.Conn != model.Connected && !s.HaveInfo {
-		view := a.offline
-		if a.starting {
-			view = a.startView
-		} else {
-			reason := a.startErr
-			if reason == "" {
-				reason = s.ConnError
-			}
-			setLabel(a.offlineErr, reason)
-			show(a.offlineErr, reason != "")
+	// The offline screen asks for a player or tells why the recorder did
+	// not start; one being started shows the tabs.
+	if s.Conn != model.Connected && !s.HaveInfo && !a.starting {
+		reason := a.startErr
+		if reason == "" {
+			reason = s.ConnError
 		}
-		if len(a.center.Objects) != 1 || a.center.Objects[0] != view {
-			a.center.Objects = []fyne.CanvasObject{view}
+		setLabel(a.offlineErr, reason)
+		show(a.offlineErr, reason != "")
+		if len(a.center.Objects) != 1 || a.center.Objects[0] != a.offline {
+			a.center.Objects = []fyne.CanvasObject{a.offline}
 			a.center.Refresh()
 		}
 		return
@@ -635,6 +630,9 @@ func (a *App) StartDaemon() {
 		fyne.Do(func() { a.startFailed(err) })
 	}()
 }
+
+// startingText is what the app bar and Record say while spytifyd starts.
+const startingText = "Starting the recorder…"
 
 // startAnswerTimeout is how long a started spytifyd has to answer.
 const startAnswerTimeout = 15 * time.Second

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
@@ -31,7 +33,7 @@ const (
 	pendingKey = "privacy-pending"
 	// privacySeenKey is set once the bug tracker choice was shown.
 	privacySeenKey = "bug-tracker-choice-seen"
-	trackerLabel   = "Sentry bug tracker: send crashes, errors and traces to help the developers fix issues"
+	trackerLabel   = "Sentry bug tracker: send crashes, errors and traces"
 	optedOut       = "You opted out of the Sentry bug tracker (Settings > Privacy)"
 )
 
@@ -351,20 +353,79 @@ func (a *App) trackerCheck() *widget.Check {
 	return c
 }
 
-// checkCrashes sends the crashes left behind with the bug tracker on, and
-// forgets them with it off.
+// checkCrashes sends the crashes left behind with the bug tracker on.
+// With it off, or in a build without one, it shows them, for the user to
+// report on GitHub if they want.
 func (a *App) checkCrashes() {
-	if !a.tel.Available() {
-		return
-	}
 	prefs := a.fa.Preferences()
 	on := a.tel.Enabled()
+	var unsent []telemetry.Crash
 	for _, cr := range telemetry.FindCrashes(a.opts.StateDir, prefs, time.Now()) {
 		telemetry.MarkHandled(prefs, cr)
 		if on {
 			go func(cr telemetry.Crash) { _ = a.tel.SendCrash(cr) }(cr)
+		} else {
+			unsent = append(unsent, cr)
 		}
 	}
+	a.showCrashes(unsent)
+}
+
+// showCrashes shows the crashes one after the other.
+func (a *App) showCrashes(crashes []telemetry.Crash) {
+	if len(crashes) > 0 {
+		a.showCrash(crashes[0], func() { a.showCrashes(crashes[1:]) })
+	}
+}
+
+// showCrash says a program crashed and that no report left, with its
+// error and trace, folded, to report on GitHub by hand.
+func (a *App) showCrash(cr telemetry.Crash, then func()) {
+	who := "Spytify"
+	if cr.Program == "spytifyd" {
+		who = "The recorder"
+	}
+	why := "the Sentry bug tracker is off (Settings > Privacy)"
+	if !a.tel.Available() {
+		why = "this build has no bug tracker"
+	}
+	title, details := a.tel.CrashReport(cr)
+	body := widget.NewLabel("No report was sent to the developers: " + why + ". " +
+		"To report it yourself, open an issue on GitHub with the error below.")
+	body.Wrapping = fyne.TextWrapWord
+	errTitle := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	errTitle.Wrapping = fyne.TextWrapWord
+	trace := container.NewScroll(widget.NewLabelWithStyle(details, fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}))
+	trace.SetMinSize(fyne.NewSize(0, 180))
+	what := widget.NewAccordion(widget.NewAccordionItem("Error and stack trace", container.NewBorder(errTitle, nil, nil, nil, trace)))
+	d := dialog.NewCustomWithoutButtons(who+" stopped unexpectedly", container.NewVBox(body, what), a.win)
+	closeButton := widget.NewButton("Close", d.Hide)
+	copyButton := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+		a.fa.Clipboard().SetContent(title + "\n\n" + details)
+	})
+	report := widget.NewButtonWithIcon("Report on GitHub", theme.MailComposeIcon(), func() { a.openURL(issueURL(title, details)) })
+	report.Importance = widget.HighImportance
+	d.SetButtons([]fyne.CanvasObject{closeButton, copyButton, report})
+	d.SetOnClosed(then)
+	d.Resize(fyne.NewSize(600, 460))
+	d.Show()
+}
+
+// issueURL opens a new GitHub issue holding a crash. GitHub takes its text
+// from the address, which browsers keep under some 8,000 characters, so
+// the details are cut after their first lines, where the crash happened.
+func issueURL(title, details string) string {
+	const most = 2500
+	if len(details) > most {
+		cut := strings.LastIndex(details[:most], "\n")
+		if cut < 0 {
+			cut = most
+		}
+		details = details[:cut] + "\n… (cut: Copy in Spytify gives the rest)"
+	}
+	body := "What I was doing:\n\n\n```\n" + details + "\n```\n"
+	q := url.Values{"title": {"Crash: " + title}, "body": {body}}
+	return sourceURL + "/issues/new?" + q.Encode()
 }
 
 // sendChecks shows what the diagnostics' report holds, and sends it on

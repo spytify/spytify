@@ -86,7 +86,7 @@ var Table = []Def{
 	{Key: "recorder.record_everything", Tab: "Advanced", Group: "Ads", Label: "Record everything (podcasts, short untitled items)", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "player.mute_output", Tab: "Advanced", Group: "Ads", Label: "Mute the player on this computer while recording (macOS, Linux)", Kind: KindBool, Default: false, Advanced: true},
 
-	{Key: "privacy.bug_tracker", Tab: "App", Group: "Privacy", Label: "Sentry bug tracker", Kind: KindBool, Default: true, Note: "sends crashes, errors and traces to help the developers fix issues"},
+	{Key: "privacy.bug_tracker", Tab: "App", Group: "Privacy", Label: "Sentry bug tracker: send crashes, errors and traces", Kind: KindBool, Default: true, Note: "sends crashes, errors and traces to help the developers fix issues"},
 }
 
 var byKey = func() map[string]*Def {

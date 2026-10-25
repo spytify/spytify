@@ -775,8 +775,9 @@ func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
 	}
 }
 
-// The app starts the recorder itself: it says so instead of asking, and
-// only a start that failed shows the offline screen, with the reason.
+// With a player set, the app starts the recorder itself: the tabs show,
+// saying so, instead of the offline screen, which only a start that failed
+// shows, with the reason.
 func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	fa := test.NewTempApp(t)
 	fa.Preferences().SetBool(firstRunKey, true)
@@ -785,10 +786,19 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, AutoStart: true})
 	m.SetConn(model.Disconnected, "spytifyd is not running")
 	a.render()
+	snapshot(t, a, "starting")
 	all := texts(a.win.Content())
-	if !contains(all, "Starting the recorder…") || contains(all, "Start the recorder") {
+	if !contains(all, "Starting the recorder…") || contains(all, "Start the recorder") || contains(all, "The recorder is not running") {
 		t.Fatalf("starting: %v", all)
 	}
+	if a.center.Objects[0] != a.tabs || a.tabs.SelectedIndex() != tabRecord {
+		t.Fatal("the Record tab is not shown while the recorder starts")
+	}
+	for i := range a.tabs.Items {
+		a.showTab(i)
+		a.render()
+	}
+	a.showTab(tabRecord)
 	a.startFailed(errors.New("spytifyd not found next to Spytify"))
 	all = texts(a.win.Content())
 	for _, want := range []string{"The recorder is not running", "spytifyd not found next to Spytify", "Start the recorder"} {

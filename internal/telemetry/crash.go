@@ -3,13 +3,17 @@ package telemetry
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 // Crash is the trace a program left when it stopped on a fatal error.
@@ -104,6 +108,20 @@ func orUnknown(s string) string {
 		return "unknown"
 	}
 	return s
+}
+
+// CrashReport is a crash as the user can report it by hand: its error, and
+// the details with the trace. The home folder, the user name and the
+// names of the tracks the app knows are replaced, as in what Sentry gets.
+func (c *Client) CrashReport(cr Crash) (title, details string) {
+	var scrub *Scrubber
+	if c != nil {
+		scrub = c.scrub
+	}
+	summary, _ := parseTrace(cr.Trace)
+	details = fmt.Sprintf("Program: %s\nVersion: %s\nSystem: %s/%s\n\n%s",
+		cr.Program, proto.Version, runtime.GOOS, runtime.GOARCH, strings.TrimSpace(cr.Trace))
+	return scrub.String(summary), scrub.String(details)
 }
 
 // SendCrash sends a crash with its trace.

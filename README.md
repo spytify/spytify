@@ -85,7 +85,7 @@ On, the app sends:
 - how long saving a track takes, for one track in a hundred;
 - **Send to the developers** (Logs, when a check fails): the checks that fail and the end of the recorder's log, with an optional comment, once you have seen them.
 
-Off, nothing is sent or collected, not even in memory, and nothing asks: **Send to the developers** is disabled.
+Off, nothing is sent or collected, not even in memory: **Send to the developers** is disabled, and a crash only shows a dialog saying no report was sent, with the error and its trace, folded, to copy or to report on GitHub yourself.
 
 Reports name your computer only by a code made from its machine ID for Spytify alone, the same after a reinstall and of no use to any other app. They carry the system, the version and the country: Sentry tells it from the connection's IP address and keeps no IP; the country falls back on your system's region setting. Never sent: your computer's name, your user name and your home folder (it becomes `~`). The tracks, artists and albums in the app's list become `<name>`; one the list does not hold, such as from an earlier session in the recorder's log, can still go out. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
 
@@ -112,13 +112,13 @@ A build of your own records nothing until you choose the application. In the app
 
 Packagers can set a default application with the build variable `SPYTIFY_DEFAULT_PROCESS`: its bare name, which matches `Name.app` on macOS, `Name.exe` on Windows and `name` on Linux. On macOS the bundle id is read from the installed app. The build scripts read the variable from the environment or from an untracked `build.env`; the project's CI takes it from a repository variable.
 
-The Sentry bug tracker (see [Privacy](#privacy)) reports to the Sentry project of the build variable `SPYTIFY_SENTRY_DSN`, read the same way. Without it, the app sends nothing and shows no switch. Builds whose version has `dev` or `+` in it, such as CI's, report as the `development` environment.
+The Sentry bug tracker (see [Privacy](#privacy)) reports to the Sentry project of the build variable `SPYTIFY_SENTRY_DSN`, read the same way. Without it, the app sends nothing and shows no switch; a crash shows the same dialog, to report by hand. Builds whose version has `dev` or `+` in it, such as CI's, report as the `development` environment.
 
 The macOS app is ad-hoc signed. macOS asks for the permissions again after every rebuild, and another Mac refuses to open it until it is signed and notarised. Opened from Finder, the app still finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ## Desktop app
 
-The app is a client of `spytifyd`, the recorder, which it starts by itself ("Starting the recorder…"). The recorder needs the application to record: official builds have one; a build of your own asks for it first (Settings > App > Advanced > Player).
+The app is a client of `spytifyd`, the recorder, which it starts by itself: the tabs show at once, the app bar and Record saying "Starting the recorder…"; only a start that failed shows why, with a Start button. The recorder needs the application to record: official builds have one; a build of your own asks for it first (Settings > App > Advanced > Player).
 
 The app bar shows whether the application runs, the output format, an Update button when a newer release is out, and the one Record button:
 

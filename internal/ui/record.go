@@ -25,6 +25,7 @@ type recordScreen struct {
 	root *fyne.Container
 
 	idle       *fyne.Container
+	idleTitle  *widget.Label
 	idleText   *widget.Label
 	attention  *fyne.Container
 	openPlayer *widget.Button
@@ -64,6 +65,7 @@ func newRecordScreen(a *App) *recordScreen {
 	icon := canvas.NewImageFromResource(Logo)
 	icon.FillMode = canvas.ImageFillContain
 	icon.SetMinSize(fyne.NewSize(72, 72))
+	r.idleTitle = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	r.idleText = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{})
 	r.idleText.Wrapping = fyne.TextWrapWord
 	hint := widget.NewLabelWithStyle("A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start.",
@@ -78,7 +80,7 @@ func newRecordScreen(a *App) *recordScreen {
 	r.attention = container.NewCenter(container.NewHBox(r.openPlayer, diagnose))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
-		widget.NewLabelWithStyle("Ready to record", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		r.idleTitle,
 		r.idleText, hint, r.attention,
 	)))
 
@@ -221,6 +223,16 @@ func (r *recordScreen) render(s model.State) {
 	r.folder = settings.ExpandHome(r.folder)
 	defer r.relayout()
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
+		// Until the recorder answers it is starting, with nothing to offer.
+		starting := !s.HaveInfo
+		setLabel(r.idleTitle, map[bool]string{true: startingText, false: "Ready to record"}[starting])
+		show(r.idleText, !starting)
+		if starting {
+			show(r.attention, false)
+			r.idle.Show()
+			r.session.Hide()
+			return
+		}
 		player := s.Info.Target.Process
 		if player == "" {
 			player = "your player"
