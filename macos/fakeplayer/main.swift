@@ -18,10 +18,55 @@ struct Item: Decodable {
     let album: String?
     let length_ms: Int
     let track_number: Int?
+    let kind: String?
+    let art: String?
 }
 
 struct Timeline: Decodable {
+    let seed: Int64?
     let items: [Item]
+}
+
+// artwork is each item's cover as a file URL, by the Go fake player's rules
+// (internal/fake/timeline.go): the item's own art, relative to the timeline,
+// or "none"; else, for a track, one of the covers in ../covers, shuffled by
+// the seed so none comes back before all are used. The shuffle is not Go's,
+// so a track may get another cover than it does in the Go tests.
+func artwork(_ tl: Timeline, dir: URL) -> [String] {
+    let folder = dir.appendingPathComponent("../covers").standardizedFileURL
+    let shared = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [])
+        .filter { $0.hasSuffix(".jpg") }
+        .sorted()
+        .map { folder.appendingPathComponent($0) }
+    var rng = SplitMix64(state: UInt64(bitPattern: tl.seed ?? 0))
+    let order = Array(shared.indices).shuffled(using: &rng)
+    var next = 0
+    return tl.items.map { it in
+        switch it.art ?? "" {
+        case "none":
+            return ""
+        case "":
+            guard it.kind != "ad", !shared.isEmpty else { return "" }
+            defer { next += 1 }
+            return shared[order[next % shared.count]].absoluteString
+        case let p:
+            let u = p.hasPrefix("/") ? URL(fileURLWithPath: p) : dir.appendingPathComponent(p)
+            return u.standardizedFileURL.absoluteString
+        }
+    }
+}
+
+// SplitMix64 makes the covers' shuffle the same on every run.
+struct SplitMix64: RandomNumberGenerator {
+    var state: UInt64
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
 }
 
 func fourCC(_ s: String) -> OSType { s.utf8.reduce(0) { $0 << 8 | OSType($1) } }
@@ -36,6 +81,7 @@ func fail(_ msg: String) -> Never {
 final class Player {
     private let lock = NSLock()
     private var items: [Item] = []
+    private var art: [String] = []
     private var index = -1
     // started is the wall clock of the current item's 0:00 while it plays;
     // pausedAt is its position while paused.
@@ -43,8 +89,8 @@ final class Player {
     private var pausedAt: Double?
     private var volume = 100
 
-    func load(_ items: [Item]) {
-        lock.withLock { self.items = items }
+    func load(_ items: [Item], art: [String]) {
+        lock.withLock { (self.items, self.art) = (items, art) }
     }
 
     func start() {
@@ -73,7 +119,7 @@ final class Player {
     }
 
     var track: FakeTrack? {
-        lock.withLock { playing ? FakeTrack(items[index], index) : nil }
+        lock.withLock { playing ? FakeTrack(items[index], index, art[index]) : nil }
     }
 
     var state: String {
@@ -140,10 +186,11 @@ final class FakeTrack: NSObject {
     @objc let albumArtist: String
     @objc let duration: Int
     @objc let trackNumber: Int
-    @objc let artworkUrl = ""
+    @objc let artworkUrl: String
 
-    init(_ it: Item, _ i: Int) {
+    init(_ it: Item, _ i: Int, _ art: String) {
         trackID = "fakeplayer:track:\(i)"
+        artworkUrl = art
         name = it.title
         artist = it.artist ?? ""
         album = it.album ?? ""
@@ -282,7 +329,7 @@ guard let data = FileManager.default.contents(atPath: timelinePath),
       let timeline = try? JSONDecoder().decode(Timeline.self, from: data) else {
     fail("cannot read the timeline \(timelinePath)")
 }
-player.load(timeline.items)
+player.load(timeline.items, art: artwork(timeline, dir: URL(fileURLWithPath: timelinePath).deletingLastPathComponent()))
 
 let app = NSApplication.shared
 app.delegate = delegate

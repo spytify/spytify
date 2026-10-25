@@ -2,7 +2,7 @@
 # Builds FakePlayer.app, the scriptable test player for macOS, into the
 # folder given (bin/ by default). Tests find it through SPYTIFY_FAKE_APP:
 #
-#   scripts/build-fakeplayer-macos.sh && SPYTIFY_FAKE_APP=bin/FakePlayer.app go test ./internal/meta/
+#   scripts/build-fakeplayer-macos.sh && SPYTIFY_FAKE_APP=$PWD/bin/FakePlayer.app go test ./internal/meta/
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out="${1:-bin}"

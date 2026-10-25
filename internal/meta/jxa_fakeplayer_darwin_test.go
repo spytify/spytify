@@ -32,8 +32,17 @@ func TestJXAWithTheFakePlayer(t *testing.T) {
 	app, _ = filepath.Abs(app)
 	dir := t.TempDir()
 	timeline := filepath.Join(dir, "timeline.json")
+	// One has its own cover, beside the timeline; the others none, as no
+	// ../covers folder is there to pick from.
+	cover, err := os.ReadFile(filepath.Join("..", "..", "testdata", "covers", "cover-01.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cover.jpg"), cover, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	tl := `{"items": [
-		{"artist": "Fake Artist", "title": "One", "album": "Fakes", "length_ms": 4000},
+		{"artist": "Fake Artist", "title": "One", "album": "Fakes", "length_ms": 4000, "art": "cover.jpg"},
 		{"artist": "Fake Artist", "title": "Two", "album": "Fakes", "length_ms": 60000},
 		{"artist": "Fake Artist", "title": "Three", "album": "Fakes", "length_ms": 60000}]}`
 	if err := os.WriteFile(timeline, []byte(tl), 0o600); err != nil {
@@ -102,6 +111,9 @@ func scriptTheFakePlayer(t *testing.T) {
 	if one.Track.Artist() != "Fake Artist" || one.Track.Album != "Fakes" || one.Track.LengthMs != 4000 || one.Track.ID == "" {
 		t.Errorf("first track %+v", one.Track)
 	}
+	if u := one.Track.ArtURL; !strings.HasPrefix(u, "file:///") || !strings.HasSuffix(u, "/cover.jpg") {
+		t.Errorf("first track's cover %q, want the file beside the timeline", u)
+	}
 	next("playing", status(Playing))
 	if err := j.SetVolume(0.4); err != nil {
 		t.Fatal(err)
@@ -110,7 +122,9 @@ func scriptTheFakePlayer(t *testing.T) {
 		t.Errorf("volume %v %v", v, err)
 	}
 	// The first item ends on its own; then the commands move the player.
-	next("second track", track("Two"))
+	if two := next("second track", track("Two")); two.Track.ArtURL != "" {
+		t.Errorf("second track's cover %q, want none", two.Track.ArtURL)
+	}
 	if err := j.Control("next"); err != nil {
 		t.Fatal(err)
 	}
