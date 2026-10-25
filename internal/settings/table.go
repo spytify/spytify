@@ -55,7 +55,7 @@ var Table = []Def{
 	{Key: "output.dir", Tab: "Recorder", Group: "Output", Label: "Output folder", Kind: KindPath, Default: "~/Music/Spytify"},
 	{Key: "output.group_by", Tab: "Recorder", Group: "Output", Label: "Group by folders", Kind: KindEnum, Enum: []string{"none", "artist", "artist/album"}, Default: "artist/album"},
 	{Key: "output.prefix", Tab: "Recorder", Group: "Output", Label: "File name prefix", Kind: KindEnum, Enum: []string{"none", "counter", "album_track"}, Default: "none", Advanced: true},
-	{Key: "output.underscores", Tab: "Recorder", Group: "Output", Label: "Add separators (_ instead of spaces)", Kind: KindBool, Default: false, Advanced: true},
+	{Key: "output.underscores", Tab: "Recorder", Group: "Output", Label: "Underscores instead of spaces", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "output.template", Tab: "Recorder", Group: "Output", Label: "File name template", Kind: KindTemplate, Default: "{artist} - {title}", Note: "placeholders {artist}, {title}, {album}, {track}, {year}", Advanced: true},
 	{Key: "output.counter_start", Tab: "Recorder", Group: "Output", Label: "Counter start value", Kind: KindInt, Default: int64(1), Min: 0, Max: 999999999, Ranged: true, Advanced: true},
 	{Key: "output.counter_width", Tab: "Recorder", Group: "Output", Label: "Counter digits", Kind: KindInt, Default: int64(3), Min: 1, Max: 9, Ranged: true, Advanced: true},

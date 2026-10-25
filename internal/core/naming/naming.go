@@ -122,6 +122,15 @@ func FileName(p Plan, o Options, counter int64, trackNumber int) string {
 	return prefix + p.Base + "." + o.Extension
 }
 
+// Example is the path, from the output folder, a sample track gets with o
+// and the counter at counter: the settings show it under the template.
+func Example(o Options, counter int64) string {
+	t := Track{Artists: []string{"Neon Harbor"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Midnight Ferry",
+		Album: "Harbor Lights", TrackNumber: 4, Year: 2024}
+	p := Build(t, o)
+	return filepath.Join(p.Dir, FileName(p, o, counter, t.TrackNumber))
+}
+
 // WithSuffix returns name with v1's duplicate counter: "Name 2.mp3".
 func WithSuffix(name string, n int, underscores bool) string {
 	if n <= 1 {

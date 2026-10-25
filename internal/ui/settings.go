@@ -15,6 +15,8 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/core/naming"
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/internal/ui/model"
@@ -32,7 +34,10 @@ type settingsScreen struct {
 
 	fields    map[string]*field
 	rendering bool
-	player    *playerCard
+	// example shows, under the file name template, the file a sample
+	// track gets with the output settings as they are.
+	example *widget.RichText
+	player  *playerCard
 	// advanced remembers which Advanced parts the user opened.
 	advanced  map[string]*widget.Accordion
 	open      map[string]bool
@@ -187,6 +192,8 @@ func (s *settingsScreen) apply(key string, v any) {
 func (s *settingsScreen) newField(d *settings.Def) *field {
 	f := &field{def: d}
 	key := d.Key
+	// under goes below the input, in the same row.
+	var under fyne.CanvasObject
 	switch d.Kind {
 	case settings.KindBool:
 		t := newToggle(func(b bool) { s.apply(key, b) })
@@ -223,6 +230,8 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		e := newApplyEntry(func(v string) { s.apply(key, v) })
 		if d.Kind == settings.KindTemplate {
 			e.SetPlaceHolder(d.Note)
+			s.example = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
+			under = s.example
 		}
 		f.set = func(v any) {
 			if !s.focused(e) {
@@ -231,7 +240,11 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		f.input = e
 	}
-	f.item = &widget.FormItem{Text: d.Label, Widget: f.input}
+	cell := f.input
+	if under != nil {
+		cell = container.NewVBox(f.input, under)
+	}
+	f.item = &widget.FormItem{Text: d.Label, Widget: cell}
 	return f
 }
 
@@ -290,7 +303,38 @@ func (s *settingsScreen) render(st model.State) {
 			sel.Enable()
 		}
 	}
+	if s.example != nil {
+		setCaption(s.example, "e.g. "+exampleName(st.Settings))
+	}
 	s.player.render(st)
+}
+
+// exampleName is the path a sample track gets with the output settings in
+// v, a default standing in for any missing.
+func exampleName(v map[string]any) string {
+	get := func(key string) any {
+		if x, ok := v[key]; ok {
+			return number(x)
+		}
+		if d, ok := settings.Lookup(key); ok {
+			return d.Default
+		}
+		return nil
+	}
+	str := func(key string) string { s, _ := get(key).(string); return s }
+	on := func(key string) bool { b, _ := get(key).(bool); return b }
+	whole := func(key string) int64 { n, _ := get(key).(int64); return n }
+	p, _ := encode.PresetFor(str("encode.format"))
+	return naming.Example(naming.Options{
+		GroupBy:         str("output.group_by"),
+		Prefix:          str("output.prefix"),
+		Underscores:     on("output.underscores"),
+		Template:        str("output.template"),
+		CounterWidth:    int(whole("output.counter_width")),
+		ASCII:           on("output.ascii_filenames"),
+		ArtistSeparator: str("tags.artist_separator"),
+		Extension:       p.Extension,
+	}, whole("output.counter_start"))
 }
 
 // focused reports whether the user is typing in o; render leaves it alone.

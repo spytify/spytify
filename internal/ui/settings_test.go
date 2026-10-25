@@ -158,6 +158,33 @@ func TestSettingsSearch(t *testing.T) {
 	}
 }
 
+// Under the file name template, the file a sample track gets with the
+// output settings as they are: underscores show once they are on.
+func TestTheTemplateShowsAnExample(t *testing.T) {
+	a, m, s := settingsApp(t)
+	example := func() string { return s.example.Segments[0].(*widget.TextSegment).Text }
+	v := defaults()
+	v["encode.format"] = "flac"
+	m.SetSettings(v)
+	a.render()
+	// By default the files go in artist and album folders.
+	if got, want := example(), "e.g. "+filepath.Join("Neon Harbor", "Harbor Lights (2024)", "Neon Harbor - Midnight Ferry.flac"); got != want {
+		t.Errorf("example %q, want %q", got, want)
+	}
+	v["output.underscores"] = true
+	v["output.prefix"] = "counter"
+	m.SetSettings(v)
+	s.search.SetText("output")
+	a.render()
+	if got, want := example(), "e.g. "+filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "001_Neon_Harbor_-_Midnight_Ferry.flac"); got != want {
+		t.Errorf("with underscores and the counter, example %q, want %q", got, want)
+	}
+	if all := texts(s.sections); !contains(all, "Underscores instead of spaces") {
+		t.Errorf("no Underscores instead of spaces in %v", all)
+	}
+	snapshot(t, a, "settings-file-name")
+}
+
 // A section's Reset resets each of its settings, and only those.
 func TestResetResetsItsSection(t *testing.T) {
 	a, _, core := connectedApp(t)
