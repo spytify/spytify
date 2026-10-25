@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/denisbrodbeck/machineid"
+	"github.com/getsentry/sentry-go"
 
 	"github.com/spytify/spytify/internal/crash"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
@@ -20,9 +21,6 @@ import (
 func newClient(t *testing.T, srv *fakesentry.Server, opts Options) *Client {
 	t.Helper()
 	opts.DSN = srv.DSN()
-	if opts.Names == nil {
-		opts.Names = func() []string { return []string{"Neon Harbor", "Midnight Ferry"} }
-	}
 	c := New(opts)
 	t.Cleanup(c.Close)
 	return c
@@ -74,18 +72,18 @@ func TestASentryOutOfReachIsIgnored(t *testing.T) {
 	}
 }
 
-// A scrubbing that fails drops what it was scrubbing: never the app, and
+// A scrubbing that fails drops what it was scrubbing, never the app:
 // nothing leaves unscrubbed.
 func TestAFailingScrubDropsTheReport(t *testing.T) {
-	srv := fakesentry.New(t)
-	c := newClient(t, srv, Options{Names: func() []string { panic("no names") }, ProblemSampleRate: 1})
-	c.SetEnabled(true)
-	c.Breadcrumb("ui", "record", nil)
-	c.Problem("capture_stalled", "detail")
-	_ = c.SendCrash(Crash{Program: "spytifyd", Trace: trace})
-	c.Flush(2 * time.Second)
-	if n := len(srv.Items("event")) + len(srv.Logs()); n != 0 {
-		t.Errorf("%d reports left unscrubbed", n)
+	c := New(Options{DSN: "http://public@127.0.0.1:1/1"})
+	if ev := c.beforeSend(&sentry.Event{Message: "x", Spans: []*sentry.Span{nil}}, nil); ev != nil {
+		t.Error("an event the scrubbing failed on would leave")
+	}
+	if b := c.beforeBreadcrumb(nil, nil); b != nil {
+		t.Error("a breadcrumb the scrubbing failed on would leave")
+	}
+	if l := c.beforeSendLog(nil); l != nil {
+		t.Error("a log the scrubbing failed on would leave")
 	}
 }
 
@@ -270,8 +268,8 @@ func TestParseARealCrash(t *testing.T) {
 
 func crashHere() { panic("boom in a real crash") }
 
-// A crash left after the first look leaves once, with its trace, and
-// nothing that names the user or the track.
+// A crash left after the first look leaves once, with its trace, the
+// home folder as ~ and the track's name as it is.
 func TestCrashReport(t *testing.T) {
 	srv := fakesentry.New(t)
 	dir := t.TempDir()
@@ -301,8 +299,8 @@ func TestCrashReport(t *testing.T) {
 	if att := srv.Items("attachment"); len(att) != 1 || strings.Contains(string(att[0].Payload), home) {
 		t.Errorf("trace attachment %v", att)
 	}
-	if raw := srv.Raw(); strings.Contains(raw, home) || strings.Contains(raw, "Neon Harbor") {
-		t.Error("the report names the user or the track")
+	if raw := srv.Raw(); strings.Contains(raw, home) || !strings.Contains(raw, "Neon Harbor") {
+		t.Error("the report names the home folder, or not the track")
 	}
 	MarkHandled(prefs, crashes[0])
 	if again := FindCrashes(dir, prefs, time.Now()); len(again) != 0 {
@@ -330,7 +328,7 @@ func TestSendChecks(t *testing.T) {
 	}
 	srv.Wait(t, "feedback", 1)
 	att := srv.Items("attachment")
-	if len(att) != 1 || !strings.Contains(string(att[0].Payload), "saved ~") || strings.Contains(string(att[0].Payload), "Neon Harbor") {
+	if len(att) != 1 || !strings.Contains(string(att[0].Payload), "saved ~/Music/Neon Harbor - Midnight Ferry.flac") && !strings.Contains(string(att[0].Payload), `saved ~\Music\Neon Harbor - Midnight Ferry.flac`) {
 		t.Errorf("log attachment %v", att)
 	}
 	if strings.Contains(srv.Raw(), home) {
@@ -363,12 +361,12 @@ func TestFeedbackFollowsTheSpec(t *testing.T) {
 }
 
 func TestScrubber(t *testing.T) {
-	s := &Scrubber{home: []string{`C:\Users\Jose`, "C:/Users/Jose"}, names: func() []string { return []string{"Paper Lanterns", "Paper Lanterns (Live)", "AB"} }}
+	s := &Scrubber{home: []string{`C:\Users\Jose`, "C:/Users/Jose"}}
 	s.setUser("Jose")
 	for in, want := range map[string]string{
 		`c:\users\jose\Music\x.flac`:       `~\Music\x.flac`,
 		"C:/Users/Jose/Music":              "~/Music",
-		"saved Paper Lanterns (Live).flac": "saved <name>.flac",
+		"saved Paper Lanterns (Live).flac": "saved Paper Lanterns (Live).flac",
 		"jose's computer, AB side":         "<user>'s computer, AB side",
 		"joseph":                           "joseph",
 	} {

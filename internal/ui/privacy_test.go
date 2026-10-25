@@ -30,7 +30,7 @@ func privacyApp(t *testing.T, srv *fakesentry.Server, on bool) (*App, *model.Mod
 	fa.Preferences().SetBool(privacySeenKey, true)
 	m := model.New()
 	l := link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
-	tel := telemetry.New(telemetry.Options{DSN: srv.DSN(), Prefs: fa.Preferences(), Names: m.Names, TracesSampleRate: 1, ProblemSampleRate: 1})
+	tel := telemetry.New(telemetry.Options{DSN: srv.DSN(), Prefs: fa.Preferences(), TracesSampleRate: 1, ProblemSampleRate: 1})
 	t.Cleanup(tel.Close)
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, AutoStart: true, Telemetry: tel,
 		Privacy: map[string]any{trackerKey: on}})

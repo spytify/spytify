@@ -18,7 +18,7 @@ func TestLiveSentry(t *testing.T) {
 		t.Skip("SPYTIFY_SENTRY_LIVE_DSN is not set")
 	}
 	mark := "live check " + time.Now().Format("20060102-150405")
-	c := New(Options{DSN: dsn, Names: func() []string { return []string{"Neon Harbor"} }, TracesSampleRate: 1, ProblemSampleRate: 1})
+	c := New(Options{DSN: dsn, TracesSampleRate: 1, ProblemSampleRate: 1})
 	defer c.Close()
 	c.SetEnabled(true)
 	cr := Crash{Program: "spytifyd", Time: time.Now(), Trace: strings.Replace(trace, "index out of range", mark+": index out of range", 1)}
@@ -38,5 +38,5 @@ func TestLiveSentry(t *testing.T) {
 	}
 	t.Logf("In Sentry, look for %q: a crash with its trace; a stuck: ffmpeg found issue with "+
 		"its user feedback and log; a blocked: live_check issue; a launch transaction from a user, the computer's hash, "+
-		"with its OS and country; and the logs step and problem. No server name, no IP address, and <name> for Neon Harbor.", mark)
+		"with its OS and country; and the logs step and problem. No server name, no IP address, and ~ for the home folder.", mark)
 }

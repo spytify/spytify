@@ -87,7 +87,7 @@ On, the app sends:
 
 Off, nothing is sent or collected, not even in memory: **Send to the developers** is disabled, and a crash only shows a dialog saying no report was sent, with the error and its trace, folded, to copy or to report on GitHub yourself.
 
-Reports name your computer only by a code made from its machine ID for Spytify alone, the same after a reinstall and of no use to any other app. They carry the system, the version and the country: Sentry tells it from the connection's IP address and keeps no IP; the country falls back on your system's region setting. Never sent: your computer's name, your user name and your home folder (it becomes `~`). The tracks, artists and albums in the app's list become `<name>`; one the list does not hold, such as from an earlier session in the recorder's log, can still go out. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
+Reports name your computer only by a code made from its machine ID for Spytify alone, the same after a reinstall and of no use to any other app. They carry the system, the version and the country: Sentry tells it from the connection's IP address and keeps no IP; the country falls back on your system's region setting. Never sent: your computer's name, your user name and your home folder (it becomes `~`). The names of tracks, artists and albums go as they appear in errors and logs. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
 
 The bug tracker never gets in the way: a report that cannot be made or sent is dropped, and at quit the app waits at most 2 seconds for what is queued.
 

@@ -6,7 +6,6 @@ package model
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -285,23 +284,6 @@ func (m *Model) Apply(ev proto.Event) {
 	}
 	m.update(func(s *State) { m.apply(s, ev) })
 	m.notify(ev)
-}
-
-// Names are the artists, titles and albums of the session's tracks.
-func (m *Model) Names() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	rows := m.s.Rows
-	if m.s.Current != nil {
-		rows = append([]Row{*m.s.Current}, rows...)
-	}
-	var names []string
-	for _, r := range rows {
-		names = append(names, r.Artist, r.Title, r.Album)
-		// Each artist of a collaboration, too.
-		names = append(names, strings.Split(r.Artist, ", ")...)
-	}
-	return names
 }
 
 // OnEvent registers fn for each live event, after the state took it in.

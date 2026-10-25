@@ -30,7 +30,7 @@ func main() {
 	fa.SetIcon(ui.Logo)
 	m := model.New()
 	l := link.New(env.SocketPath, m)
-	tel := telemetry.New(telemetry.Options{Prefs: fa.Preferences(), Names: m.Names})
+	tel := telemetry.New(telemetry.Options{Prefs: fa.Preferences()})
 	// At quit, what is queued leaves within 2 s or is dropped.
 	defer tel.Close()
 	// With a player to record, the app starts spytifyd itself; with none,

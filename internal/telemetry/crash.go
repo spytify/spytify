@@ -111,8 +111,8 @@ func orUnknown(s string) string {
 }
 
 // CrashReport is a crash as the user can report it by hand: its error, and
-// the details with the trace. The home folder, the user name and the
-// names of the tracks the app knows are replaced, as in what Sentry gets.
+// the details with the trace. The home folder and the user name are
+// replaced, as in what Sentry gets.
 func (c *Client) CrashReport(cr Crash) (title, details string) {
 	var scrub *Scrubber
 	if c != nil {

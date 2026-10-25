@@ -6,10 +6,9 @@
 // without one sends nothing.
 //
 // Reports name the computer only by a hash of its machine ID made for this
-// app. There is no host name, the IP address only lets Sentry tell the
-// country (the project keeps no IP), and the home folder, the user name
-// and the names of the tracks the app knows are replaced before anything
-// leaves.
+// app. There is no host name, no IP address in what is sent (Sentry tells
+// the country from the connection and the project keeps no IP), and the
+// home folder becomes ~ and the user name <user> before anything leaves.
 package telemetry
 
 import (
@@ -43,9 +42,6 @@ type Options struct {
 	// DSN replaces the build's project (tests).
 	DSN   string
 	Prefs Prefs
-	// Names lists the artists, titles and albums the app knows: they are
-	// replaced in everything sent.
-	Names func() []string
 	// TracesSampleRate is the share of timings sent, 0.01 when zero; every
 	// launch is sent.
 	TracesSampleRate float64
@@ -100,7 +96,7 @@ func New(opts Options) *Client {
 	if opts.Prefs == nil {
 		opts.Prefs = &memPrefs{m: map[string]string{}}
 	}
-	c := &Client{opts: opts, dsn: dsn, scrub: NewScrubber(opts.Names), seen: map[string]bool{}}
+	c := &Client{opts: opts, dsn: dsn, scrub: NewScrubber(), seen: map[string]bool{}}
 	if c.Available() {
 		// Both may run a command: not on the UI's thread when it turns on.
 		go func() {

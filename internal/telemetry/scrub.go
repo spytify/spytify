@@ -5,7 +5,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
@@ -13,17 +12,15 @@ import (
 )
 
 // Scrubber replaces what could tell who the user is: the home folder
-// becomes ~, the user name <user>, and the artists, titles and albums the
-// app knows <name>.
+// becomes ~ and the user name <user>. Track names are left as they are.
 type Scrubber struct {
-	home  []string
-	user  *regexp.Regexp
-	names func() []string
+	home []string
+	user *regexp.Regexp
 }
 
 // NewScrubber reads the home folder and user name of this computer.
-func NewScrubber(names func() []string) *Scrubber {
-	s := &Scrubber{names: names}
+func NewScrubber() *Scrubber {
+	s := &Scrubber{}
 	if home, err := os.UserHomeDir(); err == nil && len(home) > 1 {
 		s.home = []string{home}
 		if slash := filepath.ToSlash(home); slash != home {
@@ -59,16 +56,6 @@ func (s *Scrubber) String(in string) string {
 	}
 	if s.user != nil {
 		out = s.user.ReplaceAllString(out, "<user>")
-	}
-	if s.names != nil {
-		names := s.names()
-		// Longest first: "Paper Lanterns (Live)" before "Paper Lanterns".
-		sort.Slice(names, func(i, j int) bool { return len(names[i]) > len(names[j]) })
-		for _, n := range names {
-			if n = strings.TrimSpace(n); len(n) >= 3 {
-				out = strings.ReplaceAll(out, n, "<name>")
-			}
-		}
 	}
 	return out
 }
