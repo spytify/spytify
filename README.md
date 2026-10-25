@@ -120,7 +120,7 @@ The macOS app is ad-hoc signed. macOS asks for the permissions again after every
 
 The app is a client of `spytifyd`, the recorder, which it starts by itself: the tabs show at once, the app bar and Record saying "Starting the recorder…"; only a start that failed shows why, with a Start button. The recorder needs the application to record: official builds have one; a build of your own asks for it first (Settings > App > Advanced > Player).
 
-The app bar shows whether the application runs, the output format, an Update button when a newer release is out, and the one Record button:
+The app bar shows whether the application runs, the output format, an Update button with a badge when a newer release is out, a heart to donate, and the one Record button:
 
 - **Record** is off while the application is not running; the Record screen offers to open it.
 - A track already playing when you press Record is skipped, since its start was missed: recording starts with the next one, or press **Record this track from the start**.
@@ -130,7 +130,7 @@ Closing the window quits Spytify and the recorder with it, after asking if a rec
 
 - **Record**: the track playing, with its cover, title, artists, album and the stream's format (44.1 kHz stereo), its progress, the level and Skip. Below it, every track of the session with its status (Saved, Tagged, Skipped and why), and buttons to show the file in Finder or Explorer and to play it. **Clear list** empties the list, not the folder; **Open folder** opens the output folder.
 - **Library**: every audio file in the output folder, with its cover, newest first or by name, and a search box. It reads the folder again each time you open the tab, so nothing recorded is missing from it.
-- **Settings**: App, Output, Encoding, Recording, Ads and Privacy, App first. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button; a search box finds any setting. App holds the theme (system, light or dark).
+- **Settings**: App, Output, Encoding, Recording, Ads and Privacy, App first. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button; a search box finds any setting. Yes-or-no settings are switches. App holds the theme (system, light or dark).
 - **Logs**: the startup checks, folded while they all pass, then the recorder's log, with a choice of levels, Copy and Open log file. A failed check reads as what is wrong, such as "ffmpeg not found", and **Send to the developers** sends the checks that fail (see [Privacy](#privacy)).
 - **About**: versions, the project page, the source code, Check for updates and Donate.
 

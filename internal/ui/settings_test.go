@@ -203,3 +203,37 @@ func TestMinimizeToTrayIsOffByDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestYesNoSettingsAreSwitches(t *testing.T) {
+	a, m, s := settingsApp(t)
+	for _, d := range settings.Table {
+		if _, ok := s.fields[d.Key].input.(*toggle); ok != (d.Kind == settings.KindBool) {
+			t.Errorf("%s: switch %v for kind %v", d.Key, ok, d.Kind)
+		}
+	}
+	light := defaults()
+	light["app.theme"] = "light"
+	m.SetSettings(light)
+	a.render()
+	snapshot(t, a, "settings-light")
+
+	var got []bool
+	sw := newToggle(func(on bool) { got = append(got, on) })
+	test.NewTempWindow(t, sw)
+	sw.SetOn(true)
+	if !sw.on || len(got) != 0 {
+		t.Fatalf("SetOn: on %v, reported %v", sw.on, got)
+	}
+	test.Tap(sw)
+	sw.TypedRune(' ')
+	sw.TypedRune('x')
+	if !sw.on || len(got) != 2 || got[0] || !got[1] {
+		t.Fatalf("tap then space: on %v, reported %v", sw.on, got)
+	}
+	// The switch fills its form row; a tap beside it is not on it.
+	sw.Resize(fyne.NewSize(400, sw.MinSize().Height))
+	test.TapAt(sw, fyne.NewPos(300, 5))
+	if len(got) != 2 {
+		t.Fatalf("a tap beside the switch flipped it: %v", got)
+	}
+}

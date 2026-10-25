@@ -189,9 +189,9 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 	key := d.Key
 	switch d.Kind {
 	case settings.KindBool:
-		c := widget.NewCheck("", func(b bool) { s.apply(key, b) })
-		f.set = func(v any) { b, _ := v.(bool); c.SetChecked(b) }
-		f.input = c
+		t := newToggle(func(b bool) { s.apply(key, b) })
+		f.set = func(v any) { b, _ := v.(bool); t.SetOn(b) }
+		f.input = t
 	case settings.KindEnum, settings.KindIntEnum:
 		opts := d.Enum
 		if d.Kind == settings.KindIntEnum {

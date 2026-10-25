@@ -193,8 +193,9 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 			t.Errorf("%q not on screen", want)
 		}
 	}
-	if contains(all, "♥ Donate") {
-		t.Error("Donate is in the app bar; About has it")
+	// The app bar's Donate is a heart, as in v1; About has the worded one.
+	if contains(all, "♥ Donate") || !a.donate.Visible() || a.donate.Icon != heartIcon || a.donate.ToolTip() != "Donate" {
+		t.Error("the app bar's Donate is not a heart alone")
 	}
 	if a.tabs.Items[tabRecord].Text != "Record · 2" {
 		t.Errorf("Record tab title %q", a.tabs.Items[tabRecord].Text)
@@ -515,11 +516,11 @@ func TestButtonsSendActions(t *testing.T) {
 	a.showTab(tabSettings)
 	a.render()
 	s := a.screens[tabSettings].(*settingsScreen)
-	check, ok := s.fields["output.underscores"].item.Widget.(*widget.Check)
+	sw, ok := s.fields["output.underscores"].item.Widget.(*toggle)
 	if !ok {
-		t.Fatal("no checkbox for output.underscores")
+		t.Fatal("no switch for output.underscores")
 	}
-	test.Tap(check)
+	test.Tap(sw)
 	waitCall(t, core, proto.MethodSettingsSet)
 	core.mu.Lock()
 	last := core.sets[len(core.sets)-1]
@@ -637,6 +638,26 @@ func TestLatestReleaseCountsPreReleases(t *testing.T) {
 	if !newer(tag, "v2.0.0-alpha.1+f5dd96e") {
 		t.Fatal("alpha.2 is not newer than alpha.1")
 	}
+}
+
+func TestANewerReleaseShowsTheBadge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `[{"tag_name":"v9.0.0","html_url":"https://x/v9","draft":false}]`)
+	}))
+	defer srv.Close()
+	defer func(u string) { releasesURL = u }(releasesURL)
+	releasesURL = srv.URL
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	a.render()
+	if a.update.Visible() {
+		t.Fatal("Update shows before any release was found")
+	}
+	a.checkUpdate()
+	if !a.update.Visible() || a.update.Icon != newReleasesIcon || a.update.Text != "Update to v9.0.0" {
+		t.Fatalf("Update: visible %v, text %q", a.update.Visible(), a.update.Text)
+	}
+	snapshot(t, a, "update")
 }
 
 func TestLibraryShowsEmbeddedCovers(t *testing.T) {

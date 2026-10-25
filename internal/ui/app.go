@@ -23,6 +23,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/service"
 	"github.com/spytify/spytify/internal/telemetry"
@@ -49,6 +50,20 @@ var openInNewSVG []byte
 // openInNewIcon marks a button that opens a page in the browser: Material
 // Design's open_in_new, like Fyne's own icons, in the button's colour.
 var openInNewIcon = theme.NewThemedResource(fyne.NewStaticResource("open-in-new.svg", openInNewSVG))
+
+//go:embed assets/heart.svg
+var heartSVG []byte
+
+// heartIcon is the app bar's way to Donate: Material Design's favorite, in
+// v1's pink in both themes.
+var heartIcon = fyne.NewStaticResource("heart.svg", heartSVG)
+
+//go:embed assets/new-releases.svg
+var newReleasesSVG []byte
+
+// newReleasesIcon marks a newer release, as v1's badge did: Material
+// Design's new_releases, in the button's colour.
+var newReleasesIcon = theme.NewThemedResource(fyne.NewStaticResource("new-releases.svg", newReleasesSVG))
 
 // Options are what the UI needs from its environment.
 type Options struct {
@@ -104,6 +119,7 @@ type App struct {
 	status  *widget.Label
 	output  *widget.RichText
 	update  *widget.Button
+	donate  *ttwidget.Button
 	action  *widget.Button
 	banner  *widget.Label
 	bar     *fyne.Container
@@ -174,9 +190,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.status = widget.NewLabel("")
 	// Secondary, but readable in both themes, unlike a low-importance label.
 	a.output = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
-	a.update = widget.NewButtonWithIcon("", theme.DownloadIcon(), nil)
+	a.update = widget.NewButtonWithIcon("", newReleasesIcon, nil)
 	a.update.Importance = widget.SuccessImportance
 	a.update.Hide()
+	a.donate = ttwidget.NewButtonWithIcon("", heartIcon, func() { a.openURL(donateURL) })
+	a.donate.Importance = widget.LowImportance
+	a.donate.SetToolTip("Donate")
 	a.action = widget.NewButtonWithIcon("Record", theme.MediaRecordIcon(), a.toggleRecording)
 	a.action.Importance = widget.HighImportance
 	// The wordmark: the logo with the name in its green.
@@ -185,7 +204,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	mark.SetMinSize(fyne.NewSize(26*622/204, 26))
 	brand := container.NewCenter(mark)
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
-	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.action))
+	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.donate, a.action))
 
 	a.banner = widget.NewLabel("")
 	a.banner.Wrapping = fyne.TextWrapWord
