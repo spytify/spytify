@@ -226,16 +226,27 @@ func TestACrashNotSentShowsItsTrace(t *testing.T) {
 	if !strings.Contains(all, "Spytify stopped unexpectedly") || !strings.Contains(all, "No report was sent to the developers: the Sentry bug tracker is off") {
 		t.Errorf("dialog texts %v", texts(d))
 	}
-	for _, acc := range accordions(d) {
-		acc.Open(0)
+	// The dialog's height, from its title to its buttons.
+	height := func() float32 {
+		top := a.fa.Driver().AbsolutePositionForObject(labels(d, "Spytify stopped unexpectedly")[0])
+		return a.fa.Driver().AbsolutePositionForObject(buttons(d, "Close")[0]).Y - top.Y
 	}
+	folded := height()
+	tapButton(t, d, "Error and stack trace")
 	snapshot(t, a, "privacy-crash-not-sent-open")
+	if open := height(); folded > 200 || open < folded+150 {
+		t.Errorf("the dialog is %v tall folded and %v open", folded, open)
+	}
 	all = strings.Join(texts(d), "\n")
 	if !strings.Contains(all, "panic: open ~") || strings.Contains(all, home) {
 		t.Errorf("the trace shown is not scrubbed: %v", texts(d))
 	}
 	if b := buttons(d, "Report on GitHub"); len(b) != 1 {
 		t.Fatal("no Report on GitHub button")
+	}
+	tapButton(t, d, "Error and stack trace")
+	if h := height(); h != folded {
+		t.Errorf("the dialog is %v tall folded again, %v at first", h, folded)
 	}
 	tapButton(t, d, "Close")
 	if quiet(a, srv) != 0 {
@@ -395,17 +406,19 @@ func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	}
 }
 
-// accordions are the accordions under o.
-func accordions(o fyne.CanvasObject) []*widget.Accordion {
-	var out []*widget.Accordion
+// labels are the visible labels under o with this text.
+func labels(o fyne.CanvasObject, text string) []*widget.Label {
+	var out []*widget.Label
 	var walk func(fyne.CanvasObject)
 	walk = func(o fyne.CanvasObject) {
 		if o == nil || !o.Visible() {
 			return
 		}
 		switch w := o.(type) {
-		case *widget.Accordion:
-			out = append(out, w)
+		case *widget.Label:
+			if w.Text == text {
+				out = append(out, w)
+			}
 			return
 		case *fyne.Container:
 			for _, child := range w.Objects {

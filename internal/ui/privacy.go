@@ -397,8 +397,32 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 	errTitle.Wrapping = fyne.TextWrapWord
 	trace := container.NewScroll(widget.NewLabelWithStyle(details, fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}))
 	trace.SetMinSize(fyne.NewSize(0, 180))
-	what := widget.NewAccordion(widget.NewAccordionItem("Error and stack trace", container.NewBorder(errTitle, nil, nil, nil, trace)))
-	d := dialog.NewCustomWithoutButtons(who+" stopped unexpectedly", container.NewVBox(body, what), a.win)
+	fault := container.NewBorder(errTitle, nil, nil, nil, trace)
+	fault.Hide()
+	// A fold of its own rather than an accordion, which says nothing when it
+	// opens: the dialog fits what it shows, compact folded, taller open.
+	var d *dialog.CustomDialog
+	fit := func() {
+		d.Resize(fyne.NewSize(crashDialogWidth, 0))
+		// The overlay centres the dialog again as it lays it out.
+		if top := a.win.Canvas().Overlays().Top(); top != nil {
+			top.Refresh()
+		}
+	}
+	fold := widget.NewButtonWithIcon("Error and stack trace", theme.MenuExpandIcon(), nil)
+	fold.Importance = widget.LowImportance
+	fold.Alignment = widget.ButtonAlignLeading
+	fold.OnTapped = func() {
+		if fault.Visible() {
+			fault.Hide()
+			fold.SetIcon(theme.MenuExpandIcon())
+		} else {
+			fault.Show()
+			fold.SetIcon(theme.MenuDropDownIcon())
+		}
+		fit()
+	}
+	d = dialog.NewCustomWithoutButtons(who+" stopped unexpectedly", container.NewVBox(body, fold, fault), a.win)
 	closeButton := widget.NewButton("Close", d.Hide)
 	copyButton := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
 		a.fa.Clipboard().SetContent(title + "\n\n" + details)
@@ -407,9 +431,15 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 	report.Importance = widget.HighImportance
 	d.SetButtons([]fyne.CanvasObject{closeButton, copyButton, report})
 	d.SetOnClosed(then)
-	d.Resize(fyne.NewSize(600, 460))
+	d.Resize(fyne.NewSize(crashDialogWidth, 0))
 	d.Show()
+	// Its text wraps at the dialog's width, known once shown.
+	fit()
 }
+
+// crashDialogWidth is the crash dialog's width; its height follows what
+// it shows.
+const crashDialogWidth = 600
 
 // issueURL opens a new GitHub issue holding a crash. GitHub takes its text
 // from the address, which browsers keep under some 8,000 characters, so
