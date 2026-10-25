@@ -69,6 +69,10 @@ func TestSaveUserTarget(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	// os.UserConfigDir reads AppData on Windows, not HOME or XDG_CONFIG_HOME;
+	// without these the test would write the real %APPDATA%\spytify\.env.
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("SPYTIFY_TARGET_PROCESS", "")
 	t.Setenv("SPYTIFY_TARGET_BUNDLE_ID", "")
 	path := UserEnvPath()
