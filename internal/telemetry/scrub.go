@@ -156,3 +156,19 @@ func (c *Client) beforeSendLog(l *sentry.Log) (out *sentry.Log) {
 	}
 	return l
 }
+
+func (c *Client) beforeSendMetric(m *sentry.Metric) (out *sentry.Metric) {
+	defer func() {
+		if recover() != nil {
+			out = nil
+		}
+	}()
+	// The SDK adds the host name when the client has no server name.
+	delete(m.Attributes, "sentry.server.address")
+	for k, v := range m.Attributes {
+		if v.Type() == attribute.STRING {
+			m.Attributes[k] = attribute.StringValue(c.scrub.String(v.AsString()))
+		}
+	}
+	return m
+}

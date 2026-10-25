@@ -33,10 +33,13 @@ func TestLiveSentry(t *testing.T) {
 	c.Problem("live_check", mark)
 	now := time.Now()
 	c.Measure("launch", now.Add(-time.Second), now, nil, []Span{{Op: "recorder.start", Start: now.Add(-time.Second), End: now}})
+	c.Count("track.skipped", 1, map[string]string{"reason": "live_check"})
+	c.Distribution("cut.offset", -480, "millisecond", map[string]string{"kind": "boundary", "by": "live_check"})
 	if !c.Flush(10 * time.Second) {
 		t.Fatal("the stats did not leave in 10 s")
 	}
 	t.Logf("In Sentry, look for %q: a crash with its trace; a stuck: ffmpeg found issue with "+
 		"its user feedback and log; a blocked: live_check issue; a launch transaction from a user, the computer's hash, "+
-		"with its OS and country; and the logs step and problem. No server name, no IP address, and ~ for the home folder.", mark)
+		"with its OS and country; the logs step and problem; and, in Explore > Metrics, track.skipped and cut.offset "+
+		"with the attribute value live_check. No server name, no IP address, and ~ for the home folder.", mark)
 }

@@ -254,6 +254,38 @@ func TestTheCoverGoesIntoTheFile(t *testing.T) {
 	}
 }
 
+// track.started says how the recorder found each start: the first track at
+// its first sound, the next ones in the silence between them, near where
+// the player said they changed.
+func TestTrackStartedSaysHowItWasCut(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, nil)
+	s.run(t, tl)
+	var cuts []proto.TrackCut
+	for _, ev := range s.events.all() {
+		var tr proto.TrackStartedEvent
+		if ev.Method != proto.EventTrackStarted || ev.Decode(&tr) != nil {
+			continue
+		}
+		if tr.Cut == nil {
+			t.Fatalf("%q started with no cut", tr.Title)
+		}
+		cuts = append(cuts, *tr.Cut)
+	}
+	if len(cuts) != len(tl.Items) {
+		t.Fatalf("cuts %+v, want one per track", cuts)
+	}
+	for i, c := range cuts {
+		kind, by := "boundary", "silence"
+		if i == 0 {
+			kind, by = "first", "first_sound"
+		}
+		if c.Kind != kind || c.By != by || c.OffsetMs < -2000 || c.OffsetMs > 2000 {
+			t.Errorf("track %d cut %+v, want %s by %s within 2 s of the notice", i, c, kind, by)
+		}
+	}
+}
+
 // A cover the watcher deletes when the next track's comes out still goes
 // into its own track's file.
 func TestACoverFileGoneAtTheNextTrackStillGoesIntoItsFile(t *testing.T) {

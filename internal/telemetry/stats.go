@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"runtime"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -54,6 +56,42 @@ func (c *Client) Log(name string, attrs map[string]any) {
 		}
 	}
 	e.Emit(name)
+}
+
+// Count adds n to a counter, such as the tracks saved, with the system and
+// attrs: never a name.
+func (c *Client) Count(name string, n int64, attrs map[string]string) {
+	defer quietly()
+	if m := c.metrics(); m != nil {
+		m.Count(name, n, sentry.WithAttributes(metricAttrs(attrs)...))
+	}
+}
+
+// Distribution adds a sample in unit, such as how far a cut is from the
+// track change in ms, with the system and attrs: never a name.
+func (c *Client) Distribution(name string, v float64, unit string, attrs map[string]string) {
+	defer quietly()
+	if m := c.metrics(); m != nil {
+		m.Distribution(name, v, sentry.WithUnit(unit), sentry.WithAttributes(metricAttrs(attrs)...))
+	}
+}
+
+// metrics is the bug tracker's meter, or nil while it is off.
+func (c *Client) metrics() sentry.Meter {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.meter
+}
+
+func metricAttrs(attrs map[string]string) []attribute.Builder {
+	out := []attribute.Builder{attribute.String("os", runtime.GOOS)}
+	for k, v := range attrs {
+		out = append(out, attribute.String(k, v))
+	}
+	return out
 }
 
 const (

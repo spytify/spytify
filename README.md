@@ -83,6 +83,7 @@ On, the app sends:
 - each launch: whether the recorder got ready, how long it took and the names of the checks that fail;
 - how far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track;
 - how long saving a track takes, for one track in a hundred;
+- recording counts, for every track: saved (with its format) or skipped (with the reason, such as an ad or a duplicate), and how its start was found (in a silence, at a dip, from the length of the track before…) and how far from where the player said the track changed; no name of a track, an artist or an album;
 - **Send to the developers** (Logs, when a check fails): the checks that fail and the end of the recorder's log, with an optional comment, once you have seen them.
 
 Off, nothing is sent or collected, not even in memory: **Send to the developers** is disabled, and a crash only shows a dialog saying no report was sent, with the error and its trace, folded, to copy or to report on GitHub yourself.

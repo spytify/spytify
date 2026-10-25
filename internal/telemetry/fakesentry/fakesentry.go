@@ -260,6 +260,39 @@ type Log struct {
 	Attrs map[string]string
 }
 
+// Metrics are the metric samples received, each with its attributes'
+// values.
+func (s *Server) Metrics() []Metric {
+	var out []Metric
+	for _, it := range s.Items("trace_metric") {
+		var batch struct {
+			Items []struct {
+				Name       string                    `json:"name"`
+				Type       string                    `json:"type"`
+				Value      float64                   `json:"value"`
+				Unit       string                    `json:"unit"`
+				Attributes map[string]map[string]any `json:"attributes"`
+			} `json:"items"`
+		}
+		_ = json.Unmarshal(it.Payload, &batch)
+		for _, m := range batch.Items {
+			attrs := map[string]string{}
+			for k, v := range m.Attributes {
+				attrs[k] = valueString(v["value"])
+			}
+			out = append(out, Metric{Name: m.Name, Type: m.Type, Unit: m.Unit, Value: m.Value, Attrs: attrs})
+		}
+	}
+	return out
+}
+
+// Metric is one metric sample.
+type Metric struct {
+	Name, Type, Unit string
+	Value            float64
+	Attrs            map[string]string
+}
+
 func valueString(v any) string {
 	switch v := v.(type) {
 	case string:

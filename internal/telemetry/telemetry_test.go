@@ -33,6 +33,8 @@ func TestNothingLeavesWhenOff(t *testing.T) {
 	c := newClient(t, srv, Options{TracesSampleRate: 1, ProblemSampleRate: 1})
 	c.Breadcrumb("ui", "Record", nil)
 	c.Log("launch", map[string]any{"ready": true})
+	c.Count("track.saved", 1, map[string]string{"format": "flac"})
+	c.Distribution("cut.offset", -480, sentry.UnitMillisecond, nil)
 	c.Step("launched")
 	c.Problem("capture_stalled", "")
 	now := time.Now()
@@ -57,6 +59,8 @@ func TestASentryOutOfReachIsIgnored(t *testing.T) {
 	c.SetEnabled(true)
 	c.Breadcrumb("ui", "record", nil)
 	c.Log("launch", map[string]any{"ready": true})
+	c.Count("track.saved", 1, nil)
+	c.Distribution("cut.offset", -480, sentry.UnitMillisecond, nil)
 	c.Step("launched")
 	c.Problem("capture_stalled", "")
 	now := time.Now()
@@ -84,6 +88,9 @@ func TestAFailingScrubDropsTheReport(t *testing.T) {
 	}
 	if l := c.beforeSendLog(nil); l != nil {
 		t.Error("a log the scrubbing failed on would leave")
+	}
+	if m := c.beforeSendMetric(nil); m != nil {
+		t.Error("a metric the scrubbing failed on would leave")
 	}
 }
 
@@ -133,6 +140,43 @@ func TestEveryLaunchCountsTheComputer(t *testing.T) {
 	}
 	if steps != 1 {
 		t.Errorf("%d step lines, want 1", steps)
+	}
+}
+
+// The recording counts leave as metrics with the system and the
+// computer's hash, and no host name.
+func TestRecordingCountsLeave(t *testing.T) {
+	srv := fakesentry.New(t)
+	c := newClient(t, srv, Options{})
+	c.SetEnabled(true)
+	c.Count("track.skipped", 1, map[string]string{"reason": "ad"})
+	c.Distribution("cut.offset", -480, sentry.UnitMillisecond, map[string]string{"kind": "boundary", "by": "silence"})
+	c.Flush(5 * time.Second)
+	srv.Wait(t, "trace_metric", 1)
+	got := map[string]fakesentry.Metric{}
+	for _, m := range srv.Metrics() {
+		got[m.Name] = m
+	}
+	skipped, cut := got["track.skipped"], got["cut.offset"]
+	if skipped.Type != "counter" || skipped.Value != 1 || skipped.Attrs["reason"] != "ad" {
+		t.Errorf("track.skipped %+v", skipped)
+	}
+	if cut.Type != "distribution" || cut.Value != -480 || cut.Unit != "millisecond" || cut.Attrs["kind"] != "boundary" || cut.Attrs["by"] != "silence" {
+		t.Errorf("cut.offset %+v", cut)
+	}
+	for _, m := range []fakesentry.Metric{skipped, cut} {
+		if m.Attrs["os"] != runtime.GOOS {
+			t.Errorf("%s without the system: %v", m.Name, m.Attrs)
+		}
+		if id := computerID(); id != "" && m.Attrs["user.id"] != id {
+			t.Errorf("%s names the computer %q, want its hash", m.Name, m.Attrs["user.id"])
+		}
+		if _, ok := m.Attrs["sentry.server.address"]; ok {
+			t.Errorf("%s has a server address", m.Name)
+		}
+	}
+	if host, _ := os.Hostname(); host != "" && strings.Contains(srv.Raw(), host) {
+		t.Errorf("the host name %q left", host)
 	}
 }
 

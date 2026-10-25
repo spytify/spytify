@@ -23,8 +23,9 @@ import (
 
 // The Sentry bug tracker, all or nothing (package telemetry). On, the app
 // sends its crashes, the problems it runs into with the steps that led
-// there, its launches and timings, and, on a click, the checks that fail.
-// Off, it sends nothing and asks nothing.
+// there, its launches and timings, counts of the tracks saved and skipped
+// and how they were cut, and, on a click, the checks that fail. Off, it
+// sends nothing and asks nothing.
 
 const (
 	trackerKey = "privacy.bug_tracker"
@@ -33,7 +34,7 @@ const (
 	pendingKey = "privacy-pending"
 	// privacySeenKey is set once the bug tracker choice was shown.
 	privacySeenKey = "bug-tracker-choice-seen"
-	trackerLabel   = "Sentry bug tracker: send crashes, errors and traces"
+	trackerLabel   = "Sentry bug tracker: send crashes, errors, traces and recording counts"
 	optedOut       = "You opted out of the Sentry bug tracker"
 )
 
@@ -221,8 +222,12 @@ func (a *App) onEvent(ev proto.Event) {
 		}
 	case proto.EventTrackStarted:
 		var e proto.TrackStartedEvent
-		if ev.Decode(&e) == nil {
-			a.tel.Breadcrumb("track", "started", map[string]any{"length_s": e.LengthMs / 1000})
+		if ev.Decode(&e) != nil {
+			return
+		}
+		a.tel.Breadcrumb("track", "started", map[string]any{"length_s": e.LengthMs / 1000})
+		if e.Cut != nil {
+			a.tel.Distribution("cut.offset", float64(e.Cut.OffsetMs), "millisecond", map[string]string{"kind": e.Cut.Kind, "by": e.Cut.By})
 		}
 	case proto.EventTrackFinished:
 		var e proto.TrackFinishedEvent
@@ -231,11 +236,14 @@ func (a *App) onEvent(ev proto.Event) {
 		}
 		a.incomplete = 0
 		data := map[string]any{"tagged": e.Tagged}
+		counted := map[string]string{}
 		if e.Timings != nil {
 			data["format"] = e.Timings.Format
+			counted["format"] = e.Timings.Format
 			a.measureFinish(*e.Timings)
 		}
 		a.tel.Breadcrumb("track", "saved", data)
+		a.tel.Count("track.saved", 1, counted)
 		a.tel.Step("first_saved")
 	case proto.EventTrackSkipped:
 		var e proto.TrackSkippedEvent
@@ -243,6 +251,7 @@ func (a *App) onEvent(ev proto.Event) {
 			return
 		}
 		a.tel.Breadcrumb("track", "skipped", map[string]any{"reason": string(e.Reason)})
+		a.tel.Count("track.skipped", 1, map[string]string{"reason": string(e.Reason)})
 		if e.Reason == proto.SkipIncomplete {
 			if a.incomplete++; a.incomplete == 3 {
 				a.tel.Problem("incomplete_tracks", "three incomplete tracks in a row")
@@ -332,7 +341,7 @@ func (a *App) askPrivacy(then func()) {
 		return
 	}
 	tracker := a.trackerCheck()
-	body := widget.NewLabel("Spytify can send its crashes, errors and traces to its developers through Sentry, to help them fix issues.")
+	body := widget.NewLabel("Spytify can send its crashes, errors, traces and recording counts to its developers through Sentry, to help them fix issues.")
 	body.Wrapping = fyne.TextWrapWord
 	d := dialog.NewCustom("Help fix issues", "OK", container.NewVBox(body, tracker), a.win)
 	d.SetOnClosed(func() {

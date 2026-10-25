@@ -451,6 +451,25 @@
       ],
       "type": "object"
     },
+    "TrackCut": {
+      "properties": {
+        "by": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "offset_ms": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "by",
+        "kind",
+        "offset_ms"
+      ],
+      "type": "object"
+    },
     "TrackFinishedEvent": {
       "properties": {
         "bytes": {
@@ -509,6 +528,9 @@
         },
         "cover_url": {
           "type": "string"
+        },
+        "cut": {
+          "$ref": "#/$defs/TrackCut"
         },
         "id": {
           "type": "string"

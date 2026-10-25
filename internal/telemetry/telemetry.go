@@ -1,7 +1,7 @@
 // Package telemetry is the Sentry bug tracker. With privacy.bug_tracker
 // on, the app sends its crashes, the problems it runs into with the steps
-// that led there, its launches and timings, and, on a click, the checks
-// that fail. Off, nothing is sent: the Sentry client is not even made. It
+// that led there, its launches and timings, counts of the tracks it saved
+// and skipped and how it cut them, and, on a click, the checks that fail. Off, nothing is sent: the Sentry client is not even made. It
 // goes to the developers' Sentry project, set at build time; a build
 // without one sends nothing.
 //
@@ -63,6 +63,7 @@ type Client struct {
 	mu      sync.Mutex
 	tracker *sentry.Hub // set while the bug tracker is on
 	log     sentry.Logger
+	meter   sentry.Meter
 	seen    map[string]bool
 }
 
@@ -137,11 +138,12 @@ func (c *Client) SetEnabled(on bool) {
 			return
 		}
 		c.tracker = hub
-		c.log = sentry.NewLogger(sentry.SetHubOnContext(context.Background(), hub))
+		ctx := sentry.SetHubOnContext(context.Background(), hub)
+		c.log, c.meter = sentry.NewLogger(ctx), sentry.NewMeter(ctx)
 	case !on && c.tracker != nil:
 		c.tracker.Flush(2 * time.Second)
 		c.tracker.Client().Close()
-		c.tracker, c.log = nil, nil
+		c.tracker, c.log, c.meter = nil, nil, nil
 	}
 }
 
@@ -170,6 +172,7 @@ func (c *Client) newHub() (*sentry.Hub, error) {
 		BeforeSend:            c.beforeSend,
 		BeforeSendTransaction: c.beforeSend,
 		BeforeSendLog:         c.beforeSendLog,
+		BeforeSendMetric:      c.beforeSendMetric,
 		BeforeBreadcrumb:      c.beforeBreadcrumb,
 		Tags:                  map[string]string{"os_region": Region()},
 	})

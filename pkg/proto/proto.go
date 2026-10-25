@@ -198,6 +198,24 @@ type TrackStartedEvent struct {
 	Track
 	// Source is the audio as the player delivers it.
 	Source *AudioSource `json:"source,omitempty"`
+	// Cut is how the recorder found where the track starts.
+	Cut *TrackCut `json:"cut,omitempty"`
+}
+
+// TrackCut is how the recorder placed a track's start.
+type TrackCut struct {
+	// Kind is first (the session's first track), boundary (the track
+	// before ended) or interrupt (it was cut short).
+	Kind string `json:"kind"`
+	// By is what placed the cut: silence, dip (two tracks faded into each
+	// other), edge (a skip, mid-note), length (gapless, from the track
+	// before's declared length) or notice (where the player said the track
+	// changed, nothing better found); for a first track, first_sound or
+	// notice.
+	By string `json:"by"`
+	// OffsetMs is how far the cut is from where the player said the track
+	// changed: negative before it.
+	OffsetMs int64 `json:"offset_ms"`
 }
 
 // AudioSource is the captured stream's format.

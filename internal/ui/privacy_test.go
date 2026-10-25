@@ -174,7 +174,8 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	a.launchFailed(errors.New("spytifyd started but does not answer; see its log in Logs"))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -12}))
-	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-1", Artist: "Neon Harbor", Title: "Midnight Ferry", LengthMs: 200000}}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-1", Artist: "Neon Harbor", Title: "Midnight Ferry", LengthMs: 200000},
+		Cut: &proto.TrackCut{Kind: "boundary", By: "silence", OffsetMs: -480}}))
 	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-1", Path: "/x.flac", Timings: &proto.FinishTimings{Format: "flac", EncodeMs: 900, TotalMs: 1000}}))
 	for i := 0; i < 3; i++ {
 		m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-2", Reason: proto.SkipIncomplete}))
@@ -203,6 +204,43 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	}
 	if left := telemetry.FindCrashes(a.opts.StateDir, a.fa.Preferences(), time.Now()); len(left) != 0 {
 		t.Error("the crash would leave once the bug tracker is on")
+	}
+}
+
+// With the bug tracker on, the recording counts leave: each track saved or
+// skipped and how each start was cut, with no names.
+func TestRecordingCountsLeave(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-1", Artist: "Neon Harbor", Title: "Midnight Ferry", LengthMs: 200000},
+		Cut: &proto.TrackCut{Kind: "boundary", By: "silence", OffsetMs: -480}}))
+	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-1", Path: "/music/Neon Harbor - Midnight Ferry.flac", Timings: &proto.FinishTimings{Format: "flac", EncodeMs: 900, TotalMs: 1000}}))
+	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-2", Reason: proto.SkipAd}))
+	a.tel.Flush(2 * time.Second)
+	got := map[string]fakesentry.Metric{}
+	deadline := time.Now().Add(5 * time.Second)
+	for len(got) < 3 && time.Now().Before(deadline) {
+		for _, mt := range srv.Metrics() {
+			got[mt.Name] = mt
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if c := got["cut.offset"]; c.Type != "distribution" || c.Value != -480 || c.Attrs["kind"] != "boundary" || c.Attrs["by"] != "silence" {
+		t.Errorf("cut.offset %+v", c)
+	}
+	if s := got["track.saved"]; s.Type != "counter" || s.Value != 1 || s.Attrs["format"] != "flac" {
+		t.Errorf("track.saved %+v", s)
+	}
+	if s := got["track.skipped"]; s.Type != "counter" || s.Value != 1 || s.Attrs["reason"] != "ad" {
+		t.Errorf("track.skipped %+v", s)
+	}
+	for _, mt := range got {
+		for k, v := range mt.Attrs {
+			if strings.Contains(v, "Neon") || strings.Contains(v, "Midnight") || strings.Contains(v, "/music") {
+				t.Errorf("%s names the track in %s: %q", mt.Name, k, v)
+			}
+		}
 	}
 }
 
