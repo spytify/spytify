@@ -405,18 +405,34 @@ func TestFeedbackFollowsTheSpec(t *testing.T) {
 }
 
 func TestScrubber(t *testing.T) {
-	s := &Scrubber{home: []string{`C:\Users\Jose`, "C:/Users/Jose"}}
+	s := &Scrubber{home: []string{`C:\Users\Jose`, "C:/Users/Jose"}, output: []string{`C:\Users\Jose\Music\Mixtapes`, `L:\Mixtapes`}}
 	s.setUser("Jose")
 	for in, want := range map[string]string{
-		`c:\users\jose\Music\x.flac`:       `~\Music\x.flac`,
-		"C:/Users/Jose/Music":              "~/Music",
-		"saved Paper Lanterns (Live).flac": "saved Paper Lanterns (Live).flac",
-		"jose's computer, AB side":         "<user>'s computer, AB side",
-		"joseph":                           "joseph",
+		`c:\users\jose\Music\x.flac`:          `~\Music\x.flac`,
+		`c:\users\jose\Music\Mixtapes\x.flac`: `<output>\x.flac`,
+		`open L:\Mixtapes\.spytify\a.wav: x`:  `open <output>\.spytify\a.wav: x`,
+		"C:/Users/Jose/Music":                 "~/Music",
+		"saved Paper Lanterns (Live).flac":    "saved Paper Lanterns (Live).flac",
+		"jose's computer, AB side":            "<user>'s computer, AB side",
+		"joseph":                              "joseph",
 	} {
 		if got := s.String(in); got != want {
 			t.Errorf("String(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestScrubberOutput(t *testing.T) {
+	s := &Scrubber{}
+	dir := filepath.Join(t.TempDir(), "Mixtapes")
+	s.SetOutput(dir + string(filepath.Separator))
+	if got, want := s.String(filepath.Join(dir, "a.flac")), filepath.Join("<output>", "a.flac"); got != want {
+		t.Errorf("String = %q, want %q", got, want)
+	}
+	// A drive's root would take every path with it.
+	s.SetOutput(string(filepath.Separator))
+	if got := s.String(dir); got != dir {
+		t.Errorf("String = %q with the root as the output folder", got)
 	}
 }
 

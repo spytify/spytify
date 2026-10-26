@@ -27,6 +27,7 @@ import (
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/service"
+	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
@@ -130,6 +131,8 @@ type App struct {
 	checked bool
 	// themeMode is the app.theme applied: system, light or dark.
 	themeMode string
+	// outputDir is the output.dir the reports leave out.
+	outputDir string
 	// replaced is set once a recorder of another build was restarted.
 	replaced bool
 	// tray says the platform has a system tray (menu bar on macOS);
@@ -463,6 +466,10 @@ func (a *App) render() {
 	}
 	if mode, _ := s.Settings["app.theme"].(string); mode != "" && mode != a.themeMode {
 		a.applyTheme(mode)
+	}
+	if dir, _ := s.Settings["output.dir"].(string); dir != "" && dir != a.outputDir {
+		a.outputDir = dir
+		a.tel.SetOutputDir(settings.ExpandHome(dir))
 	}
 	if a.tabs.Items[tabRecord].Text != record {
 		a.tabs.Items[tabRecord].Text = record
