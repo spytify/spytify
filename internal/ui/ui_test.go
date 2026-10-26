@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -980,9 +979,9 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 		a.render()
 	}
 	a.showTab(tabRecord)
-	a.startFailed(errors.New("spytifyd not found next to Spytify"))
+	a.startFailed(link.ErrInArchive)
 	all = texts(a.win.Content())
-	for _, want := range []string{"The recorder is not running", "spytifyd not found next to Spytify", "Start the recorder"} {
+	for _, want := range []string{"The recorder is not running", link.ErrInArchive.Error(), "Start the recorder"} {
 		if !contains(all, want) {
 			t.Errorf("%q not shown after a failed start: %v", want, all)
 		}
