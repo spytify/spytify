@@ -39,10 +39,14 @@ The recorded application is set with environment variables, read when the record
 | `SPYTIFY_TARGET_PROCESS` | the application's name, or a comma list for several packagings | the build's default |
 | `SPYTIFY_TARGET_MPRIS` | its D-Bus name (Linux) | `org.mpris.MediaPlayer2.<name>` |
 | `SPYTIFY_TARGET_BUNDLE_ID` | its bundle id (macOS) | read from the installed app |
+| `SPYTIFY_TARGET_DURATION_UNIT` | `ms` or `s`, the unit of its AppleScript track length (macOS) | guessed |
 | `SPYTIFY_TARGET_LAUNCH` | a command that opens it | the system's own way |
+| `SPYTIFY_TAP` | the capture helper `spytify-tap` (macOS, Windows) | next to `spytifyd`, then `PATH` |
 | `SPYTIFY_CONFIG` | the settings file | `config.toml` in the configuration folder |
 | `SPYTIFY_SOCKET` | the recorder's socket | in the runtime or state folder |
-| `SPYTIFY_FFMPEG` | the ffmpeg binary | `ffmpeg` on `PATH` |
+| `SPYTIFY_FFMPEG` | the ffmpeg binary | `ffmpeg` on `PATH`, then next to `spytifyd` and in the usual install folders |
+
+Snap and Flatpak builds of an application can run under another process name, and expose MPRIS only through their sandbox. List every process name in `SPYTIFY_TARGET_PROCESS`. If `spytify-cli info` finds the process but no MPRIS name, check the sandbox's D-Bus permissions (`snap connections <snap>`, `flatpak info --show-permissions <app>`).
 
 Everything else is a [setting](settings.html). Clients of their own speak the [protocol](#protocol).
 

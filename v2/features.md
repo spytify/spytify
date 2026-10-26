@@ -33,4 +33,4 @@ Every recorded file, newest first, with its cover, a search box, Reveal and Play
 
 ### [Without a window](#headless)
 
-`spytifyd` records on its own: the window can close to the tray, `spytify-cli` drives it from a terminal, `spytifyd --once` records one session without a socket, and `spytify-cli service install` starts it at login.
+`spytifyd` records on its own: with **Minimize to tray** on (Settings > App), closing the window keeps Spytify recording in the tray or the menu bar, `spytify-cli` drives it from a terminal, `spytifyd --once` records one session without a socket, and `spytify-cli service install` starts it at login.

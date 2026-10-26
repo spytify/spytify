@@ -22,5 +22,8 @@ It runs on Linux, macOS 14.2 or later and, as a first build being tested, Window
 1. Open the application you want to record, and turn off its crossfade and gapless playback: two mixed tracks cannot be separated again.
 2. Open Spytify and press **Record**.
 3. Play music. Each track becomes a file in `~/Music/Spytify`, grouped by artist and album; Settings changes the folder, the format and the names.
+4. Press **Stop**: the track playing finishes first. **Stop now** stops at once and drops that track.
+
+The bug tracker sends crash reports and recording counts unless you untick it at the first launch; it never sends your computer's name, your user name, your home folder or your IP address. See [Privacy](privacy.html).
 
 Coming from Spytify v1? See [what changed](migrate.html).
