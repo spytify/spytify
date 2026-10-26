@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -129,11 +131,13 @@ func newRecordScreen(a *App) *recordScreen {
 			img.FillMode = canvas.ImageFillContain
 			img.SetMinSize(fyne.NewSquareSize(rowCover))
 			chip := caption("Skipped: duplicate")
+			keep := widget.NewButtonWithIcon("Keep anyway", theme.DocumentSaveIcon(), nil)
+			keep.Hide()
 			reveal := widget.NewButtonWithIcon("", theme.SearchIcon(), nil)
 			reveal.Importance = widget.LowImportance
 			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
-			return container.NewBorder(nil, nil, img, container.NewHBox(container.NewCenter(chip), container.NewCenter(reveal), container.NewCenter(play)),
+			return container.NewBorder(nil, nil, img, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)),
 				rowText())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
@@ -154,8 +158,16 @@ func newRecordScreen(a *App) *recordScreen {
 				seg.Text, seg.Style.ColorName = row.StatusText(), c
 				chip.Refresh()
 			}
-			revealBtn := right.Objects[1].(*fyne.Container).Objects[0].(*widget.Button)
-			playBtn := right.Objects[2].(*fyne.Container).Objects[0].(*widget.Button)
+			keepBtn := right.Objects[1].(*fyne.Container).Objects[0].(*widget.Button)
+			revealBtn := right.Objects[2].(*fyne.Container).Objects[0].(*widget.Button)
+			playBtn := right.Objects[3].(*fyne.Container).Objects[0].(*widget.Button)
+			if row.Keepable {
+				id := row.ID
+				keepBtn.OnTapped = func() { a.keep(id) }
+				keepBtn.Show()
+			} else {
+				keepBtn.Hide()
+			}
 			if row.Path != "" && (row.Status == model.Saved || row.Status == model.Tagged) {
 				path := row.Path
 				revealBtn.OnTapped = func() { a.noteAction("show a track in its folder"); _ = reveal(path) }
@@ -218,6 +230,24 @@ func chipColor(r model.Row) fyne.ThemeColorName {
 		return colorSkipped
 	}
 	return theme.ColorNamePlaceHolder
+}
+
+// keep saves a take cut short after all, the part that played: the row
+// shows Saving until its file is made, or skipped again if the take is
+// gone.
+func (a *App) keep(id string) {
+	a.noteAction("keep anyway")
+	a.m.Keeping(id, true)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := a.link.Do(ctx, proto.MethodTrackKeep, proto.TrackKeepParams{ID: id}, nil); err != nil {
+			fyne.Do(func() {
+				a.m.Keeping(id, false)
+				a.showError(err)
+			})
+		}
+	}()
 }
 
 func (r *recordScreen) content() fyne.CanvasObject { return r.root }

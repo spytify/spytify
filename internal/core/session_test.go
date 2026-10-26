@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -79,9 +81,8 @@ func states(s *scenario) []proto.SessionState {
 
 func TestGracefulStopFinishesCurrentTrack(t *testing.T) {
 	tl := loadTimeline(t, "basic")
-	// With no minimum length the stop, sent as the track starts, always
-	// takes the "let it finish" path.
-	s := newScenario(t, tl, map[string]any{"recorder.min_seconds": 0})
+	// The stop, sent as the track starts, lets it finish.
+	s := newScenario(t, tl, nil)
 	onTrackStart(s.events, "Paper Lanterns", func() { s.core.StopSession(false) })
 	runWith(t, s, SessionOptions{EndOnStop: true})
 	saved, skipped := outcome(t, s)
@@ -111,6 +112,115 @@ func TestStopNowDiscardsCurrentTrack(t *testing.T) {
 	}
 	if files := fake.AudioFiles(s.out); len(files) != 1 {
 		t.Fatalf("files %v", files)
+	}
+}
+
+// idOf is the id of the take of title.
+func idOf(s *scenario, title string) string {
+	for _, ev := range s.events.all() {
+		var tr proto.TrackStartedEvent
+		if ev.Method == proto.EventTrackStarted && ev.Decode(&tr) == nil && tr.Title == title {
+			return tr.ID
+		}
+	}
+	return ""
+}
+
+// keepable is every track.keepable the take of title got, in order.
+func keepable(s *scenario, title string) []bool {
+	id := idOf(s, title)
+	var out []bool
+	for _, ev := range s.events.all() {
+		var k proto.TrackKeepableEvent
+		if ev.Method == proto.EventTrackKeepable && ev.Decode(&k) == nil && k.ID == id {
+			out = append(out, k.Keepable)
+		}
+	}
+	return out
+}
+
+// finished waits for the file of take id.
+func finished(t *testing.T, s *scenario, id string) proto.TrackFinishedEvent {
+	t.Helper()
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		for _, ev := range s.events.all() {
+			var f proto.TrackFinishedEvent
+			if ev.Method == proto.EventTrackFinished && ev.Decode(&f) == nil && f.ID == id {
+				return f
+			}
+		}
+	}
+	t.Fatalf("no file for %s; log:\n%s", id, s.logs)
+	return proto.TrackFinishedEvent{}
+}
+
+// A take ended by Stop now is not saved, but it can be after the session:
+// track.keep saves the part that played as "<title> (partial)".
+func TestStopNowTakeCanBeKept(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, nil)
+	// Paper Lanterns starts at 6.5 s: stop 2 s into it.
+	s.player.At(8500, func() { _, _ = s.core.StopSession(true) })
+	runWith(t, s, SessionOptions{EndOnStop: true})
+	_, skipped := outcome(t, s)
+	if skipped["Paper Lanterns"] != proto.SkipIncomplete || !slices.Equal(keepable(s, "Paper Lanterns"), []bool{true}) {
+		t.Fatalf("skipped %v, keepable %v", skipped, keepable(s, "Paper Lanterns"))
+	}
+	if err := s.core.Keep("another"); err == nil {
+		t.Fatal("kept a take that is not held")
+	}
+	id := idOf(s, "Paper Lanterns")
+	if err := s.core.Keep(id); err != nil {
+		t.Fatal(err)
+	}
+	f := finished(t, s, id)
+	if !f.Partial || !strings.HasSuffix(f.Path, "Paper Lanterns (partial).wav") || f.DurationMs < 1000 || f.DurationMs > 3000 {
+		t.Fatalf("kept %+v", f)
+	}
+	if !slices.Equal(keepable(s, "Paper Lanterns"), []bool{true, false}) {
+		t.Fatalf("keepable %v", keepable(s, "Paper Lanterns"))
+	}
+	if err := s.core.Keep(id); err == nil {
+		t.Fatal("kept the same take twice")
+	}
+}
+
+// Only the last take cut short can be kept, and only until the next track
+// is saved: its audio is gone then.
+func TestKeepableTakeGoesOnceTheNextTrackIsSaved(t *testing.T) {
+	tl := loadTimeline(t, "control")
+	s := newScenario(t, tl, nil)
+	s.run(t, tl)
+	if got := keepable(s, "Fast Forward"); !slices.Equal(got, []bool{true, false}) {
+		t.Fatalf("keepable %v", got)
+	}
+	if err := s.core.Keep(idOf(s, "Fast Forward")); err == nil {
+		t.Fatal("kept a take that was let go")
+	}
+	if held, _ := filepath.Glob(filepath.Join(s.out, ".spytify", "*.wav")); len(held) > 0 {
+		t.Fatalf("audio left behind: %v", held)
+	}
+}
+
+// A take moved along its track bar is recorded to its end all the same, so
+// keeping it saves all of it, jump included.
+func TestSeekedTakeIsKeptWhole(t *testing.T) {
+	tl := loadTimeline(t, "seek")
+	s := newScenario(t, tl, nil)
+	// Back Again plays from 12.5 s to 21 s, jumping back at 16.5 s; Chapter
+	// Four plays from 22 s to 26.5 s.
+	s.player.At(24000, func() {
+		if err := s.core.Keep(idOf(s, "Back Again")); err != nil {
+			t.Errorf("keep: %v", err)
+		}
+	})
+	s.run(t, tl)
+	f := finished(t, s, idOf(s, "Back Again"))
+	if !f.Partial || f.DurationMs < 7500 {
+		t.Fatalf("kept %+v, want the 8.5 s played", f)
+	}
+	if got := keepable(s, "Skip Ahead"); !slices.Equal(got, []bool{true, false}) {
+		t.Fatalf("Skip Ahead keepable %v: the next take held should replace it", got)
 	}
 }
 

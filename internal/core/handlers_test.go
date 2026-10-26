@@ -85,9 +85,9 @@ func TestSettingsActions(t *testing.T) {
 	c, rec := newTestCore(t, true)
 	var res proto.SettingsSetResult
 	if err := call(t, c, proto.MethodSettingsSet, proto.SettingsSetParams{Values: map[string]any{
-		"encode.format":        "wav",
-		"recorder.min_seconds": 10,
-		"bogus":                1,
+		"encode.format":               "wav",
+		"recorder.boundary_window_ms": 400,
+		"bogus":                       1,
 	}}, &res); err != nil {
 		t.Fatal(err)
 	}
@@ -100,15 +100,15 @@ func TestSettingsActions(t *testing.T) {
 			_ = ev.Decode(&changed)
 		}
 	}
-	if changed.Values["encode.format"] != "wav" || changed.Values["recorder.min_seconds"] != float64(10) {
+	if changed.Values["encode.format"] != "wav" || changed.Values["recorder.boundary_window_ms"] != float64(400) {
 		t.Fatalf("settings.changed = %+v", changed.Values)
 	}
 
 	var got proto.SettingsValues
-	if err := call(t, c, proto.MethodSettingsGet, proto.SettingsGetParams{Keys: []string{"encode.format", "recorder.min_seconds"}}, &got); err != nil {
+	if err := call(t, c, proto.MethodSettingsGet, proto.SettingsGetParams{Keys: []string{"encode.format", "recorder.boundary_window_ms"}}, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Values["encode.format"] != "wav" || got.Values["recorder.min_seconds"] != float64(10) {
+	if got.Values["encode.format"] != "wav" || got.Values["recorder.boundary_window_ms"] != float64(400) {
 		t.Fatalf("get = %+v", got.Values)
 	}
 	if err := call(t, c, proto.MethodSettingsGet, proto.SettingsGetParams{Keys: []string{"nope"}}, nil); code(err) != proto.CodeInvalidParams {

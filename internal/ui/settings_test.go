@@ -117,7 +117,7 @@ func TestShowingSettingsSendsNothingBack(t *testing.T) {
 	values := defaults()
 	values["output.underscores"] = true
 	values["encode.format"] = "mp3"
-	values["recorder.min_seconds"] = 45
+	values["recorder.boundary_window_ms"] = 450
 	m.SetSettings(values)
 	a.render()
 	time.Sleep(200 * time.Millisecond)

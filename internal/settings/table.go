@@ -70,7 +70,6 @@ var Table = []Def{
 	{Key: "tags.extra_to_subtitle", Tab: "Tags", Group: "Encoding", Label: "Move parenthesised extra title to subtitle", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "tags.artist_separator", Tab: "Tags", Group: "Encoding", Label: "Multiple artists separator", Kind: KindString, Default: ", ", Advanced: true},
 
-	{Key: "recorder.min_seconds", Tab: "Recorder", Group: "Recording", Label: "Minimum track length (seconds)", Kind: KindInt, Default: int64(30), Min: 0, Max: 3600, Ranged: true},
 	{Key: "recorder.duplicates", Tab: "Recorder", Group: "Recording", Label: "Already recorded tracks", Kind: KindEnum, Enum: []string{"skip", "suffix", "overwrite"}, Default: "skip"},
 	{Key: "recorder.skip_duplicates_forward", Tab: "Recorder", Group: "Recording", Label: "Skip to the next track when already recorded", Kind: KindBool, Default: false},
 	{Key: "recorder.single_track", Tab: "Recorder", Group: "Recording", Label: "Record a single track then stop", Kind: KindBool, Default: false},
@@ -84,8 +83,7 @@ var Table = []Def{
 	{Key: "player.mute_output", Tab: "Advanced", Group: "Recording", Label: "Mute the player on this computer while recording (macOS, Linux)", Kind: KindBool, Default: false, Advanced: true, Note: "the files are recorded as usual; only the speakers stay silent"},
 
 	{Key: "recorder.mute_ads", Tab: "Ads", Group: "Ads", Label: "Mute ads", Kind: KindBool, Default: false},
-	{Key: "recorder.skip_short_untitled", Tab: "Advanced", Group: "Ads", Label: "Treat items shorter than N seconds with no album as ads (0 = off)", Kind: KindInt, Default: int64(60), Min: 0, Max: 600, Ranged: true, Advanced: true},
-	{Key: "recorder.record_everything", Tab: "Advanced", Group: "Ads", Label: "Record ads and short untitled items too", Kind: KindBool, Default: false, Advanced: true, Note: "turns the ad filter off: nothing is skipped as an ad"},
+	{Key: "recorder.skip_short_untitled", Tab: "Advanced", Group: "Ads", Label: "Treat items shorter than N seconds with no album as ads (0 = off)", Kind: KindInt, Default: int64(60), Min: 0, Max: 600, Ranged: true, Advanced: true, Note: "podcast episodes record either way; 0 also records short clips with no album"},
 
 	{Key: "privacy.bug_tracker", Tab: "App", Group: "Privacy", Label: "Sentry bug tracker: send crashes, errors, traces and recording counts", Kind: KindBool, Default: true, Note: "sends crashes, errors, traces and recording counts to help the developers fix issues"},
 }

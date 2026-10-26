@@ -234,12 +234,21 @@ func (a *App) onEvent(ev proto.Event) {
 		if ev.Decode(&e) != nil {
 			return
 		}
-		a.incomplete = 0
 		data := map[string]any{"tagged": e.Tagged}
 		counted := map[string]string{}
 		if e.Timings != nil {
 			data["format"] = e.Timings.Format
 			counted["format"] = e.Timings.Format
+		}
+		// A take cut short and kept by hand is counted apart: it says
+		// nothing of how well tracks record.
+		if e.Partial {
+			a.tel.Breadcrumb("track", "kept", data)
+			a.tel.Count("track.kept", 1, counted)
+			return
+		}
+		a.incomplete = 0
+		if e.Timings != nil {
 			a.measureFinish(*e.Timings)
 		}
 		a.tel.Breadcrumb("track", "saved", data)

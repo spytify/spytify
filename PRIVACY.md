@@ -22,7 +22,7 @@ Your computer is known only by a code made from its machine ID for Spytify alone
 - Each launch: whether the recorder got ready, how long it took, and the names of the checks that fail.
 - How far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track.
 - How long saving a track takes, for one track in a hundred.
-- Recording counts, for every track: saved (with its format) or skipped (with the reason, such as an ad or a duplicate), how its start was found and how far from where the player said the track changed. These carry no name of a track, an artist or an album.
+- Recording counts, for every track: saved (with its format), skipped (with the reason, such as an ad or a duplicate) or kept by hand after being cut short, how its start was found and how far from where the player said the track changed. These carry no name of a track, an artist or an album.
 - **Send to the developers** (Logs, when a check fails): the checks that fail and the end of the recorder's log, with an optional comment, once you have seen them.
 
 The names of tracks, artists and albums do go where they appear in an error message or a log line.

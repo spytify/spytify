@@ -29,6 +29,7 @@ const (
 	MethodPlayerLaunch  = "player.launch"
 	MethodLogTail       = "log.tail"
 	MethodEventsRecent  = "events.recent"
+	MethodTrackKeep     = "track.keep"
 )
 
 // Events (core to clients).
@@ -37,6 +38,7 @@ const (
 	EventTrackStarted    = "track.started"
 	EventTrackFinished   = "track.finished"
 	EventTrackSkipped    = "track.skipped"
+	EventTrackKeepable   = "track.keepable"
 	EventLevel           = "level"
 	EventSettingsChanged = "settings.changed"
 	EventTargetState     = "target.state"
@@ -113,7 +115,8 @@ type SessionStartResult struct {
 }
 
 type SessionStopParams struct {
-	// Now discards the current track instead of letting it finish.
+	// Now ends the current track where it is instead of letting it finish;
+	// it is not saved, unless with track.keep.
 	Now bool `json:"now,omitempty"`
 }
 
@@ -236,6 +239,8 @@ type TrackFinishedEvent struct {
 	TaggedBy   string `json:"tagged_by,omitempty"`
 	// Timings is how long saving the file took, step by step.
 	Timings *FinishTimings `json:"timings,omitempty"`
+	// Partial is a take saved with track.keep: only the part that played.
+	Partial bool `json:"partial,omitempty"`
 }
 
 // FinishTimings are the steps between the end of a track and its file.
@@ -251,6 +256,20 @@ type FinishTimings struct {
 type TrackSkippedEvent struct {
 	ID     string     `json:"id"`
 	Reason SkipReason `json:"reason"`
+}
+
+// TrackKeepableEvent says whether a skipped take can still be saved with
+// track.keep. Only the last take cut short, stopped or moved along its
+// track bar can: its audio is let go once another track is saved.
+type TrackKeepableEvent struct {
+	ID       string `json:"id"`
+	Keepable bool   `json:"keepable"`
+}
+
+type TrackKeepParams struct {
+	// ID is the take to save, from track.keepable; empty saves the one
+	// there is.
+	ID string `json:"id,omitempty"`
 }
 
 type LevelEvent struct {

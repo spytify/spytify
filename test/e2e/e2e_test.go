@@ -79,7 +79,7 @@ func newEnv(t *testing.T) *env {
 
 var quiet = []string{
 	"--set", "encode.format=wav", "--set", "recorder.normalize=false",
-	"--set", "recorder.min_seconds=1", "--set", "output.group_by=none", "--set", "tags.cover=false",
+	"--set", "output.group_by=none", "--set", "tags.cover=false",
 }
 
 func (e *env) daemonArgs(timeline string, extra ...string) []string {
@@ -136,13 +136,13 @@ func TestDaemonAndCLI(t *testing.T) {
 	if out := e.mustCLI("info"); !strings.Contains(out, "target   process=fakeplayer") || !strings.Contains(out, "[ok  ] fake player") {
 		t.Fatalf("info:\n%s", out)
 	}
-	if out := e.mustCLI("set", "recorder.min_seconds=2", "output.prefix=counter"); !strings.Contains(out, "set output.prefix") {
+	if out := e.mustCLI("set", "recorder.boundary_window_ms=400", "output.prefix=counter"); !strings.Contains(out, "set output.prefix") {
 		t.Fatalf("set:\n%s", out)
 	}
 	if out, err := e.cli("set", "encode.format=ogg"); err == nil || !strings.Contains(out, "rejected encode.format: expected one of mp3, aac, flac, wav") {
 		t.Fatalf("invalid set accepted:\n%s", out)
 	}
-	if out := e.mustCLI("get", "output.prefix", "recorder.min_seconds"); out != "output.prefix = counter\nrecorder.min_seconds = 2\n" {
+	if out := e.mustCLI("get", "output.prefix", "recorder.boundary_window_ms"); out != "output.prefix = counter\nrecorder.boundary_window_ms = 400\n" {
 		t.Fatalf("get:\n%q", out)
 	}
 	cfg, err := os.ReadFile(filepath.Join(e.dir, "config.toml"))

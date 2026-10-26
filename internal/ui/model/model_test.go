@@ -104,6 +104,47 @@ func TestReplayRebuildsTheSessionForALateClient(t *testing.T) {
 	}
 }
 
+// A take cut short offers Keep anyway until it is let go; kept, it is saving
+// until its file reads "Saved: partial".
+func TestKeepableTakes(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(started(t, "a", "First"))
+	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "a", Reason: proto.SkipIncomplete}))
+	m.Apply(started(t, "b", "Second"))
+	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a", Keepable: true}))
+	if s := m.Snapshot(); len(s.Rows) != 1 || !s.Rows[0].Keepable {
+		t.Fatalf("rows %+v", s.Rows)
+	}
+
+	m.Keeping("a", true)
+	if r := m.Snapshot().Rows[0]; r.Keepable || r.Status != Saving {
+		t.Fatalf("keeping %+v", r)
+	}
+	m.Keeping("a", false)
+	if r := m.Snapshot().Rows[0]; r.Status != Skipped || r.StatusText() != "Skipped: incomplete" {
+		t.Fatalf("not kept %+v", r)
+	}
+
+	m.Keeping("a", true)
+	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a"}))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (partial).flac", Partial: true}))
+	if r := m.Snapshot().Rows[0]; r.Keepable || r.StatusText() != "Saved: partial" {
+		t.Fatalf("kept %+v", r)
+	}
+
+	// Let go: the button goes, the row stays skipped.
+	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "b", Reason: proto.SkipSeeked}))
+	m.Apply(started(t, "c", "Third"))
+	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "b", Keepable: true}))
+	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "b"}))
+	for _, r := range m.Snapshot().Rows {
+		if r.ID == "b" && (r.Keepable || r.StatusText() != "Skipped: track bar moved") {
+			t.Fatalf("let go %+v", r)
+		}
+	}
+}
+
 func TestSettingsLogsAndErrors(t *testing.T) {
 	m := New()
 	m.SetSettings(map[string]any{"encode.format": "mp3", "output.dir": "/m"})
