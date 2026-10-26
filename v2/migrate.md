@@ -14,9 +14,9 @@ Every v1 setting and feature, and where it is in v2:
 | Muting other apps while recording | Gone: no other app can be recorded. **Mute the player on this computer while recording** (`player.mute_output`) silences the player for you on macOS and Linux |
 | Audio quality, 128 to 320 kbps | **Bitrate** (`encode.bitrate_kbps`), for MP3 and AAC |
 | Audio format, WAV or MP3 | **Output format** (`encode.format`): FLAC by default, MP3, AAC or WAV, all tagged |
-| Minimal length | **Minimum track length** (`recorder.min_seconds`) |
+| Minimal length | Gone: whole tracks of any length are kept and incomplete ones never are. **Keep anyway** saves the last track cut short |
 | Mute ads | **Mute ads** (`recorder.mute_ads`); ads are never recorded |
-| Record everything (podcasts) | **Record ads and short untitled items too** (`recorder.record_everything`) |
+| Record everything (podcasts) | Gone: podcasts record like tracks. Short items with no album record with **Treat items shorter than N seconds with no album as ads** at 0 |
 | Delay next recording if sound is detected | Always on: each cut is placed in the quietest spot near the change of track (**Boundary search window**) |
 | Timer for the recording session | **Stop the session after** (`recorder.session_timer`) |
 | Counter in front of file names | **File name prefix** set to `counter` |

@@ -14,7 +14,8 @@ spytify-cli set encode.format=flac output.dir=~/Music/Recordings
 spytify-cli start              # recording starts with the next track
 spytify-cli status
 spytify-cli tail -f            # follow the log
-spytify-cli stop               # the current track finishes first; --now discards it
+spytify-cli stop               # the current track finishes first; --now stops at once
+spytify-cli keep               # saves the last track cut short, as "<title> (partial)"
 ```
 
 | `spytify-cli` | What it does |
@@ -25,6 +26,7 @@ spytify-cli stop               # the current track finishes first; --now discard
 | `tail [-n N] [-f]` / `events` | log lines / every event as JSON lines |
 | `control play|pause|next|previous|restart` | transport; `restart` plays the current track again from 0:00 |
 | `launch` | opens the application if it is not running |
+| `keep [id]` | saves the last track cut short (skipped, stopped with `--now`, or moved along its track bar) as "*title* (partial)", until the next track is saved |
 | `service install|uninstall|status` | runs `spytifyd` at login and again after a crash (Linux, macOS) |
 | `shutdown` | stops the recorder |
 

@@ -55,7 +55,6 @@ Advanced:
 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
-| Minimum track length (seconds) | `recorder.min_seconds` | 0 to 3600 | 30 |
 | Already recorded tracks | `recorder.duplicates` | skip, suffix, overwrite | `skip` |
 | Skip to the next track when already recorded | `recorder.skip_duplicates_forward` | on, off | off |
 | Record a single track then stop | `recorder.single_track` | on, off | off |
@@ -84,7 +83,6 @@ Advanced:
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
 | Treat items shorter than N seconds with no album as ads (0 = off) | `recorder.skip_short_untitled` | 0 to 600 | 60 |
-| Record ads and short untitled items too | `recorder.record_everything` | on, off | off |
 
 ### Privacy
 
