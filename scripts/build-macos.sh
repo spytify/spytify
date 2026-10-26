@@ -49,8 +49,9 @@ CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" MACOSX_DEPLOYMENT
   go build -trimpath -ldflags "$ldflags" -o "$tmp/spytify-ui-amd64" ./cmd/spytify-ui
 lipo -create -output "$out/spytify-ui" "$tmp/spytify-ui-arm64" "$tmp/spytify-ui-amd64"
 
-app="$out/Spytify.app"
-rm -rf "$app"
+# The app is put together aside and moved in whole: Finder, when it sees a
+# bundle before its icon is written, keeps a blank icon for it.
+app="$tmp/Spytify.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$out/spytify-ui" "$out/spytifyd" "$out/spytify-tap" "$out/spytify-cli" "$app/Contents/MacOS/"
 sed "s/@VERSION@/$version/g" macos/Info.plist > "$app/Contents/Info.plist"
@@ -70,4 +71,6 @@ for f in spytifyd spytify-cli spytify-tap; do
   codesign --force --sign - "$app/Contents/MacOS/$f" >/dev/null 2>&1
 done
 codesign --force --sign - "$app" >/dev/null 2>&1
+rm -rf "$out/Spytify.app"
+mv "$app" "$out/"
 echo "built v$version into $out/: Spytify.app spytify-ui spytifyd spytify-cli spytify-tap"
