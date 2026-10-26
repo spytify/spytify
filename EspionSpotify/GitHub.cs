@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
@@ -19,15 +18,17 @@ namespace EspionSpotify
     internal static class GitHub
     {
         private const string API_LATEST_RELEASE_URL =
-            "https://api.github.com/repos/jwallet/spy-spotify/releases/latest";
+            "https://api.github.com/repos/spytify/spytify/releases/latest";
 
-        public const string WEBSITE_FAQ_URL = "https://jwallet.github.io/spy-spotify/faq.html";
+        public const string WEBSITE_FAQ_URL = "https://spytify.github.io/spytify/faq.html";
 
         public const string WEBSITE_FAQ_SPOTIFY_API_URL =
-            "https://jwallet.github.io/spy-spotify/faq.html#media-tags-not-found";
+            "https://spytify.github.io/spytify/faq.html#media-tags-not-found";
 
-        public const string WEBSITE_DONATE_URL = "https://jwallet.github.io/spy-spotify/donate.html";
-        // public const string REPO_LATEST_RELEASE_URL = "https://github.com/jwallet/spy-spotify/releases/latest";
+        public const string WEBSITE_DONATE_URL = "https://spytify.github.io/spytify/donate.html";
+        public const string REPO_LATEST_RELEASE_URL = "https://github.com/spytify/spytify/releases/latest";
+
+        private const int SPYTIFY_2_MAJOR_VERSION = 2;
 
         public static async Task GetVersion()
         {
@@ -62,17 +63,18 @@ namespace EspionSpotify
                     if (githubTagVersion == null || githubTagVersion <= assemblyVersion) return;
                     if (Settings.Default.app_last_version_prompt.ToVersion() == githubTagVersion) return;
 
-                    var dialogTitle = string.Format(FrmEspionSpotify.Instance.Rm.GetString(I18NKeys.MsgNewVersionTitle),
+                    var isSpytify2 = IsSpytify2(githubTagVersion);
+                    var dialogTitle = string.Format(
+                        FrmEspionSpotify.Instance.Rm.GetString(isSpytify2
+                            ? I18NKeys.MsgSpytify2Title
+                            : I18NKeys.MsgNewVersionTitle),
                         githubTagVersion);
-                    var dialogMessage = FrmEspionSpotify.Instance.Rm.GetString(I18NKeys.MsgNewVersionContent);
+                    var dialogMessage = FrmEspionSpotify.Instance.Rm.GetString(isSpytify2
+                        ? I18NKeys.MsgSpytify2Content
+                        : I18NKeys.MsgNewVersionContent);
 
-                    if (!string.IsNullOrEmpty(release.body))
-                    {
-                        var releaseBodySplit =
-                            release.body.Split(new[] {"\r\n", "\r", "\n"}, StringSplitOptions.None);
-                        dialogMessage =
-                            $"{releaseBodySplit.TakeWhile(x => x.StartsWith("- ")).Take(5).Aggregate((current, next) => $"{current}\n{next}")}\r\n\r\n{dialogMessage}";
-                    }
+                    var releaseNotes = release.body.ToReleaseNotesSummary();
+                    if (!string.IsNullOrEmpty(releaseNotes)) dialogMessage = $"{releaseNotes}\r\n\r\n{dialogMessage}";
 
                     var dialogResult = MetroMessageBox.Show(
                         FrmEspionSpotify.Instance,
@@ -82,7 +84,11 @@ namespace EspionSpotify
                         MessageBoxIcon.Question,
                         260);
 
-                    if (dialogResult == DialogResult.OK) Update();
+                    if (dialogResult == DialogResult.OK)
+                    {
+                        if (isSpytify2) Process.Start(release.html_url);
+                        else Update();
+                    }
 
                     Settings.Default.app_last_version_prompt = githubTagVersion.ToString();
                     Settings.Default.Save();
@@ -92,6 +98,11 @@ namespace EspionSpotify
             {
                 Console.WriteLine(ex.Message);
             }
+        }
+
+        public static bool IsSpytify2(Version version)
+        {
+            return version != null && version.Major >= SPYTIFY_2_MAJOR_VERSION;
         }
 
         public static void Update()

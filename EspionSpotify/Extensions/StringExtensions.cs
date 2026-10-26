@@ -106,5 +106,13 @@ namespace EspionSpotify.Extensions
             if (input.Length <= max || max == -1) return input;
             return input.Substring(0, max);
         }
+
+        public static string ToReleaseNotesSummary(this string body)
+        {
+            if (string.IsNullOrEmpty(body)) return string.Empty;
+
+            var lines = body.Split(new[] {"\r\n", "\r", "\n"}, StringSplitOptions.None);
+            return string.Join("\n", lines.TakeWhile(x => x.StartsWith("- ")).Take(5));
+        }
     }
 }

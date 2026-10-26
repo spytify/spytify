@@ -23,6 +23,8 @@ namespace EspionSpotify
         {
             if (!Directory.Exists(UpdaterExtractedContentDirectoryPath)) return;
             Settings.Default.Upgrade();
+            // a prompt recorded by the version that ran the updater must not hide the Spytify 2 prompt
+            Settings.Default.app_last_version_prompt = string.Empty;
             Settings.Default.Save();
             UpdateDirectoryContent();
             DeleteOlderUserSettings();

@@ -1064,7 +1064,10 @@ namespace EspionSpotify
 
         private void LnkRelease_Click(object sender, EventArgs e)
         {
-            GitHub.Update();
+            if (GitHub.IsSpytify2(Settings.Default.app_last_version_prompt.ToVersion()))
+                Process.Start(GitHub.REPO_LATEST_RELEASE_URL);
+            else
+                GitHub.Update();
         }
 
         private void TxtRecordingTimer_Leave(object sender, EventArgs e)

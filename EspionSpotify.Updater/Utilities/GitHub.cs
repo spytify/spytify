@@ -9,8 +9,8 @@ namespace EspionSpotify.Updater.Utilities
 {
     internal class GitHub
     {
-        internal const string API_LATEST_RELEASES_LINK = "https://api.github.com/repos/jwallet/spy-spotify/releases";
-        internal const string LATEST_RELEASE_LINK = "https://github.com/jwallet/spy-spotify/releases/latest";
+        internal const string API_LATEST_RELEASES_LINK = "https://api.github.com/repos/spytify/spytify/releases";
+        internal const string LATEST_RELEASE_LINK = "https://github.com/spytify/spytify/releases/latest";
 
         internal static async Task<Release[]> GetReleases()
         {

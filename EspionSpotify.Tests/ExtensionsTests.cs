@@ -195,6 +195,18 @@ namespace EspionSpotify.Tests
             var actual = value.ToMaxLength(max);
             Assert.Equal(expected, actual.Length);
         }
+
+        [Theory]
+        [InlineData(null, "")]
+        [InlineData("", "")]
+        [InlineData("The Windows build is a first draft.\n- Not a summary line", "")]
+        [InlineData("- One\r\n- Two\r\n\r\n- After a blank line", "- One\n- Two")]
+        [InlineData("- 1\n- 2\n- 3\n- 4\n- 5\n- 6", "- 1\n- 2\n- 3\n- 4\n- 5")]
+        internal void StringToReleaseNotesSummary_ReturnsLeadingDashLines(string value, string expected)
+        {
+            var actual = value.ToReleaseNotesSummary();
+            Assert.Equal(expected, actual);
+        }
     }
 
     public class LinqExtensionsTest

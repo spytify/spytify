@@ -682,6 +682,24 @@ namespace EspionSpotify.Translations {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Spytify 2 est une nouvelle application pour Windows, macOS et Linux, et cette version ne recevra plus de mises à jour. Voulez-vous ouvrir la page de téléchargement de Spytify 2?.
+        /// </summary>
+        internal static string msgSpytify2Content {
+            get {
+                return ResourceManager.GetString("msgSpytify2Content", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Spytify {0} a été publié!.
+        /// </summary>
+        internal static string msgSpytify2Title {
+            get {
+                return ResourceManager.GetString("msgSpytify2Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Espionnage Spotify en cours.
         /// </summary>
         internal static string msgTitleCantQuit {

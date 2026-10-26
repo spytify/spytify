@@ -84,6 +84,8 @@ namespace EspionSpotify.Translations
         public static TranslationKeys MsgFolderDialog => TranslationKeys.msgFolderDialog;
         public static TranslationKeys MsgNewVersionContent => TranslationKeys.msgNewVersionContent;
         public static TranslationKeys MsgNewVersionTitle => TranslationKeys.msgNewVersionTitle;
+        public static TranslationKeys MsgSpytify2Content => TranslationKeys.msgSpytify2Content;
+        public static TranslationKeys MsgSpytify2Title => TranslationKeys.msgSpytify2Title;
         public static TranslationKeys MsgTitleCantQuit => TranslationKeys.msgTitleCantQuit;
         public static TranslationKeys MsgTitlePathNotFound => TranslationKeys.msgTitlePathNotFound;
         public static TranslationKeys MsgTitlePathTooLong => TranslationKeys.msgTitlePathTooLong;

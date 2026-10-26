@@ -71,6 +71,8 @@
         msgFolderDialog,
         msgNewVersionContent,
         msgNewVersionTitle,
+        msgSpytify2Content,
+        msgSpytify2Title,
         msgTitleCantQuit,
         msgTitleFailedToUseSpotifyAPI,
         msgTitlePathNotFound,

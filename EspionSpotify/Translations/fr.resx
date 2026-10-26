@@ -261,6 +261,14 @@
     <value>Version {0} a été publiée!</value>
     <comment>message</comment>
   </data>
+  <data name="msgSpytify2Content" xml:space="preserve">
+    <value>Spytify 2 est une nouvelle application pour Windows, macOS et Linux, et cette version ne recevra plus de mises à jour. Voulez-vous ouvrir la page de téléchargement de Spytify 2?</value>
+    <comment>message</comment>
+  </data>
+  <data name="msgSpytify2Title" xml:space="preserve">
+    <value>Spytify {0} a été publié!</value>
+    <comment>message</comment>
+  </data>
   <data name="msgTitleCantQuit" xml:space="preserve">
     <value>Espionnage Spotify en cours</value>
     <comment>message</comment>

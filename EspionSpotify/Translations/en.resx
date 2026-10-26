@@ -261,6 +261,14 @@
     <value>Version {0} is out!</value>
     <comment>message</comment>
   </data>
+  <data name="msgSpytify2Content" xml:space="preserve">
+    <value>Spytify 2 is a new app for Windows, macOS and Linux, and this version will not get any more updates. Do you want to open the Spytify 2 download page?</value>
+    <comment>message</comment>
+  </data>
+  <data name="msgSpytify2Title" xml:space="preserve">
+    <value>Spytify {0} is out!</value>
+    <comment>message</comment>
+  </data>
   <data name="msgTitleCantQuit" xml:space="preserve">
     <value>Spytify is spying</value>
     <comment>message</comment>
