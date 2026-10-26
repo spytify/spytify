@@ -671,6 +671,8 @@ func TestANewerReleaseShowsTheBadge(t *testing.T) {
 	defer srv.Close()
 	defer func(u string) { releasesURL = u }(releasesURL)
 	releasesURL = srv.URL
+	defer func(v string) { proto.Version = v }(proto.Version)
+	proto.Version = "v2.0.0"
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	a.render()
@@ -687,6 +689,30 @@ func TestANewerReleaseShowsTheBadge(t *testing.T) {
 	m.SetSettings(light)
 	a.render()
 	snapshot(t, a, "update-light")
+}
+
+// A development build, local or from CI, does not look for releases.
+func TestADevelopmentBuildShowsNoBadge(t *testing.T) {
+	var asked atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		asked.Store(true)
+		fmt.Fprint(w, `[{"tag_name":"v9.0.0","html_url":"https://x/v9","draft":false}]`)
+	}))
+	defer srv.Close()
+	defer func(u string) { releasesURL = u }(releasesURL)
+	releasesURL = srv.URL
+	for _, v := range []string{"v2.0.1-dev.12", "v0.0.0-dev"} {
+		func() {
+			defer func(old string) { proto.Version = old }(proto.Version)
+			proto.Version = v
+			a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+			feedSession(t, m)
+			a.checkUpdate()
+			if a.update.Visible() || asked.Load() {
+				t.Errorf("%s: Update visible %v, releases asked %v", v, a.update.Visible(), asked.Load())
+			}
+		}()
+	}
 }
 
 func TestLibraryShowsEmbeddedCovers(t *testing.T) {

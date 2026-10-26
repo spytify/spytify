@@ -12,8 +12,9 @@ import "encoding/json"
 const Protocol = 1
 
 // Version is the core version, overridden at build time with
-// -ldflags "-X github.com/spytify/spytify/pkg/proto.Version=v2.0.0-alpha.1".
-var Version = "v2.0.0-alpha.dev"
+// -ldflags "-X github.com/spytify/spytify/pkg/proto.Version=v2.0.0-alpha.1"
+// (scripts/version.sh). Without it, a build is a development one.
+var Version = "v0.0.0-dev"
 
 // Actions (client to core).
 const (
