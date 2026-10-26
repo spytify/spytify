@@ -83,7 +83,7 @@ func newRoot(out io.Writer) *cobra.Command {
 
 	root.AddCommand(
 		a.infoCmd(), a.startCmd(), a.stopCmd(), a.statusCmd(), a.setCmd(), a.getCmd(), a.resetCmd(),
-		a.tailCmd(), a.eventsCmd(), a.controlCmd(), a.launchCmd(), a.shutdownCmd(), a.serviceCmd(),
+		a.tailCmd(), a.eventsCmd(), a.controlCmd(), a.launchCmd(), a.keepCmd(), a.shutdownCmd(), a.serviceCmd(),
 	)
 	return root
 }
@@ -168,7 +168,7 @@ func (a *app) stopCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&now, "now", false, "discard the current track and stop immediately")
+	cmd.Flags().BoolVar(&now, "now", false, "stop immediately; the current track is not saved, unless kept with keep")
 	return cmd
 }
 
@@ -387,6 +387,25 @@ func (a *app) launchCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.call(proto.MethodPlayerLaunch, nil, nil)
+		},
+	}
+}
+
+func (a *app) keepCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "keep [id]",
+		Short: "Save the last track cut short, stopped or moved along its track bar, as \"<title> (partial)\"",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var p proto.TrackKeepParams
+			if len(args) == 1 {
+				p.ID = args[0]
+			}
+			if err := a.call(proto.MethodTrackKeep, p, nil); err != nil || a.asJSON {
+				return err
+			}
+			fmt.Fprintln(a.out, "saving the part that played")
+			return nil
 		},
 	}
 }

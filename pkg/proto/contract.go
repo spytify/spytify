@@ -19,7 +19,7 @@ type EventSpec struct {
 var Methods = []MethodSpec{
 	{MethodCoreInfo, nil, CoreInfoResult{}, "versions, resolved target and capability checks; first call on connect"},
 	{MethodSessionStart, SessionStartParams{}, SessionStartResult{}, "fails if the target process is not running or ffmpeg is missing"},
-	{MethodSessionStop, SessionStopParams{}, SessionStopResult{}, "lets the current track finish when past recorder.min_seconds, unless now"},
+	{MethodSessionStop, SessionStopParams{}, SessionStopResult{}, "lets the current track finish, unless now; a track ended by now can be saved with track.keep"},
 	{MethodSessionStatus, nil, SessionStatusResult{}, "snapshot for late-joining clients"},
 	{MethodSettingsGet, SettingsGetParams{}, SettingsValues{}, "every setting when keys is empty"},
 	{MethodSettingsSet, SettingsSetParams{}, SettingsSetResult{}, "validated, persisted, then settings.changed fires"},
@@ -28,6 +28,7 @@ var Methods = []MethodSpec{
 	{MethodPlayerLaunch, nil, Empty{}, "opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way"},
 	{MethodLogTail, LogTailParams{}, LogTailResult{}, "last N log lines"},
 	{MethodEventsRecent, nil, EventsRecentResult{}, "the last 200 events, for a client that connects mid-session"},
+	{MethodTrackKeep, TrackKeepParams{}, Empty{}, "saves a keepable take after all, as \"<title> (partial)\"; fails once it is no longer keepable"},
 	{MethodCoreShutdown, nil, Empty{}, "stops the session first"},
 }
 
@@ -37,6 +38,7 @@ var Events = []EventSpec{
 	{EventTrackStarted, TrackStartedEvent{}, "boundary committed"},
 	{EventTrackFinished, TrackFinishedEvent{}, "file closed and tagged"},
 	{EventTrackSkipped, TrackSkippedEvent{}, "decision made: duplicate, too_short, ad, incomplete, seeked"},
+	{EventTrackKeepable, TrackKeepableEvent{}, "a take cut short, stopped or moved along its track bar can be saved with track.keep, or no longer"},
 	{EventLevel, LevelEvent{}, "10 Hz while recording"},
 	{EventSettingsChanged, SettingsValues{}, "after any successful settings.set or settings.reset"},
 	{EventTargetState, TargetStateEvent{}, "player process appears or exits"},

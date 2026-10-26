@@ -25,11 +25,10 @@ import (
 // baseSettings make scenario output comparable sample by sample: WAV, no
 // loudness change, no network.
 var baseSettings = map[string]any{
-	"encode.format":        "wav",
-	"recorder.normalize":   false,
-	"recorder.min_seconds": 1,
-	"tags.cover":           false,
-	"output.group_by":      "none",
+	"encode.format":      "wav",
+	"recorder.normalize": false,
+	"tags.cover":         false,
+	"output.group_by":    "none",
 }
 
 type fakeBackends struct{ b *fake.Backend }

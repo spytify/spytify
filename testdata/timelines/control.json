@@ -9,13 +9,7 @@
   ],
   "actions": [{"at_ms": 10000, "cmd": "next"}],
   "expect": [
-    {"item": 0, "saved": false, "reason": "too_short"},
+    {"item": 0, "saved": false, "reason": "incomplete"},
     {"item": 1, "saved": true}
-  ],
-  "variants": [
-    {"name": "too short", "settings": {"recorder.min_seconds": 15},
-     "expect": [{"item": 0, "saved": false, "reason": "too_short"}, {"item": 1, "saved": true}]},
-    {"name": "cut short", "settings": {"recorder.min_seconds": 1},
-     "expect": [{"item": 0, "saved": false, "reason": "incomplete"}, {"item": 1, "saved": true}]}
   ]
 }

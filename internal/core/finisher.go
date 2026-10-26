@@ -25,6 +25,11 @@ import (
 // short (a skip, a seek, a stop) and is not kept.
 const completeToleranceMs = 2000
 
+// An item with no declared length cannot be told whole, so one shorter
+// than this is taken for a bit of one. A whole track is kept whatever its
+// length.
+const minUnknownLengthMs = 30_000
+
 type finishJob struct {
 	id      string
 	info    meta.TrackInfo
@@ -33,6 +38,11 @@ type finishJob struct {
 	played  int64
 	length  int64
 	partial bool
+	// rejected is why the session already skipped this take, when it did:
+	// the file is not made, but the audio is held for track.keep.
+	rejected proto.SkipReason
+	// keep saves a held take after all, whatever part of it played.
+	keep bool
 }
 
 // finisher turns closed temp WAVs into tagged files, one at a time and in
@@ -54,6 +64,8 @@ type finisher struct {
 	// stops the recording when the counter has no number left.
 	advance func(next int64)
 	full    func()
+	// keep holds the last take cut short, for track.keep.
+	keep *keeper
 }
 
 func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(string, any), log *Logger) *finisher {
@@ -78,7 +90,7 @@ func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(str
 func (f *finisher) enqueue(j finishJob) {
 	// A partial take is discarded, so it does not make the track a
 	// duplicate of itself.
-	if !j.partial {
+	if !j.partial && j.rejected == "" {
 		f.mu.Lock()
 		f.claims[trackKey(j.info.Artist(), j.info.Title)] = true
 		f.mu.Unlock()
@@ -178,28 +190,40 @@ func namingTrack(t tag.Track, info meta.TrackInfo) naming.Track {
 func (f *finisher) process(j finishJob) {
 	defer f.wg.Done()
 	defer func() {
-		if j.partial {
+		if j.partial || j.rejected != "" {
 			return
 		}
 		f.mu.Lock()
 		delete(f.claims, trackKey(j.info.Artist(), j.info.Title))
 		f.mu.Unlock()
 	}()
-	defer os.Remove(j.tmp)
+	held := false
+	defer func() {
+		if !held {
+			os.Remove(j.tmp)
+		}
+	}()
 
 	began := time.Now()
 	since := func(t time.Time) int64 { return time.Since(t).Milliseconds() }
 	v := f.values()
-	minMs := v.Int("recorder.min_seconds") * 1000
 	playedMs := j.format.MsFromFrames(j.played)
-	if playedMs < minMs {
-		f.log.Infof("%q: %d ms recorded, under the %d s minimum", j.info.Title, playedMs, minMs/1000)
-		f.skip(j.id, proto.SkipTooShort)
+	if j.rejected != "" {
+		held = f.keep.hold(j)
 		return
 	}
-	if j.partial || (j.length > 0 && j.played < j.length-j.format.FramesFromMs(completeToleranceMs)) {
+	if !j.keep && (j.partial || (j.length > 0 && j.played < j.length-j.format.FramesFromMs(completeToleranceMs))) {
 		f.log.Infof("%q: only %d of %d ms played, not kept", j.info.Title, playedMs, j.format.MsFromFrames(j.length))
 		f.skip(j.id, proto.SkipIncomplete)
+		held = f.keep.hold(j)
+		return
+	}
+	tooShort := func(frames int64) bool {
+		return j.length == 0 && !j.keep && j.format.MsFromFrames(frames) < minUnknownLengthMs
+	}
+	if tooShort(j.played) {
+		f.log.Infof("%q: %d ms of an item with no length, under %d s", j.info.Title, playedMs, minUnknownLengthMs/1000)
+		f.skip(j.id, proto.SkipTooShort)
 		return
 	}
 
@@ -219,7 +243,7 @@ func (f *finisher) process(j finishJob) {
 			return
 		}
 		trimStart, trimEnd, keptFrames = s, e, e-s
-		if j.format.MsFromFrames(keptFrames) < minMs {
+		if tooShort(keptFrames) {
 			f.skip(j.id, proto.SkipTooShort)
 			return
 		}
@@ -265,7 +289,12 @@ func (f *finisher) process(j finishJob) {
 	}
 	name := naming.FileName(plan, o, counter, tags.Track)
 	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
-	switch v.String("recorder.duplicates") {
+	duplicates := v.String("recorder.duplicates")
+	if j.keep {
+		// A partial file never replaces a file, nor is it skipped.
+		duplicates = "suffix"
+	}
+	switch duplicates {
 	case "suffix":
 		name = naming.FreeSuffix(dir, name, o.Underscores, exists)
 	case "skip":
@@ -324,7 +353,12 @@ func (f *finisher) process(j finishJob) {
 	if o.Prefix == "counter" && f.advance != nil {
 		f.advance(counter + 1)
 	}
-	f.index.add(trackKey(j.info.Artist(), j.info.Title), final)
+	if !j.keep {
+		// A partial file does not make the whole track a duplicate.
+		f.index.add(trackKey(j.info.Artist(), j.info.Title), final)
+		// The take held for track.keep goes once the next track is saved.
+		f.keep.drop()
+	}
 	timings.TotalMs = since(began)
 	f.log.Infof("saved %s", final)
 	f.emit(proto.EventTrackFinished, proto.TrackFinishedEvent{
@@ -336,6 +370,7 @@ func (f *finisher) process(j finishJob) {
 		Tagged:     tagged,
 		TaggedBy:   tags.Source,
 		Timings:    timings,
+		Partial:    j.keep,
 	})
 }
 

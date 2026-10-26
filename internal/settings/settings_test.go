@@ -49,11 +49,11 @@ func TestChoicesNameEveryValue(t *testing.T) {
 func TestSetPersistsAndReloads(t *testing.T) {
 	s, path := openTemp(t)
 	applied, rejected, changed, err := s.Set(map[string]any{
-		"encode.format":        "flac",
-		"recorder.min_seconds": 45.0, // JSON numbers arrive as float64
-		"recorder.silence_db":  "-55",
-		"output.dir":           "~/Music/Rec",
-		"recorder.duplicates":  "suffix",
+		"encode.format":               "flac",
+		"recorder.boundary_window_ms": 450.0, // JSON numbers arrive as float64
+		"recorder.silence_db":         "-55",
+		"output.dir":                  "~/Music/Rec",
+		"recorder.duplicates":         "suffix",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -77,8 +77,8 @@ func TestSetPersistsAndReloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := again.Values()
-	if v.String("encode.format") != "flac" || v.Int("recorder.min_seconds") != 45 || v.Float("recorder.silence_db") != -55 {
-		t.Fatalf("reloaded values wrong: %v %v %v", v.String("encode.format"), v.Int("recorder.min_seconds"), v.Float("recorder.silence_db"))
+	if v.String("encode.format") != "flac" || v.Int("recorder.boundary_window_ms") != 450 || v.Float("recorder.silence_db") != -55 {
+		t.Fatalf("reloaded values wrong: %v %v %v", v.String("encode.format"), v.Int("recorder.boundary_window_ms"), v.Float("recorder.silence_db"))
 	}
 	if !strings.HasSuffix(v.Path("output.dir"), filepath.Join("Music", "Rec")) || strings.HasPrefix(v.Path("output.dir"), "~") {
 		t.Fatalf("Path(output.dir) = %q", v.Path("output.dir"))
@@ -92,7 +92,7 @@ func TestSetPersistsAndReloads(t *testing.T) {
 // to its new key, a retired key goes without a warning.
 func TestEarlierKeysLoad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[output]\ncounter_start = 42\n[tags]\ntrack_from_counter = true\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("[output]\ncounter_start = 42\n[tags]\ntrack_from_counter = true\n[recorder]\nmin_seconds = 30\nrecord_everything = true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	s, err := Open(path)
@@ -112,7 +112,7 @@ func TestSetRejectsInvalidAndUnknown(t *testing.T) {
 	cases := map[string]any{
 		"encode.format":          "ogg",
 		"encode.bitrate_kbps":    192,
-		"recorder.min_seconds":   1.5,
+		"output.counter_width":   1.5,
 		"output.dir":             "relative/dir",
 		"output.template":        "{artist}/{title}",
 		"recorder.session_timer": "forever",
@@ -166,7 +166,7 @@ func TestResetPrefix(t *testing.T) {
 
 func TestOverrideIsNotPersisted(t *testing.T) {
 	s, path := openTemp(t)
-	if rej := s.Override(map[string]any{"encode.format": "wav", "recorder.min_seconds": "1"}); len(rej) != 0 {
+	if rej := s.Override(map[string]any{"encode.format": "wav", "recorder.boundary_window_ms": "100"}); len(rej) != 0 {
 		t.Fatal(rej)
 	}
 	if s.Values().String("encode.format") != "wav" {

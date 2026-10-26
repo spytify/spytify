@@ -6,9 +6,9 @@
 //
 // writes the ten items of testdata/timelines/jitter.json as tagged files.
 // Add the folder to the player's local files, start a Spytify session with
-// encode.format = wav (or flac), recorder.normalize = off and
-// recorder.min_seconds = 1, turn the player's own volume normalisation off,
-// and play the ten files in order. Then
+// encode.format = wav (or flac) and recorder.normalize = off, turn the
+// player's own volume normalisation off, and play the ten files in order.
+// Then
 //
 //	go run ./internal/tools/gate1 check -dir ~/Gate1 -out ~/Music/Spytify
 //

@@ -214,8 +214,8 @@ func (s *Session) Status() proto.SessionStatusResult {
 	return out
 }
 
-// Stop asks the session to end: now discards the current track, otherwise
-// a track past recorder.min_seconds is allowed to finish.
+// Stop asks the session to end: now ends the current track where it is,
+// otherwise the current track is allowed to finish.
 func (s *Session) Stop(now bool) {
 	mode := stopGraceful
 	if now {
@@ -605,8 +605,9 @@ func (s *Session) onSeek(posMs, at int64) {
 	if c.ghost || c.provisional || c.reason != "" {
 		return
 	}
-	s.deps.log.Infof("%q: playback jumped to %d ms, this take is not kept", c.info.Title, posMs)
-	s.dropWriter(c)
+	// The take goes on to its end all the same: it is not saved, but its
+	// audio is held for track.keep.
+	s.deps.log.Infof("%q: playback jumped to %d ms, this take is not saved", c.info.Title, posMs)
 	c.reason = proto.SkipSeeked
 	if c.announced {
 		s.deps.fin.skip(c.id, c.reason)
@@ -940,11 +941,9 @@ func (s *Session) newSegment(info meta.TrackInfo, start int64) *segment {
 func (s *Session) classify(seg *segment) {
 	v := s.deps.values()
 	seg.reason = ""
-	if !v.Bool("recorder.record_everything") {
-		short := v.Int("recorder.skip_short_untitled")
-		if seg.info.IsAdvert() || (short > 0 && seg.info.LengthMs > 0 && seg.info.LengthMs < short*1000 && seg.info.Album == "") {
-			seg.reason = proto.SkipAd
-		}
+	short := v.Int("recorder.skip_short_untitled")
+	if seg.info.IsAdvert() || (short > 0 && seg.info.LengthMs > 0 && seg.info.LengthMs < short*1000 && seg.info.Album == "") {
+		seg.reason = proto.SkipAd
 	}
 	if seg.reason == "" && v.String("recorder.duplicates") == "skip" && s.deps.fin.recorded(seg.info, v) {
 		seg.reason = proto.SkipDuplicate
@@ -1016,13 +1015,14 @@ func (s *Session) closeSegment(c *segment, end int64) {
 		info.ArtURL = coverURL(p)
 	}
 	s.deps.fin.enqueue(finishJob{
-		id:      c.id,
-		info:    info,
-		tmp:     path,
-		format:  c.format,
-		played:  played,
-		length:  c.length,
-		partial: c.partial,
+		id:       c.id,
+		info:     info,
+		tmp:      path,
+		format:   c.format,
+		played:   played,
+		length:   c.length,
+		partial:  c.partial,
+		rejected: c.reason,
 	})
 	if s.opts.SingleTrack {
 		s.stop = stopGraceful
@@ -1213,27 +1213,34 @@ func (s *Session) handleStop(mode stopMode) {
 	}
 	c := s.cur
 	if mode == stopNow || c == nil || c.ghost || c.reason != "" || c.provisional {
-		if c != nil && !c.ghost && c.reason == "" && c.w != nil {
-			s.dropWriter(c)
-			if c.announced {
-				s.deps.fin.skip(c.id, proto.SkipIncomplete)
-			}
+		if c != nil && !c.ghost && !c.provisional {
+			s.reject(c)
 		}
 		s.cur = nil
 		s.pend = nil
 		s.finish()
 		return
 	}
-	minFrames := c.format.FramesFromMs(s.deps.values().Int("recorder.min_seconds") * 1000)
-	if s.ring.End()-c.start < minFrames {
-		s.dropWriter(c)
-		s.deps.fin.skip(c.id, proto.SkipTooShort)
-		s.cur = nil
-		s.finish()
-		return
-	}
 	s.stop = stopGraceful
 	s.refreshState()
+}
+
+// reject ends c before its end: it is not saved, but the audio it has is
+// held for track.keep. A take nobody saw start is only dropped.
+func (s *Session) reject(c *segment) {
+	if c.w == nil {
+		return
+	}
+	if !c.announced {
+		s.dropWriter(c)
+		return
+	}
+	if c.reason == "" {
+		c.reason = proto.SkipIncomplete
+		s.deps.fin.skip(c.id, c.reason)
+	}
+	s.write(c, c.drained, s.ring.End())
+	s.closeSegment(c, s.ring.End())
 }
 
 func (s *Session) finish() {

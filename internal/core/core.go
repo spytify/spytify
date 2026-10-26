@@ -60,8 +60,12 @@ type Core struct {
 	broadcast func(method string, payload any)
 	recent    []proto.Event
 
+	// keep holds the last take cut short, across sessions.
+	keep *keeper
+
 	mu       sync.Mutex
 	sess     *Session
+	fin      *finisher
 	np       meta.NowPlaying
 	done     chan struct{}
 	timer    *time.Timer
@@ -83,6 +87,7 @@ func New(o Options) *Core {
 	if c.find == nil {
 		c.find = target.FindProcess
 	}
+	c.keep = &keeper{emit: c.emit}
 	c.ffmpeg, c.ffErr = encode.Find(o.Env.FFmpeg)
 	o.Log.SetEmitter(c.emit)
 	return c
@@ -255,6 +260,15 @@ func (c *Core) Handle(ctx context.Context, method string, params json.RawMessage
 		c.emitMu.Lock()
 		defer c.emitMu.Unlock()
 		return proto.EventsRecentResult{Events: append([]proto.Event(nil), c.recent...)}, nil
+	case proto.MethodTrackKeep:
+		var p proto.TrackKeepParams
+		if err := decode(&p); err != nil {
+			return nil, err
+		}
+		if err := c.Keep(p.ID); err != nil {
+			return nil, err
+		}
+		return proto.Empty{}, nil
 	case proto.MethodCoreShutdown:
 		go c.Shutdown()
 		return proto.Empty{}, nil
@@ -383,12 +397,7 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 	}
 
 	id := time.Now().Format("20060102-150405")
-	fin := newFinisher(c.store.Values, c.ffmpeg, c.emit, c.log)
-	fin.advance = func(next int64) {
-		if _, err := c.SetSettings(map[string]any{"output.counter_next": next}); err != nil {
-			c.log.Errorf("the counter could not move on to %d: %v", next, err)
-		}
-	}
+	fin := c.newFinisher()
 	// Not on the finisher's goroutine: stopping waits for it.
 	fin.full = func() { go func() { _, _ = c.StopSession(true) }() }
 	s := newSession(id, sessionDeps{
@@ -406,7 +415,7 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 
 	done := make(chan struct{})
 	c.mu.Lock()
-	c.sess, c.np, c.done = s, np, done
+	c.sess, c.fin, c.np, c.done = s, fin, np, done
 	if d := c.store.Values().Duration("recorder.session_timer"); d > 0 {
 		c.timer = time.AfterFunc(d, func() {
 			c.log.Infof("session timer of %s reached", d)
@@ -421,6 +430,10 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		cancel()
 		capt.Close()
 		restore()
+		// track.keep stops handing jobs to this finisher before it closes.
+		c.mu.Lock()
+		c.fin = nil
+		c.mu.Unlock()
 		fin.close()
 		c.mu.Lock()
 		if c.timer != nil {
@@ -447,6 +460,46 @@ func (c *Core) StopSession(now bool) (proto.SessionStopResult, error) {
 	s.Stop(now)
 	st := s.Status()
 	return proto.SessionStopResult{Recorded: st.Counters.Recorded, Skipped: st.Counters.Skipped, Stopping: !now}, nil
+}
+
+// newFinisher makes a finisher that moves the file counter on and holds
+// takes cut short for track.keep.
+func (c *Core) newFinisher() *finisher {
+	fin := newFinisher(c.store.Values, c.ffmpeg, c.emit, c.log)
+	fin.keep = c.keep
+	fin.advance = func(next int64) {
+		if _, err := c.SetSettings(map[string]any{"output.counter_next": next}); err != nil {
+			c.log.Errorf("the counter could not move on to %d: %v", next, err)
+		}
+	}
+	return fin
+}
+
+// Keep saves the held take after all, as "<title> (partial)": the last
+// one cut short, stopped or moved along its track bar, until the next
+// track is saved. id names it; empty takes the one there is.
+func (c *Core) Keep(id string) error {
+	if c.ffErr != nil {
+		return proto.Errorf(proto.CodeFFmpegMissing, "%v", c.ffErr)
+	}
+	// Under c.mu, so a session that ends cannot close its finisher between
+	// the check and the job.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	j, ok := c.keep.claim(id)
+	if !ok {
+		return proto.Errorf(proto.CodeNotAvailable, "this take can no longer be saved: only the last one cut short can, until the next track is saved")
+	}
+	j.keep, j.partial, j.rejected = true, true, ""
+	j.info.Title += " (partial)"
+	if c.fin != nil {
+		c.fin.enqueue(j)
+		return nil
+	}
+	fin := c.newFinisher()
+	fin.enqueue(j)
+	go fin.close()
+	return nil
 }
 
 // Wait blocks until the running session (if any) has ended.
@@ -501,6 +554,7 @@ func (c *Core) Shutdown() {
 	if _, err := c.StopSession(true); err == nil {
 		c.Wait()
 	}
+	c.keep.drop()
 	c.mu.Lock()
 	fn := c.shutdown
 	c.mu.Unlock()

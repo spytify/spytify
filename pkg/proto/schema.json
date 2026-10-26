@@ -484,6 +484,9 @@
         "id": {
           "type": "string"
         },
+        "partial": {
+          "type": "boolean"
+        },
         "path": {
           "type": "string"
         },
@@ -503,6 +506,29 @@
         "id",
         "path",
         "tagged"
+      ],
+      "type": "object"
+    },
+    "TrackKeepParams": {
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TrackKeepableEvent": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "keepable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "keepable"
       ],
       "type": "object"
     },
@@ -602,6 +628,12 @@
         "$ref": "#/$defs/TrackFinishedEvent"
       }
     },
+    "track.keepable": {
+      "description": "a take cut short, stopped or moved along its track bar can be saved with track.keep, or no longer",
+      "params": {
+        "$ref": "#/$defs/TrackKeepableEvent"
+      }
+    },
     "track.skipped": {
       "description": "decision made: duplicate, too_short, ad, incomplete, seeked",
       "params": {
@@ -674,7 +706,7 @@
       }
     },
     "session.stop": {
-      "description": "lets the current track finish when past recorder.min_seconds, unless now",
+      "description": "lets the current track finish, unless now; a track ended by now can be saved with track.keep",
       "params": {
         "$ref": "#/$defs/SessionStopParams"
       },
@@ -707,6 +739,15 @@
       },
       "result": {
         "$ref": "#/$defs/SettingsSetResult"
+      }
+    },
+    "track.keep": {
+      "description": "saves a keepable take after all, as \"\u003ctitle\u003e (partial)\"; fails once it is no longer keepable",
+      "params": {
+        "$ref": "#/$defs/TrackKeepParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Empty"
       }
     }
   },

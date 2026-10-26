@@ -225,6 +225,30 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	}
 }
 
+// The last take cut short offers Keep anyway on its row, and only it.
+func TestRecordScreenOffersKeepAnyway(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-004", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000}}))
+	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipIncomplete}))
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
+	m.Apply(event(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "s-004", Keepable: true}))
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	r.list.ScrollToBottom()
+	all := texts(a.win.Content())
+	if !contains(all, "Skipped: incomplete") || !contains(all, "Keep anyway") {
+		t.Errorf("no Keep anyway on the take cut short: %v", all)
+	}
+	snapshot(t, a, "record-keep")
+
+	m.Apply(event(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "s-004"}))
+	a.render()
+	if contains(texts(a.win.Content()), "Keep anyway") {
+		t.Error("Keep anyway stays once the take is let go")
+	}
+}
+
 func TestWaitingOffersToRestartTheTrack(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	m.SetConn(model.Connected, "")

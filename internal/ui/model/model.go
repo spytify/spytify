@@ -50,6 +50,10 @@ type Row struct {
 	DurationMs     int64
 	Bytes          int64
 	TaggedBy       string
+	// Keepable is a take cut short that can still be saved (track.keep);
+	// Partial is one that was.
+	Keepable bool
+	Partial  bool
 }
 
 // Done reports whether the row's file is closed (saved or skipped).
@@ -59,6 +63,9 @@ func (r Row) Done() bool { return r.Status == Saved || r.Status == Tagged || r.S
 func (r Row) StatusText() string {
 	if r.Status == Skipped && r.Reason != "" {
 		return "Skipped: " + reasonText(r.Reason)
+	}
+	if r.Partial && (r.Status == Saved || r.Status == Tagged) {
+		return "Saved: partial"
 	}
 	return string(r.Status)
 }
@@ -159,6 +166,20 @@ func (m *Model) ClearRows() {
 			m.cleared[r.ID] = true
 		}
 		s.Rows = nil
+	})
+}
+
+// Keeping shows a take cut short as saving once Keep anyway is pressed, or
+// as skipped again when it could not be kept.
+func (m *Model) Keeping(id string, keeping bool) {
+	m.update(func(s *State) {
+		m.edit(s, id, func(r *Row) {
+			if keeping {
+				r.Status, r.Keepable = Saving, false
+			} else {
+				r.Status = Skipped
+			}
+		})
 	})
 }
 
@@ -365,6 +386,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		m.edit(s, e.ID, func(r *Row) {
 			r.Status, r.Path, r.DurationMs, r.Bytes, r.TaggedBy = Saved, e.Path, e.DurationMs, e.Bytes, e.TaggedBy
+			r.Partial, r.Keepable = e.Partial, false
 			if e.Tagged && e.TaggedBy != "" && e.TaggedBy != "local" {
 				r.Status = Tagged
 			}
@@ -375,6 +397,12 @@ func (m *Model) apply(s *State, ev proto.Event) {
 			return
 		}
 		m.edit(s, e.ID, func(r *Row) { r.Status, r.Reason = Skipped, e.Reason })
+	case proto.EventTrackKeepable:
+		var e proto.TrackKeepableEvent
+		if ev.Decode(&e) != nil {
+			return
+		}
+		m.edit(s, e.ID, func(r *Row) { r.Keepable = e.Keepable && r.Status == Skipped })
 	case proto.EventLevel:
 		_ = ev.Decode(&s.Level)
 	case proto.EventTargetState:

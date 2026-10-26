@@ -90,6 +90,12 @@ func (s *Store) load() error {
 var renamed = map[string]string{
 	"output.counter_start":    "output.counter_next",
 	"tags.track_from_counter": "",
+	// Whole tracks of any length are kept and incomplete ones never are,
+	// so a minimum length has nothing left to do.
+	"recorder.min_seconds": "",
+	// Podcasts were never taken for ads; skip_short_untitled at 0 records
+	// short untitled items.
+	"recorder.record_everything": "",
 }
 
 func flatten(prefix string, in map[string]any, out map[string]any) {
