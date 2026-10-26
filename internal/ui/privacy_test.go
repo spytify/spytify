@@ -207,6 +207,20 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	}
 }
 
+// A failed start leaves as its kind only: the message holds paths.
+func TestStartErrorKinds(t *testing.T) {
+	for err, want := range map[error]string{
+		link.ErrInArchive: "in archive",
+		link.ErrNoDaemon:  "not found",
+		errors.New("spytifyd started but does not answer; see its log in Logs"): "no answer",
+		errors.New("spytifyd stopped: listen: address already in use"):          "failed",
+	} {
+		if got := startErrorKind(err); got != want {
+			t.Errorf("startErrorKind(%q) = %q, want %q", err, got, want)
+		}
+	}
+}
+
 // With the bug tracker on, the recording counts leave: each track saved or
 // skipped and how each start was cut, with no names.
 func TestRecordingCountsLeave(t *testing.T) {

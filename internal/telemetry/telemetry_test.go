@@ -405,16 +405,16 @@ func TestFeedbackFollowsTheSpec(t *testing.T) {
 }
 
 func TestScrubber(t *testing.T) {
-	s := &Scrubber{home: []string{`C:\Users\Jose`, "C:/Users/Jose"}, output: []string{`C:\Users\Jose\Music\Mixtapes`, `L:\Mixtapes`}}
-	s.setUser("Jose")
+	s := &Scrubber{home: []string{`C:\Users\User`, "C:/Users/User"}, output: []string{`C:\Users\User\Music\Mixtapes`, `L:\Mixtapes`}}
+	s.setUser("User")
 	for in, want := range map[string]string{
-		`c:\users\jose\Music\x.flac`:          `~\Music\x.flac`,
-		`c:\users\jose\Music\Mixtapes\x.flac`: `<output>\x.flac`,
+		`c:\users\user\Music\x.flac`:          `~\Music\x.flac`,
+		`c:\users\user\Music\Mixtapes\x.flac`: `<output>\x.flac`,
 		`open L:\Mixtapes\.spytify\a.wav: x`:  `open <output>\.spytify\a.wav: x`,
-		"C:/Users/Jose/Music":                 "~/Music",
+		"C:/Users/User/Music":                 "~/Music",
 		"saved Paper Lanterns (Live).flac":    "saved Paper Lanterns (Live).flac",
-		"jose's computer, AB side":            "<user>'s computer, AB side",
-		"joseph":                              "joseph",
+		"user's computer, AB side":            "<user>'s computer, AB side",
+		"username":                            "username",
 	} {
 		if got := s.String(in); got != want {
 			t.Errorf("String(%q) = %q, want %q", in, got, want)
