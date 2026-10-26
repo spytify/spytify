@@ -1,8 +1,11 @@
 # CI only: plays a 440 Hz tone in a loop until killed, so the capture
 # helper has a process to record. With -Smtc it plays through Windows'
 # MediaPlayer with a title, an artist and an album, so the media controls
-# (SMTC) show a session to read.
+# (SMTC) show a session to read. Writing the WAV takes seconds, more on a
+# slow runner: <Path>.playing appears once the tone plays, to wait on.
 param([string]$Path = (Join-Path $env:RUNNER_TEMP "tone.wav"), [switch]$Smtc)
+$ready = "$Path.playing"
+Remove-Item -ErrorAction Ignore $ready
 $rate = 48000; $seconds = 5; $frames = $rate * $seconds
 $w = [System.IO.BinaryWriter]::new([System.IO.File]::Create($Path))
 $w.Write([Text.Encoding]::ASCII.GetBytes("RIFF")); $w.Write([int](36 + $frames * 4))
@@ -17,6 +20,7 @@ $w.Close()
 if (-not $Smtc) {
   $player = New-Object System.Media.SoundPlayer $Path
   $player.PlayLooping()
+  New-Item -ItemType File -Force $ready | Out-Null
   Start-Sleep -Seconds 120
   exit
 }
@@ -36,4 +40,5 @@ $player = [Windows.Media.Playback.MediaPlayer]::new()
 $player.IsLoopingEnabled = $true
 $player.Source = $item
 $player.Play()
+New-Item -ItemType File -Force $ready | Out-Null
 Start-Sleep -Seconds 120

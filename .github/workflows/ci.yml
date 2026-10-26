@@ -173,7 +173,11 @@ jobs:
         run: |
           # A process playing, by its Windows PID (bash's $! is not one).
           pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
-          sleep 4
+          # Until it plays: a fixed wait lost the race on a slow runner.
+          ready="$(cygpath -u "$RUNNER_TEMP")/tone.wav.playing"
+          for i in $(seq 60); do [ -f "$ready" ] && break; sleep 1; done
+          test -f "$ready" || { echo "the tone did not play within 60 s"; exit 1; }
+          sleep 1
           set +e; timeout 3 ./spytify-tap.exe --pid "$pid" > tap.raw; code=$?; set -e
           echo "spytify-tap exit $code (124: stopped by timeout)"
           python src/scripts/ci/tap-level.py tap.raw 2 -20
