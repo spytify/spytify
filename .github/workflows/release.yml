@@ -1,17 +1,17 @@
 name: release
 
-# Pushing a tag such as v2.0.0-alpha.1, or running this workflow from the
-# Actions tab with a version, builds every platform and prepares a GitHub
-# release with the files: a draft, unless the run asks to publish it. A
-# version with a "-" becomes a pre-release, which the app's update check
-# counts.
+# Pushing a tag such as 2.0.0-alpha.1 (no "v", as v1's tags), or running
+# this workflow from the Actions tab with a version, builds every platform
+# and prepares a GitHub release with the files: a draft, unless the run asks
+# to publish it. A version with a "-" becomes a pre-release, which the app's
+# update check counts and v1's ignores.
 on:
   push:
-    tags: ["v2.*"]
+    tags: ["2.*"]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version, such as 2.0.0-alpha.1 (the tag v2.0.0-alpha.1 is made on this branch's last commit)"
+        description: "Version, such as 2.0.0-alpha.1 (the tag 2.0.0-alpha.1 is made on this branch's last commit)"
         required: true
       publish:
         description: "Publish the release now instead of leaving a draft"
@@ -183,7 +183,7 @@ jobs:
       - name: Release with every file
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.version }}
           PUBLISH: ${{ inputs.publish }}
           NOTARIZED: ${{ needs.macos.outputs.notarized }}
           SIGNED: ${{ needs.windows.outputs.signed }}

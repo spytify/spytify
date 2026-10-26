@@ -2,8 +2,8 @@ name: ci
 
 on:
   push:
-    branches: [master, dev, "v2-*"]
-    tags: ["v2.*"]
+    branches: [main, "v2-*"]
+    tags: ["2.*"]
   pull_request:
 
 permissions:
@@ -58,7 +58,7 @@ jobs:
   # The README's "x/y passed" badge: shields.io reads tests.json from the
   # badges branch, which holds nothing else.
   badges:
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: unit
     runs-on: ubuntu-24.04
     permissions:
