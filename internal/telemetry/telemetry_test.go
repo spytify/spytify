@@ -405,14 +405,14 @@ func TestFeedbackFollowsTheSpec(t *testing.T) {
 }
 
 func TestScrubber(t *testing.T) {
-	s := &Scrubber{home: []string{`C:\Users\Jose`, "C:/Users/Jose"}}
-	s.setUser("Jose")
+	s := &Scrubber{home: []string{`C:\Users\User`, "C:/Users/User"}}
+	s.setUser("User")
 	for in, want := range map[string]string{
-		`c:\users\jose\Music\x.flac`:       `~\Music\x.flac`,
-		"C:/Users/Jose/Music":              "~/Music",
+		`c:\users\user\Music\x.flac`:       `~\Music\x.flac`,
+		"C:/Users/User/Music":              "~/Music",
 		"saved Paper Lanterns (Live).flac": "saved Paper Lanterns (Live).flac",
-		"jose's computer, AB side":         "<user>'s computer, AB side",
-		"joseph":                           "joseph",
+		"user's computer, AB side":         "<user>'s computer, AB side",
+		"username":                         "username",
 	} {
 		if got := s.String(in); got != want {
 			t.Errorf("String(%q) = %q, want %q", in, got, want)
