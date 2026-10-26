@@ -60,9 +60,8 @@ var Table = []Def{
 	{Key: "output.underscores", Tab: "Recorder", Group: "Output", Label: "Underscores instead of spaces", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "output.ascii_filenames", Tab: "Recorder", Group: "Output", Label: "Remove diacritics from file names", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "output.prefix", Tab: "Recorder", Group: "Output", Label: "File name prefix", Kind: KindEnum, Enum: []string{"none", "counter", "album_track"}, Choices: []string{"None", "Counter (001)", "Album track number (04)"}, Default: "none", Advanced: true},
-	{Key: "tags.track_from_counter", Tab: "Tags", Group: "Output", Label: "Counter as the track number tag", Kind: KindBool, Default: false, Advanced: true, Note: "the counter's number replaces the track number in the file's tags"},
-	{Key: "output.counter_start", Tab: "Recorder", Group: "Output", Label: "Counter starts at", Kind: KindInt, Default: int64(1), Min: 0, Max: 999999999, Ranged: true, Advanced: true, Note: "each recording numbers its saved files from this"},
-	{Key: "output.counter_width", Tab: "Recorder", Group: "Output", Label: "Counter digits", Kind: KindInt, Default: int64(3), Min: 1, Max: 9, Ranged: true, Advanced: true, Note: "in the file name prefix: 3 makes 001"},
+	{Key: "output.counter_next", Tab: "Recorder", Group: "Output", Label: "Next counter number", Kind: KindInt, Default: int64(1), Min: 0, Max: 999999999, Ranged: true, Advanced: true, Note: "the number the next saved file gets with the counter prefix; it goes on from one recording to the next, so set it back to 1 for a new CD"},
+	{Key: "output.counter_width", Tab: "Recorder", Group: "Output", Label: "Counter digits", Kind: KindInt, Default: int64(3), Min: 1, Max: 9, Ranged: true, Advanced: true, Note: "3 makes 001; past 999 the recording stops"},
 
 	{Key: "encode.format", Tab: "Recorder", Group: "Encoding", Label: "Output format", Kind: KindEnum, Enum: []string{"mp3", "aac", "flac", "wav"}, Default: "flac"},
 	{Key: "encode.bitrate_kbps", Tab: "Recorder", Group: "Encoding", Label: "Bitrate", Kind: KindIntEnum, Ints: []int64{128, 160, 256, 320}, Default: int64(160), Note: "ignored for flac and wav"},

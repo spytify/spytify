@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -27,38 +29,46 @@ func settingsApp(t *testing.T) (*App, *model.Model, *settingsScreen) {
 	return a, m, a.screens[tabSettings].(*settingsScreen)
 }
 
-// advancedItems are the form items folded under a group's Advanced.
-func advancedItems(s *settingsScreen, group string) map[*widget.FormItem]bool {
-	out := map[*widget.FormItem]bool{}
-	acc := s.advanced[group]
-	if acc == nil {
-		return out
+// holds reports whether o is in root's tree, through containers and
+// widgets alike.
+func holds(root, o fyne.CanvasObject) bool {
+	if root == o {
+		return true
 	}
-	for _, o := range acc.Items[0].Detail.(*fyne.Container).Objects {
-		if f, ok := o.(*widget.Form); ok {
-			for _, it := range f.Items {
-				out[it] = true
+	switch w := root.(type) {
+	case nil:
+		return false
+	case *fyne.Container:
+		for _, c := range w.Objects {
+			if holds(c, o) {
+				return true
+			}
+		}
+		return false
+	case fyne.Widget:
+		for _, c := range test.WidgetRenderer(w).Objects() {
+			if holds(c, o) {
+				return true
 			}
 		}
 	}
-	return out
+	return false
+}
+
+// folded reports whether o is under a group's Advanced.
+func folded(s *settingsScreen, group string, o fyne.CanvasObject) bool {
+	acc := s.advanced[group]
+	return acc != nil && holds(acc.Items[0].Detail, o)
 }
 
 // App comes first, with the player as its advanced part; every setting is
-// in its section, the rarely changed ones folded under Advanced, and no
-// field has a caption under it.
+// in its section, the rarely changed ones folded under Advanced.
 func TestSettingsAreLaidOutBySection(t *testing.T) {
 	_, _, s := settingsApp(t)
 	if g := groups(); g[0] != "App" {
 		t.Errorf("first section %q, want App", g[0])
 	}
-	player := false
-	if app := s.advanced["App"]; app != nil {
-		for _, o := range app.Items[0].Detail.(*fyne.Container).Objects {
-			player = player || o == s.player.form
-		}
-	}
-	if !player {
+	if !folded(s, "App", s.player.box) {
 		t.Error("the player is not in App's Advanced part")
 	}
 	for _, d := range settings.Table {
@@ -67,11 +77,8 @@ func TestSettingsAreLaidOutBySection(t *testing.T) {
 			t.Errorf("no field for %s", d.Key)
 			continue
 		}
-		if folded := advancedItems(s, d.Group)[f.item]; folded != d.Advanced {
-			t.Errorf("%s: under Advanced %v, want %v", d.Key, folded, d.Advanced)
-		}
-		if f.item.HintText != "" {
-			t.Errorf("%s has a caption: %q", d.Key, f.item.HintText)
+		if folded(s, d.Group, f.row) != d.Advanced {
+			t.Errorf("%s: under Advanced %v, want %v", d.Key, !d.Advanced, d.Advanced)
 		}
 	}
 	for _, acc := range s.advanced {
@@ -190,40 +197,59 @@ func TestTheTemplateShowsAnExample(t *testing.T) {
 // number the next file gets.
 func TestTheCounterSettings(t *testing.T) {
 	a, m, s := settingsApp(t)
-	start := s.fields["output.counter_start"].input.(*applyEntry)
+	next := s.fields["output.counter_next"].input.(*applyEntry)
 	digits := s.fields["output.counter_width"].input.(*applyEntry)
-	next := func() string { return s.next.Segments[0].(*widget.TextSegment).Text }
-	if !start.Disabled() || !digits.Disabled() || s.next.Visible() {
+	if !next.Disabled() || !digits.Disabled() {
 		t.Error("the counter's settings are on while nothing uses the counter")
 	}
 	if sel := s.fields["output.prefix"].input.(*widget.Select); sel.Selected != "None" || !contains(sel.Options, "Counter (001)") {
 		t.Errorf("the prefix shows %q of %v", sel.Selected, sel.Options)
 	}
+	// The next number is the setting itself, which the recorder moves on.
 	v := defaults()
-	v["tags.track_from_counter"] = true
-	m.SetSettings(v)
-	a.render()
-	if start.Disabled() || !digits.Disabled() || !s.next.Visible() || next() != "The next recording starts at 1" {
-		t.Errorf("counter in the tag: start disabled %v, digits disabled %v, %q", start.Disabled(), digits.Disabled(), next())
-	}
 	v["output.prefix"] = "counter"
+	v["output.counter_next"] = int64(5)
 	m.SetSettings(v)
-	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
-	a.render()
-	if digits.Disabled() || next() != "Next file in this recording: 001" {
-		t.Errorf("counter prefix while recording: digits disabled %v, %q", digits.Disabled(), next())
-	}
-	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-1", Path: "/x.flac", Counter: 4}))
 	s.search.SetText("counter")
 	a.render()
-	if got := next(); got != "Next file in this recording: 005" {
-		t.Errorf("after file 004, %q", got)
+	if next.Disabled() || digits.Disabled() || next.Text != "5" {
+		t.Errorf("with the counter prefix: next %q disabled %v, digits disabled %v", next.Text, next.Disabled(), digits.Disabled())
 	}
 	// The prefix is found by its choices' words too.
-	if all := texts(s.sections); !contains(all, "File name prefix") {
+	if all := texts(s.sections); !contains(all, "File name prefix") || !contains(all, "Next counter number") {
 		t.Errorf("searching counter shows %v", all)
 	}
 	snapshot(t, a, "settings-counter")
+}
+
+// A player change saves at once, as the other settings do; only then does
+// the card offer to restart spytifyd, which reads it when it starts.
+func TestThePlayerSavesWithoutAButton(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	for _, k := range target.TargetKeys {
+		t.Setenv(k, "")
+	}
+	a, _, s := settingsApp(t)
+	s.advanced["App"].Open(0)
+	s.layout()
+	if _, err := os.Stat(target.UserEnvPath()); err == nil {
+		t.Fatal("showing the player wrote the .env file")
+	}
+	if all := texts(a.win.Content()); !contains(all, "Player process") || contains(all, "Restart spytifyd") {
+		t.Errorf("before any change the player shows %v", all)
+	}
+	s.player.process.SetText("otherplayer")
+	s.player.process.submit()
+	if env, err := os.ReadFile(target.UserEnvPath()); err != nil || !strings.Contains(string(env), "otherplayer") {
+		t.Errorf(".env after the change: %q, %v", env, err)
+	}
+	all := texts(a.win.Content())
+	if !contains(all, "Restart spytifyd") || contains(all, "Save and restart spytifyd") {
+		t.Errorf("after the change the player shows %v", all)
+	}
+	snapshot(t, a, "settings-player")
 }
 
 // A section's Reset resets each of its settings, and only those.
@@ -238,7 +264,7 @@ func TestResetResetsItsSection(t *testing.T) {
 			want = append(want, d.Key)
 		}
 	}
-	resets := buttons(s.sections.Objects[0].(*fyne.Container), "Reset")
+	resets := buttons(s.sections.Objects[0], "Reset")
 	if len(resets) != 1 {
 		t.Fatalf("%d Reset buttons in the first section", len(resets))
 	}

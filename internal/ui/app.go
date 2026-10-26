@@ -235,7 +235,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		container.NewHBox(start),
 		caption(opts.Socket),
 		widget.NewSeparator(),
-		a.player.form,
+		newCard(sectionTitle("Player"), indent(a.player.box)),
 	)))
 	a.starting = opts.AutoStart
 

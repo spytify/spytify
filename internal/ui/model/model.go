@@ -104,10 +104,6 @@ type State struct {
 	Settings    map[string]any
 	Logs        []proto.LogEvent
 	LastError   *proto.ErrorEvent
-	// Counter is the counter number of this session's last saved file,
-	// once Counted.
-	Counter int64
-	Counted bool
 }
 
 // Recording reports whether a session runs.
@@ -333,9 +329,8 @@ func (m *Model) apply(s *State, ev proto.Event) {
 			return
 		}
 		if s.Session == proto.StateIdle && e.State != proto.StateIdle {
-			// A new session starts a new list, and its counter over.
+			// A new session starts a new list.
 			s.Rows, s.Current, s.LastError = nil, nil, nil
-			s.Counter, s.Counted = 0, false
 		}
 		s.Session = e.State
 		// Waiting means the core follows no item: what was playing ended.
@@ -367,9 +362,6 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		var e proto.TrackFinishedEvent
 		if ev.Decode(&e) != nil {
 			return
-		}
-		if !s.Counted || e.Counter > s.Counter {
-			s.Counter, s.Counted = e.Counter, true
 		}
 		m.edit(s, e.ID, func(r *Row) {
 			r.Status, r.Path, r.DurationMs, r.Bytes, r.TaggedBy = Saved, e.Path, e.DurationMs, e.Bytes, e.TaggedBy

@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -23,23 +24,24 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// settingsScreen is one section per group of the validation table: the
-// settings most people change, then the rest folded under Advanced. The
-// player, which few people change, is the App section's advanced part.
+// settingsScreen is one card per group of the validation table: the
+// settings most people change, then the rest folded under Advanced in a
+// greyer block. The player, which few people change, is the App card's
+// advanced part.
 type settingsScreen struct {
 	app      *App
 	root     fyne.CanvasObject
 	search   *widget.Entry
 	sections *fyne.Container
+	scroll   *container.Scroll
 
 	fields    map[string]*field
 	rendering bool
-	// example shows, under the file name template, the file a sample
-	// track gets with the output settings as they are.
-	example *widget.RichText
-	// next shows, under Counter starts at, the number the next file gets.
-	next   *widget.RichText
-	player *playerCard
+	// example shows, at the end of the file name template's block, the
+	// file a sample track gets with the output settings as they are.
+	example  *widget.RichText
+	template *settings.Def
+	player   *playerCard
 	// advanced remembers which Advanced parts the user opened.
 	advanced  map[string]*widget.Accordion
 	open      map[string]bool
@@ -50,7 +52,8 @@ type field struct {
 	def   *settings.Def
 	set   func(v any)
 	input fyne.CanvasObject
-	item  *widget.FormItem
+	// row is the label on the left of the input, as a card shows it.
+	row fyne.CanvasObject
 }
 
 func newSettingsScreen(a *App) *settingsScreen {
@@ -59,14 +62,18 @@ func newSettingsScreen(a *App) *settingsScreen {
 	s.search.SetPlaceHolder("Search settings")
 	s.search.ActionItem = widget.NewIcon(theme.SearchIcon())
 	s.search.OnChanged = func(string) { s.layout() }
-	s.sections = container.NewVBox()
+	s.sections = container.New(layout.NewCustomPaddedVBoxLayout(theme.Padding() * 3))
+	s.scroll = container.NewVScroll(container.NewPadded(s.sections))
 	s.player = newPlayerCard(a)
+	s.player.relayout = func() { relayout(s.scroll) }
 	for i := range settings.Table {
 		d := &settings.Table[i]
 		s.fields[d.Key] = s.newField(d)
 	}
 	s.layout()
-	s.root = container.NewBorder(container.NewPadded(s.search), nil, nil, nil, container.NewVScroll(container.NewPadded(s.sections)))
+	// The search is a white field on the page, as the cards are.
+	search := container.NewThemeOverride(container.NewPadded(s.search), cardTheme{input: colorCard})
+	s.root = newPanel(colorPage, "", 0, fyne.Size{}, container.NewBorder(search, nil, nil, nil, s.scroll))
 	return s
 }
 
@@ -102,16 +109,16 @@ func (s *settingsScreen) layout() {
 	s.advanced = map[string]*widget.Accordion{}
 	var sections []fyne.CanvasObject
 	for _, g := range groups() {
-		var main, adv []*widget.FormItem
+		var main, adv []fyne.CanvasObject
 		var keys []string
 		for _, d := range settings.Table {
 			if d.Group != g || !matches(q, d) {
 				continue
 			}
 			if d.Advanced {
-				adv = append(adv, s.fields[d.Key].item)
+				adv = append(adv, s.fields[d.Key].row)
 			} else {
-				main = append(main, s.fields[d.Key].item)
+				main = append(main, s.fields[d.Key].row)
 			}
 			keys = append(keys, d.Key)
 		}
@@ -119,26 +126,25 @@ func (s *settingsScreen) layout() {
 		if len(keys) == 0 && !player {
 			continue
 		}
-		var advanced []fyne.CanvasObject
+		var block []fyne.CanvasObject
 		if player {
-			advanced = append(advanced, widget.NewLabelWithStyle("Player", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), s.player.form)
+			block = append(block, s.player.box)
 		}
-		if len(adv) > 0 {
-			advanced = append(advanced, widget.NewForm(adv...))
+		block = lines(append(block, adv...))
+		// The example follows the settings that make it.
+		if s.template != nil && s.template.Group == g && len(adv) > 0 {
+			block = append(block, s.example)
 		}
-		body := []fyne.CanvasObject{s.header(g, keys)}
-		if len(main) > 0 {
-			body = append(body, widget.NewForm(main...))
-		}
-		if len(advanced) > 0 {
-			acc := widget.NewAccordion(widget.NewAccordionItem("Advanced", container.NewVBox(advanced...)))
+		rows := main
+		if len(block) > 0 {
+			acc := widget.NewAccordion(widget.NewAccordionItem("Advanced", newBlock(block...)))
 			if q != "" || s.open[g] {
 				acc.Open(0)
 			}
 			s.advanced[g] = acc
-			body = append(body, acc)
+			rows = append(rows, acc)
 		}
-		sections = append(sections, container.NewVBox(body...), widget.NewSeparator())
+		sections = append(sections, newCard(s.header(g, keys), indent(lines(rows)...)))
 	}
 	s.sections.Objects = sections
 	s.sections.Refresh()
@@ -146,14 +152,104 @@ func (s *settingsScreen) layout() {
 
 func (s *settingsScreen) header(group string, keys []string) fyne.CanvasObject {
 	if len(keys) == 0 {
-		return heading(group)
+		return sectionTitle(group)
 	}
 	reset := widget.NewButtonWithIcon("Reset", theme.HistoryIcon(), func() {
 		s.app.noteAction("reset " + group)
 		s.resetKeys(keys)
 	})
 	reset.Importance = widget.LowImportance
-	return container.NewBorder(nil, nil, heading(group), reset)
+	return container.NewBorder(nil, nil, sectionTitle(group), reset)
+}
+
+// sectionTitle is a card's title, the strongest text of the screen.
+func sectionTitle(text string) *widget.RichText {
+	return widget.NewRichText(&widget.TextSegment{Text: text, Style: widget.RichTextStyle{
+		ColorName: colorTitle,
+		SizeName:  theme.SizeNameSubHeadingText,
+		TextStyle: fyne.TextStyle{Bold: true},
+		Inline:    true,
+	}})
+}
+
+// newCard is a settings section on the page: its title, then its rows.
+func newCard(objs ...fyne.CanvasObject) fyne.CanvasObject {
+	pad := theme.Padding()
+	box := newPanel(colorCard, colorCardLine, 10, fyne.NewSize(pad*3, pad*2), container.NewVBox(objs...))
+	return container.NewThemeOverride(box, cardTheme{input: colorCardInput})
+}
+
+// newBlock holds a card's advanced settings: greyer, in smaller text.
+func newBlock(objs ...fyne.CanvasObject) fyne.CanvasObject {
+	pad := theme.Padding()
+	box := newPanel(colorAdvanced, "", 8, fyne.NewSize(pad*3, pad), container.NewVBox(objs...))
+	return container.NewThemeOverride(box, cardTheme{input: colorAdvancedInput, small: true})
+}
+
+// indent sets a card's rows in from its title.
+func indent(objs ...fyne.CanvasObject) fyne.CanvasObject {
+	return container.New(layout.NewCustomPaddedLayout(0, 0, theme.Padding()*3, 0), container.NewVBox(objs...))
+}
+
+// lines puts a thin line between rows.
+func lines(rows []fyne.CanvasObject) []fyne.CanvasObject {
+	var out []fyne.CanvasObject
+	for i, r := range rows {
+		if i > 0 {
+			out = append(out, widget.NewSeparator())
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// settingRow is a setting's label, with under beneath it when set, on the
+// left of its control.
+func settingRow(label string, control, under fyne.CanvasObject) fyne.CanvasObject {
+	var left fyne.CanvasObject = widget.NewRichText(&widget.TextSegment{Text: label, Style: widget.RichTextStyle{ColorName: colorLabel, Inline: true}})
+	if under != nil {
+		left = container.New(layout.NewCustomPaddedVBoxLayout(0), left, under)
+	}
+	return container.New(rowLayout{}, left, control)
+}
+
+// rowLayout puts a label on the left and a control against the right
+// edge. Switches and buttons keep their size; other controls share one
+// width, so they line up down a card.
+type rowLayout struct{}
+
+const minControlWidth = 240
+
+func natural(control fyne.CanvasObject) bool {
+	switch control.(type) {
+	case *toggle, *widget.Button:
+		return true
+	}
+	return false
+}
+
+func (rowLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	label, control := objs[0].MinSize(), objs[1].MinSize()
+	w := control.Width
+	if !natural(objs[1]) {
+		w = fyne.Max(w, minControlWidth)
+	}
+	pad := theme.Padding()
+	return fyne.NewSize(label.Width+pad*4+w, fyne.Max(label.Height, control.Height)+pad*2)
+}
+
+func (rowLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	label, control := objs[0], objs[1]
+	gap := theme.Padding() * 4
+	lm, cm := label.MinSize(), control.MinSize()
+	w := cm.Width
+	if !natural(control) {
+		w = fyne.Max(cm.Width, fyne.Min(fyne.Max(minControlWidth, size.Width*0.45), size.Width-lm.Width-gap))
+	}
+	control.Resize(fyne.NewSize(w, cm.Height))
+	control.Move(fyne.NewPos(size.Width-w, (size.Height-cm.Height)/2))
+	label.Resize(fyne.NewSize(size.Width-w-gap, lm.Height))
+	label.Move(fyne.NewPos(0, (size.Height-lm.Height)/2))
 }
 
 func (s *settingsScreen) resetKeys(keys []string) {
@@ -195,7 +291,7 @@ func (s *settingsScreen) apply(key string, v any) {
 func (s *settingsScreen) newField(d *settings.Def) *field {
 	f := &field{def: d}
 	key := d.Key
-	// under goes below the input, in the same row.
+	// under goes below the label, in the same row.
 	var under fyne.CanvasObject
 	switch d.Kind {
 	case settings.KindBool:
@@ -246,12 +342,9 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		e := newApplyEntry(func(v string) { s.apply(key, v) })
 		if d.Kind == settings.KindTemplate {
 			e.SetPlaceHolder(d.Note)
-			s.example = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
-			under = s.example
-		}
-		if key == "output.counter_start" {
-			s.next = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
-			under = s.next
+			s.example = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
+			s.example.Truncation = fyne.TextTruncateEllipsis
+			s.template = d
 		}
 		f.set = func(v any) {
 			if !s.focused(e) {
@@ -260,11 +353,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		f.input = e
 	}
-	cell := f.input
-	if under != nil {
-		cell = container.NewVBox(f.input, under)
-	}
-	f.item = &widget.FormItem{Text: d.Label, Widget: cell}
+	f.row = settingRow(d.Label, f.input, under)
 	return f
 }
 
@@ -326,19 +415,10 @@ func (s *settingsScreen) render(st model.State) {
 	if s.example != nil {
 		setCaption(s.example, "e.g. "+exampleName(st.Settings))
 	}
-	// The counter's settings mean something only once a setting uses it.
+	// The counter's settings mean something only with the counter prefix.
 	prefix, _ := st.Settings["output.prefix"].(string)
-	inTag, _ := st.Settings["tags.track_from_counter"].(bool)
-	s.enable("output.counter_start", prefix == "counter" || inTag)
+	s.enable("output.counter_next", prefix == "counter")
 	s.enable("output.counter_width", prefix == "counter")
-	if s.next != nil {
-		if text := nextCounter(st, prefix == "counter"); text != "" && (prefix == "counter" || inTag) {
-			setCaption(s.next, text)
-			s.next.Show()
-		} else {
-			s.next.Hide()
-		}
-	}
 	s.player.render(st)
 }
 
@@ -355,27 +435,6 @@ func (s *settingsScreen) enable(key string, on bool) {
 			d.Disable()
 		}
 	}
-}
-
-// nextCounter says the number the next saved file gets: in this recording,
-// one more than its last file's, or the start value; padded as in a file
-// name when the prefix is the counter.
-func nextCounter(st model.State, padded bool) string {
-	start, _ := number(st.Settings["output.counter_start"]).(int64)
-	width, _ := number(st.Settings["output.counter_width"]).(int64)
-	show := func(n int64) string {
-		if padded {
-			return fmt.Sprintf("%0*d", width, n)
-		}
-		return strconv.FormatInt(n, 10)
-	}
-	switch {
-	case st.Recording() && st.Counted:
-		return "Next file in this recording: " + show(st.Counter+1)
-	case st.Recording():
-		return "Next file in this recording: " + show(start)
-	}
-	return "The next recording starts at " + show(start)
 }
 
 // exampleName is the path a sample track gets with the output settings in
@@ -403,7 +462,7 @@ func exampleName(v map[string]any) string {
 		ASCII:           on("output.ascii_filenames"),
 		ArtistSeparator: str("tags.artist_separator"),
 		Extension:       p.Extension,
-	}, whole("output.counter_start"))
+	}, whole("output.counter_next"))
 }
 
 // focused reports whether the user is typing in o; render leaves it alone.
@@ -411,59 +470,85 @@ func (s *settingsScreen) focused(o fyne.Focusable) bool {
 	return s.app.win.Canvas().Focused() == o
 }
 
-// playerCard edits the SPYTIFY_TARGET_* variables in the user's .env file
-// and restarts the daemon, which reads them only when it starts.
+// playerCard edits the SPYTIFY_TARGET_* variables in the user's .env file,
+// saving each change as the other settings do. The daemon reads them only
+// when it starts, so after a change the card offers to restart it.
 type playerCard struct {
 	app     *App
-	form    fyne.CanvasObject
-	process *widget.Entry
-	bundle  *widget.Entry
-	mpris   *widget.Entry
-	launch  *widget.Entry
+	box     fyne.CanvasObject
+	process *applyEntry
+	bundle  *applyEntry
+	mpris   *applyEntry
+	launch  *applyEntry
+	notice  fyne.CanvasObject
 	filled  bool
+	// pending is set from a saved change until spytifyd restarts.
+	pending bool
+	// relayout lays out the screen showing the card once the notice
+	// showed or hid.
+	relayout func()
 }
 
 func newPlayerCard(a *App) *playerCard {
-	p := &playerCard{app: a, process: widget.NewEntry(), bundle: widget.NewEntry(), mpris: widget.NewEntry(), launch: widget.NewEntry()}
-	p.process.SetPlaceHolder("process name, or a comma list")
-	p.bundle.SetPlaceHolder("bundle id")
-	p.mpris.SetPlaceHolder("org.mpris.MediaPlayer2.<name> (default)")
-	p.launch.SetPlaceHolder("command that starts the player (optional)")
-	form := widget.NewForm(&widget.FormItem{Text: "Player process", Widget: p.process})
+	p := &playerCard{app: a, relayout: func() {}}
+	entry := func(placeholder string) *applyEntry {
+		e := newApplyEntry(func(string) { p.save() })
+		e.SetPlaceHolder(placeholder)
+		return e
+	}
+	p.process = entry("process name, or a comma list")
+	p.bundle = entry("bundle id")
+	p.mpris = entry("org.mpris.MediaPlayer2.<name> (default)")
+	p.launch = entry("command that starts the player (optional)")
+	rows := []fyne.CanvasObject{settingRow("Player process", p.process, nil)}
 	switch runtime.GOOS {
 	case "darwin":
-		form.AppendItem(&widget.FormItem{Text: "Bundle id", Widget: p.bundle})
+		rows = append(rows, settingRow("Bundle id", p.bundle, nil))
 	case "linux":
-		form.AppendItem(&widget.FormItem{Text: "MPRIS name", Widget: p.mpris})
+		rows = append(rows, settingRow("MPRIS name", p.mpris, nil))
 	}
-	form.AppendItem(&widget.FormItem{Text: "Launch command", Widget: p.launch})
-	save := widget.NewButtonWithIcon("Save and restart spytifyd", theme.DocumentSaveIcon(), p.save)
-	save.Importance = widget.HighImportance
-	p.form = container.NewVBox(form, container.NewHBox(save))
+	rows = append(rows, settingRow("Launch command", p.launch, nil))
+	restart := widget.NewButtonWithIcon("Restart spytifyd", theme.ViewRefreshIcon(), p.restart)
+	note := widget.NewRichText(&widget.TextSegment{Text: "Saved. spytifyd records this player once it restarts.", Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
+	p.notice = container.New(rowLayout{}, note, restart)
+	p.notice.Hide()
+	p.box = container.NewVBox(append(lines(rows), p.notice)...)
 	// Until the daemon answers, show what this process would start it with.
 	t := target.Load().Target
-	p.process.SetText(strings.Join(t.ProcessNames, ","))
-	p.bundle.SetText(t.BundleID)
-	p.mpris.SetText(os.Getenv("SPYTIFY_TARGET_MPRIS"))
-	p.launch.SetText(t.Launch)
+	p.process.show(strings.Join(t.ProcessNames, ","))
+	p.bundle.show(t.BundleID)
+	p.mpris.show(os.Getenv("SPYTIFY_TARGET_MPRIS"))
+	p.launch.show(t.Launch)
 	return p
 }
 
 func (p *playerCard) render(s model.State) {
+	p.showNotice(p.pending && s.Conn == model.Connected)
 	if p.filled || !s.HaveInfo {
 		return
 	}
 	p.filled = true
-	p.process.SetText(s.Info.Target.Process)
-	p.bundle.SetText(s.Info.Target.BundleID)
-	p.launch.SetText(s.Info.Target.Launch)
+	p.process.show(s.Info.Target.Process)
+	p.bundle.show(s.Info.Target.BundleID)
+	p.launch.show(s.Info.Target.Launch)
 	if mprisName := s.Info.Target.MPRIS; mprisName != "" && !strings.Contains(mprisName, ",") && mprisName != "org.mpris.MediaPlayer2."+strings.ToLower(s.Info.Target.Process) {
-		p.mpris.SetText(mprisName)
+		p.mpris.show(mprisName)
 	}
 }
 
+func (p *playerCard) showNotice(on bool) {
+	if on == p.notice.Visible() {
+		return
+	}
+	if on {
+		p.notice.Show()
+	} else {
+		p.notice.Hide()
+	}
+	p.relayout()
+}
+
 func (p *playerCard) save() {
-	p.app.noteAction("save the player and restart spytifyd")
 	values := map[string]string{
 		"SPYTIFY_TARGET_PROCESS":   p.process.Text,
 		"SPYTIFY_TARGET_BUNDLE_ID": p.bundle.Text,
@@ -474,21 +559,34 @@ func (p *playerCard) save() {
 		p.app.showError(fmt.Errorf("the player process name is required"))
 		return
 	}
+	p.app.noteAction("save the player")
+	if err := target.SaveUserTarget(values); err != nil {
+		p.app.showError(err)
+		return
+	}
+	p.pending = true
+	p.showNotice(p.app.last.Conn == model.Connected)
+}
+
+func (p *playerCard) restart() {
+	p.app.noteAction("restart spytifyd for the player")
 	restart := func() {
-		if err := target.SaveUserTarget(values); err != nil {
-			p.app.showError(err)
-			return
-		}
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			if p.app.link.Do(ctx, proto.MethodCoreShutdown, nil, nil) == nil {
 				time.Sleep(time.Second)
 			}
-			if err := p.app.link.StartDaemon(); err != nil {
-				fyne.Do(func() { p.app.showError(err) })
-			}
-			fyne.Do(func() { p.filled = false })
+			err := p.app.link.StartDaemon()
+			fyne.Do(func() {
+				p.filled = false
+				if err != nil {
+					p.app.showError(err)
+					return
+				}
+				p.pending = false
+				p.showNotice(false)
+			})
 		}()
 	}
 	if p.app.last.Recording() {

@@ -86,28 +86,6 @@ func TestSessionList(t *testing.T) {
 	}
 }
 
-// The counter is the highest number a saved file of this session got; a
-// new session starts it over.
-func TestTheCounterFollowsTheSession(t *testing.T) {
-	m := New()
-	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
-	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
-	if s := m.Snapshot(); s.Counted {
-		t.Fatal("a counter before any file")
-	}
-	for _, n := range []int64{3, 5, 4} {
-		m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "x", Counter: n}))
-	}
-	if s := m.Snapshot(); !s.Counted || s.Counter != 5 {
-		t.Fatalf("counter %d (counted %v), want 5", s.Counter, s.Counted)
-	}
-	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
-	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
-	if s := m.Snapshot(); s.Counted {
-		t.Fatalf("a new session kept the counter %d", s.Counter)
-	}
-}
-
 func TestReplayRebuildsTheSessionForALateClient(t *testing.T) {
 	m := New()
 	m.Replay([]proto.Event{

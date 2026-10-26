@@ -499,7 +499,6 @@
       },
       "required": [
         "bytes",
-        "counter",
         "duration_ms",
         "id",
         "path",

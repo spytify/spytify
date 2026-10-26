@@ -284,7 +284,7 @@ func TestOfflineScreen(t *testing.T) {
 	m.SetConn(model.Disconnected, "spytifyd is not running")
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"The recorder is not running", "spytifyd is not running", "Start the recorder", "/tmp/spytify.sock", "Player process", "Save and restart spytifyd"} {
+	for _, want := range []string{"The recorder is not running", "spytifyd is not running", "Start the recorder", "/tmp/spytify.sock", "Player process"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the offline screen", want)
 		}
@@ -331,7 +331,7 @@ func TestOtherScreensRender(t *testing.T) {
 	}
 	s.search.SetText("player")
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, "Player process") || !contains(all, "Save and restart spytifyd") {
+	if all := texts(a.win.Content()); !contains(all, "Player process") || contains(all, "Restart spytifyd") {
 		t.Errorf("search for player: %v", all)
 	}
 	s.search.SetText("")
@@ -516,7 +516,7 @@ func TestButtonsSendActions(t *testing.T) {
 	a.showTab(tabSettings)
 	a.render()
 	s := a.screens[tabSettings].(*settingsScreen)
-	sw, ok := s.fields["output.underscores"].item.Widget.(*toggle)
+	sw, ok := s.fields["output.underscores"].input.(*toggle)
 	if !ok {
 		t.Fatal("no switch for output.underscores")
 	}

@@ -291,7 +291,7 @@ func TestTrackStartedSaysHowItWasCut(t *testing.T) {
 // counter prefix: from the start value, one more per file.
 func TestEachFileSaysItsCounter(t *testing.T) {
 	tl := loadTimeline(t, "basic")
-	s := newScenario(t, tl, map[string]any{"output.prefix": "counter", "output.counter_start": 5})
+	s := newScenario(t, tl, map[string]any{"output.prefix": "counter", "output.counter_next": 5})
 	s.run(t, tl)
 	var got []int64
 	for _, ev := range s.events.all() {
@@ -306,6 +306,37 @@ func TestEachFileSaysItsCounter(t *testing.T) {
 	}
 	if len(got) != 3 || got[0] != 5 || got[1] != 6 || got[2] != 7 {
 		t.Fatalf("counters %v, want 5 6 7", got)
+	}
+	// The next recording goes on from there.
+	if next := s.core.store.Values().Int("output.counter_next"); next != 8 {
+		t.Errorf("next counter number %d, want 8", next)
+	}
+}
+
+// Past the last number its digits allow, the counter saves nothing more
+// and the recording stops, as v1's did.
+func TestTheRecordingStopsWhenTheCounterIsFull(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, map[string]any{"output.prefix": "counter", "output.counter_next": 999, "output.counter_width": 3})
+	s.run(t, tl)
+	var saved []string
+	full := false
+	for _, ev := range s.events.all() {
+		switch ev.Method {
+		case proto.EventTrackFinished:
+			var f proto.TrackFinishedEvent
+			if ev.Decode(&f) == nil {
+				saved = append(saved, filepath.Base(f.Path))
+			}
+		case proto.EventError:
+			var e proto.ErrorEvent
+			if ev.Decode(&e) == nil && e.Code == "counter_full" {
+				full = true
+			}
+		}
+	}
+	if len(saved) != 1 || !strings.HasPrefix(saved[0], "999 ") || !full {
+		t.Fatalf("saved %v, counter_full %v; want the 999 file alone and the counter full\n%s", saved, full, s.logs)
 	}
 }
 

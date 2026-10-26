@@ -103,16 +103,7 @@ func FileName(p Plan, o Options, counter int64, trackNumber int) string {
 		if width <= 0 {
 			width = 3
 		}
-		limit := int64(1)
-		for i := 0; i < width; i++ {
-			limit *= 10
-		}
-		if counter >= limit {
-			counter = limit - 1
-		}
-		if counter < 0 {
-			counter = 0
-		}
+		counter = min(max(counter, 0), CounterLimit(width))
 		prefix = fmt.Sprintf("%0*d%s", width, counter, sep)
 	case "album_track":
 		if trackNumber > 0 {
@@ -120,6 +111,19 @@ func FileName(p Plan, o Options, counter int64, trackNumber int) string {
 		}
 	}
 	return prefix + p.Base + "." + o.Extension
+}
+
+// CounterLimit is the last number a counter of width digits writes: 999
+// for 3.
+func CounterLimit(width int) int64 {
+	if width <= 0 {
+		width = 3
+	}
+	limit := int64(1)
+	for range width {
+		limit *= 10
+	}
+	return limit - 1
 }
 
 // Example is the path, from the output folder, a sample track gets with o
