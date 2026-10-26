@@ -32,7 +32,7 @@ Every release has a build per system on the [releases page]({{ site.repository_d
 The Windows build is a first draft, being tested.
 
 - Windows 10 version 2004 or later, or Windows 11. Unzip the release anywhere and open `Spytify.exe`.
-- Put `ffmpeg.exe` on your `PATH`, for instance with `winget install Gyan.FFmpeg`.
+- The zip comes with `ffmpeg.exe`, an LGPL build (see `ffmpeg-README.txt`). One installed with winget, Chocolatey or Scoop works too.
 - The application must show what it plays in the Windows media controls (the volume flyout).
 
 ### [Choose the application](#choose-the-application)

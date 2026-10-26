@@ -3,6 +3,10 @@ layout: page
 title: F.A.Q.
 ---
 
+### [Nothing is recorded](#nothing-recorded)
+
+Open the **Logs** tab: its startup checks say what is wrong, such as "ffmpeg not found", and **Send to the developers** sends the checks that fail. If the application plays and no audio reaches Spytify for 10 seconds, the app also says where to look.
+
 ### [Tracks overlap, or a file starts with the end of the previous track](#tracks-overlap)
 
 Turn off crossfade and gapless playback in the application: Spytify cuts between tracks in the audio, and two tracks mixed into each other cannot be separated again. Gapless albums are fine; they are cut at each track's length.
