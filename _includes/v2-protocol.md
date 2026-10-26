@@ -14,7 +14,7 @@ Clients speak newline-delimited JSON-RPC 2.0, protocol version 1, on the recorde
 | --- | --- | --- | --- |
 | `core.info` | none | [CoreInfoResult](#coreinforesult) | versions, resolved target and capability checks; first call on connect |
 | `session.start` | [SessionStartParams](#sessionstartparams) | [SessionStartResult](#sessionstartresult) | fails if the target process is not running or ffmpeg is missing |
-| `session.stop` | [SessionStopParams](#sessionstopparams) | [SessionStopResult](#sessionstopresult) | lets the current track finish when past recorder.min_seconds, unless now |
+| `session.stop` | [SessionStopParams](#sessionstopparams) | [SessionStopResult](#sessionstopresult) | lets the current track finish, unless now; a track ended by now can be saved with track.keep |
 | `session.status` | none | [SessionStatusResult](#sessionstatusresult) | snapshot for late-joining clients |
 | `settings.get` | [SettingsGetParams](#settingsgetparams) | [SettingsValues](#settingsvalues) | every setting when keys is empty |
 | `settings.set` | [SettingsSetParams](#settingssetparams) | [SettingsSetResult](#settingssetresult) | validated, persisted, then settings.changed fires |
@@ -23,6 +23,7 @@ Clients speak newline-delimited JSON-RPC 2.0, protocol version 1, on the recorde
 | `player.launch` | none | [Empty](#empty) | opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way |
 | `log.tail` | [LogTailParams](#logtailparams) | [LogTailResult](#logtailresult) | last N log lines |
 | `events.recent` | none | [EventsRecentResult](#eventsrecentresult) | the last 200 events, for a client that connects mid-session |
+| `track.keep` | [TrackKeepParams](#trackkeepparams) | [Empty](#empty) | saves a keepable take after all, as "<title> (partial)"; fails once it is no longer keepable |
 | `core.shutdown` | none | [Empty](#empty) | stops the session first |
 
 ### Events
@@ -33,6 +34,7 @@ Clients speak newline-delimited JSON-RPC 2.0, protocol version 1, on the recorde
 | `track.started` | [TrackStartedEvent](#trackstartedevent) | boundary committed |
 | `track.finished` | [TrackFinishedEvent](#trackfinishedevent) | file closed and tagged |
 | `track.skipped` | [TrackSkippedEvent](#trackskippedevent) | decision made: duplicate, too_short, ad, incomplete, seeked |
+| `track.keepable` | [TrackKeepableEvent](#trackkeepableevent) | a take cut short, stopped or moved along its track bar can be saved with track.keep, or no longer |
 | `level` | [LevelEvent](#levelevent) | 10 Hz while recording |
 | `settings.changed` | [SettingsValues](#settingsvalues) | after any successful settings.set or settings.reset |
 | `target.state` | [TargetStateEvent](#targetstateevent) | player process appears or exits |
@@ -194,6 +196,20 @@ An empty object.
 | `tagged` | boolean |
 | `tagged_by` | string, optional |
 | `timings` | [FinishTimings](#finishtimings), optional |
+| `partial` | boolean, optional |
+
+#### TrackKeepParams
+
+| Field | Type |
+| --- | --- |
+| `id` | string, optional |
+
+#### TrackKeepableEvent
+
+| Field | Type |
+| --- | --- |
+| `id` | string |
+| `keepable` | boolean |
 
 #### TrackSkippedEvent
 

@@ -17,15 +17,19 @@ A file is a whole track, so recording starts with the next one. Press **Record t
 
 ### [A track is marked "track bar moved"](#track-bar-moved)
 
-The position jumped while it played, so the file would not be the track as published, even if it lasted as long. Let tracks play through while recording.
+The position jumped while it played, so the file would not be the track as published, even if it lasted as long. Let tracks play through while recording, or press **Keep anyway** to save it with the jump.
 
 ### [The application plays my recording instead of the track](#local-files)
 
 Some applications play your own music files in place of a streamed track when they match. Keep Spytify's output folder out of the folders the application scans.
 
-### [Podcasts or short items are skipped as ads](#ads)
+### [Keep a track that was cut short](#keep-anyway)
 
-Items shorter than a minute without an album are taken for ads. Turn on **Record ads and short untitled items too** in Settings > Ads > Advanced, or lower that length.
+The last track cut short (skipped, stopped with **Stop now**, or moved along its track bar) shows **Keep anyway** in the Record list until the next track is saved. It saves the part that played as "*title* (partial)", which never counts as the whole track: when it plays in full, it is recorded as usual.
+
+### [Short items are skipped as ads](#ads)
+
+Podcast episodes record like tracks. Items shorter than a minute without an album are taken for ads: set **Treat items shorter than N seconds with no album as ads** to 0 in Settings > Ads > Advanced to record them.
 
 ### [Keep the order of the recordings](#recording-order)
 

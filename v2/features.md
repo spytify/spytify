@@ -13,7 +13,9 @@ The cut between two tracks is placed in the audio, at the quietest moment around
 
 ### [Whole tracks only](#whole-tracks)
 
-A file is a whole track or nothing: a track that was skipped, stopped early or moved along its track bar is not kept, and a track already in the folder is skipped (or saved with a number, or overwritten, as you choose). **Skip to the next track when already recorded** moves the player on by itself.
+A file is a whole track or nothing: a track that was skipped, stopped early or moved along its track bar is not kept, and a track already in the folder is skipped (or saved with a number, or overwritten, as you choose). **Skip to the next track when already recorded** moves the player on by itself. A whole track is kept whatever its length, intros and interludes included.
+
+Changed your mind? The last track cut short shows **Keep anyway** until the next track is saved: it saves the part that played as "*title* (partial)".
 
 ### [Tags and covers](#tags)
 
