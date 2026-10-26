@@ -14,8 +14,9 @@ cd "$(dirname "$0")/.."
 # shellcheck source=/dev/null
 [ -f build.env ] && . ./build.env
 out="${1:-dist}"
-# SPYTIFY_VERSION (such as 2.0.0-alpha.1) is set by the release workflow.
-version="${SPYTIFY_VERSION:-2.0.0-alpha+$(git rev-parse --short HEAD 2>/dev/null || echo dev)}"
+# The release workflow sets SPYTIFY_VERSION; any other build is a
+# development one after the latest tag (scripts/version.sh).
+version="$(scripts/version.sh)"
 arch="$(go env GOARCH)"
 ldflags="-s -w -X github.com/spytify/spytify/pkg/proto.Version=v$version"
 ldflags+=" -X github.com/spytify/spytify/internal/target.DefaultProcess=${SPYTIFY_DEFAULT_PROCESS:-}"

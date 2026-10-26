@@ -431,6 +431,13 @@ func TestNewerVersion(t *testing.T) {
 		{"v2.0.0-alpha", "v2.0.0-alpha+f5dd96e", false},
 		{"1.12", "v2.0.0-alpha", false},
 		{"", "v2.0.0", false},
+		// A development build is after the tag it was made from (one
+		// patch on), so it is never offered that tag, nor the release the
+		// tag led to; the next patch release is newer.
+		{"v2.0.0-alpha.1", "v2.0.1-dev.12", false},
+		{"v2.0.0", "v2.0.1-dev.1", false},
+		{"v2.0.1", "v2.0.1-dev.12", true},
+		{"v2.0.0-alpha.1", "v0.0.0-dev.0", true},
 	}
 	for _, c := range cases {
 		if got := newer(c.latest, c.current); got != c.want {
