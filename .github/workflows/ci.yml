@@ -31,7 +31,7 @@ jobs:
           go-version-file: go.mod
       - name: Install ffmpeg (and the UI's OpenGL and X11 headers on Linux)
         run: |
-          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols; else brew install ffmpeg; fi
+          if [ "$RUNNER_OS" = Linux ]; then scripts/ci/apt-install.sh ffmpeg gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols; else brew install ffmpeg; fi
       - name: gofmt
         run: test -z "$(gofmt -l .)"
       - name: go vet
@@ -125,7 +125,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install MinGW-w64
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64
+        run: scripts/ci/apt-install.sh mingw-w64
       - name: Spytify.exe, spytifyd.exe, spytify-cli.exe, spytify-tap.exe
         run: scripts/build-windows.sh dist/windows
         env:
@@ -219,7 +219,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install the desktop app's build dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+        run: scripts/ci/apt-install.sh gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
       - name: Tarball, .deb and .rpm
         run: scripts/build-linux.sh dist
         env:
@@ -234,9 +234,24 @@ jobs:
 
   # Gate 1 of M1: the fake player recorded through PipeWire and MPRIS, every
   # file matched sample by sample against its source.
+  # The timelines play in real time, so the tests run in three jobs at once,
+  # each on its own runner: a shared CPU makes the timing tests flaky. The
+  # shards cover every test: a new timeline lands in the second, a new test
+  # in the third.
   pipewire-gate:
+    name: pipewire-gate (${{ matrix.shard.name }})
     runs-on: ubuntu-24.04
     container: golang:1.26-trixie
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: timelines 1
+            tests: "-run 'TestRecordFakePlayer/^(basic|jitter|control|quiet-start)$'"
+          - name: timelines 2
+            tests: "-run TestRecordFakePlayer -skip 'TestRecordFakePlayer/^(basic|jitter|control|quiet-start)$'"
+          - name: app
+            tests: "-skip TestRecordFakePlayer"
     steps:
       - uses: actions/checkout@v4
       - name: Install PipeWire, WirePlumber, D-Bus and ffmpeg
@@ -253,4 +268,4 @@ jobs:
           # without this, git refuses it and go build cannot stamp the version.
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           . scripts/pipewire-session.sh
-          xvfb-run -a -s "-screen 0 1280x800x24" go test -tags integration -v -timeout 20m ./test/integration/
+          xvfb-run -a -s "-screen 0 1280x800x24" go test -tags integration -v -timeout 20m ${{ matrix.shard.tests }} ./test/integration/
