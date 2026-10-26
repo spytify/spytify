@@ -1,10 +1,13 @@
 name: ci
 
+# A change to Markdown files alone runs nothing; tags always run.
 on:
   push:
     branches: [main, "v2-*"]
     tags: ["2.*"]
+    paths-ignore: ["**.md"]
   pull_request:
+    paths-ignore: ["**.md"]
 
 permissions:
   contents: read
