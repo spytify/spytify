@@ -130,6 +130,12 @@ func prereleaseAfter(a, b string) bool {
 	return len(x) > len(y)
 }
 
+// devBuild is a development build, such as 2.0.1-dev.12, local or from CI:
+// it is not offered releases on its own.
+func devBuild(version string) bool {
+	return strings.Contains(version, "-dev")
+}
+
 func at(n []int, i int) int {
 	if i < len(n) {
 		return n[i]

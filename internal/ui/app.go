@@ -555,6 +555,9 @@ func (a *App) renderLevel() {
 }
 
 func (a *App) checkUpdate() {
+	if devBuild(proto.Version) {
+		return
+	}
 	tag, page, err := latestRelease(context.Background())
 	if err != nil || tag == "" || !newer(tag, proto.Version) {
 		return
