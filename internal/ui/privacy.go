@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
+	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -169,9 +170,11 @@ func (a *App) launchFailed(err error) {
 func startErrorKind(err error) string {
 	msg := err.Error()
 	switch {
+	case errors.Is(err, link.ErrInArchive):
+		return "in archive"
 	case strings.Contains(msg, "does not answer"):
 		return "no answer"
-	case errors.Is(err, exec.ErrNotFound) || strings.Contains(msg, "not found") || strings.Contains(msg, "no such file"):
+	case errors.Is(err, link.ErrNoDaemon) || errors.Is(err, exec.ErrNotFound) || strings.Contains(msg, "not found") || strings.Contains(msg, "no such file"):
 		return "not found"
 	}
 	return "failed"

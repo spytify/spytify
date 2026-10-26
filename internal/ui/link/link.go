@@ -21,6 +21,16 @@ import (
 // ErrNotConnected is returned by Do while no daemon answers.
 var ErrNotConnected = errors.New("not connected to spytifyd")
 
+var (
+	// ErrInArchive is the app started from inside its download: the file
+	// manager unpacked it alone into a temporary folder, without the
+	// recorder.
+	ErrInArchive = errors.New("Spytify runs from inside the downloaded archive, without the recorder next to it. Extract the whole archive to a folder, then start Spytify from there.")
+	// ErrNoDaemon is the recorder found neither next to the app nor on
+	// PATH.
+	ErrNoDaemon = errors.New("spytifyd" + exeSuffix + ", the recorder, is not next to Spytify. Extract the whole download again and start Spytify from there; if it is still missing, an antivirus may have removed it.")
+)
+
 // Link is the UI's connection to the core.
 type Link struct {
 	Addr  string
@@ -173,13 +183,44 @@ func (l *Link) Retry() {
 
 // FindDaemon locates spytifyd: next to the running binary, then on PATH.
 func FindDaemon() (string, error) {
-	if exe, err := os.Executable(); err == nil {
+	exe, err := os.Executable()
+	if err != nil {
+		exe = ""
+	}
+	return findDaemon(exe)
+}
+
+func findDaemon(exe string) (string, error) {
+	if exe != "" {
 		p := filepath.Join(filepath.Dir(exe), "spytifyd"+exeSuffix)
 		if _, err := os.Stat(p); err == nil {
 			return p, nil
 		}
 	}
-	return exec.LookPath("spytifyd")
+	if p, err := exec.LookPath("spytifyd"); err == nil {
+		return p, nil
+	}
+	if exe != "" && inTempDir(filepath.Dir(exe)) {
+		return "", ErrInArchive
+	}
+	return "", ErrNoDaemon
+}
+
+// inTempDir says whether dir is in the temporary folder, where Windows'
+// Explorer and Linux archive managers unpack a program started from
+// inside an archive.
+func inTempDir(dir string) bool {
+	tmp := os.TempDir()
+	// Both resolved: macOS's /var is a link, and Windows may name the
+	// temporary folder in 8.3 form.
+	if p, err := filepath.EvalSymlinks(tmp); err == nil {
+		tmp = p
+	}
+	if p, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = p
+	}
+	rel, err := filepath.Rel(tmp, dir)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // StartDaemon launches spytifyd detached from the UI, so closing the window
@@ -188,7 +229,7 @@ func FindDaemon() (string, error) {
 func (l *Link) StartDaemon() error {
 	path, err := FindDaemon()
 	if err != nil {
-		return errors.New("spytifyd was not found next to the UI or on PATH")
+		return err
 	}
 	cmd := exec.Command(path)
 	detach(cmd)

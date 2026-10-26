@@ -136,3 +136,36 @@ func TestRefusesAnotherProtocol(t *testing.T) {
 		t.Fatalf("reason lost while retrying: %+v", s)
 	}
 }
+
+// Started from inside its archive, the app finds itself alone in the
+// temporary folder: it says to extract the archive, not that the recorder
+// is missing.
+func TestFindDaemonTellsAnArchiveFromAMissingRecorder(t *testing.T) {
+	base := t.TempDir()
+	tmp := filepath.Join(base, "tmp")
+	for _, env := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(env, tmp)
+	}
+	t.Setenv("PATH", "")
+	app := filepath.Join(base, "Spytify")
+	unpacked := filepath.Join(tmp, "Temp1_spytify-windows-amd64.zip", "spytify-windows-amd64")
+	for _, dir := range []string{app, unpacked} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ui := "Spytify" + exeSuffix
+	if _, err := findDaemon(filepath.Join(unpacked, ui)); err != ErrInArchive {
+		t.Errorf("unpacked alone: %v, want ErrInArchive", err)
+	}
+	if _, err := findDaemon(filepath.Join(app, ui)); err != ErrNoDaemon {
+		t.Errorf("recorder missing: %v, want ErrNoDaemon", err)
+	}
+	daemon := filepath.Join(app, "spytifyd"+exeSuffix)
+	if err := os.WriteFile(daemon, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := findDaemon(filepath.Join(app, ui)); err != nil || p != daemon {
+		t.Errorf("next to the app: %q, %v", p, err)
+	}
+}
