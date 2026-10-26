@@ -22,8 +22,10 @@ const (
 )
 
 // Cards on a darker page, a settings card's advanced settings in a greyer
-// block, the track being recorded on a pale green (grey in the dark theme),
-// and text in three steps, a card's title strongest. The bars at the top,
+// block, the track being recorded on a card of its own (white as the others
+// in the light theme, where a tint made its grey text hard to read; lighter
+// than them in the dark one), and text in three steps, a card's title
+// strongest. The bars at the top,
 // the log and About stay on Fyne's plain window colour.
 const (
 	colorLive          fyne.ThemeColorName = "spytifyLive"
@@ -42,7 +44,7 @@ const (
 
 // cardColors are the light and dark values of those colours.
 var cardColors = map[fyne.ThemeColorName][2]color.NRGBA{
-	colorLive:          {{R: 0xe8, G: 0xf5, B: 0xec, A: 0xff}, {R: 0x26, G: 0x26, B: 0x29, A: 0xff}},
+	colorLive:          {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x26, G: 0x26, B: 0x29, A: 0xff}},
 	colorPage:          {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x0f, G: 0x0f, B: 0x10, A: 0xff}},
 	colorPlain:         {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x17, G: 0x17, B: 0x18, A: 0xff}},
 	colorCard:          {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x1c, G: 0x1c, B: 0x1e, A: 0xff}},

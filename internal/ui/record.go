@@ -109,7 +109,9 @@ func newRecordScreen(a *App) *recordScreen {
 	// the list.
 	pad := theme.Padding()
 	live := container.NewBorder(nil, nil, r.cover, container.NewCenter(skip), container.NewVBox(layout.NewSpacer(), info, layout.NewSpacer()))
-	r.card = inset(newPanel(colorLive, "", 10, fyne.NewSize(pad*2, pad*2), live))
+	// Rounder than the list's card: on a box this big, the same radius looks
+	// square.
+	r.card = inset(newPanel(colorLive, colorCardLine, 16, fyne.NewSize(pad*2, pad*2), live))
 
 	r.waiting = widget.NewLabel("")
 	// A track already playing when the session starts is not recorded;
