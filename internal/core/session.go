@@ -965,14 +965,31 @@ func (s *Session) classify(seg *segment) {
 			s.stop = stopGraceful
 			return
 		}
-		w, err := pcm.CreateWAV(filepath.Join(s.tmpDir, seg.id+".wav"), seg.format)
+		w, err := s.tempWAV(seg.id, seg.format)
 		if err != nil {
-			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "temp_file", Msg: err.Error()})
 			seg.reason = proto.SkipIncomplete
+			if _, gone := os.Stat(s.tmpDir); gone != nil {
+				// The folder cannot even be made again: the output folder
+				// is out of reach, its drive unplugged or its share gone.
+				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: "the output folder cannot be reached, so the recording stops: " + err.Error()})
+				s.stop = stopGraceful
+				return
+			}
+			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "temp_file", Msg: err.Error()})
 			return
 		}
 		seg.w = w
 	}
+}
+
+// tempWAV creates a track's temp file. The temp folder is made again
+// first: it can go while a session runs, deleted along with the files
+// around it.
+func (s *Session) tempWAV(id string, f pcm.Format) (*pcm.WAVWriter, error) {
+	if err := os.MkdirAll(s.tmpDir, 0o755); err != nil {
+		return nil, err
+	}
+	return pcm.CreateWAV(filepath.Join(s.tmpDir, id+".wav"), f)
 }
 
 func (s *Session) announce(seg *segment) {
@@ -1290,7 +1307,7 @@ func (s *Session) formatChange(f pcm.Format) {
 		c.length = f.FramesFromMs(c.info.LengthMs)
 		c.awaitStart, c.startDeadline = true, s.ms(startTimeoutMs)
 		if c.reason == "" {
-			if w, err := pcm.CreateWAV(filepath.Join(s.tmpDir, c.id+".wav"), f); err == nil {
+			if w, err := s.tempWAV(c.id, f); err == nil {
 				c.w = w
 			} else {
 				c.reason = proto.SkipIncomplete
@@ -1330,7 +1347,7 @@ func (s *Session) reformat(f pcm.Format) {
 		c.startDeadline = conv(c.startDeadline)
 		if c.w != nil {
 			s.dropWriter(c)
-			if w, err := pcm.CreateWAV(filepath.Join(s.tmpDir, c.id+".wav"), f); err == nil {
+			if w, err := s.tempWAV(c.id, f); err == nil {
 				c.w = w
 			} else {
 				c.reason = proto.SkipIncomplete

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -112,6 +113,70 @@ func TestStopNowDiscardsCurrentTrack(t *testing.T) {
 	}
 	if files := fake.AudioFiles(s.out); len(files) != 1 {
 		t.Fatalf("files %v", files)
+	}
+}
+
+// onWaiting runs fn when the session first waits, its temp folder made.
+func onWaiting(r *recorder, fn func()) {
+	var once atomic.Bool
+	r.onEvent = func(ev proto.Event) {
+		var st proto.SessionStateEvent
+		if ev.Method == proto.EventSessionState && ev.Decode(&st) == nil && st.State == proto.StateWaiting && once.CompareAndSwap(false, true) {
+			fn()
+		}
+	}
+}
+
+func errorsOf(s *scenario) []proto.ErrorEvent {
+	var out []proto.ErrorEvent
+	for _, ev := range s.events.all() {
+		var e proto.ErrorEvent
+		if ev.Method == proto.EventError && ev.Decode(&e) == nil {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// The temp folder deleted while a session runs, by hand with the files
+// around it, is made again for the next track.
+func TestTempFolderDeletedIsMadeAgain(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, nil)
+	onWaiting(s.events, func() {
+		if err := os.RemoveAll(filepath.Join(s.out, ".spytify")); err != nil {
+			t.Error(err)
+		}
+	})
+	runWith(t, s, SessionOptions{EndOnStop: true})
+	saved, skipped := outcome(t, s)
+	if len(saved) != 3 || len(skipped) != 0 || len(errorsOf(s)) != 0 {
+		t.Fatalf("saved %v skipped %v errors %v\n%s", saved, skipped, errorsOf(s), s.logs)
+	}
+}
+
+// An output folder out of reach, its drive unplugged, stops the recording
+// with an error that says so, rather than skip every track that follows.
+func TestOutputFolderGoneStopsTheRecording(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, nil)
+	onWaiting(s.events, func() {
+		// A file where the folder was: it cannot be made again.
+		if err := os.RemoveAll(s.out); err != nil {
+			t.Error(err)
+		}
+		if err := os.WriteFile(s.out, nil, 0o644); err != nil {
+			t.Error(err)
+		}
+	})
+	runWith(t, s, SessionOptions{EndOnStop: true})
+	saved, skipped := outcome(t, s)
+	if len(saved) != 0 || skipped["Midnight Ferry"] != proto.SkipIncomplete || idOf(s, "Paper Lanterns") != "" {
+		t.Fatalf("saved %v skipped %v\n%s", saved, skipped, s.logs)
+	}
+	errs := errorsOf(s)
+	if len(errs) != 1 || errs[0].Code != "output_dir" || !strings.HasPrefix(errs[0].Msg, "the output folder cannot be reached") {
+		t.Fatalf("errors %+v", errs)
 	}
 }
 
