@@ -11,7 +11,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/image v0.24.0
+	golang.org/x/image v0.41.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.43.0
 )
