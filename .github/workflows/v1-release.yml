@@ -7,7 +7,7 @@ name: v1 release
 # lines are the text of the update dialog in 1.11 and 1.12.
 on:
   push:
-    branches: [next-version-bridge-to-v2]
+    branches: [v1]
     tags: ["1.*"]
   workflow_dispatch:
 
