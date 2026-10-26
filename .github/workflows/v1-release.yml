@@ -1,0 +1,88 @@
+name: v1 release
+
+# Builds Spytify 1.x on Windows and packs Spytify-<version>.zip with the layout
+# the 1.10+ updater extracts over the install folder (Updater/ goes to
+# tmp_updater). Pushing a bare tag such as 1.13 also makes a draft release with
+# the zip and the notes in .github/release-notes/<tag>.md, whose leading "- "
+# lines are the text of the update dialog in 1.11 and 1.12.
+on:
+  push:
+    branches: [next-version-bridge-to-v2]
+    tags: ["1.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    outputs:
+      version: ${{ steps.pack.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - uses: NuGet/setup-nuget@v2
+      - name: Restore packages
+        run: nuget restore EspionSpotify.sln
+      # The runner has no .NET Framework 4.6.1 targeting pack.
+      - name: .NET Framework 4.6.1 reference assemblies
+        run: nuget install Microsoft.NETFramework.ReferenceAssemblies.net461 -Version 1.0.3 -OutputDirectory "$env:RUNNER_TEMP\refs"
+      - name: Build
+        run: msbuild EspionSpotify.sln /m /v:minimal /p:Configuration=Release "/p:Platform=Any CPU" "/p:TargetFrameworkRootPath=$env:RUNNER_TEMP\refs\Microsoft.NETFramework.ReferenceAssemblies.net461.1.0.3\build"
+      - name: Zip
+        id: pack
+        run: |
+          $v = [version](Get-Item EspionSpotify\bin\Release\Spytify.exe).VersionInfo.FileVersion
+          $version = if ($v.Revision -gt 0) { $v.ToString(4) } elseif ($v.Build -gt 0) { $v.ToString(3) } else { $v.ToString(2) }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $version) {
+            throw "The tag $env:GITHUB_REF_NAME does not match Spytify.exe $version"
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory("$PWD\EspionSpotify\bin\Release", "$PWD\Spytify-$version.zip")
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Spytify-${{ steps.pack.outputs.version }}
+          path: Spytify-${{ steps.pack.outputs.version }}.zip
+          compression-level: 0
+      - name: Same files as 1.12's zip
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $old = "$env:RUNNER_TEMP\Spytify-v.1.12.zip"
+          Invoke-WebRequest https://github.com/spytify/spytify/releases/download/1.12/Spytify-v.1.12.zip -OutFile $old
+          function Get-ZipFiles($path) {
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($path)
+            try { $zip.Entries | Where-Object { $_.Name } | ForEach-Object { $_.FullName.Replace('\', '/') } }
+            finally { $zip.Dispose() }
+          }
+          $before = Get-ZipFiles $old
+          $after = Get-ZipFiles "$PWD\Spytify-${{ steps.pack.outputs.version }}.zip"
+          $added = $after | Where-Object { $before -notcontains $_ }
+          $missing = $before | Where-Object { $after -notcontains $_ }
+          if ($added) { "::notice::Not in 1.12's zip: $($added -join ', ')" }
+          if ($missing) { throw "Missing compared with 1.12's zip: $($missing -join ', ')" }
+      - name: Test
+        run: |
+          $vstest = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -find "**\TestPlatform\vstest.console.exe" | Select-Object -First 1
+          & $vstest EspionSpotify.Tests\bin\Release\EspionSpotify.Tests.dll /TestAdapterPath:EspionSpotify.Tests\bin\Release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+  draft:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Spytify-${{ needs.build.outputs.version }}
+      - name: Draft release with the zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" "Spytify-$TAG.zip" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Spytify $TAG" --notes-file ".github/release-notes/$TAG.md"
