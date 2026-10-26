@@ -57,7 +57,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install the desktop app's build dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+        run: scripts/ci/apt-install.sh gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
       - name: Tarball, .deb and .rpm
         run: SPYTIFY_VERSION="${{ needs.version.outputs.version }}" scripts/build-linux.sh dist
       - uses: actions/upload-artifact@v4
@@ -143,7 +143,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install MinGW-w64
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64
+        run: scripts/ci/apt-install.sh mingw-w64
       - name: Spytify.exe and the command-line tools
         run: |
           v="${{ needs.version.outputs.version }}"
@@ -155,7 +155,7 @@ jobs:
         env:
           SPYTIFY_WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
-          sudo apt-get install -y -qq osslsigncode
+          scripts/ci/apt-install.sh osslsigncode
           echo "$WINDOWS_CERT_PFX" | base64 --decode > "$RUNNER_TEMP/cert.pfx"
           SPYTIFY_WINDOWS_PFX="$RUNNER_TEMP/cert.pfx" scripts/sign-windows.sh "dist/spytify-${{ needs.version.outputs.version }}-windows-amd64"
           rm "$RUNNER_TEMP/cert.pfx"
