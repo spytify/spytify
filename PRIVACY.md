@@ -11,7 +11,7 @@ On Sentry's side, the project is set to:
 - keep no IP address: Sentry reads the country from it first;
 - remove any IP address or MAC address found anywhere in a report;
 - mask user names in file paths;
-- run Sentry's default scrubbers, which remove things like passwords and credit card numbers.
+- run the default scrubbers.
 
 Your computer is known only by a code made from its machine ID for Spytify alone: the same after a reinstall, and of no use to any other app. Reports also carry the system, the version and the country; when Sentry cannot tell the country, your system's region setting gives it.
 
