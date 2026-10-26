@@ -73,7 +73,8 @@ func newSettingsScreen(a *App) *settingsScreen {
 	s.layout()
 	// The search is a white field on the page, as the cards are.
 	search := container.NewThemeOverride(container.NewPadded(s.search), cardTheme{input: colorCard})
-	s.root = newPanel(colorPage, "", 0, fyne.Size{}, container.NewBorder(search, nil, nil, nil, s.scroll))
+	// Lighter shadows at the scrolled edges, as in the cards.
+	s.root = container.NewBorder(search, nil, nil, nil, container.NewThemeOverride(s.scroll, cardTheme{}))
 	return s
 }
 
@@ -176,14 +177,14 @@ func sectionTitle(text string) *widget.RichText {
 func newCard(objs ...fyne.CanvasObject) fyne.CanvasObject {
 	pad := theme.Padding()
 	box := newPanel(colorCard, colorCardLine, 10, fyne.NewSize(pad*3, pad*2), container.NewVBox(objs...))
-	return container.NewThemeOverride(box, cardTheme{input: colorCardInput})
+	return container.NewThemeOverride(box, cardTheme{input: colorCardInput, surface: colorCard})
 }
 
 // newBlock holds a card's advanced settings: greyer, in smaller text.
 func newBlock(objs ...fyne.CanvasObject) fyne.CanvasObject {
 	pad := theme.Padding()
 	box := newPanel(colorAdvanced, "", 8, fyne.NewSize(pad*3, pad), container.NewVBox(objs...))
-	return container.NewThemeOverride(box, cardTheme{input: colorAdvancedInput, small: true})
+	return container.NewThemeOverride(box, cardTheme{input: colorAdvancedInput, surface: colorAdvanced, small: true})
 }
 
 // indent sets a card's rows in from its title.

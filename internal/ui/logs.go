@@ -9,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
@@ -109,7 +110,9 @@ func newLogsScreen(a *App) *logsScreen {
 	open.Importance = widget.LowImportance
 	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open))
 	// The diagnostics are a card on the page; the log stays plain below.
-	l.root = container.NewBorder(container.NewVBox(onPage(inset(newCard(l.diag))), tools), nil, nil, nil, l.list)
+	pad := theme.Padding()
+	diag := container.New(layout.NewCustomPaddedLayout(pad, pad, pad*3, pad*3), newCard(l.diag))
+	l.root = container.NewBorder(diag, nil, nil, nil, plain(margin(container.NewBorder(tools, nil, nil, nil, l.list))))
 	return l
 }
 

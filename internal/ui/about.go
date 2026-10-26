@@ -40,7 +40,7 @@ func newAboutScreen(a *App) *aboutScreen {
 	legal := widget.NewLabelWithStyle(disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	legal.Wrapping = fyne.TextWrapWord
 	legal.SizeName = theme.SizeNameCaptionText
-	s.root = container.NewCenter(container.NewGridWrap(fyne.NewSize(520, 420), container.NewVBox(
+	s.root = plain(container.NewCenter(container.NewGridWrap(fyne.NewSize(520, 420), container.NewVBox(
 		container.NewCenter(logo),
 		tagline,
 		container.NewCenter(s.versions),
@@ -48,7 +48,7 @@ func newAboutScreen(a *App) *aboutScreen {
 		container.NewCenter(container.NewHBox(project, updates, donate)),
 		layout.NewSpacer(),
 		legal,
-	)))
+	))))
 	return s
 }
 

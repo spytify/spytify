@@ -20,6 +20,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
@@ -111,9 +112,11 @@ type App struct {
 
 	screens []screen
 	tabs    *container.AppTabs
-	center  *fyne.Container
-	offline fyne.CanvasObject
-	player  *playerCard
+	// tabsView is the tabs with the plain colour behind their bar.
+	tabsView *fyne.Container
+	center   *fyne.Container
+	offline  fyne.CanvasObject
+	player   *playerCard
 
 	dot     *widget.Label
 	status  *widget.Label
@@ -177,10 +180,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.win.Resize(fyne.NewSize(920, 640))
 
 	a.screens = []screen{newRecordScreen(a), newLibraryScreen(a), newSettingsScreen(a), newLogsScreen(a), newAboutScreen(a)}
+	// Logs and About have the plain colour to the window's sides; the other
+	// screens are on the page, off them.
 	a.tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), a.screens[tabRecord].content()),
-		container.NewTabItemWithIcon("Library", theme.FolderIcon(), a.screens[tabLibrary].content()),
-		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), a.screens[tabSettings].content()),
+		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), margin(a.screens[tabRecord].content())),
+		container.NewTabItemWithIcon("Library", theme.FolderIcon(), margin(a.screens[tabLibrary].content())),
+		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), margin(a.screens[tabSettings].content())),
 		container.NewTabItemWithIcon("Logs", theme.ListIcon(), a.screens[tabLogs].content()),
 		container.NewTabItemWithIcon("About", theme.InfoIcon(), a.screens[tabAbout].content()),
 	)
@@ -228,7 +233,8 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.offlineErr = widget.NewLabel("")
 	a.offlineErr.Wrapping = fyne.TextWrapWord
 	a.offlineErr.Importance = widget.DangerImportance
-	a.offline = container.NewVScroll(container.NewPadded(container.NewVBox(
+	pad := theme.Padding()
+	a.offline = container.NewVScroll(container.New(layout.NewCustomPaddedLayout(pad, pad*2, pad*2, pad*2), container.NewVBox(
 		heading("The recorder is not running"),
 		a.offlineErr,
 		intro,
@@ -239,8 +245,13 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	)))
 	a.starting = opts.AutoStart
 
-	a.center = container.NewStack(a.tabs)
-	body := container.NewBorder(container.NewVBox(container.NewPadded(a.bar), a.banner), nil, nil, nil, a.center)
+	a.tabsView = withPlainTabBar(a.tabs)
+	a.center = container.NewStack(a.tabsView)
+	// The window has no padding of its own, so the bars' plain colour goes
+	// to its edges; the page's grey is the window's background.
+	top := plain(container.New(layout.NewCustomPaddedLayout(pad, 0, pad, pad), container.NewVBox(container.NewPadded(a.bar), a.banner)))
+	body := container.NewBorder(top, nil, nil, nil, a.center)
+	a.win.SetPadded(false)
 	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
 
 	if !opts.ManualRender {
@@ -504,8 +515,8 @@ func (a *App) renderCenter(s model.State) {
 		}
 		return
 	}
-	if len(a.center.Objects) != 1 || a.center.Objects[0] != a.tabs {
-		a.center.Objects = []fyne.CanvasObject{a.tabs}
+	if len(a.center.Objects) != 1 || a.center.Objects[0] != a.tabsView {
+		a.center.Objects = []fyne.CanvasObject{a.tabsView}
 		a.center.Refresh()
 	}
 	a.screens[a.tabs.SelectedIndex()].render(s)

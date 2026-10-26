@@ -23,8 +23,6 @@ import (
 type recordScreen struct {
 	app  *App
 	root *fyne.Container
-	// view is root on the page colour.
-	view fyne.CanvasObject
 
 	idle       *fyne.Container
 	idleTitle  *widget.Label
@@ -89,7 +87,7 @@ func newRecordScreen(a *App) *recordScreen {
 
 	r.cover = canvas.NewImageFromResource(theme.MediaMusicIcon())
 	r.cover.FillMode = canvas.ImageFillContain
-	r.cover.SetMinSize(fyne.NewSize(96, 96))
+	r.cover.SetMinSize(fyne.NewSquareSize(liveCover))
 	r.state = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	r.state.SizeName = theme.SizeNameCaptionText
 	r.state.Importance = widget.DangerImportance
@@ -107,7 +105,8 @@ func newRecordScreen(a *App) *recordScreen {
 	info := container.NewVBox(r.state, r.title, r.subtitle,
 		container.NewBorder(nil, nil, nil, r.elapsed, r.progress),
 		container.NewBorder(nil, nil, caption("Level"), nil, r.level))
-	// The track being recorded is on a grey card, apart from the list.
+	// The track being recorded is on a card of its own colour, apart from
+	// the list.
 	pad := theme.Padding()
 	live := container.NewBorder(nil, nil, r.cover, container.NewCenter(skip), container.NewVBox(layout.NewSpacer(), info, layout.NewSpacer()))
 	r.card = inset(newPanel(colorLive, "", 10, fyne.NewSize(pad*2, pad*2), live))
@@ -126,7 +125,7 @@ func newRecordScreen(a *App) *recordScreen {
 		func() fyne.CanvasObject {
 			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
 			img.FillMode = canvas.ImageFillContain
-			img.SetMinSize(fyne.NewSize(40, 40))
+			img.SetMinSize(fyne.NewSquareSize(rowCover))
 			chip := caption("Skipped: duplicate")
 			reveal := widget.NewButtonWithIcon("", theme.SearchIcon(), nil)
 			reveal.Importance = widget.LowImportance
@@ -146,11 +145,7 @@ func newRecordScreen(a *App) *recordScreen {
 			img := box.Objects[1].(*canvas.Image)
 			right := box.Objects[2].(*fyne.Container)
 			setRowText(text, row.Title, rowSubtitle(row))
-			if res := a.covers.get(row.CoverURL); res != nil {
-				setImage(img, res)
-			} else {
-				setImage(img, theme.MediaMusicIcon())
-			}
+			setCover(img, a.covers.get(row.CoverURL).row)
 			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.RichText)
 			seg := chip.Segments[0].(*widget.TextSegment)
 			if c := chipColor(row); seg.Text != row.StatusText() || seg.Style.ColorName != c {
@@ -193,7 +188,6 @@ func newRecordScreen(a *App) *recordScreen {
 	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow), inset(footer), nil, nil,
 		container.NewStack(inset(r.listCard), r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
-	r.view = onPage(r.root)
 	return r
 }
 
@@ -224,7 +218,7 @@ func chipColor(r model.Row) fyne.ThemeColorName {
 	return theme.ColorNamePlaceHolder
 }
 
-func (r *recordScreen) content() fyne.CanvasObject { return r.view }
+func (r *recordScreen) content() fyne.CanvasObject { return r.root }
 
 func (r *recordScreen) render(s model.State) {
 	r.folder, _ = s.Settings["output.dir"].(string)
@@ -273,11 +267,7 @@ func (r *recordScreen) render(s model.State) {
 			sub += " · " + src
 		}
 		setCaption(r.subtitle, sub)
-		if res := r.app.covers.get(c.CoverURL); res != nil {
-			setImage(r.cover, res)
-		} else {
-			setImage(r.cover, theme.MediaMusicIcon())
-		}
+		setCover(r.cover, r.app.covers.get(c.CoverURL).live)
 	} else {
 		r.card.Hide()
 		setLabel(r.waiting, waitingText(s.Session))
@@ -289,7 +279,7 @@ func (r *recordScreen) render(s model.State) {
 	r.rows = s.Rows
 	if shown := fmt.Sprint(r.rows, r.app.covers.count()); shown != r.shown {
 		r.shown = shown
-		r.list.Refresh()
+		r.listCard.Refresh()
 	}
 	show(r.noRows, len(r.rows) == 0)
 	show(r.listCard, len(r.rows) > 0)

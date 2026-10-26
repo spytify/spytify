@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -153,7 +154,7 @@ func TestASavedTrackGoesToTheHistoryWithItsCoverAndToTheLibrary(t *testing.T) {
 	if all := texts(content); !contains(all, "Midnight City") || !contains(all, "Saved") {
 		t.Fatalf("history: %v", all)
 	}
-	if !contains(images(content), coverURL) {
+	if row := a.covers.get(coverURL).row; row == nil || !contains(images(content), picture(row)) {
 		t.Errorf("the history row does not show the cover: %v", images(content))
 	}
 	a.showTab(tabLibrary)
@@ -351,6 +352,8 @@ func images(o fyne.CanvasObject) []string {
 		case *canvas.Image:
 			if w.Resource != nil {
 				out = append(out, w.Resource.Name())
+			} else if w.Image != nil {
+				out = append(out, picture(w.Image))
 			}
 			return
 		case *fyne.Container:
@@ -368,3 +371,6 @@ func images(o fyne.CanvasObject) []string {
 	walk(o)
 	return out
 }
+
+// picture names an image shown from its pixels, such as a cover's thumbnail.
+func picture(img image.Image) string { return fmt.Sprintf("picture %p", img) }

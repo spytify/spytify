@@ -7,14 +7,20 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
+	"image/jpeg"
 	"image/png"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -683,7 +689,10 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 	}
 	dir := t.TempDir()
 	var picture bytes.Buffer
-	if err := png.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+	red := color.NRGBA{R: 0xff, A: 0xff}
+	pic := image.NewNRGBA(image.Rect(0, 0, 8, 8))
+	draw.Draw(pic, pic.Bounds(), image.NewUniform(red), image.Point{}, draw.Src)
+	if err := png.Encode(&picture, pic); err != nil {
 		t.Fatal(err)
 	}
 	cover := filepath.Join(t.TempDir(), "cover.png")
@@ -710,9 +719,9 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		if res := lib.cover(lib.shown[0]); res != nil {
-			if !bytes.Equal(res.Content(), picture.Bytes()) {
-				t.Fatal("the row shows another picture")
+		if got := lib.cover(lib.shown[0]).row; got != nil {
+			if got.Bounds().Dx() != 8 || color.NRGBAModel.Convert(got.At(4, 4)) != red {
+				t.Fatalf("the row shows another picture: %v, %v at its middle", got.Bounds(), got.At(4, 4))
 			}
 			return
 		}
@@ -720,6 +729,84 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 			t.Fatal("the cover never loaded")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// A cover is fetched, decoded and shrunk once, to twice the size it is
+// shown at; a row showing it again decodes nothing.
+func TestCoversAreShrunkOnce(t *testing.T) {
+	var big bytes.Buffer
+	if err := jpeg.Encode(&big, image.NewRGBA(image.Rect(0, 0, 1200, 800)), nil); err != nil {
+		t.Fatal(err)
+	}
+	loaded := make(chan struct{}, 4)
+	c := newCovers(func() { loaded <- struct{}{} })
+	var fetches atomic.Int32
+	fetch := func(context.Context) ([]byte, error) {
+		fetches.Add(1)
+		return big.Bytes(), nil
+	}
+	if got := c.load("cover", fetch); got.row != nil || got.live != nil {
+		t.Fatal("a cover before it loaded")
+	}
+	<-loaded
+	got := c.load("cover", fetch)
+	c.load("cover", fetch)
+	if n := fetches.Load(); n != 1 {
+		t.Errorf("the cover was fetched %d times", n)
+	}
+	if b := got.live.Bounds(); b.Dx() != 2*liveCover || b.Dy() != 2*liveCover*2/3 {
+		t.Errorf("the live card's cover is %v", b)
+	}
+	if b := got.row.Bounds(); b.Dx() != 2*rowCover || b.Dy() != 2*rowCover*2/3 {
+		t.Errorf("a row's cover is %v", b)
+	}
+	img := canvas.NewImageFromResource(theme.MediaMusicIcon())
+	setCover(img, got.row)
+	img.Refresh()
+	if img.Resource != nil || img.Image != got.row {
+		t.Error("the row's picture is not the thumbnail")
+	}
+}
+
+// The library builds rows only for the files in view, however many there
+// are: a row, and its cover, cost nothing until it scrolls in.
+func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 400 {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("Artist - Song %03d.mp3", i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// No ffmpeg: the empty files have no cover to look for.
+	t.Setenv("SPYTIFY_FFMPEG", filepath.Join(dir, "none"))
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.showTab(tabLibrary)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	if len(lib.shown) != 400 {
+		t.Fatalf("%d files listed", len(lib.shown))
+	}
+	drawn := map[widget.ListItemID]bool{}
+	update := lib.list.UpdateItem
+	lib.list.UpdateItem = func(id widget.ListItemID, o fyne.CanvasObject) {
+		drawn[id] = true
+		update(id, o)
+	}
+	// About eight rows fit in the window.
+	lib.list.Refresh()
+	if len(drawn) == 0 || len(drawn) > 12 {
+		t.Errorf("drew rows %v of 400", slices.Sorted(maps.Keys(drawn)))
+	}
+	clear(drawn)
+	lib.list.ScrollTo(200)
+	if len(drawn) == 0 || len(drawn) > 12 || !drawn[200] {
+		t.Errorf("scrolled to the 200th file, drew rows %v", slices.Sorted(maps.Keys(drawn)))
 	}
 }
 
@@ -828,7 +915,7 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	if !contains(all, "Starting the recorder…") || contains(all, "Start the recorder") || contains(all, "The recorder is not running") {
 		t.Fatalf("starting: %v", all)
 	}
-	if a.center.Objects[0] != a.tabs || a.tabs.SelectedIndex() != tabRecord {
+	if a.center.Objects[0] != a.tabsView || a.tabs.SelectedIndex() != tabRecord {
 		t.Fatal("the Record tab is not shown while the recorder starts")
 	}
 	for i := range a.tabs.Items {
