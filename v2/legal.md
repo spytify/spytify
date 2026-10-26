@@ -9,7 +9,7 @@ Spytify is a general-purpose application audio recorder, in the same category as
 
 Spytify downloads nothing, emulates no streaming protocol and circumvents no DRM. It records audio the operating system already plays on your speakers, in real time.
 
-Downloaders, such as the tools built on librespot, pull files through a service's own protocol, and those are what services go after with legal action. A recorder only reaches your account: that difference is why Spytify is still around.
+Stream downloaders pull files through a service's own protocol, and those are what services go after with legal action. A recorder only reaches your account: that difference is why Spytify is still around.
 
 ### [Your account](#account)
 
