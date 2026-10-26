@@ -207,13 +207,18 @@ func TestKeepableTakeGoesOnceTheNextTrackIsSaved(t *testing.T) {
 func TestSeekedTakeIsKeptWhole(t *testing.T) {
 	tl := loadTimeline(t, "seek")
 	s := newScenario(t, tl, nil)
-	// Back Again plays from 12.5 s to 21 s, jumping back at 16.5 s; Chapter
-	// Four plays from 22 s to 26.5 s.
-	s.player.At(24000, func() {
-		if err := s.core.Keep(idOf(s, "Back Again")); err != nil {
+	// Back Again plays 8.5 s, jumping back 2.5 s at 4 s. It is kept as soon
+	// as it is held: Chapter Four, saved next, lets it go.
+	var kept atomic.Bool
+	s.events.onEvent = func(ev proto.Event) {
+		var k proto.TrackKeepableEvent
+		if ev.Method != proto.EventTrackKeepable || ev.Decode(&k) != nil || !k.Keepable || k.ID != idOf(s, "Back Again") || !kept.CompareAndSwap(false, true) {
+			return
+		}
+		if err := s.core.Keep(k.ID); err != nil {
 			t.Errorf("keep: %v", err)
 		}
-	})
+	}
 	s.run(t, tl)
 	f := finished(t, s, idOf(s, "Back Again"))
 	if !f.Partial || f.DurationMs < 7500 {
