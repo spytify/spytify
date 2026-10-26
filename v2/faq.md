@@ -21,11 +21,11 @@ Some applications play your own music files in place of a streamed track when th
 
 ### [Podcasts or short items are skipped as ads](#ads)
 
-Items shorter than a minute without an album are taken for ads. Turn on **Record everything** in Settings > Ads > Advanced, or lower that length.
+Items shorter than a minute without an album are taken for ads. Turn on **Record ads and short untitled items too** in Settings > Ads > Advanced, or lower that length.
 
 ### [Keep the order of the recordings](#recording-order)
 
-Set **File name prefix** to `counter` in Settings > Output > Advanced: each file starts with its recording number, from **Counter start value**.
+Set **File name prefix** to `counter` in Settings > Output > Advanced: each file starts with its number, which goes on from one recording to the next. **Next counter number** sets the next one: set it back to 1 for a new CD.
 
 ### [Is FLAC better than MP3?](#quality)
 

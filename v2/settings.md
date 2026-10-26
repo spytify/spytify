@@ -28,12 +28,12 @@ Advanced:
 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
-| File name prefix | `output.prefix` | none, counter, album_track | `none` |
-| Add separators (_ instead of spaces) | `output.underscores` | on, off | off |
 | File name template | `output.template` | placeholders {artist}, {title}, {album}, {track}, {year} | `{artist} - {title}` |
-| Counter start value | `output.counter_start` | 0 to 999999999 | 1 |
-| Counter digits | `output.counter_width` | 1 to 9 | 3 |
+| Underscores instead of spaces | `output.underscores` | on, off | off |
 | Remove diacritics from file names | `output.ascii_filenames` | on, off | off |
+| File name prefix | `output.prefix` | none, counter, album_track | `none` |
+| Next counter number | `output.counter_next` | 0 to 999999999 | 1 |
+| Counter digits | `output.counter_width` | 1 to 9 | 3 |
 
 ### Encoding
 
@@ -48,7 +48,6 @@ Advanced:
 | --- | --- | --- | --- |
 | Embed album cover | `tags.cover` | on, off | on |
 | Cover size | `tags.cover_size` | small, medium, large | `medium` |
-| Replace track number with counter | `tags.track_from_counter` | on, off | off |
 | Move parenthesised extra title to subtitle | `tags.extra_to_subtitle` | on, off | off |
 | Multiple artists separator | `tags.artist_separator` | text | `, ` |
 
@@ -72,6 +71,7 @@ Advanced:
 | Stop the session after (0s = never) | `recorder.session_timer` | a duration such as 90m or 2h | `0s` |
 | Target loudness (LUFS) | `recorder.target_lufs` | -30 to -5 | -14 |
 | Pause player when disk is full | `recorder.pause_on_disk_full` | on, off | on |
+| Mute the player on this computer while recording (macOS, Linux) | `player.mute_output` | on, off | off |
 
 ### Ads
 
@@ -84,13 +84,12 @@ Advanced:
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
 | Treat items shorter than N seconds with no album as ads (0 = off) | `recorder.skip_short_untitled` | 0 to 600 | 60 |
-| Record everything (podcasts, short untitled items) | `recorder.record_everything` | on, off | off |
-| Mute the player on this computer while recording (macOS, Linux) | `player.mute_output` | on, off | off |
+| Record ads and short untitled items too | `recorder.record_everything` | on, off | off |
 
 ### Privacy
 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
-| Sentry bug tracker: send crashes, errors and traces | `privacy.bug_tracker` | on, off | on |
+| Sentry bug tracker: send crashes, errors, traces and recording counts | `privacy.bug_tracker` | on, off | on |
 
 The recorded application is chosen with environment variables, not in `config.toml`: see [Configuration](advanced.html#configuration).

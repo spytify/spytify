@@ -187,6 +187,7 @@ An empty object.
 | Field | Type |
 | --- | --- |
 | `id` | string |
+| `counter` | integer, optional |
 | `path` | string |
 | `duration_ms` | integer |
 | `bytes` | integer |
@@ -212,6 +213,7 @@ An empty object.
 | `length_ms` | integer |
 | `cover_url` | string, optional |
 | `source` | [AudioSource](#audiosource), optional |
+| `cut` | [TrackCut](#trackcut), optional |
 
 #### AudioSource
 
@@ -275,3 +277,11 @@ An empty object.
 | `album` | string, optional |
 | `length_ms` | integer |
 | `cover_url` | string, optional |
+
+#### TrackCut
+
+| Field | Type |
+| --- | --- |
+| `kind` | string |
+| `by` | string |
+| `offset_ms` | integer |
