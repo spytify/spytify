@@ -479,6 +479,8 @@ func (c *Core) newFinisher() *finisher {
 			c.log.Errorf("the counter could not move on to %d: %v", next, err)
 		}
 	}
+	// Not on the finisher's goroutine: stopping waits for it.
+	fin.lost = func() { go func() { _, _ = c.StopSession(true) }() }
 	return fin
 }
 

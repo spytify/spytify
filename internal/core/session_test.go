@@ -212,6 +212,73 @@ func TestNoRecordingStartsWithoutAnOutputFolder(t *testing.T) {
 	}
 }
 
+// A track that cannot be saved because the output folder went, its USB
+// drive unplugged after the track ended, stops the recording too.
+func TestASaveWithTheOutputFolderGoneStopsTheRecording(t *testing.T) {
+	dir := t.TempDir()
+	// A file where the drive's folder was: the output folder cannot be
+	// reached, nor made again.
+	drive := filepath.Join(dir, "drive")
+	if err := os.WriteFile(drive, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := settings.Open(filepath.Join(dir, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	overrides := map[string]any{"output.dir": filepath.Join(drive, "Music")}
+	for k, v := range baseSettings {
+		overrides[k] = v
+	}
+	if rej := store.Override(overrides); len(rej) > 0 {
+		t.Fatalf("settings rejected: %v", rej)
+	}
+	ff, err := encode.Find("ffmpeg")
+	if err != nil {
+		t.Skip(err)
+	}
+	log, _ := NewLogger("", testWriter{t})
+	rec := &recorder{}
+	emit := func(method string, payload any) {
+		raw, _ := json.Marshal(payload)
+		rec.add(method, json.RawMessage(raw))
+	}
+	fin := newFinisher(store.Values, ff, emit, log)
+	var lost atomic.Bool
+	fin.lost = func() { lost.Store(true) }
+
+	f := pcm.Format{Rate: 8000, Channels: 1, Sample: pcm.S16LE}
+	take := filepath.Join(dir, "take.wav")
+	w, err := pcm.CreateWAV(take, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frames := f.FramesFromMs(3000)
+	if _, err := w.Write(pcm.Synth{Seed: 1}.Render(f, frames)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	fin.enqueue(finishJob{id: "s-1", info: meta.TrackInfo{Title: "Midnight Ferry", Artists: []string{"Neon Harbor"}, Album: "Harbor Lights", LengthMs: 3000},
+		tmp: take, format: f, played: frames, length: frames})
+	fin.close()
+
+	var errs []proto.ErrorEvent
+	skipped := false
+	for _, ev := range rec.all() {
+		var e proto.ErrorEvent
+		if ev.Method == proto.EventError && ev.Decode(&e) == nil {
+			errs = append(errs, e)
+		}
+		var sk proto.TrackSkippedEvent
+		skipped = skipped || (ev.Method == proto.EventTrackSkipped && ev.Decode(&sk) == nil && sk.ID == "s-1" && sk.Reason == proto.SkipIncomplete)
+	}
+	if !lost.Load() || !skipped || len(errs) != 1 || errs[0].Code != "output_dir" || !strings.HasPrefix(errs[0].Msg, "the output folder cannot be reached, so the recording stopped") {
+		t.Fatalf("lost %v, skipped %v, errors %+v", lost.Load(), skipped, errs)
+	}
+}
+
 // idOf is the id of the take of title.
 func idOf(s *scenario, title string) string {
 	for _, ev := range s.events.all() {
