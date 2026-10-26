@@ -2,10 +2,16 @@
 
 Spytify has one switch for what it sends its developers: the **Sentry bug tracker** (Settings > Privacy). It is on by default and shown at the first launch, where you can untick it. Only official builds send anything: a build of your own has no bug tracker project (see `SPYTIFY_SENTRY_DSN` in [CONTRIBUTING.md](CONTRIBUTING.md#build)) and sends nothing.
 
-## Never sent
+## Never kept
 
-- Your computer's name, your user name (it becomes `<user>`) and your home folder (it becomes `~`), wherever they appear in a report.
-- Your IP address: Sentry reads the country from it and does not keep it.
+Before a report leaves your computer, Spytify removes your computer's name, and turns your user name into `<user>` and your home folder into `~` wherever they appear.
+
+On Sentry's side, the project is set to:
+
+- keep no IP address: Sentry reads the country from it first;
+- remove any IP address or MAC address found anywhere in a report;
+- mask user names in file paths;
+- run Sentry's default scrubbers, which remove things like passwords and credit card numbers.
 
 Your computer is known only by a code made from its machine ID for Spytify alone: the same after a reinstall, and of no use to any other app. Reports also carry the system, the version and the country; when Sentry cannot tell the country, your system's region setting gives it.
 
