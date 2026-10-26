@@ -682,7 +682,7 @@ namespace EspionSpotify.Translations {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Spytify 2 est une nouvelle application pour Windows, macOS et Linux, et cette version ne recevra plus de mises à jour. Voulez-vous ouvrir la page de téléchargement de Spytify 2?.
+        ///   Looks up a localized string similar to Spytify v2 est disponible pour Linux, macOS et Windows, avec de nombreuses améliorations et des correctifs pour des bogues que la v1 traînait depuis des années. Essayez-la, on se voit sur GitHub!.
         /// </summary>
         internal static string msgSpytify2Content {
             get {

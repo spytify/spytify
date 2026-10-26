@@ -262,7 +262,7 @@
     <comment>message</comment>
   </data>
   <data name="msgSpytify2Content" xml:space="preserve">
-    <value>Spytify 2 est une nouvelle application pour Windows, macOS et Linux, et cette version ne recevra plus de mises à jour. Voulez-vous ouvrir la page de téléchargement de Spytify 2?</value>
+    <value>Spytify v2 est disponible pour Linux, macOS et Windows, avec de nombreuses améliorations et des correctifs pour des bogues que la v1 traînait depuis des années. Essayez-la, on se voit sur GitHub!</value>
     <comment>message</comment>
   </data>
   <data name="msgSpytify2Title" xml:space="preserve">
