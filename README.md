@@ -37,7 +37,6 @@ Don't forget to hit the [F.A.Q.](https://jwallet.github.io/spy-spotify/faq.html)
 - [_How to reroute sound/output of a virtual audio device to my main audio device to listen to it?_](https://jwallet.github.io/spy-spotify/faq.html#listen-to-virtual-device)
 - [_How to connect to Spotify API for more accurate media tags?_](https://jwallet.github.io/spy-spotify/faq.html#media-tags-not-found)
 
-
 ### [Features](#features)
 
 Splits the recorded sound into individual tracks using the artist and track names as the title, like so:
@@ -58,7 +57,6 @@ Spytify runs on Windows only.
 - Spotify Desktop application.
 
 A **free Spotify account** will work, but Spotify restricts audio quality to 160 kbps. Having a Premium Spotify subscription will enable recording of up to 320 kbps audio.
-
 
 ## Need a feature quicker?
 
