@@ -18,7 +18,7 @@ type EventSpec struct {
 // Methods is every action the core answers.
 var Methods = []MethodSpec{
 	{MethodCoreInfo, nil, CoreInfoResult{}, "versions, resolved target and capability checks; first call on connect"},
-	{MethodSessionStart, SessionStartParams{}, SessionStartResult{}, "fails when the recorder cannot record; core.info's checks, the app's diagnostics, say why"},
+	{MethodSessionStart, SessionStartParams{}, SessionStartResult{}, "fails when a recording cannot start: the error says why, and core.info's checks (Logs > Diagnostics in the app) what to fix"},
 	{MethodSessionStop, SessionStopParams{}, SessionStopResult{}, "lets the current track finish, unless now; a track ended by now can be saved with track.keep"},
 	{MethodSessionStatus, nil, SessionStatusResult{}, "snapshot for late-joining clients"},
 	{MethodSettingsGet, SettingsGetParams{}, SettingsValues{}, "every setting when keys is empty"},

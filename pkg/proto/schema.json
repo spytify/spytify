@@ -691,7 +691,7 @@
       }
     },
     "session.start": {
-      "description": "fails when the recorder cannot record; core.info's checks, the app's diagnostics, say why",
+      "description": "fails when a recording cannot start: the error says why, and core.info's checks (Logs \u003e Diagnostics in the app) what to fix",
       "params": {
         "$ref": "#/$defs/SessionStartParams"
       },
