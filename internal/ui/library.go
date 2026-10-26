@@ -38,6 +38,7 @@ type libraryScreen struct {
 	search *widget.Entry
 	sortBy *widget.Select
 	list   *widget.List
+	card   fyne.CanvasObject
 	count  *widget.RichText
 	empty  fyne.CanvasObject
 	hint   *widget.Label
@@ -110,10 +111,13 @@ func newLibraryScreen(a *App) *libraryScreen {
 			box.Refresh()
 		},
 	)
-	// SetSelected runs the callback, which needs the list and the count.
+	l.card = listCard(l.list)
+	// SetSelected runs the callback, which needs the list, its card and the
+	// count.
 	l.sortBy.SetSelected("Newest")
-	top := container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search)
-	l.root = container.NewBorder(top, container.NewPadded(l.count), nil, nil, container.NewStack(l.list, l.empty))
+	// The search and the sort are white fields on the page, as in Settings.
+	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search), cardTheme{input: colorCard})
+	l.root = onPage(container.NewBorder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty)))
 	return l
 }
 
@@ -225,6 +229,7 @@ func (l *libraryScreen) filter() {
 	default:
 		l.empty.Hide()
 	}
+	show(l.card, !l.empty.Visible())
 }
 
 func pluralFiles(shown, all int, folder string) string {

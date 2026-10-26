@@ -21,9 +21,11 @@ const (
 	colorSkipped fyne.ThemeColorName = "spytifySkipped"
 )
 
-// Settings: cards on a darker page, each card's advanced settings in a
-// greyer block, and text in three steps, a section's title strongest.
+// Cards on a darker page, a settings card's advanced settings in a greyer
+// block, the track being recorded on grey, and text in three steps, a
+// card's title strongest.
 const (
+	colorLive          fyne.ThemeColorName = "spytifyLive"
 	colorPage          fyne.ThemeColorName = "spytifyPage"
 	colorCard          fyne.ThemeColorName = "spytifyCard"
 	colorCardLine      fyne.ThemeColorName = "spytifyCardLine"
@@ -35,8 +37,9 @@ const (
 	colorSubtle        fyne.ThemeColorName = "spytifySubtle"
 )
 
-// settingsColors are the light and dark values of the settings colours.
-var settingsColors = map[fyne.ThemeColorName][2]color.NRGBA{
+// cardColors are the light and dark values of those colours.
+var cardColors = map[fyne.ThemeColorName][2]color.NRGBA{
+	colorLive:          {{R: 0xe6, G: 0xe6, B: 0xea, A: 0xff}, {R: 0x26, G: 0x26, B: 0x29, A: 0xff}},
 	colorPage:          {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x0f, G: 0x0f, B: 0x10, A: 0xff}},
 	colorCard:          {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x1c, G: 0x1c, B: 0x1e, A: 0xff}},
 	colorCardLine:      {{R: 0xe8, G: 0xe8, B: 0xed, A: 0xff}, {R: 0x2c, G: 0x2c, B: 0x2e, A: 0xff}},
@@ -71,7 +74,7 @@ func (t spytifyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color
 		green = greenLight
 	}
 	light := v == theme.VariantLight
-	if c, ok := settingsColors[name]; ok {
+	if c, ok := cardColors[name]; ok {
 		if light {
 			return c[0]
 		}

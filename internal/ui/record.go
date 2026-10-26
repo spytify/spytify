@@ -23,6 +23,8 @@ import (
 type recordScreen struct {
 	app  *App
 	root *fyne.Container
+	// view is root on the page colour.
+	view fyne.CanvasObject
 
 	idle       *fyne.Container
 	idleTitle  *widget.Label
@@ -45,8 +47,9 @@ type recordScreen struct {
 	waiting *widget.Label
 	restart *widget.Button
 
-	rows []model.Row
-	list *widget.List
+	rows     []model.Row
+	list     *widget.List
+	listCard fyne.CanvasObject
 	// shape is which parts the screen last showed; it is laid out again
 	// only when that changes.
 	shape string
@@ -104,7 +107,10 @@ func newRecordScreen(a *App) *recordScreen {
 	info := container.NewVBox(r.state, r.title, r.subtitle,
 		container.NewBorder(nil, nil, nil, r.elapsed, r.progress),
 		container.NewBorder(nil, nil, caption("Level"), nil, r.level))
-	r.card = container.NewPadded(container.NewBorder(nil, nil, r.cover, container.NewCenter(skip), container.NewVBox(layout.NewSpacer(), info, layout.NewSpacer())))
+	// The track being recorded is on a grey card, apart from the list.
+	pad := theme.Padding()
+	live := container.NewBorder(nil, nil, r.cover, container.NewCenter(skip), container.NewVBox(layout.NewSpacer(), info, layout.NewSpacer()))
+	r.card = inset(newPanel(colorLive, "", 10, fyne.NewSize(pad*2, pad*2), live))
 
 	r.waiting = widget.NewLabel("")
 	// A track already playing when the session starts is not recorded;
@@ -113,7 +119,7 @@ func newRecordScreen(a *App) *recordScreen {
 		a.noteAction("record this track from the start")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
-	r.waitRow = container.NewPadded(container.NewHBox(r.waiting, layout.NewSpacer(), r.restart))
+	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.restart))
 
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
@@ -183,9 +189,11 @@ func newRecordScreen(a *App) *recordScreen {
 	r.clear.Importance = widget.LowImportance
 	footer := container.NewBorder(nil, nil, nil, container.NewHBox(r.clear, openFolder), r.totals)
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
-	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow, widget.NewSeparator()), container.NewVBox(widget.NewSeparator(), footer), nil, nil,
-		container.NewStack(r.list, r.noRows))
+	r.listCard = listCard(r.list)
+	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow), inset(footer), nil, nil,
+		container.NewStack(inset(r.listCard), r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
+	r.view = onPage(r.root)
 	return r
 }
 
@@ -216,7 +224,7 @@ func chipColor(r model.Row) fyne.ThemeColorName {
 	return theme.ColorNamePlaceHolder
 }
 
-func (r *recordScreen) content() fyne.CanvasObject { return r.root }
+func (r *recordScreen) content() fyne.CanvasObject { return r.view }
 
 func (r *recordScreen) render(s model.State) {
 	r.folder, _ = s.Settings["output.dir"].(string)
@@ -284,6 +292,7 @@ func (r *recordScreen) render(s model.State) {
 		r.list.Refresh()
 	}
 	show(r.noRows, len(r.rows) == 0)
+	show(r.listCard, len(r.rows) > 0)
 	if len(r.rows) == 0 {
 		r.clear.Disable()
 	} else {

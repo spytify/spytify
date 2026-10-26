@@ -108,7 +108,8 @@ func newLogsScreen(a *App) *logsScreen {
 	})
 	open.Importance = widget.LowImportance
 	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open))
-	l.root = container.NewBorder(container.NewVBox(l.diag, widget.NewSeparator(), tools), nil, nil, nil, l.list)
+	// The diagnostics are a card on the page; the log stays plain below.
+	l.root = container.NewBorder(container.NewVBox(onPage(inset(newCard(l.diag))), tools), nil, nil, nil, l.list)
 	return l
 }
 
@@ -199,7 +200,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 		l.actions.Objects = []fyne.CanvasObject{l.refresh}
 	}
 	l.actions.Refresh()
-	l.checks.Objects = rows
+	l.checks.Objects = lines(rows)
 	l.checks.Refresh()
 	// The checks take what they need up to checksMaxHeight, then scroll:
 	// the log below keeps its room.

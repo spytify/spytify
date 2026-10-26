@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -400,6 +401,25 @@ func (r *toggleRenderer) Destroy() {}
 func relayout(s *container.Scroll) {
 	s.Content.Refresh()
 	s.Refresh()
+}
+
+// onPage sets a screen on the page colour, which the cards stand out from.
+func onPage(content fyne.CanvasObject) fyne.CanvasObject {
+	return newPanel(colorPage, "", 0, fyne.Size{}, content)
+}
+
+// inset keeps a part of a screen off the window's sides, in line with the
+// cards.
+func inset(o fyne.CanvasObject) *fyne.Container {
+	pad := theme.Padding()
+	return container.New(layout.NewCustomPaddedLayout(pad, pad, pad*2, pad*2), o)
+}
+
+// listCard holds a list in a card that takes the room it is given.
+func listCard(list fyne.CanvasObject) fyne.CanvasObject {
+	pad := theme.Padding()
+	box := newPanel(colorCard, colorCardLine, 10, fyne.NewSize(pad, pad), list)
+	return container.NewThemeOverride(box, cardTheme{input: colorCardInput})
 }
 
 // panel draws its content, inset by pad, on a box of a theme colour with
