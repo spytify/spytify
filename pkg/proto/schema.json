@@ -691,7 +691,7 @@
       }
     },
     "session.start": {
-      "description": "fails if the target process is not running or ffmpeg is missing",
+      "description": "fails if the target process is not running, ffmpeg is missing or the output folder cannot be written to",
       "params": {
         "$ref": "#/$defs/SessionStartParams"
       },

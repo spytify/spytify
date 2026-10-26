@@ -29,6 +29,7 @@ type recordScreen struct {
 	idle       *fyne.Container
 	idleTitle  *widget.Label
 	idleText   *widget.Label
+	hint       *widget.Label
 	attention  *fyne.Container
 	openPlayer *widget.Button
 	diagnose   *widget.Button
@@ -46,6 +47,9 @@ type recordScreen struct {
 	waitRow *fyne.Container
 	waiting *widget.Label
 	restart *widget.Button
+	// blocked leads to the diagnostics once a session ended for want of
+	// an output folder.
+	blocked *widget.Button
 
 	rows     []model.Row
 	list     *widget.List
@@ -71,10 +75,10 @@ func newRecordScreen(a *App) *recordScreen {
 	r.idleTitle = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	r.idleText = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{})
 	r.idleText.Wrapping = fyne.TextWrapWord
-	hint := widget.NewLabelWithStyle("A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start.",
+	r.hint = widget.NewLabelWithStyle("A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start.",
 		fyne.TextAlignCenter, fyne.TextStyle{})
-	hint.Wrapping = fyne.TextWrapWord
-	hint.SizeName = theme.SizeNameCaptionText
+	r.hint.Wrapping = fyne.TextWrapWord
+	r.hint.SizeName = theme.SizeNameCaptionText
 	r.diagnose = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
 	r.diagnose.Importance = widget.WarningImportance
 	diagnose := r.diagnose
@@ -84,7 +88,7 @@ func newRecordScreen(a *App) *recordScreen {
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
 		r.idleTitle,
-		r.idleText, hint, r.attention,
+		r.idleText, r.hint, r.attention,
 	)))
 
 	r.cover = canvas.NewImageFromResource(theme.MediaMusicIcon())
@@ -122,7 +126,9 @@ func newRecordScreen(a *App) *recordScreen {
 		a.noteAction("record this track from the start")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
-	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.restart))
+	r.blocked = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
+	r.blocked.Importance = widget.WarningImportance
+	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.restart, r.blocked))
 
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
@@ -271,7 +277,14 @@ func (r *recordScreen) render(s model.State) {
 		if player == "" {
 			player = "your player"
 		}
-		setLabel(r.idleText, fmt.Sprintf("Press Record, then play music in %s. Each track becomes its own file in %s.", player, r.folder))
+		title, text := "Ready to record", fmt.Sprintf("Press Record, then play music in %s. Each track becomes its own file in %s.", player, r.folder)
+		blocked := checkFails(s.Info.Checks, proto.CheckOutputWritable)
+		if blocked {
+			title, text = "Record is off", fmt.Sprintf("Spytify cannot write to the output folder, %s. The diagnostics say why.", r.folder)
+		}
+		setLabel(r.idleTitle, title)
+		setLabel(r.idleText, text)
+		show(r.hint, !blocked)
 		// A player that is not running is shown in the app bar and offered
 		// to open here; the diagnostics are for anything else.
 		down := !playerRunning(s)
@@ -302,8 +315,16 @@ func (r *recordScreen) render(s model.State) {
 		setCover(r.cover, r.app.covers.get(c.CoverURL).live)
 	} else {
 		r.card.Hide()
-		setLabel(r.waiting, waitingText(s.Session))
+		// A session the output folder ended, its drive unplugged: Record
+		// stays off until the folder is back or another one is chosen.
+		blocked := s.Session == proto.StateIdle && checkFails(s.Info.Checks, proto.CheckOutputWritable)
+		text := waitingText(s.Session)
+		if blocked {
+			text = "Session ended: Spytify cannot write to the output folder, so Record is off."
+		}
+		setLabel(r.waiting, text)
 		show(r.restart, s.Session == proto.StateWaiting)
+		show(r.blocked, blocked)
 		r.waitRow.Show()
 	}
 	r.renderLive(s.Current, s.Session, s.Level)
@@ -347,7 +368,7 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 
 // relayout lays the screen out again when a part appeared or went away.
 func (r *recordScreen) relayout() {
-	shape := fmt.Sprint(r.idle.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), r.waitRow.Visible(), r.restart.Visible(), r.noRows.Visible())
+	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), r.waitRow.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()

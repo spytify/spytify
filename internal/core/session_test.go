@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -155,8 +156,9 @@ func TestTempFolderDeletedIsMadeAgain(t *testing.T) {
 	}
 }
 
-// An output folder out of reach, its drive unplugged, stops the recording
-// with an error that says so, rather than skip every track that follows.
+// An output folder out of reach, its USB drive unplugged, stops the
+// recording at once with an error that says so: nothing more can be
+// recorded, this track included.
 func TestOutputFolderGoneStopsTheRecording(t *testing.T) {
 	tl := loadTimeline(t, "basic")
 	s := newScenario(t, tl, nil)
@@ -169,14 +171,44 @@ func TestOutputFolderGoneStopsTheRecording(t *testing.T) {
 			t.Error(err)
 		}
 	})
+	// Midnight Ferry ends at 5.5 s.
+	var reached atomic.Bool
+	s.player.At(5000, func() { reached.Store(true) })
 	runWith(t, s, SessionOptions{EndOnStop: true})
 	saved, skipped := outcome(t, s)
-	if len(saved) != 0 || skipped["Midnight Ferry"] != proto.SkipIncomplete || idOf(s, "Paper Lanterns") != "" {
+	if len(saved) != 0 || idOf(s, "Paper Lanterns") != "" {
 		t.Fatalf("saved %v skipped %v\n%s", saved, skipped, s.logs)
+	}
+	// A track seen to start is said to be skipped, not left recording.
+	if idOf(s, "Midnight Ferry") != "" && skipped["Midnight Ferry"] != proto.SkipIncomplete {
+		t.Errorf("skipped %v", skipped)
+	}
+	if reached.Load() {
+		t.Error("the recording waited for the track to end")
 	}
 	errs := errorsOf(s)
 	if len(errs) != 1 || errs[0].Code != "output_dir" || !strings.HasPrefix(errs[0].Msg, "the output folder cannot be reached") {
 		t.Fatalf("errors %+v", errs)
+	}
+}
+
+// Without an output folder to write to, no recording starts, and the
+// diagnostics say why.
+func TestNoRecordingStartsWithoutAnOutputFolder(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, nil)
+	if err := os.WriteFile(s.out, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.core.StartSession(SessionOptions{EndOnStop: true})
+	var perr *proto.Error
+	if !errors.As(err, &perr) || perr.Code != proto.CodeOutputDir {
+		t.Fatalf("start: %v, want the output folder's error", err)
+	}
+	for _, c := range s.core.Info().Checks {
+		if c.Name == proto.CheckOutputWritable && (c.OK || c.Detail == s.out) {
+			t.Errorf("check %+v, want it failing with the reason", c)
+		}
 	}
 }
 

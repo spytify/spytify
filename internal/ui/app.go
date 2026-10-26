@@ -268,6 +268,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	m.OnChange(a.scheduleRender)
 	m.OnLevel(a.scheduleLevel)
 	m.OnEvent(a.onEvent)
+	m.OnEvent(a.recheck)
 	a.render()
 	return a
 }
@@ -382,6 +383,15 @@ func (a *App) showTab(i int) {
 	a.renderCenter(a.last)
 }
 
+// showOutputSetting opens Settings on the output folder.
+func (a *App) showOutputSetting() {
+	a.noteAction("choose another folder")
+	a.showTab(tabSettings)
+	if set, ok := a.screens[tabSettings].(*settingsScreen); ok {
+		set.search.SetText("Output folder")
+	}
+}
+
 // scheduleRender coalesces bursts of events (levels arrive at 10 Hz) into
 // at most ten redraws a second, on the toolkit's goroutine.
 func (a *App) scheduleRender() {
@@ -439,6 +449,11 @@ func (a *App) render() {
 	case s.HaveInfo && !running:
 		// Nothing would play: the app bar says the player is not running,
 		// and the Record screen offers to open it.
+		a.action.Disable()
+		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
+	case s.HaveInfo && checkFails(s.Info.Checks, proto.CheckOutputWritable):
+		// Nothing could be saved: the Record screen says so and leads to
+		// the diagnostics.
 		a.action.Disable()
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	default:
@@ -605,6 +620,17 @@ func failingChecks(checks []proto.Check) int {
 	return n
 }
 
+// checkFails says whether the check named name is there and fails: a
+// recorder of an earlier build may not have it.
+func checkFails(checks []proto.Check, name string) bool {
+	for _, c := range checks {
+		if c.Name == name {
+			return !c.OK
+		}
+	}
+	return false
+}
+
 func outputText(settings map[string]any) string {
 	format, _ := settings["encode.format"].(string)
 	switch format {
@@ -643,10 +669,49 @@ func (a *App) toggleRecording() {
 			a.noteAction("record")
 			err = a.link.Do(ctx, proto.MethodSessionStart, proto.SessionStartParams{}, nil)
 		}
+		var perr *proto.Error
+		if errors.As(err, &perr) && perr.Code == proto.CodeOutputDir {
+			// The output folder went since the checks ran: the
+			// diagnostics show them, run again.
+			fyne.Do(func() { a.showTab(tabLogs) })
+			a.refreshChecks()
+			return
+		}
 		if err != nil {
 			fyne.Do(func() { a.showError(err) })
 		}
 	}()
+}
+
+// refreshChecks runs the recorder's checks again.
+func (a *App) refreshChecks() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_ = a.link.RefreshInfo(ctx)
+}
+
+// recheck runs the checks again when what they test may have changed:
+// the output folder lost during a recording, or another one chosen. It
+// runs on the link's goroutine.
+func (a *App) recheck(ev proto.Event) {
+	switch ev.Method {
+	case proto.EventError:
+		var e proto.ErrorEvent
+		if ev.Decode(&e) != nil || e.Code != "output_dir" {
+			return
+		}
+	case proto.EventSettingsChanged:
+		var e proto.SettingsValues
+		if ev.Decode(&e) != nil {
+			return
+		}
+		if _, ok := e.Values["output.dir"]; !ok {
+			return
+		}
+	default:
+		return
+	}
+	go a.refreshChecks()
 }
 
 // do runs an action off the toolkit's goroutine and reports a failure.

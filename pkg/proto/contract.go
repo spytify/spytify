@@ -18,7 +18,7 @@ type EventSpec struct {
 // Methods is every action the core answers.
 var Methods = []MethodSpec{
 	{MethodCoreInfo, nil, CoreInfoResult{}, "versions, resolved target and capability checks; first call on connect"},
-	{MethodSessionStart, SessionStartParams{}, SessionStartResult{}, "fails if the target process is not running or ffmpeg is missing"},
+	{MethodSessionStart, SessionStartParams{}, SessionStartResult{}, "fails if the target process is not running, ffmpeg is missing or the output folder cannot be written to"},
 	{MethodSessionStop, SessionStopParams{}, SessionStopResult{}, "lets the current track finish, unless now; a track ended by now can be saved with track.keep"},
 	{MethodSessionStatus, nil, SessionStatusResult{}, "snapshot for late-joining clients"},
 	{MethodSettingsGet, SettingsGetParams{}, SettingsValues{}, "every setting when keys is empty"},

@@ -82,6 +82,14 @@ func info() proto.CoreInfoResult {
 	}
 }
 
+// outputGone is info with the output folder out of reach, its USB drive
+// unplugged.
+func outputGone() proto.CoreInfoResult {
+	i := info()
+	i.Checks = append(i.Checks, proto.Check{Name: proto.CheckOutputWritable, OK: false, Detail: `mkdir L:\Music: The system cannot find the path specified.`})
+	return i
+}
+
 // newTestApp builds the window over a model the test feeds directly.
 func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	t.Helper()
@@ -476,6 +484,15 @@ type recordingCore struct {
 	calls []string
 	sets  []map[string]any
 	stops []proto.SessionStopParams
+	// noOutput is an output folder that cannot be written to: its check
+	// fails and no session starts.
+	noOutput bool
+}
+
+func (c *recordingCore) setNoOutput(gone bool) {
+	c.mu.Lock()
+	c.noOutput = gone
+	c.mu.Unlock()
 }
 
 func (c *recordingCore) handle(ctx context.Context, method string, params json.RawMessage) (any, error) {
@@ -491,10 +508,18 @@ func (c *recordingCore) handle(ctx context.Context, method string, params json.R
 		_ = json.Unmarshal(params, &p)
 		c.stops = append(c.stops, p)
 	}
+	noOutput := c.noOutput
 	c.mu.Unlock()
 	switch method {
 	case proto.MethodCoreInfo:
+		if noOutput {
+			return outputGone(), nil
+		}
 		return info(), nil
+	case proto.MethodSessionStart:
+		if noOutput {
+			return nil, proto.Errorf(proto.CodeOutputDir, "the output folder cannot be written to: mkdir L:\\Music: The system cannot find the path specified.")
+		}
 	case proto.MethodSettingsGet:
 		return proto.SettingsValues{Values: defaults()}, nil
 	case proto.MethodLogTail:
@@ -1042,4 +1067,88 @@ func TestNoDiagnosticsForAPlayerThatIsOff(t *testing.T) {
 	if all := texts(a.win.Content()); contains(all, "Open diagnostics") {
 		t.Errorf("a stale player check sends to the diagnostics: %v", all)
 	}
+}
+
+// An output folder that cannot be written to turns Record off. The Record
+// screen says so and leads to the diagnostics, whose check offers another
+// folder; after a session, the list says so too.
+func TestRecordIsOffWithoutAnOutputFolder(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	m.SetInfo(outputGone())
+	m.SetSettings(defaults())
+	a.render()
+	all := texts(a.win.Content())
+	if !a.action.Disabled() || !contains(all, "Record is off") || !contains(all, "Open diagnostics") || contains(all, "Ready to record") {
+		t.Fatalf("output folder gone: Record disabled %v, screen %v", a.action.Disabled(), all)
+	}
+	snapshot(t, a, "record-no-output")
+	tapButton(t, a.win.Content(), "Open diagnostics")
+	if a.tabs.SelectedIndex() != tabLogs {
+		t.Fatalf("Open diagnostics shows tab %d", a.tabs.SelectedIndex())
+	}
+	a.render()
+	snapshot(t, a, "diagnostics-no-output")
+	tapButton(t, a.win.Content(), "Choose another folder")
+	set := a.screens[tabSettings].(*settingsScreen)
+	if a.tabs.SelectedIndex() != tabSettings || set.search.Text != "Output folder" {
+		t.Fatalf("Choose another folder shows tab %d, searching %q", a.tabs.SelectedIndex(), set.search.Text)
+	}
+	set.search.SetText("")
+
+	// Lost during a session that saved a track.
+	a.showTab(tabRecord)
+	m.SetInfo(info())
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-1", Artist: "Neon Harbor", Title: "Midnight Ferry", LengthMs: 200000}}))
+	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-1", Path: "/x.flac"}))
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
+	m.SetInfo(outputGone())
+	a.render()
+	all = texts(a.win.Content())
+	if !a.action.Disabled() || !contains(all, "Session ended: Spytify cannot write to the output folder, so Record is off.") || !contains(all, "Open diagnostics") {
+		t.Fatalf("session ended without its folder: Record disabled %v, screen %v", a.action.Disabled(), all)
+	}
+	snapshot(t, a, "record-session-no-output")
+	m.SetInfo(info())
+	a.render()
+	if a.action.Disabled() || contains(texts(a.win.Content()), "Open diagnostics") {
+		t.Error("Record stays off once the folder is back")
+	}
+}
+
+// eventually waits for cond, set by the link's goroutine.
+func eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal(what)
+		}
+	}
+}
+
+// A start the recorder refuses for want of an output folder runs the
+// checks again and shows them; the folder lost during a session or
+// another one chosen runs them again too.
+func TestTheOutputFolderIsCheckedAgain(t *testing.T) {
+	a, m, core := connectedApp(t)
+	failing := func() bool { return checkFails(m.Snapshot().Info.Checks, proto.CheckOutputWritable) }
+	// The drive unplugged since the checks ran.
+	core.setNoOutput(true)
+	test.Tap(a.action)
+	// The app shows the diagnostics, then runs the checks: once the model
+	// has them, the tab switched.
+	eventually(t, "the checks did not run again after the refused start", failing)
+	a.render()
+	if a.tabs.SelectedIndex() != tabLogs || !a.action.Disabled() {
+		t.Fatalf("after the refused start: tab %d, Record disabled %v", a.tabs.SelectedIndex(), a.action.Disabled())
+	}
+	// Another folder chosen.
+	core.setNoOutput(false)
+	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{"output.dir": "/Volumes/Other"}}))
+	eventually(t, "the checks did not run again for another folder", func() bool { return !failing() })
+	// The folder lost during a recording.
+	core.setNoOutput(true)
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: "the output folder cannot be reached, so the recording stopped"}))
+	eventually(t, "the checks did not run again for a folder lost while recording", failing)
 }

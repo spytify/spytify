@@ -971,8 +971,9 @@ func (s *Session) classify(seg *segment) {
 			if _, gone := os.Stat(s.tmpDir); gone != nil {
 				// The folder cannot even be made again: the output folder
 				// is out of reach, its drive unplugged or its share gone.
-				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: "the output folder cannot be reached, so the recording stops: " + err.Error()})
-				s.stop = stopGraceful
+				// Nothing more can be recorded, this track included.
+				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: "the output folder cannot be reached, so the recording stopped: " + err.Error()})
+				s.Stop(true)
 				return
 			}
 			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "temp_file", Msg: err.Error()})
@@ -1246,6 +1247,9 @@ func (s *Session) handleStop(mode stopMode) {
 // held for track.keep. A take nobody saw start is only dropped.
 func (s *Session) reject(c *segment) {
 	if c.w == nil {
+		// No file to keep: a track whose file could not be opened is
+		// still said to be skipped.
+		s.closeSegment(c, s.ring.End())
 		return
 	}
 	if !c.announced {
