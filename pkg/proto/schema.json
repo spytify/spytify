@@ -691,7 +691,7 @@
       }
     },
     "session.start": {
-      "description": "fails if the target process is not running or ffmpeg is missing",
+      "description": "fails when a recording cannot start: the error says why, and core.info's checks (Logs > Diagnostics in the app) what to fix",
       "params": {
         "$ref": "#/$defs/SessionStartParams"
       },
@@ -742,7 +742,7 @@
       }
     },
     "track.keep": {
-      "description": "saves a keepable take after all, as \"\u003ctitle\u003e (partial)\"; fails once it is no longer keepable",
+      "description": "saves a keepable take after all, as \"<title> (partial)\"; fails once it is no longer keepable",
       "params": {
         "$ref": "#/$defs/TrackKeepParams"
       },

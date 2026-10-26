@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -49,11 +48,7 @@ func newLogsScreen(a *App) *logsScreen {
 	l.checksScroll = container.NewVScroll(l.checks)
 	l.refresh = widget.NewButtonWithIcon("Run the checks again", theme.ViewRefreshIcon(), func() {
 		a.noteAction("run the checks again")
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			_ = a.link.RefreshInfo(ctx)
-		}()
+		go a.refreshChecks()
 	})
 	l.refresh.Importance = widget.LowImportance
 	l.actions = container.NewHBox(l.refresh)
@@ -161,6 +156,11 @@ func (l *logsScreen) renderChecks(s model.State) {
 			open := widget.NewButtonWithIcon("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), l.app.launchPlayer)
 			open.Importance = widget.HighImportance
 			fix = open
+		}
+		if c.Name == proto.CheckOutputWritable && !c.OK {
+			choose := widget.NewButtonWithIcon("Choose another folder", theme.FolderOpenIcon(), l.app.showOutputSetting)
+			choose.Importance = widget.HighImportance
+			fix = choose
 		}
 		row := container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail))
 		if c.OK {

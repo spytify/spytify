@@ -4,7 +4,7 @@ Spytify has one switch for what it sends its developers: the **Sentry bug tracke
 
 ## Never kept
 
-Before a report leaves your computer, Spytify removes your computer's name, and turns your user name into `<user>` and your home folder into `~` wherever they appear.
+Before a report leaves your computer, Spytify removes your computer's name, and turns your user name into `<user>`, your home folder into `~` and your output folder into `<output>` wherever they appear.
 
 On Sentry's side, the project is set to:
 

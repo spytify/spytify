@@ -37,6 +37,7 @@ const (
 	CodeNoSession        = -32004
 	CodeUnsupported      = -32005
 	CodeNotAvailable     = -32006
+	CodeOutputDir        = -32007
 )
 
 // Error is a JSON-RPC error object.

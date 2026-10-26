@@ -122,6 +122,13 @@ func (c *Client) Enabled() bool {
 	return c.tracker != nil
 }
 
+// SetOutputDir names the output folder, which leaves as <output>.
+func (c *Client) SetOutputDir(dir string) {
+	if c != nil {
+		c.scrub.SetOutput(dir)
+	}
+}
+
 // SetEnabled turns the bug tracker on or off. Off, the Sentry client is
 // closed: nothing is collected, not even breadcrumbs.
 func (c *Client) SetEnabled(on bool) {

@@ -309,7 +309,11 @@ func (c *Core) Info() proto.CoreInfoResult {
 	}
 	info.Checks = append(info.Checks, c.backends.Probe()...)
 	dir := v.Path("output.dir")
-	add("output folder writable", writable(dir), dir)
+	if err := outputWritable(dir); err != nil {
+		add(proto.CheckOutputWritable, false, err.Error())
+	} else {
+		add(proto.CheckOutputWritable, true, dir)
+	}
 	if c.crashed != "" {
 		info.Warnings = append(info.Warnings, c.crashed)
 	}
@@ -331,17 +335,17 @@ func joinNames(names []string) string {
 	return out
 }
 
-func writable(dir string) bool {
+func outputWritable(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return false
+		return err
 	}
 	f, err := os.CreateTemp(dir, ".spytify-probe-*")
 	if err != nil {
-		return false
+		return err
 	}
 	f.Close()
 	os.Remove(f.Name())
-	return true
+	return nil
 }
 
 // SetSettings validates, persists and broadcasts a settings change.
@@ -375,6 +379,9 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 	c.mu.Unlock()
 	if c.ffErr != nil {
 		return "", proto.Errorf(proto.CodeFFmpegMissing, "%v", c.ffErr)
+	}
+	if err := outputWritable(c.store.Values().Path("output.dir")); err != nil {
+		return "", proto.Errorf(proto.CodeOutputDir, "the output folder cannot be written to: %v", err)
 	}
 	if err := c.ensureTarget(); err != nil {
 		return "", err
@@ -472,6 +479,8 @@ func (c *Core) newFinisher() *finisher {
 			c.log.Errorf("the counter could not move on to %d: %v", next, err)
 		}
 	}
+	// Not on the finisher's goroutine: stopping waits for it.
+	fin.lost = func() { go func() { _, _ = c.StopSession(true) }() }
 	return fin
 }
 

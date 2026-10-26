@@ -462,6 +462,25 @@ func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	}
 }
 
+// The output folder leaves a report as <output>: its name is the user's
+// own, which can be theirs.
+func TestReportsLeaveTheOutputFolderOut(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
+	dir := filepath.Join(t.TempDir(), "Mixtapes")
+	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{"output.dir": dir}}))
+	a.render()
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "temp_file", Msg: "open " + filepath.Join(dir, ".spytify", "a.wav") + ": not found"}))
+	ev := srv.Wait(t, "event", 1)[0].JSON()
+	contexts, _ := ev["contexts"].(map[string]any)
+	problem, _ := contexts["problem"].(map[string]any)
+	if want := "open " + filepath.Join("<output>", ".spytify", "a.wav") + ": not found"; problem["detail"] != want {
+		t.Errorf("detail %v, want %q", problem["detail"], want)
+	}
+}
+
 // labels are the visible labels under o with this text.
 func labels(o fyne.CanvasObject, text string) []*widget.Label {
 	var out []*widget.Label

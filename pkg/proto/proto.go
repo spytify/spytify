@@ -98,6 +98,10 @@ type Check struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+// CheckOutputWritable is the check that the output folder can be written
+// to: without it, no recording starts (CodeOutputDir).
+const CheckOutputWritable = "output folder writable"
+
 type CoreInfoResult struct {
 	Version  string     `json:"version"`
 	Protocol int        `json:"protocol"`

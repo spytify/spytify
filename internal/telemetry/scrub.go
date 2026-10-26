@@ -6,16 +6,39 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
 )
 
-// Scrubber replaces what could tell who the user is: the home folder
-// becomes ~ and the user name <user>. Track names are left as they are.
+// Scrubber replaces what could tell who the user is: the output folder
+// becomes <output>, the home folder ~ and the user name <user>. Track
+// names are left as they are.
 type Scrubber struct {
 	home []string
 	user *regexp.Regexp
+
+	mu     sync.Mutex
+	output []string
+}
+
+// SetOutput names the output folder, whose name the user chose and can
+// be their own. A drive's root is left as it is.
+func (s *Scrubber) SetOutput(dir string) {
+	if s == nil {
+		return
+	}
+	var output []string
+	if dir = filepath.Clean(dir); filepath.Dir(dir) != dir {
+		output = []string{dir}
+		if slash := filepath.ToSlash(dir); slash != dir {
+			output = append(output, slash)
+		}
+	}
+	s.mu.Lock()
+	s.output = output
+	s.mu.Unlock()
 }
 
 // NewScrubber reads the home folder and user name of this computer.
@@ -51,6 +74,13 @@ func (s *Scrubber) String(in string) string {
 		return in
 	}
 	out := in
+	// The output folder first: it is often in the home folder.
+	s.mu.Lock()
+	output := s.output
+	s.mu.Unlock()
+	for _, o := range output {
+		out = replaceFold(out, o, "<output>")
+	}
 	for _, h := range s.home {
 		out = replaceFold(out, h, "~")
 	}

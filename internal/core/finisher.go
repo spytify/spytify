@@ -61,9 +61,11 @@ type finisher struct {
 	claims map[string]bool
 	index  *recordIndex
 	// advance stores the counter's next number once a file took one; full
-	// stops the recording when the counter has no number left.
+	// stops the recording when the counter has no number left, and lost
+	// when the output folder cannot be reached.
 	advance func(next int64)
 	full    func()
+	lost    func()
 	// keep holds the last take cut short, for track.keep.
 	keep *keeper
 }
@@ -376,8 +378,18 @@ func (f *finisher) process(j finishJob) {
 
 func (f *finisher) fail(j finishJob, code string, err error) {
 	f.log.Errorf("%q: %s: %v", j.info.Title, code, err)
-	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: fmt.Sprintf("%s: %v", j.info.Title, err)})
+	msg := fmt.Sprintf("%s: %v", j.info.Title, err)
+	// Only once a file failed is the output folder looked at: gone with
+	// its drive, nothing more can be saved, and the recording stops.
+	lost := false
+	if _, gone := os.Stat(f.values().Path("output.dir")); gone != nil {
+		code, msg, lost = "output_dir", "the output folder cannot be reached, so the recording stopped: "+msg, true
+	}
+	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg})
 	f.skip(j.id, proto.SkipIncomplete)
+	if lost && f.lost != nil {
+		f.lost()
+	}
 }
 
 // scanTrim returns the frame range [start, end) of a WAV file between its

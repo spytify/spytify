@@ -2,7 +2,9 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -537,9 +539,11 @@ func (s *Session) write(c *segment, from, to int64) {
 	}
 	if c.w != nil {
 		if _, err := c.w.Write(data); err != nil {
-			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "write", Msg: err.Error()})
 			s.dropWriter(c)
 			c.reason = proto.SkipIncomplete
+			if !s.outputLost(err) {
+				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "write", Msg: err.Error()})
+			}
 		}
 	}
 	c.drained = to
@@ -965,14 +969,41 @@ func (s *Session) classify(seg *segment) {
 			s.stop = stopGraceful
 			return
 		}
-		w, err := pcm.CreateWAV(filepath.Join(s.tmpDir, seg.id+".wav"), seg.format)
+		w, err := s.tempWAV(seg.id, seg.format)
 		if err != nil {
-			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "temp_file", Msg: err.Error()})
 			seg.reason = proto.SkipIncomplete
+			if !s.outputLost(err) {
+				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "temp_file", Msg: err.Error()})
+			}
 			return
 		}
 		seg.w = w
 	}
+}
+
+// tempWAV creates a track's temp file. A temp folder deleted while the
+// session runs, by hand with the files around it, is made again.
+func (s *Session) tempWAV(id string, f pcm.Format) (*pcm.WAVWriter, error) {
+	path := filepath.Join(s.tmpDir, id+".wav")
+	w, err := pcm.CreateWAV(path, f)
+	if errors.Is(err, fs.ErrNotExist) && os.MkdirAll(s.tmpDir, 0o755) == nil {
+		return pcm.CreateWAV(path, f)
+	}
+	return w, err
+}
+
+// outputLost tells, once a temp file could not be created or written to,
+// whether the output folder went with it: its drive unplugged or its share
+// gone. Nothing more can be recorded then, this track included, and the
+// recording stops at once. The folder is only looked at after such an
+// error.
+func (s *Session) outputLost(err error) bool {
+	if _, gone := os.Stat(s.tmpDir); gone == nil {
+		return false
+	}
+	s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: "the output folder cannot be reached, so the recording stopped: " + err.Error()})
+	s.Stop(true)
+	return true
 }
 
 func (s *Session) announce(seg *segment) {
@@ -1229,6 +1260,9 @@ func (s *Session) handleStop(mode stopMode) {
 // held for track.keep. A take nobody saw start is only dropped.
 func (s *Session) reject(c *segment) {
 	if c.w == nil {
+		// No file to keep: a track whose file could not be opened is
+		// still said to be skipped.
+		s.closeSegment(c, s.ring.End())
 		return
 	}
 	if !c.announced {
@@ -1290,7 +1324,7 @@ func (s *Session) formatChange(f pcm.Format) {
 		c.length = f.FramesFromMs(c.info.LengthMs)
 		c.awaitStart, c.startDeadline = true, s.ms(startTimeoutMs)
 		if c.reason == "" {
-			if w, err := pcm.CreateWAV(filepath.Join(s.tmpDir, c.id+".wav"), f); err == nil {
+			if w, err := s.tempWAV(c.id, f); err == nil {
 				c.w = w
 			} else {
 				c.reason = proto.SkipIncomplete
@@ -1330,7 +1364,7 @@ func (s *Session) reformat(f pcm.Format) {
 		c.startDeadline = conv(c.startDeadline)
 		if c.w != nil {
 			s.dropWriter(c)
-			if w, err := pcm.CreateWAV(filepath.Join(s.tmpDir, c.id+".wav"), f); err == nil {
+			if w, err := s.tempWAV(c.id, f); err == nil {
 				c.w = w
 			} else {
 				c.reason = proto.SkipIncomplete
