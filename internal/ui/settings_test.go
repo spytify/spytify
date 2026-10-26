@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -27,38 +29,46 @@ func settingsApp(t *testing.T) (*App, *model.Model, *settingsScreen) {
 	return a, m, a.screens[tabSettings].(*settingsScreen)
 }
 
-// advancedItems are the form items folded under a group's Advanced.
-func advancedItems(s *settingsScreen, group string) map[*widget.FormItem]bool {
-	out := map[*widget.FormItem]bool{}
-	acc := s.advanced[group]
-	if acc == nil {
-		return out
+// holds reports whether o is in root's tree, through containers and
+// widgets alike.
+func holds(root, o fyne.CanvasObject) bool {
+	if root == o {
+		return true
 	}
-	for _, o := range acc.Items[0].Detail.(*fyne.Container).Objects {
-		if f, ok := o.(*widget.Form); ok {
-			for _, it := range f.Items {
-				out[it] = true
+	switch w := root.(type) {
+	case nil:
+		return false
+	case *fyne.Container:
+		for _, c := range w.Objects {
+			if holds(c, o) {
+				return true
+			}
+		}
+		return false
+	case fyne.Widget:
+		for _, c := range test.WidgetRenderer(w).Objects() {
+			if holds(c, o) {
+				return true
 			}
 		}
 	}
-	return out
+	return false
+}
+
+// folded reports whether o is under a group's Advanced.
+func folded(s *settingsScreen, group string, o fyne.CanvasObject) bool {
+	acc := s.advanced[group]
+	return acc != nil && holds(acc.Items[0].Detail, o)
 }
 
 // App comes first, with the player as its advanced part; every setting is
-// in its section, the rarely changed ones folded under Advanced, and no
-// field has a caption under it.
+// in its section, the rarely changed ones folded under Advanced.
 func TestSettingsAreLaidOutBySection(t *testing.T) {
 	_, _, s := settingsApp(t)
 	if g := groups(); g[0] != "App" {
 		t.Errorf("first section %q, want App", g[0])
 	}
-	player := false
-	if app := s.advanced["App"]; app != nil {
-		for _, o := range app.Items[0].Detail.(*fyne.Container).Objects {
-			player = player || o == s.player.form
-		}
-	}
-	if !player {
+	if !folded(s, "App", s.player.box) {
 		t.Error("the player is not in App's Advanced part")
 	}
 	for _, d := range settings.Table {
@@ -67,11 +77,8 @@ func TestSettingsAreLaidOutBySection(t *testing.T) {
 			t.Errorf("no field for %s", d.Key)
 			continue
 		}
-		if folded := advancedItems(s, d.Group)[f.item]; folded != d.Advanced {
-			t.Errorf("%s: under Advanced %v, want %v", d.Key, folded, d.Advanced)
-		}
-		if f.item.HintText != "" {
-			t.Errorf("%s has a caption: %q", d.Key, f.item.HintText)
+		if folded(s, d.Group, f.row) != d.Advanced {
+			t.Errorf("%s: under Advanced %v, want %v", d.Key, !d.Advanced, d.Advanced)
 		}
 	}
 	for _, acc := range s.advanced {
@@ -158,6 +165,93 @@ func TestSettingsSearch(t *testing.T) {
 	}
 }
 
+// Under the file name template, the file a sample track gets with the
+// output settings as they are: underscores show once they are on.
+func TestTheTemplateShowsAnExample(t *testing.T) {
+	a, m, s := settingsApp(t)
+	example := func() string { return s.example.Segments[0].(*widget.TextSegment).Text }
+	v := defaults()
+	v["encode.format"] = "flac"
+	m.SetSettings(v)
+	a.render()
+	// By default the files go in artist and album folders.
+	if got, want := example(), "e.g. "+filepath.Join("Neon Harbor", "Harbor Lights (2024)", "Neon Harbor - Café Lumière.flac"); got != want {
+		t.Errorf("example %q, want %q", got, want)
+	}
+	v["output.underscores"] = true
+	v["output.prefix"] = "counter"
+	v["output.ascii_filenames"] = true
+	m.SetSettings(v)
+	s.search.SetText("output")
+	a.render()
+	if got, want := example(), "e.g. "+filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "001_Neon_Harbor_-_Cafe_Lumiere.flac"); got != want {
+		t.Errorf("with underscores, the counter and no diacritics, example %q, want %q", got, want)
+	}
+	if all := texts(s.sections); !contains(all, "Underscores instead of spaces") {
+		t.Errorf("no Underscores instead of spaces in %v", all)
+	}
+	snapshot(t, a, "settings-file-name")
+}
+
+// The counter's settings wake up with what uses the counter, and say the
+// number the next file gets.
+func TestTheCounterSettings(t *testing.T) {
+	a, m, s := settingsApp(t)
+	next := s.fields["output.counter_next"].input.(*applyEntry)
+	digits := s.fields["output.counter_width"].input.(*applyEntry)
+	if !next.Disabled() || !digits.Disabled() {
+		t.Error("the counter's settings are on while nothing uses the counter")
+	}
+	if sel := s.fields["output.prefix"].input.(*widget.Select); sel.Selected != "None" || !contains(sel.Options, "Counter (001)") {
+		t.Errorf("the prefix shows %q of %v", sel.Selected, sel.Options)
+	}
+	// The next number is the setting itself, which the recorder moves on.
+	v := defaults()
+	v["output.prefix"] = "counter"
+	v["output.counter_next"] = int64(5)
+	m.SetSettings(v)
+	s.search.SetText("counter")
+	a.render()
+	if next.Disabled() || digits.Disabled() || next.Text != "5" {
+		t.Errorf("with the counter prefix: next %q disabled %v, digits disabled %v", next.Text, next.Disabled(), digits.Disabled())
+	}
+	// The prefix is found by its choices' words too.
+	if all := texts(s.sections); !contains(all, "File name prefix") || !contains(all, "Next counter number") {
+		t.Errorf("searching counter shows %v", all)
+	}
+	snapshot(t, a, "settings-counter")
+}
+
+// A player change saves at once, as the other settings do; only then does
+// the card offer to restart spytifyd, which reads it when it starts.
+func TestThePlayerSavesWithoutAButton(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	for _, k := range target.TargetKeys {
+		t.Setenv(k, "")
+	}
+	a, _, s := settingsApp(t)
+	s.advanced["App"].Open(0)
+	s.layout()
+	if _, err := os.Stat(target.UserEnvPath()); err == nil {
+		t.Fatal("showing the player wrote the .env file")
+	}
+	if all := texts(a.win.Content()); !contains(all, "Player process") || contains(all, "Restart spytifyd") {
+		t.Errorf("before any change the player shows %v", all)
+	}
+	s.player.process.SetText("otherplayer")
+	s.player.process.submit()
+	if env, err := os.ReadFile(target.UserEnvPath()); err != nil || !strings.Contains(string(env), "otherplayer") {
+		t.Errorf(".env after the change: %q, %v", env, err)
+	}
+	all := texts(a.win.Content())
+	if !contains(all, "Restart spytifyd") || contains(all, "Save and restart spytifyd") {
+		t.Errorf("after the change the player shows %v", all)
+	}
+	snapshot(t, a, "settings-player")
+}
+
 // A section's Reset resets each of its settings, and only those.
 func TestResetResetsItsSection(t *testing.T) {
 	a, _, core := connectedApp(t)
@@ -170,7 +264,7 @@ func TestResetResetsItsSection(t *testing.T) {
 			want = append(want, d.Key)
 		}
 	}
-	resets := buttons(s.sections.Objects[0].(*fyne.Container), "Reset")
+	resets := buttons(s.sections.Objects[0], "Reset")
 	if len(resets) != 1 {
 		t.Fatalf("%d Reset buttons in the first section", len(resets))
 	}
@@ -201,5 +295,39 @@ func TestMinimizeToTrayIsOffByDefault(t *testing.T) {
 		if d.Key == "app.minimize_to_tray" && d.Default != false {
 			t.Fatalf("app.minimize_to_tray defaults to %v", d.Default)
 		}
+	}
+}
+
+func TestYesNoSettingsAreSwitches(t *testing.T) {
+	a, m, s := settingsApp(t)
+	for _, d := range settings.Table {
+		if _, ok := s.fields[d.Key].input.(*toggle); ok != (d.Kind == settings.KindBool) {
+			t.Errorf("%s: switch %v for kind %v", d.Key, ok, d.Kind)
+		}
+	}
+	light := defaults()
+	light["app.theme"] = "light"
+	m.SetSettings(light)
+	a.render()
+	snapshot(t, a, "settings-light")
+
+	var got []bool
+	sw := newToggle(func(on bool) { got = append(got, on) })
+	test.NewTempWindow(t, sw)
+	sw.SetOn(true)
+	if !sw.on || len(got) != 0 {
+		t.Fatalf("SetOn: on %v, reported %v", sw.on, got)
+	}
+	test.Tap(sw)
+	sw.TypedRune(' ')
+	sw.TypedRune('x')
+	if !sw.on || len(got) != 2 || got[0] || !got[1] {
+		t.Fatalf("tap then space: on %v, reported %v", sw.on, got)
+	}
+	// The switch fills its form row; a tap beside it is not on it.
+	sw.Resize(fyne.NewSize(400, sw.MinSize().Height))
+	test.TapAt(sw, fyne.NewPos(300, 5))
+	if len(got) != 2 {
+		t.Fatalf("a tap beside the switch flipped it: %v", got)
 	}
 }

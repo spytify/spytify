@@ -19,6 +19,7 @@ import (
 
 	"github.com/spytify/spytify/internal/bus"
 	"github.com/spytify/spytify/internal/core"
+	"github.com/spytify/spytify/internal/crash"
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/platform"
 	"github.com/spytify/spytify/internal/settings"
@@ -95,7 +96,7 @@ func run() int {
 	}
 
 	crashLog := filepath.Join(env.StateDir, "spytifyd.crash.log")
-	crashed := keepCrashes(crashLog)
+	crashed := crash.Keep(crashLog)
 	log, err := core.NewLogger(*logPath, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spytifyd: log file:", err)

@@ -24,6 +24,9 @@ mkdir -p "$out"
 version="${SPYTIFY_VERSION:-2.0.0-alpha+$(git rev-parse --short HEAD 2>/dev/null || echo dev)}"
 ldflags="-s -w -X github.com/spytify/spytify/pkg/proto.Version=v$version"
 ldflags+=" -X github.com/spytify/spytify/internal/target.DefaultProcess=${SPYTIFY_DEFAULT_PROCESS:-}"
+# Crash reports and anonymous stats go to the Sentry project in
+# SPYTIFY_SENTRY_DSN; a build without it sends nothing.
+ldflags+=" -X github.com/spytify/spytify/internal/telemetry.DSN=${SPYTIFY_SENTRY_DSN:-}"
 
 export GOOS=windows GOARCH=amd64
 for cmd in spytifyd spytify-cli; do

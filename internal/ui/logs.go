@@ -9,8 +9,10 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -29,23 +31,33 @@ type logsScreen struct {
 	all   []proto.LogEvent
 	path  string
 
-	diag      *widget.Accordion
-	checks    *fyne.Container
-	lastState string
+	diag *widget.Accordion
+	// checks scroll past checksMaxHeight, above actions: Run the checks
+	// again, and Send to the developers when a check fails.
+	checks       *fyne.Container
+	checksScroll *container.Scroll
+	actions      *fyne.Container
+	refresh      *widget.Button
+	lastState    string
+	// sent is the state of the checks last sent to the developers.
+	sent string
 }
 
 func newLogsScreen(a *App) *logsScreen {
 	l := &logsScreen{app: a, path: filepath.Join(a.opts.StateDir, "spytifyd.log")}
 	l.checks = container.NewVBox()
-	refresh := widget.NewButtonWithIcon("Run the checks again", theme.ViewRefreshIcon(), func() {
+	l.checksScroll = container.NewVScroll(l.checks)
+	l.refresh = widget.NewButtonWithIcon("Run the checks again", theme.ViewRefreshIcon(), func() {
+		a.noteAction("run the checks again")
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			_ = a.link.RefreshInfo(ctx)
 		}()
 	})
-	refresh.Importance = widget.LowImportance
-	l.diag = widget.NewAccordion(widget.NewAccordionItem("Diagnostics", container.NewVBox(l.checks, container.NewHBox(refresh))))
+	l.refresh.Importance = widget.LowImportance
+	l.actions = container.NewHBox(l.refresh)
+	l.diag = widget.NewAccordion(widget.NewAccordionItem("Diagnostics", container.NewVBox(l.checksScroll, l.actions)))
 
 	l.level = widget.NewCheckGroup(logLevels, func([]string) { l.filter() })
 	l.level.Horizontal = true
@@ -83,6 +95,7 @@ func newLogsScreen(a *App) *logsScreen {
 	// SetSelected runs the callback, which needs the list.
 	l.level.SetSelected(logLevels)
 	copyAll := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+		a.noteAction("copy the log")
 		var b strings.Builder
 		for _, line := range l.lines {
 			b.WriteString(line.TS + " " + line.Level + " " + line.Msg + "\n")
@@ -90,12 +103,21 @@ func newLogsScreen(a *App) *logsScreen {
 		a.fa.Clipboard().SetContent(b.String())
 	})
 	copyAll.Importance = widget.LowImportance
-	open := widget.NewButtonWithIcon("Open log file", theme.DocumentIcon(), func() { _ = openPath(l.path) })
+	open := widget.NewButtonWithIcon("Open log file", theme.DocumentIcon(), func() {
+		a.noteAction("open the log file")
+		_ = openPath(l.path)
+	})
 	open.Importance = widget.LowImportance
 	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open))
-	l.root = container.NewBorder(container.NewVBox(l.diag, widget.NewSeparator(), tools), nil, nil, nil, l.list)
+	// The diagnostics are a card on the page; the log stays plain below.
+	pad := theme.Padding()
+	diag := container.New(layout.NewCustomPaddedLayout(pad, pad, pad*3, pad*3), newCard(l.diag))
+	l.root = container.NewBorder(diag, nil, nil, nil, plain(margin(container.NewBorder(tools, nil, nil, nil, l.list))))
 	return l
 }
+
+// checksMaxHeight is about four checks: more scroll.
+const checksMaxHeight = 160
 
 func padLevel(s string) string {
 	for len(s) < 5 {
@@ -119,15 +141,20 @@ func (l *logsScreen) renderChecks(s model.State) {
 		title = fmt.Sprintf("Diagnostics · %d of %d checks need attention", failing, len(s.Info.Checks))
 	}
 	state := fmt.Sprint(title, s.Info.Checks, s.Info.Warnings)
-	if state == l.lastState {
+	// The send button follows the bug tracker's switch too.
+	on, _ := l.app.privacy(trackerKey).(bool)
+	redraw := fmt.Sprint(state, on)
+	if redraw == l.lastState {
 		return
 	}
-	l.lastState = state
-	var rows []fyne.CanvasObject
+	l.lastState = redraw
+	// What needs attention comes last, the list scrolled to it: the checks
+	// that pass, the advice, then the checks that fail.
+	var failed, advice, passed []fyne.CanvasObject
 	for _, c := range s.Info.Checks {
 		icon := theme.ConfirmIcon()
 		if !c.OK {
-			icon = theme.ErrorIcon()
+			icon = theme.WarningIcon()
 		}
 		var fix fyne.CanvasObject
 		if c.Name == "player running" && !c.OK {
@@ -135,13 +162,52 @@ func (l *logsScreen) renderChecks(s model.State) {
 			open.Importance = widget.HighImportance
 			fix = open
 		}
-		rows = append(rows, container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail)))
+		row := container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail))
+		if c.OK {
+			passed = append(passed, row)
+		} else {
+			failed = append(failed, row)
+		}
 	}
 	for _, w := range s.Info.Warnings {
-		rows = append(rows, container.NewBorder(nil, nil, widget.NewIcon(theme.WarningIcon()), nil, wrapped(w)))
+		advice = append(advice, container.NewBorder(nil, nil, widget.NewIcon(theme.InfoIcon()), nil, wrapped(w)))
 	}
-	l.checks.Objects = rows
+	rows := append(append(passed, advice...), failed...)
+	// Stuck on a check: the user may send it to the developers, once for
+	// these results, unless they opted out of the bug tracker.
+	if failing > 0 && l.app.tel.Available() {
+		send := ttwidget.NewButtonWithIcon("Send to the developers", theme.MailSendIcon(), nil)
+		done := func() {
+			l.sent = state
+			send.SetText("Sent")
+			send.Disable()
+		}
+		send.OnTapped = func() {
+			l.app.sendChecks(s, func(ok bool) {
+				if !ok {
+					send.SetText("Not sent, try again")
+					return
+				}
+				done()
+			})
+		}
+		switch {
+		case !on:
+			send.Disable()
+			send.SetToolTip(optedOut)
+		case l.sent == state:
+			done()
+		}
+		l.actions.Objects = []fyne.CanvasObject{l.refresh, send}
+	} else {
+		l.actions.Objects = []fyne.CanvasObject{l.refresh}
+	}
+	l.actions.Refresh()
+	l.checks.Objects = lines(rows)
 	l.checks.Refresh()
+	// The checks take what they need up to checksMaxHeight, then scroll:
+	// the log below keeps its room.
+	l.checksScroll.SetMinSize(fyne.NewSize(0, min(l.checks.MinSize().Height, checksMaxHeight)))
 	l.diag.Items[0].Title = title
 	// Fold the checks away while they all pass; open them when one fails.
 	if failing > 0 {
@@ -150,6 +216,9 @@ func (l *logsScreen) renderChecks(s model.State) {
 		l.diag.Close(0)
 	}
 	l.diag.Refresh()
+	// The diagnostics changed height: lay the log out below them again.
+	l.root.Refresh()
+	l.checksScroll.ScrollToBottom()
 }
 
 func (l *logsScreen) filter() {

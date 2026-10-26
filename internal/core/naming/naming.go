@@ -103,16 +103,7 @@ func FileName(p Plan, o Options, counter int64, trackNumber int) string {
 		if width <= 0 {
 			width = 3
 		}
-		limit := int64(1)
-		for i := 0; i < width; i++ {
-			limit *= 10
-		}
-		if counter >= limit {
-			counter = limit - 1
-		}
-		if counter < 0 {
-			counter = 0
-		}
+		counter = min(max(counter, 0), CounterLimit(width))
 		prefix = fmt.Sprintf("%0*d%s", width, counter, sep)
 	case "album_track":
 		if trackNumber > 0 {
@@ -120,6 +111,29 @@ func FileName(p Plan, o Options, counter int64, trackNumber int) string {
 		}
 	}
 	return prefix + p.Base + "." + o.Extension
+}
+
+// CounterLimit is the last number a counter of width digits writes: 999
+// for 3.
+func CounterLimit(width int) int64 {
+	if width <= 0 {
+		width = 3
+	}
+	limit := int64(1)
+	for range width {
+		limit *= 10
+	}
+	return limit - 1
+}
+
+// Example is the path, from the output folder, a sample track gets with o
+// and the counter at counter: the settings show it under the template.
+func Example(o Options, counter int64) string {
+	// Its accents show what removing diacritics does.
+	t := Track{Artists: []string{"Neon Harbor"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Café Lumière",
+		Album: "Harbor Lights", TrackNumber: 4, Year: 2024}
+	p := Build(t, o)
+	return filepath.Join(p.Dir, FileName(p, o, counter, t.TrackNumber))
 }
 
 // WithSuffix returns name with v1's duplicate counter: "Name 2.mp3".

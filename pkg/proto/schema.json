@@ -146,6 +146,37 @@
       ],
       "type": "object"
     },
+    "FinishTimings": {
+      "properties": {
+        "cover_ms": {
+          "type": "integer"
+        },
+        "encode_ms": {
+          "type": "integer"
+        },
+        "format": {
+          "type": "string"
+        },
+        "tag_ms": {
+          "type": "integer"
+        },
+        "total_ms": {
+          "type": "integer"
+        },
+        "trim_ms": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cover_ms",
+        "encode_ms",
+        "format",
+        "tag_ms",
+        "total_ms",
+        "trim_ms"
+      ],
+      "type": "object"
+    },
     "LevelEvent": {
       "properties": {
         "peak_dbfs": {
@@ -420,9 +451,31 @@
       ],
       "type": "object"
     },
+    "TrackCut": {
+      "properties": {
+        "by": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "offset_ms": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "by",
+        "kind",
+        "offset_ms"
+      ],
+      "type": "object"
+    },
     "TrackFinishedEvent": {
       "properties": {
         "bytes": {
+          "type": "integer"
+        },
+        "counter": {
           "type": "integer"
         },
         "duration_ms": {
@@ -439,6 +492,9 @@
         },
         "tagged_by": {
           "type": "string"
+        },
+        "timings": {
+          "$ref": "#/$defs/FinishTimings"
         }
       },
       "required": [
@@ -475,6 +531,9 @@
         },
         "cover_url": {
           "type": "string"
+        },
+        "cut": {
+          "$ref": "#/$defs/TrackCut"
         },
         "id": {
           "type": "string"

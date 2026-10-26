@@ -96,6 +96,8 @@ type segment struct {
 	provisional   bool
 	announced     bool
 	partial       bool
+	// cut is how the take's start was found, for track.started.
+	cut *proto.TrackCut
 }
 
 type changeKind int
@@ -115,6 +117,17 @@ type change struct {
 	ready    int64
 	// restart: the same item started over, so the take before is partial.
 	restart bool
+}
+
+// String names the kind as track.started's cut says it.
+func (k changeKind) String() string {
+	switch k {
+	case changeFirst:
+		return "first"
+	case changeBoundary:
+		return "boundary"
+	}
+	return "interrupt"
 }
 
 // sessionDeps is what a session needs from the core.
@@ -787,10 +800,13 @@ func (s *Session) tryResolve(force bool) bool {
 		return false
 	}
 	var cut int64
+	var by string
 	switch p.kind {
 	case changeFirst:
 		at, ok := s.firstSound(p.lo)
+		by = "first_sound"
 		if !ok {
+			by = "notice"
 			if !force && r.End() < p.at+s.ms(startTimeoutMs) {
 				return false
 			}
@@ -815,21 +831,21 @@ func (s *Session) tryResolve(force bool) bool {
 		}
 		switch {
 		case db <= s.silenceDB:
-			cut = refine(q)
+			cut, by = refine(q), "silence"
 		case db <= r.MedianRMS(p.lo, hi, s.frame)-dipDB:
 			// No silence, but a clear dip: two tracks faded into each
 			// other.
-			cut = refine(q)
+			cut, by = refine(q), "dip"
 		case edgeOK:
 			// A skip cuts a track mid-note; the next one starts where the
 			// peak level drops for a millisecond, at its first sample.
-			cut = edge
+			cut, by = edge, "edge"
 		case p.kind == changeBoundary && s.cur != nil:
 			// Gapless: trust the declared length, counted from the
 			// track's first sound.
-			cut = s.soundAt(s.cur) + s.cur.length
+			cut, by = s.soundAt(s.cur)+s.cur.length, "length"
 		default:
-			cut = p.expected
+			cut, by = p.expected, "notice"
 		}
 		if cut > r.End() {
 			cut = r.End()
@@ -842,14 +858,15 @@ func (s *Session) tryResolve(force bool) bool {
 	s.deps.log.Debugf("cut for %q at %d ms (kind %d, noticed at %d ms, window %d..%d ms)",
 		p.info.Title, f.MsFromFrames(cut), p.kind, f.MsFromFrames(p.at), f.MsFromFrames(p.lo), f.MsFromFrames(p.hi))
 	s.pend = nil
-	s.cutAt(cut, p.info, p.kind == changeFirst, p.restart)
+	how := &proto.TrackCut{Kind: p.kind.String(), By: by, OffsetMs: f.MsFromFrames(cut) - f.MsFromFrames(p.at)}
+	s.cutAt(cut, p.info, p.kind == changeFirst, p.restart, how)
 	return true
 }
 
 func f1ms(r *Ring) int64 { return r.Format().FramesFromMs(1) }
 
 // cutAt ends the current segment at cut and starts the next one there.
-func (s *Session) cutAt(cut int64, info meta.TrackInfo, first, restart bool) {
+func (s *Session) cutAt(cut int64, info meta.TrackInfo, first, restart bool, how *proto.TrackCut) {
 	prev := s.cur
 	afterAd := false
 	if prev != nil && restart {
@@ -866,6 +883,7 @@ func (s *Session) cutAt(cut int64, info meta.TrackInfo, first, restart bool) {
 		return
 	}
 	seg := s.newSegment(info, cut)
+	seg.cut = how
 	if afterAd && !first {
 		// The next track starts at its first sound, which keeps an
 		// advert's tail out of it.
@@ -963,7 +981,7 @@ func (s *Session) announce(seg *segment) {
 		return
 	}
 	seg.announced = true
-	ev := proto.TrackStartedEvent{Track: trackOf(seg)}
+	ev := proto.TrackStartedEvent{Track: trackOf(seg), Cut: seg.cut}
 	if seg.format.Valid() {
 		ev.Source = &proto.AudioSource{SampleRate: seg.format.Rate, Channels: seg.format.Channels}
 	}

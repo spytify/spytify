@@ -38,11 +38,10 @@ func (t Track) Artist() string {
 
 // Options are the tags.* settings that shape the mapping.
 type Options struct {
-	ExtraToSubtitle  bool
-	TrackFromCounter bool
-	ArtistSeparator  string
-	CoverSize        string // small, medium, large
-	Cover            bool
+	ExtraToSubtitle bool
+	ArtistSeparator string
+	CoverSize       string // small, medium, large
+	Cover           bool
 }
 
 // FromLocal maps what the player's now-playing interface said. When the

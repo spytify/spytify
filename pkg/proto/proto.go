@@ -198,6 +198,24 @@ type TrackStartedEvent struct {
 	Track
 	// Source is the audio as the player delivers it.
 	Source *AudioSource `json:"source,omitempty"`
+	// Cut is how the recorder found where the track starts.
+	Cut *TrackCut `json:"cut,omitempty"`
+}
+
+// TrackCut is how the recorder placed a track's start.
+type TrackCut struct {
+	// Kind is first (the session's first track), boundary (the track
+	// before ended) or interrupt (it was cut short).
+	Kind string `json:"kind"`
+	// By is what placed the cut: silence, dip (two tracks faded into each
+	// other), edge (a skip, mid-note), length (gapless, from the track
+	// before's declared length) or notice (where the player said the track
+	// changed, nothing better found); for a first track, first_sound or
+	// notice.
+	By string `json:"by"`
+	// OffsetMs is how far the cut is from where the player said the track
+	// changed: negative before it.
+	OffsetMs int64 `json:"offset_ms"`
 }
 
 // AudioSource is the captured stream's format.
@@ -207,12 +225,27 @@ type AudioSource struct {
 }
 
 type TrackFinishedEvent struct {
-	ID         string `json:"id"`
+	ID string `json:"id"`
+	// Counter is the number this file got with output.prefix counter, in
+	// its name; the next file gets one more (output.counter_next).
+	Counter    int64  `json:"counter,omitempty"`
 	Path       string `json:"path"`
 	DurationMs int64  `json:"duration_ms"`
 	Bytes      int64  `json:"bytes"`
 	Tagged     bool   `json:"tagged"`
 	TaggedBy   string `json:"tagged_by,omitempty"`
+	// Timings is how long saving the file took, step by step.
+	Timings *FinishTimings `json:"timings,omitempty"`
+}
+
+// FinishTimings are the steps between the end of a track and its file.
+type FinishTimings struct {
+	Format   string `json:"format"`
+	TrimMs   int64  `json:"trim_ms"`
+	CoverMs  int64  `json:"cover_ms"`
+	EncodeMs int64  `json:"encode_ms"`
+	TagMs    int64  `json:"tag_ms"`
+	TotalMs  int64  `json:"total_ms"`
 }
 
 type TrackSkippedEvent struct {

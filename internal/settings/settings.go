@@ -62,7 +62,14 @@ func (s *Store) load() error {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		d, ok := Lookup(k)
+		key := k
+		if to, ok := renamed[k]; ok {
+			if _, both := flat[to]; to == "" || both {
+				continue
+			}
+			key = to
+		}
+		d, ok := Lookup(key)
 		if !ok {
 			s.warnings = append(s.warnings, fmt.Sprintf("%s: unknown key ignored", k))
 			continue
@@ -72,9 +79,17 @@ func (s *Store) load() error {
 			s.warnings = append(s.warnings, fmt.Sprintf("%s: %v, default kept", k, err))
 			continue
 		}
-		s.values[k] = v
+		s.values[key] = v
 	}
 	return nil
+}
+
+// renamed are keys of earlier versions found in a config file: the value
+// goes to the new key, unless the file has it too, or is dropped without a
+// warning when the setting is gone.
+var renamed = map[string]string{
+	"output.counter_start":    "output.counter_next",
+	"tags.track_from_counter": "",
 }
 
 func flatten(prefix string, in map[string]any, out map[string]any) {

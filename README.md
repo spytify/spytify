@@ -73,6 +73,25 @@ Spytify is a general-purpose application audio recorder, like Audio Hijack, Loop
 
 **For personal use of content you are entitled to listen to. You are responsible for the terms of the services you record.**
 
+## Privacy
+
+Spytify has one switch for what it sends its developers: the **Sentry bug tracker** (Settings > Privacy), on by default and shown at the first launch, where you can untick it. Only official builds can send anything: a build of your own has no reporting project (see [Build](#build)) and sends nothing.
+
+On, the app sends:
+- the crashes of Spytify and of the recorder, with their trace, at the next launch, without asking;
+- the problems that are not crashes, such as no sound reaching the recorder or a file that could not be encoded, with the steps and clicks that led there; each is counted, and one computer in ten sends its details, once per version;
+- each launch: whether the recorder got ready, how long it took and the names of the checks that fail;
+- how far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track;
+- how long saving a track takes, for one track in a hundred;
+- recording counts, for every track: saved (with its format) or skipped (with the reason, such as an ad or a duplicate), and how its start was found (in a silence, at a dip, from the length of the track before…) and how far from where the player said the track changed; no name of a track, an artist or an album;
+- **Send to the developers** (Logs, when a check fails): the checks that fail and the end of the recorder's log, with an optional comment, once you have seen them.
+
+Off, nothing is sent or collected, not even in memory: **Send to the developers** is disabled, and a crash only shows a dialog saying no report was sent, with the error and its trace, folded, to copy or to report on GitHub yourself.
+
+Reports name your computer only by a code made from its machine ID for Spytify alone, the same after a reinstall and of no use to any other app. They carry the system, the version and the country: Sentry tells it from the connection's IP address and keeps no IP; the country falls back on your system's region setting. Never sent: your computer's name, your user name and your home folder (it becomes `~`). The names of tracks, artists and albums go as they appear in errors and logs. Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
+
+The bug tracker never gets in the way: a report that cannot be made or sent is dropped, and at quit the app waits at most 2 seconds for what is queued.
+
 ## Build
 
 Go 1.26 or later.
@@ -94,24 +113,26 @@ A build of your own records nothing until you choose the application. In the app
 
 Packagers can set a default application with the build variable `SPYTIFY_DEFAULT_PROCESS`: its bare name, which matches `Name.app` on macOS, `Name.exe` on Windows and `name` on Linux. On macOS the bundle id is read from the installed app. The build scripts read the variable from the environment or from an untracked `build.env`; the project's CI takes it from a repository variable.
 
+The Sentry bug tracker (see [Privacy](#privacy)) reports to the Sentry project of the build variable `SPYTIFY_SENTRY_DSN`, read the same way. Without it, the app sends nothing and shows no switch; a crash shows the same dialog, to report by hand. Builds whose version has `dev` or `+` in it, such as CI's, report as the `development` environment.
+
 The macOS app is ad-hoc signed. macOS asks for the permissions again after every rebuild, and another Mac refuses to open it until it is signed and notarised. Opened from Finder, the app still finds `ffmpeg` in `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ## Desktop app
 
-The app is a client of `spytifyd`, the recorder, which it starts by itself ("Starting the recorder…"). The recorder needs the application to record: official builds have one; a build of your own asks for it first (Settings > App > Advanced > Player).
+The app is a client of `spytifyd`, the recorder, which it starts by itself: the tabs show at once, the app bar and Record saying "Starting the recorder…"; only a start that failed shows why, with a Start button. The recorder needs the application to record: official builds have one; a build of your own asks for it first (Settings > App > Advanced > Player).
 
-The app bar shows whether the application runs, the output format, an Update button when a newer release is out, and the one Record button:
+The app bar shows whether the application runs, the output format, an Update button with a badge when a newer release is out, a heart to donate, and the one Record button:
 
 - **Record** is off while the application is not running; the Record screen offers to open it.
 - A track already playing when you press Record is skipped, since its start was missed: recording starts with the next one, or press **Record this track from the start**.
 - **Stop** lets the track playing finish; it then reads **Stop now**, which stops at once and discards that track.
 
-Closing the window quits Spytify and the recorder with it, after asking if a recording is under way. With **Minimize to tray** on (Settings > App, off by default), closing keeps Spytify recording in the system tray, the menu bar on macOS, where the Dock icon goes too. The tray menu starts and stops a recording, opens the window and quits; on macOS, opening Spytify again also brings the window back.
+Closing the window quits Spytify and the recorder with it, after asking if a recording is under way. With **Minimize to tray** on (Settings > App, off by default), closing keeps Spytify recording in the system tray, the menu bar on macOS, where the Dock icon goes too. The tray icon shows only while the setting is on; turned off, it goes when Spytify restarts. The tray menu has the app bar's Record or Stop, opens the window and quits; on macOS, opening Spytify again also brings the window back.
 
 - **Record**: the track playing, with its cover, title, artists, album and the stream's format (44.1 kHz stereo), its progress, the level and Skip. Below it, every track of the session with its status (Saved, Tagged, Skipped and why), and buttons to show the file in Finder or Explorer and to play it. **Clear list** empties the list, not the folder; **Open folder** opens the output folder.
 - **Library**: every audio file in the output folder, with its cover, newest first or by name, and a search box. It reads the folder again each time you open the tab, so nothing recorded is missing from it.
-- **Settings**: App, Output, Encoding, Recording and Ads, App first. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button; a search box finds any setting. App holds the theme (system, light or dark).
-- **Logs**: the startup checks, folded while they all pass, then the recorder's log, with a choice of levels, Copy and Open log file. A failed check reads as what is wrong, such as "ffmpeg not found".
+- **Settings**: App, Output, Encoding, Recording, Ads and Privacy, App first. Each section shows the settings most people change, folds the rest under Advanced, and has a Reset button; a search box finds any setting. Yes-or-no settings are switches. App holds the theme (system, light or dark).
+- **Logs**: the startup checks, folded while they all pass, then the recorder's log, with a choice of levels, Copy and Open log file. A failed check reads as what is wrong, such as "ffmpeg not found", and **Send to the developers** sends the checks that fail (see [Privacy](#privacy)).
 - **About**: versions, the project page, the source code, Check for updates and Donate.
 
 If the application plays and no audio arrives for 10 seconds, the app says so and where to look: on macOS, usually the System Audio Recording permission, which macOS asks for again after each build of your own.
@@ -198,6 +219,8 @@ The scenarios in [`testdata/timelines`](testdata/timelines) drive the real core 
 
 Each file is compared with its source by cross-correlation: the peak must be within 2 ms of zero and the residual under −50 dBFS.
 
+The Sentry bug tracker is tested against a fake Sentry server ([`internal/telemetry/fakesentry`](internal/telemetry/fakesentry)), which fails the test on a user feedback Sentry would refuse. With the bug tracker off, a launch, a recording, a problem, a failed start and a crash must send it nothing; with Sentry out of reach, every call must return. To see that a real Sentry project takes every report, run `SPYTIFY_SENTRY_LIVE_DSN=<a test project's DSN> go test -run TestLiveSentry -v ./internal/telemetry/` and look there for the run's mark.
+
 The same timelines run against real PipeWire and MPRIS through `cmd/fakeplayer`. CI does this in a container with no sound card:
 
 ```sh
@@ -214,7 +237,7 @@ go test -tags macos_capture -v ./test/macos/
 The AppleScript side is checked against FakePlayer, a scriptable macOS app that plays a timeline ([`macos/fakeplayer`](macos/fakeplayer)). FakePlayer runs the test as its own child, so macOS asks for no Automation consent; CI also writes that consent into the runner's TCC database:
 
 ```sh
-scripts/build-fakeplayer-macos.sh && SPYTIFY_FAKE_APP=bin/FakePlayer.app go test -run TestJXAWithTheFakePlayer -v ./internal/meta/
+scripts/build-fakeplayer-macos.sh && SPYTIFY_FAKE_APP=$PWD/bin/FakePlayer.app go test -run TestJXAWithTheFakePlayer -v ./internal/meta/
 ```
 
 With a real player, `gate1` writes ten test tracks to play from the player's local files, then compares each recording with its track by the same rule:

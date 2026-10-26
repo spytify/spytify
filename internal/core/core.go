@@ -384,6 +384,13 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 
 	id := time.Now().Format("20060102-150405")
 	fin := newFinisher(c.store.Values, c.ffmpeg, c.emit, c.log)
+	fin.advance = func(next int64) {
+		if _, err := c.SetSettings(map[string]any{"output.counter_next": next}); err != nil {
+			c.log.Errorf("the counter could not move on to %d: %v", next, err)
+		}
+	}
+	// Not on the finisher's goroutine: stopping waits for it.
+	fin.full = func() { go func() { _, _ = c.StopSession(true) }() }
 	s := newSession(id, sessionDeps{
 		values:  c.store.Values,
 		emit:    c.emit,

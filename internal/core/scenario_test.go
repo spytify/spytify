@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -213,7 +214,8 @@ func TestRecordingRaisesThePlayerVolumeAndPutsItBack(t *testing.T) {
 }
 
 // The fake player shows a cover for each track, as a player does: it is
-// in track.started and embedded in the saved file.
+// in track.started and embedded in the saved file, whose track.finished
+// says how long each step took.
 func TestTheCoverGoesIntoTheFile(t *testing.T) {
 	ff, err := encode.Find("ffmpeg")
 	if err != nil {
@@ -236,6 +238,10 @@ func TestTheCoverGoesIntoTheFile(t *testing.T) {
 				continue
 			}
 			saved++
+			// The app times saving a file from these.
+			if tm := f.Timings; tm == nil || tm.Format != "flac" || tm.EncodeMs <= 0 || tm.TotalMs < tm.TrimMs+tm.CoverMs+tm.EncodeMs+tm.TagMs {
+				t.Errorf("%s timings %+v", filepath.Base(f.Path), f.Timings)
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			art, err := ff.Cover(ctx, f.Path)
 			cancel()
@@ -246,6 +252,91 @@ func TestTheCoverGoesIntoTheFile(t *testing.T) {
 	}
 	if saved != len(tl.Items) {
 		t.Fatalf("%d files saved, want %d", saved, len(tl.Items))
+	}
+}
+
+// track.started says how the recorder found each start: the first track at
+// its first sound, the next ones in the silence between them, near where
+// the player said they changed.
+func TestTrackStartedSaysHowItWasCut(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, nil)
+	s.run(t, tl)
+	var cuts []proto.TrackCut
+	for _, ev := range s.events.all() {
+		var tr proto.TrackStartedEvent
+		if ev.Method != proto.EventTrackStarted || ev.Decode(&tr) != nil {
+			continue
+		}
+		if tr.Cut == nil {
+			t.Fatalf("%q started with no cut", tr.Title)
+		}
+		cuts = append(cuts, *tr.Cut)
+	}
+	if len(cuts) != len(tl.Items) {
+		t.Fatalf("cuts %+v, want one per track", cuts)
+	}
+	for i, c := range cuts {
+		kind, by := "boundary", "silence"
+		if i == 0 {
+			kind, by = "first", "first_sound"
+		}
+		if c.Kind != kind || c.By != by || c.OffsetMs < -2000 || c.OffsetMs > 2000 {
+			t.Errorf("track %d cut %+v, want %s by %s within 2 s of the notice", i, c, kind, by)
+		}
+	}
+}
+
+// Each saved file says its counter number, the one in its name with the
+// counter prefix: from the start value, one more per file.
+func TestEachFileSaysItsCounter(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, map[string]any{"output.prefix": "counter", "output.counter_next": 5})
+	s.run(t, tl)
+	var got []int64
+	for _, ev := range s.events.all() {
+		var f proto.TrackFinishedEvent
+		if ev.Method != proto.EventTrackFinished || ev.Decode(&f) != nil {
+			continue
+		}
+		got = append(got, f.Counter)
+		if want := fmt.Sprintf("%03d ", f.Counter); !strings.HasPrefix(filepath.Base(f.Path), want) {
+			t.Errorf("%s does not start with its counter %q", filepath.Base(f.Path), want)
+		}
+	}
+	if len(got) != 3 || got[0] != 5 || got[1] != 6 || got[2] != 7 {
+		t.Fatalf("counters %v, want 5 6 7", got)
+	}
+	// The next recording goes on from there.
+	if next := s.core.store.Values().Int("output.counter_next"); next != 8 {
+		t.Errorf("next counter number %d, want 8", next)
+	}
+}
+
+// Past the last number its digits allow, the counter saves nothing more
+// and the recording stops, as v1's did.
+func TestTheRecordingStopsWhenTheCounterIsFull(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, map[string]any{"output.prefix": "counter", "output.counter_next": 999, "output.counter_width": 3})
+	s.run(t, tl)
+	var saved []string
+	full := false
+	for _, ev := range s.events.all() {
+		switch ev.Method {
+		case proto.EventTrackFinished:
+			var f proto.TrackFinishedEvent
+			if ev.Decode(&f) == nil {
+				saved = append(saved, filepath.Base(f.Path))
+			}
+		case proto.EventError:
+			var e proto.ErrorEvent
+			if ev.Decode(&e) == nil && e.Code == "counter_full" {
+				full = true
+			}
+		}
+	}
+	if len(saved) != 1 || !strings.HasPrefix(saved[0], "999 ") || !full {
+		t.Fatalf("saved %v, counter_full %v; want the 999 file alone and the counter full\n%s", saved, full, s.logs)
 	}
 }
 

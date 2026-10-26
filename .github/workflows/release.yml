@@ -23,6 +23,8 @@ permissions:
 
 env:
   SPYTIFY_DEFAULT_PROCESS: ${{ vars.SPYTIFY_DEFAULT_PROCESS }}
+  # The developers' Sentry project, for crash reports and anonymous stats.
+  SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
 
 jobs:
   # The version every job builds, from the tag or the run's input.
@@ -105,7 +107,7 @@ jobs:
       - name: Disk image and zip
         run: |
           v="${{ needs.version.outputs.version }}"
-          hdiutil create -volname Spytify -srcfolder dist/macos/Spytify.app -ov -format UDZO "dist/Spytify-$v-macos.dmg"
+          scripts/dmg-macos.sh dist/macos/Spytify.app "dist/Spytify-$v-macos.dmg"
           (cd dist/macos && zip -q -r "../spytify-$v-macos-cli.zip" spytifyd spytify-cli spytify-tap)
       - name: Notarise
         id: notarize

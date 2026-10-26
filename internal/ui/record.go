@@ -25,6 +25,7 @@ type recordScreen struct {
 	root *fyne.Container
 
 	idle       *fyne.Container
+	idleTitle  *widget.Label
 	idleText   *widget.Label
 	attention  *fyne.Container
 	openPlayer *widget.Button
@@ -44,8 +45,9 @@ type recordScreen struct {
 	waiting *widget.Label
 	restart *widget.Button
 
-	rows []model.Row
-	list *widget.List
+	rows     []model.Row
+	list     *widget.List
+	listCard fyne.CanvasObject
 	// shape is which parts the screen last showed; it is laid out again
 	// only when that changes.
 	shape string
@@ -64,6 +66,7 @@ func newRecordScreen(a *App) *recordScreen {
 	icon := canvas.NewImageFromResource(Logo)
 	icon.FillMode = canvas.ImageFillContain
 	icon.SetMinSize(fyne.NewSize(72, 72))
+	r.idleTitle = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	r.idleText = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{})
 	r.idleText.Wrapping = fyne.TextWrapWord
 	hint := widget.NewLabelWithStyle("A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start.",
@@ -78,13 +81,13 @@ func newRecordScreen(a *App) *recordScreen {
 	r.attention = container.NewCenter(container.NewHBox(r.openPlayer, diagnose))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
-		widget.NewLabelWithStyle("Ready to record", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		r.idleTitle,
 		r.idleText, hint, r.attention,
 	)))
 
 	r.cover = canvas.NewImageFromResource(theme.MediaMusicIcon())
 	r.cover.FillMode = canvas.ImageFillContain
-	r.cover.SetMinSize(fyne.NewSize(96, 96))
+	r.cover.SetMinSize(fyne.NewSquareSize(liveCover))
 	r.state = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	r.state.SizeName = theme.SizeNameCaptionText
 	r.state.Importance = widget.DangerImportance
@@ -96,27 +99,35 @@ func newRecordScreen(a *App) *recordScreen {
 	r.elapsed = caption("0:00 / 0:00")
 	r.level = newBar(theme.ColorNameSuccess)
 	skip := widget.NewButtonWithIcon("Skip", theme.MediaSkipNextIcon(), func() {
+		a.noteAction("skip")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdNext}, nil)
 	})
 	info := container.NewVBox(r.state, r.title, r.subtitle,
 		container.NewBorder(nil, nil, nil, r.elapsed, r.progress),
 		container.NewBorder(nil, nil, caption("Level"), nil, r.level))
-	r.card = container.NewPadded(container.NewBorder(nil, nil, r.cover, container.NewCenter(skip), container.NewVBox(layout.NewSpacer(), info, layout.NewSpacer())))
+	// The track being recorded is on a card of its own colour, apart from
+	// the list.
+	pad := theme.Padding()
+	live := container.NewBorder(nil, nil, r.cover, container.NewCenter(skip), container.NewVBox(layout.NewSpacer(), info, layout.NewSpacer()))
+	// Rounder than the list's card: on a box this big, the same radius looks
+	// square.
+	r.card = inset(newPanel(colorLive, colorCardLine, 16, fyne.NewSize(pad*2, pad*2), live))
 
 	r.waiting = widget.NewLabel("")
 	// A track already playing when the session starts is not recorded;
 	// playing it again from 0:00 makes it the next track.
 	r.restart = widget.NewButtonWithIcon("Record this track from the start", theme.MediaReplayIcon(), func() {
+		a.noteAction("record this track from the start")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
-	r.waitRow = container.NewPadded(container.NewHBox(r.waiting, layout.NewSpacer(), r.restart))
+	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.restart))
 
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
 			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
 			img.FillMode = canvas.ImageFillContain
-			img.SetMinSize(fyne.NewSize(40, 40))
+			img.SetMinSize(fyne.NewSquareSize(rowCover))
 			chip := caption("Skipped: duplicate")
 			reveal := widget.NewButtonWithIcon("", theme.SearchIcon(), nil)
 			reveal.Importance = widget.LowImportance
@@ -136,11 +147,7 @@ func newRecordScreen(a *App) *recordScreen {
 			img := box.Objects[1].(*canvas.Image)
 			right := box.Objects[2].(*fyne.Container)
 			setRowText(text, row.Title, rowSubtitle(row))
-			if res := a.covers.get(row.CoverURL); res != nil {
-				setImage(img, res)
-			} else {
-				setImage(img, theme.MediaMusicIcon())
-			}
+			setCover(img, a.covers.get(row.CoverURL).row)
 			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.RichText)
 			seg := chip.Segments[0].(*widget.TextSegment)
 			if c := chipColor(row); seg.Text != row.StatusText() || seg.Style.ColorName != c {
@@ -151,8 +158,8 @@ func newRecordScreen(a *App) *recordScreen {
 			playBtn := right.Objects[2].(*fyne.Container).Objects[0].(*widget.Button)
 			if row.Path != "" && (row.Status == model.Saved || row.Status == model.Tagged) {
 				path := row.Path
-				revealBtn.OnTapped = func() { _ = reveal(path) }
-				playBtn.OnTapped = func() { _ = openPath(path) }
+				revealBtn.OnTapped = func() { a.noteAction("show a track in its folder"); _ = reveal(path) }
+				playBtn.OnTapped = func() { a.noteAction("play a track"); _ = openPath(path) }
 				revealBtn.Enable()
 				playBtn.Enable()
 			} else {
@@ -166,17 +173,22 @@ func newRecordScreen(a *App) *recordScreen {
 
 	r.totals = caption("")
 	openFolder := widget.NewButtonWithIcon("Open folder", theme.FolderOpenIcon(), func() {
+		a.noteAction("open folder")
 		if r.folder != "" {
 			_ = openPath(r.folder)
 		}
 	})
 	openFolder.Importance = widget.LowImportance
-	r.clear = widget.NewButtonWithIcon("Clear list", theme.ContentClearIcon(), a.m.ClearRows)
+	r.clear = widget.NewButtonWithIcon("Clear list", theme.ContentClearIcon(), func() {
+		a.noteAction("clear list")
+		a.m.ClearRows()
+	})
 	r.clear.Importance = widget.LowImportance
 	footer := container.NewBorder(nil, nil, nil, container.NewHBox(r.clear, openFolder), r.totals)
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
-	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow, widget.NewSeparator()), container.NewVBox(widget.NewSeparator(), footer), nil, nil,
-		container.NewStack(r.list, r.noRows))
+	r.listCard = listCard(r.list)
+	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow), inset(footer), nil, nil,
+		container.NewStack(inset(r.listCard), r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
 	return r
 }
@@ -215,6 +227,16 @@ func (r *recordScreen) render(s model.State) {
 	r.folder = settings.ExpandHome(r.folder)
 	defer r.relayout()
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
+		// Until the recorder answers it is starting, with nothing to offer.
+		starting := !s.HaveInfo
+		setLabel(r.idleTitle, map[bool]string{true: startingText, false: "Ready to record"}[starting])
+		show(r.idleText, !starting)
+		if starting {
+			show(r.attention, false)
+			r.idle.Show()
+			r.session.Hide()
+			return
+		}
 		player := s.Info.Target.Process
 		if player == "" {
 			player = "your player"
@@ -247,11 +269,7 @@ func (r *recordScreen) render(s model.State) {
 			sub += " · " + src
 		}
 		setCaption(r.subtitle, sub)
-		if res := r.app.covers.get(c.CoverURL); res != nil {
-			setImage(r.cover, res)
-		} else {
-			setImage(r.cover, theme.MediaMusicIcon())
-		}
+		setCover(r.cover, r.app.covers.get(c.CoverURL).live)
 	} else {
 		r.card.Hide()
 		setLabel(r.waiting, waitingText(s.Session))
@@ -263,9 +281,10 @@ func (r *recordScreen) render(s model.State) {
 	r.rows = s.Rows
 	if shown := fmt.Sprint(r.rows, r.app.covers.count()); shown != r.shown {
 		r.shown = shown
-		r.list.Refresh()
+		r.listCard.Refresh()
 	}
 	show(r.noRows, len(r.rows) == 0)
+	show(r.listCard, len(r.rows) > 0)
 	if len(r.rows) == 0 {
 		r.clear.Disable()
 	} else {

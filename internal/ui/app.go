@@ -20,10 +20,14 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/service"
+	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -41,6 +45,27 @@ var wordmarkPNG []byte
 // Wordmark is the logo with the name beside it, for the app bar and the About screen.
 var Wordmark = fyne.NewStaticResource("logo-wordmark.png", wordmarkPNG)
 
+//go:embed assets/open-in-new.svg
+var openInNewSVG []byte
+
+// openInNewIcon marks a button that opens a page in the browser: Material
+// Design's open_in_new, like Fyne's own icons, in the button's colour.
+var openInNewIcon = theme.NewThemedResource(fyne.NewStaticResource("open-in-new.svg", openInNewSVG))
+
+//go:embed assets/heart.png
+var heartPNG []byte
+
+// heartIcon is the app bar's way to Donate: v1's heart, from its icons, in
+// its pink in both themes.
+var heartIcon = fyne.NewStaticResource("heart.png", heartPNG)
+
+//go:embed assets/new-releases.png
+var newReleasesPNG []byte
+
+// newReleasesIcon marks a newer release: v1's badge, from its icons, in its
+// green with the mark cut out.
+var newReleasesIcon = fyne.NewStaticResource("new-releases.png", newReleasesPNG)
+
 // Options are what the UI needs from its environment.
 type Options struct {
 	// StateDir holds the daemon's log file.
@@ -53,9 +78,15 @@ type Options struct {
 	ManualRender bool
 	// NoUpdateCheck skips the GitHub release check (tests).
 	NoUpdateCheck bool
-	// AutoStart says the app starts spytifyd itself: until it answers, the
-	// app shows that it is starting rather than asking for it.
+	// AutoStart says the app starts spytifyd itself, a player being set:
+	// until it answers, the tabs show that it is starting rather than the
+	// offline screen asking for it.
 	AutoStart bool
+	// Telemetry sends what the user agrees to send; nil sends nothing.
+	Telemetry *telemetry.Client
+	// Privacy are the privacy.* settings read at launch, used until the
+	// recorder answers.
+	Privacy map[string]any
 }
 
 type screen interface {
@@ -81,14 +112,17 @@ type App struct {
 
 	screens []screen
 	tabs    *container.AppTabs
-	center  *fyne.Container
-	offline fyne.CanvasObject
-	player  *playerCard
+	// tabsView is the tabs with the plain colour behind their bar.
+	tabsView *fyne.Container
+	center   *fyne.Container
+	offline  fyne.CanvasObject
+	player   *playerCard
 
 	dot     *widget.Label
 	status  *widget.Label
 	output  *widget.RichText
 	update  *widget.Button
+	donate  *ttwidget.Button
 	action  *widget.Button
 	banner  *widget.Label
 	bar     *fyne.Container
@@ -102,12 +136,32 @@ type App struct {
 	// quitApp quits, replaced by tests.
 	tray    bool
 	quitApp func()
+	// trayMenu is the tray's menu, whose trayAction is the app bar's
+	// Record or Stop.
+	trayMenu   *fyne.Menu
+	trayAction *fyne.MenuItem
 	// starting is set while spytifyd is being started; startErr is why
 	// the last start failed.
 	starting   bool
 	startErr   string
-	startView  fyne.CanvasObject
 	offlineErr *widget.Label
+
+	// tel is the Sentry bug tracker; launch times the way to a recorder
+	// that answers; checksNoted are the checks last left as a breadcrumb.
+	tel          *telemetry.Client
+	launch       launchTrace
+	shown        bool
+	wasConnected bool
+	checksNoted  string
+	diagNoted    bool
+	// reports are the reports on their way to the bug tracker, which
+	// tests wait for: one still going must not touch the next test's
+	// window.
+	reports sync.WaitGroup
+	// heard and incomplete are the link goroutine's: the first sound, and
+	// the incomplete tracks in a row.
+	heard      bool
+	incomplete int
 
 	pending     sync.Mutex
 	queued      bool
@@ -118,7 +172,7 @@ type App struct {
 
 // New builds the window; call ShowAndRun to start.
 func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
-	a := &App{fa: fa, m: m, link: l, opts: opts}
+	a := &App{fa: fa, m: m, link: l, opts: opts, tel: opts.Telemetry, launch: launchTrace{start: time.Now()}}
 	a.applyTheme("system")
 	a.covers = newCovers(a.scheduleRender)
 	a.win = fa.NewWindow("Spytify")
@@ -126,10 +180,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.win.Resize(fyne.NewSize(920, 640))
 
 	a.screens = []screen{newRecordScreen(a), newLibraryScreen(a), newSettingsScreen(a), newLogsScreen(a), newAboutScreen(a)}
+	// Logs and About have the plain colour to the window's sides; the other
+	// screens are on the page, off them.
 	a.tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), a.screens[tabRecord].content()),
-		container.NewTabItemWithIcon("Library", theme.FolderIcon(), a.screens[tabLibrary].content()),
-		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), a.screens[tabSettings].content()),
+		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), margin(a.screens[tabRecord].content())),
+		container.NewTabItemWithIcon("Library", theme.FolderIcon(), margin(a.screens[tabLibrary].content())),
+		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), margin(a.screens[tabSettings].content())),
 		container.NewTabItemWithIcon("Logs", theme.ListIcon(), a.screens[tabLogs].content()),
 		container.NewTabItemWithIcon("About", theme.InfoIcon(), a.screens[tabAbout].content()),
 	)
@@ -139,6 +195,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		if l, ok := a.screens[a.tabs.SelectedIndex()].(*libraryScreen); ok {
 			l.scan()
 		}
+		a.noteTab(a.tabs.SelectedIndex())
 		a.renderCenter(a.last)
 	}
 
@@ -146,9 +203,13 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.status = widget.NewLabel("")
 	// Secondary, but readable in both themes, unlike a low-importance label.
 	a.output = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
-	a.update = widget.NewButtonWithIcon("", theme.DownloadIcon(), nil)
-	a.update.Importance = widget.SuccessImportance
+	a.update = widget.NewButtonWithIcon("", newReleasesIcon, nil)
+	// No fill: the badge's own green says it, as the heart's pink does.
+	a.update.Importance = widget.LowImportance
 	a.update.Hide()
+	a.donate = ttwidget.NewButtonWithIcon("", heartIcon, func() { a.openURL(donateURL) })
+	a.donate.Importance = widget.LowImportance
+	a.donate.SetToolTip("Donate")
 	a.action = widget.NewButtonWithIcon("Record", theme.MediaRecordIcon(), a.toggleRecording)
 	a.action.Importance = widget.HighImportance
 	// The wordmark: the logo with the name in its green.
@@ -157,7 +218,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	mark.SetMinSize(fyne.NewSize(26*622/204, 26))
 	brand := container.NewCenter(mark)
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
-	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.action))
+	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.donate, a.action))
 
 	a.banner = widget.NewLabel("")
 	a.banner.Wrapping = fyne.TextWrapWord
@@ -172,27 +233,27 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.offlineErr = widget.NewLabel("")
 	a.offlineErr.Wrapping = fyne.TextWrapWord
 	a.offlineErr.Importance = widget.DangerImportance
-	a.offline = container.NewVScroll(container.NewPadded(container.NewVBox(
+	pad := theme.Padding()
+	a.offline = container.NewVScroll(container.New(layout.NewCustomPaddedLayout(pad, pad*2, pad*2, pad*2), container.NewVBox(
 		heading("The recorder is not running"),
 		a.offlineErr,
 		intro,
 		container.NewHBox(start),
 		caption(opts.Socket),
 		widget.NewSeparator(),
-		a.player.form,
+		newCard(sectionTitle("Player"), indent(a.player.box)),
 	)))
-	startIcon := canvas.NewImageFromResource(Logo)
-	startIcon.FillMode = canvas.ImageFillContain
-	startIcon.SetMinSize(fyne.NewSize(72, 72))
-	a.startView = container.NewCenter(container.NewVBox(container.NewCenter(startIcon),
-		widget.NewLabelWithStyle("Starting the recorder…", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})))
 	a.starting = opts.AutoStart
 
-	a.center = container.NewStack(a.tabs)
-	body := container.NewBorder(container.NewVBox(container.NewPadded(a.bar), a.banner), nil, nil, nil, a.center)
-	a.win.SetContent(body)
+	a.tabsView = withPlainTabBar(a.tabs)
+	a.center = container.NewStack(a.tabsView)
+	// The window has no padding of its own, so the bars' plain colour goes
+	// to its edges; the page's grey is the window's background.
+	top := plain(container.New(layout.NewCustomPaddedLayout(pad, 0, pad, pad), container.NewVBox(container.NewPadded(a.bar), a.banner)))
+	body := container.NewBorder(top, nil, nil, nil, a.center)
+	a.win.SetPadded(false)
+	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
 
-	a.setupTray()
 	if !opts.ManualRender {
 		onReopen(func() { fyne.Do(a.showWindow) })
 	}
@@ -203,6 +264,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	fa.Lifecycle().SetOnStopped(a.stopDaemon)
 	m.OnChange(a.scheduleRender)
 	m.OnLevel(a.scheduleLevel)
+	m.OnEvent(a.onEvent)
 	a.render()
 	return a
 }
@@ -213,7 +275,13 @@ func (a *App) Window() fyne.Window { return a.win }
 // ShowAndRun shows the window and runs the toolkit's loop.
 func (a *App) ShowAndRun() {
 	a.win.Show()
-	a.maybeShowFirstRun()
+	a.maybeShowFirstRun(func() {
+		a.shown = true
+		a.renderPrivacy(a.last)
+		a.tel.Step("launched")
+		a.tel.Breadcrumb("app", "launched", nil)
+		a.checkCrashes()
+	})
 	a.fa.Run()
 }
 
@@ -226,6 +294,7 @@ func playerRunning(s model.State) bool {
 
 // launchPlayer asks the recorder to open the player.
 func (a *App) launchPlayer() {
+	a.noteAction("open the player")
 	a.do(proto.MethodPlayerLaunch, nil, nil)
 }
 
@@ -337,6 +406,9 @@ func (a *App) render() {
 	connected := s.Conn == model.Connected
 	running := playerRunning(s)
 	switch {
+	case !connected && a.starting:
+		a.dot.Importance = widget.LowImportance
+		a.status.SetText(startingText)
 	case !connected:
 		a.dot.Importance = widget.LowImportance
 		a.status.SetText("Not connected")
@@ -370,6 +442,12 @@ func (a *App) render() {
 		a.action.Enable()
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	}
+	// The tray icon comes with Minimize to tray; the toolkit cannot take
+	// it away, so turned off, it goes when Spytify restarts.
+	if a.tray && a.trayMenu == nil && s.Settings["app.minimize_to_tray"] == true {
+		a.setupTray()
+	}
+	a.syncTray()
 	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {
 		a.banner.SetText(s.LastError.Msg)
 		a.banner.Show()
@@ -398,6 +476,7 @@ func (a *App) render() {
 			}
 		}
 	}
+	a.renderPrivacy(s)
 	// Texts changed width: lay the bar out again, only then.
 	if key := fmt.Sprint(a.dot.Importance, a.status.Text, a.output.String(), a.action.Text, a.update.Visible()); key != a.barKey {
 		a.barKey = key
@@ -421,26 +500,23 @@ func (a *App) renderCenter(s model.State) {
 	if s.Conn == model.Connected {
 		a.starting, a.startErr = false, ""
 	}
-	if s.Conn != model.Connected && !s.HaveInfo {
-		view := a.offline
-		if a.starting {
-			view = a.startView
-		} else {
-			reason := a.startErr
-			if reason == "" {
-				reason = s.ConnError
-			}
-			setLabel(a.offlineErr, reason)
-			show(a.offlineErr, reason != "")
+	// The offline screen asks for a player or tells why the recorder did
+	// not start; one being started shows the tabs.
+	if s.Conn != model.Connected && !s.HaveInfo && !a.starting {
+		reason := a.startErr
+		if reason == "" {
+			reason = s.ConnError
 		}
-		if len(a.center.Objects) != 1 || a.center.Objects[0] != view {
-			a.center.Objects = []fyne.CanvasObject{view}
+		setLabel(a.offlineErr, reason)
+		show(a.offlineErr, reason != "")
+		if len(a.center.Objects) != 1 || a.center.Objects[0] != a.offline {
+			a.center.Objects = []fyne.CanvasObject{a.offline}
 			a.center.Refresh()
 		}
 		return
 	}
-	if len(a.center.Objects) != 1 || a.center.Objects[0] != a.tabs {
-		a.center.Objects = []fyne.CanvasObject{a.tabs}
+	if len(a.center.Objects) != 1 || a.center.Objects[0] != a.tabsView {
+		a.center.Objects = []fyne.CanvasObject{a.tabsView}
 		a.center.Refresh()
 	}
 	a.screens[a.tabs.SelectedIndex()].render(s)
@@ -492,6 +568,7 @@ func (a *App) checkUpdate() {
 }
 
 func (a *App) openURL(raw string) {
+	a.noteAction("open " + raw)
 	if u, err := url.Parse(raw); err == nil {
 		_ = a.fa.OpenURL(u)
 	}
@@ -547,10 +624,13 @@ func (a *App) toggleRecording() {
 		var err error
 		switch {
 		case s.Session == proto.StateStopping:
+			a.noteAction("stop now")
 			err = a.link.Do(ctx, proto.MethodSessionStop, proto.SessionStopParams{Now: true}, nil)
 		case s.Recording():
+			a.noteAction("stop")
 			err = a.link.Do(ctx, proto.MethodSessionStop, proto.SessionStopParams{}, nil)
 		default:
+			a.noteAction("record")
 			err = a.link.Do(ctx, proto.MethodSessionStart, proto.SessionStartParams{}, nil)
 		}
 		if err != nil {
@@ -582,6 +662,10 @@ func (a *App) showError(err error) {
 func (a *App) StartDaemon() {
 	fyne.Do(func() {
 		a.starting, a.startErr = true, ""
+		a.tel.Breadcrumb("app", "starting the recorder", nil)
+		if a.launch.started.IsZero() {
+			a.launch.started = time.Now()
+		}
 		a.render()
 	})
 	go func() {
@@ -598,12 +682,16 @@ func (a *App) StartDaemon() {
 	}()
 }
 
+// startingText is what the app bar and Record say while spytifyd starts.
+const startingText = "Starting the recorder…"
+
 // startAnswerTimeout is how long a started spytifyd has to answer.
 const startAnswerTimeout = 15 * time.Second
 
 // startFailed shows the offline screen with why the recorder did not start.
 func (a *App) startFailed(err error) {
 	a.starting, a.startErr = false, err.Error()
+	a.launchFailed(err)
 	a.render()
 }
 
@@ -613,12 +701,30 @@ func (a *App) setupTray() {
 		return
 	}
 	desk.SetSystemTrayIcon(Logo)
-	desk.SetSystemTrayMenu(fyne.NewMenu("Spytify",
-		fyne.NewMenuItem("Start recording", func() { a.do(proto.MethodSessionStart, proto.SessionStartParams{}, nil) }),
-		fyne.NewMenuItem("Stop", func() { a.do(proto.MethodSessionStop, proto.SessionStopParams{}, nil) }),
+	// The tray's action is the app bar's, which render copies there:
+	// Record, Stop, or Stop now while the last track is being saved.
+	a.trayAction = fyne.NewMenuItem("Record", a.toggleRecording)
+	a.trayAction.Disabled = true
+	a.trayMenu = fyne.NewMenu("Spytify",
+		a.trayAction,
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Open window", a.showWindow),
-	))
+	)
+	desk.SetSystemTrayMenu(a.trayMenu)
+}
+
+// syncTray gives the tray the app bar's action, rebuilding the tray menu
+// only when it changes.
+func (a *App) syncTray() {
+	if a.trayMenu == nil {
+		return
+	}
+	label, off := a.action.Text, a.action.Disabled()
+	if a.trayAction.Label == label && a.trayAction.Disabled == off {
+		return
+	}
+	a.trayAction.Label, a.trayAction.Disabled = label, off
+	a.trayMenu.Refresh()
 }
 
 const trayNoticeKey = "tray-notice-seen"

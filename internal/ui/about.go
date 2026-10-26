@@ -40,7 +40,7 @@ func newAboutScreen(a *App) *aboutScreen {
 	legal := widget.NewLabelWithStyle(disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	legal.Wrapping = fyne.TextWrapWord
 	legal.SizeName = theme.SizeNameCaptionText
-	s.root = container.NewCenter(container.NewGridWrap(fyne.NewSize(520, 420), container.NewVBox(
+	s.root = plain(container.NewCenter(container.NewGridWrap(fyne.NewSize(520, 420), container.NewVBox(
 		container.NewCenter(logo),
 		tagline,
 		container.NewCenter(s.versions),
@@ -48,7 +48,7 @@ func newAboutScreen(a *App) *aboutScreen {
 		container.NewCenter(container.NewHBox(project, updates, donate)),
 		layout.NewSpacer(),
 		legal,
-	)))
+	))))
 	return s
 }
 
@@ -63,6 +63,7 @@ func (s *aboutScreen) render(st model.State) {
 }
 
 func (s *aboutScreen) checkNow() {
+	s.app.noteAction("check for updates")
 	go func() {
 		tag, page, err := latestRelease(context.Background())
 		fyne.Do(func() {
@@ -85,10 +86,12 @@ func (s *aboutScreen) checkNow() {
 const firstRunKey = "first-run-seen"
 
 // maybeShowFirstRun explains, once, what the recording's quality is and
-// whose responsibility the recording is.
-func (a *App) maybeShowFirstRun() {
+// whose responsibility the recording is, and shows the Sentry bug
+// tracker's switch, ticked. then runs once it is closed.
+func (a *App) maybeShowFirstRun(then func()) {
 	prefs := a.fa.Preferences()
 	if prefs.Bool(firstRunKey) {
+		a.askPrivacy(then)
 		return
 	}
 	body := widget.NewLabel("Spytify records the audio the player sends to your speakers. " +
@@ -96,12 +99,24 @@ func (a *App) maybeShowFirstRun() {
 	body.Wrapping = fyne.TextWrapWord
 	again := widget.NewCheck("Don't show this again", nil)
 	again.SetChecked(true)
-	d := dialog.NewCustom("Before you record", "OK", container.NewVBox(body, again), a.win)
+	box := container.NewVBox(body)
+	var tracker *widget.Check
+	if a.tel.Available() {
+		tracker = a.trackerCheck()
+		box.Add(tracker)
+	}
+	box.Add(again)
+	d := dialog.NewCustom("Before you record", "OK", box, a.win)
 	d.SetOnClosed(func() {
 		if again.Checked {
 			prefs.SetBool(firstRunKey, true)
 		}
+		if tracker != nil {
+			prefs.SetBool(privacySeenKey, true)
+			a.setPrivacy(trackerKey, tracker.Checked)
+		}
+		then()
 	})
-	d.Resize(fyne.NewSize(460, 260))
+	d.Resize(fyne.NewSize(460, 300))
 	d.Show()
 }

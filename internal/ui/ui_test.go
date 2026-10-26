@@ -7,14 +7,20 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
+	"image/jpeg"
 	"image/png"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +30,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/bus"
 	"github.com/spytify/spytify/internal/settings"
@@ -192,8 +199,9 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 			t.Errorf("%q not on screen", want)
 		}
 	}
-	if contains(all, "♥ Donate") {
-		t.Error("Donate is in the app bar; About has it")
+	// The app bar's Donate is a heart, as in v1; About has the worded one.
+	if contains(all, "♥ Donate") || !a.donate.Visible() || a.donate.Icon != heartIcon || a.donate.ToolTip() != "Donate" {
+		t.Error("the app bar's Donate is not a heart alone")
 	}
 	if a.tabs.Items[tabRecord].Text != "Record · 2" {
 		t.Errorf("Record tab title %q", a.tabs.Items[tabRecord].Text)
@@ -282,7 +290,7 @@ func TestOfflineScreen(t *testing.T) {
 	m.SetConn(model.Disconnected, "spytifyd is not running")
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"The recorder is not running", "spytifyd is not running", "Start the recorder", "/tmp/spytify.sock", "Player process", "Save and restart spytifyd"} {
+	for _, want := range []string{"The recorder is not running", "spytifyd is not running", "Start the recorder", "/tmp/spytify.sock", "Player process"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the offline screen", want)
 		}
@@ -329,7 +337,7 @@ func TestOtherScreensRender(t *testing.T) {
 	}
 	s.search.SetText("player")
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, "Player process") || !contains(all, "Save and restart spytifyd") {
+	if all := texts(a.win.Content()); !contains(all, "Player process") || contains(all, "Restart spytifyd") {
 		t.Errorf("search for player: %v", all)
 	}
 	s.search.SetText("")
@@ -514,11 +522,11 @@ func TestButtonsSendActions(t *testing.T) {
 	a.showTab(tabSettings)
 	a.render()
 	s := a.screens[tabSettings].(*settingsScreen)
-	check, ok := s.fields["output.underscores"].item.Widget.(*widget.Check)
+	sw, ok := s.fields["output.underscores"].input.(*toggle)
 	if !ok {
-		t.Fatal("no checkbox for output.underscores")
+		t.Fatal("no switch for output.underscores")
 	}
-	test.Tap(check)
+	test.Tap(sw)
 	waitCall(t, core, proto.MethodSettingsSet)
 	core.mu.Lock()
 	last := core.sets[len(core.sets)-1]
@@ -539,6 +547,17 @@ func TestButtonsSendActions(t *testing.T) {
 	core.mu.Unlock()
 	if len(sets) != 2 || sets[1]["output.template"] != "{title}" {
 		t.Fatalf("settings.set calls %v", sets)
+	}
+
+	// A choice shows its words and applies its value.
+	sel := s.fields["output.prefix"].input.(*widget.Select)
+	sel.SetSelected("Album track number (04)")
+	waitSets(t, core, 3)
+	core.mu.Lock()
+	last = core.sets[len(core.sets)-1]
+	core.mu.Unlock()
+	if last["output.prefix"] != "album_track" {
+		t.Fatalf("choosing Album track number sent %v", last)
 	}
 
 	// Quitting the app stops the recorder too.
@@ -599,6 +618,11 @@ func buttons(o fyne.CanvasObject, text string) []*widget.Button {
 				out = append(out, w)
 			}
 			return
+		case *ttwidget.Button:
+			if w.Text == text {
+				out = append(out, &w.Button)
+			}
+			return
 		case *fyne.Container:
 			for _, c := range w.Objects {
 				walk(c)
@@ -633,6 +657,31 @@ func TestLatestReleaseCountsPreReleases(t *testing.T) {
 	}
 }
 
+func TestANewerReleaseShowsTheBadge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `[{"tag_name":"v9.0.0","html_url":"https://x/v9","draft":false}]`)
+	}))
+	defer srv.Close()
+	defer func(u string) { releasesURL = u }(releasesURL)
+	releasesURL = srv.URL
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	a.render()
+	if a.update.Visible() {
+		t.Fatal("Update shows before any release was found")
+	}
+	a.checkUpdate()
+	if !a.update.Visible() || a.update.Icon != newReleasesIcon || a.update.Text != "Update to v9.0.0" {
+		t.Fatalf("Update: visible %v, text %q", a.update.Visible(), a.update.Text)
+	}
+	snapshot(t, a, "update")
+	light := defaults()
+	light["app.theme"] = "light"
+	m.SetSettings(light)
+	a.render()
+	snapshot(t, a, "update-light")
+}
+
 func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 	ff, err := exec.LookPath("ffmpeg")
 	if err != nil {
@@ -640,7 +689,10 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 	}
 	dir := t.TempDir()
 	var picture bytes.Buffer
-	if err := png.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+	red := color.NRGBA{R: 0xff, A: 0xff}
+	pic := image.NewNRGBA(image.Rect(0, 0, 8, 8))
+	draw.Draw(pic, pic.Bounds(), image.NewUniform(red), image.Point{}, draw.Src)
+	if err := png.Encode(&picture, pic); err != nil {
 		t.Fatal(err)
 	}
 	cover := filepath.Join(t.TempDir(), "cover.png")
@@ -667,9 +719,9 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		if res := lib.cover(lib.shown[0]); res != nil {
-			if !bytes.Equal(res.Content(), picture.Bytes()) {
-				t.Fatal("the row shows another picture")
+		if got := lib.cover(lib.shown[0]).row; got != nil {
+			if got.Bounds().Dx() != 8 || color.NRGBAModel.Convert(got.At(4, 4)) != red {
+				t.Fatalf("the row shows another picture: %v, %v at its middle", got.Bounds(), got.At(4, 4))
 			}
 			return
 		}
@@ -677,6 +729,84 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 			t.Fatal("the cover never loaded")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// A cover is fetched, decoded and shrunk once, to twice the size it is
+// shown at; a row showing it again decodes nothing.
+func TestCoversAreShrunkOnce(t *testing.T) {
+	var big bytes.Buffer
+	if err := jpeg.Encode(&big, image.NewRGBA(image.Rect(0, 0, 1200, 800)), nil); err != nil {
+		t.Fatal(err)
+	}
+	loaded := make(chan struct{}, 4)
+	c := newCovers(func() { loaded <- struct{}{} })
+	var fetches atomic.Int32
+	fetch := func(context.Context) ([]byte, error) {
+		fetches.Add(1)
+		return big.Bytes(), nil
+	}
+	if got := c.load("cover", fetch); got.row != nil || got.live != nil {
+		t.Fatal("a cover before it loaded")
+	}
+	<-loaded
+	got := c.load("cover", fetch)
+	c.load("cover", fetch)
+	if n := fetches.Load(); n != 1 {
+		t.Errorf("the cover was fetched %d times", n)
+	}
+	if b := got.live.Bounds(); b.Dx() != 2*liveCover || b.Dy() != 2*liveCover*2/3 {
+		t.Errorf("the live card's cover is %v", b)
+	}
+	if b := got.row.Bounds(); b.Dx() != 2*rowCover || b.Dy() != 2*rowCover*2/3 {
+		t.Errorf("a row's cover is %v", b)
+	}
+	img := canvas.NewImageFromResource(theme.MediaMusicIcon())
+	setCover(img, got.row)
+	img.Refresh()
+	if img.Resource != nil || img.Image != got.row {
+		t.Error("the row's picture is not the thumbnail")
+	}
+}
+
+// The library builds rows only for the files in view, however many there
+// are: a row, and its cover, cost nothing until it scrolls in.
+func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 400 {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("Artist - Song %03d.mp3", i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// No ffmpeg: the empty files have no cover to look for.
+	t.Setenv("SPYTIFY_FFMPEG", filepath.Join(dir, "none"))
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.showTab(tabLibrary)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	if len(lib.shown) != 400 {
+		t.Fatalf("%d files listed", len(lib.shown))
+	}
+	drawn := map[widget.ListItemID]bool{}
+	update := lib.list.UpdateItem
+	lib.list.UpdateItem = func(id widget.ListItemID, o fyne.CanvasObject) {
+		drawn[id] = true
+		update(id, o)
+	}
+	// About eight rows fit in the window.
+	lib.list.Refresh()
+	if len(drawn) == 0 || len(drawn) > 12 {
+		t.Errorf("drew rows %v of 400", slices.Sorted(maps.Keys(drawn)))
+	}
+	clear(drawn)
+	lib.list.ScrollTo(200)
+	if len(drawn) == 0 || len(drawn) > 12 || !drawn[200] {
+		t.Errorf("scrolled to the 200th file, drew rows %v", slices.Sorted(maps.Keys(drawn)))
 	}
 }
 
@@ -769,8 +899,9 @@ func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
 	}
 }
 
-// The app starts the recorder itself: it says so instead of asking, and
-// only a start that failed shows the offline screen, with the reason.
+// With a player set, the app starts the recorder itself: the tabs show,
+// saying so, instead of the offline screen, which only a start that failed
+// shows, with the reason.
 func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	fa := test.NewTempApp(t)
 	fa.Preferences().SetBool(firstRunKey, true)
@@ -779,10 +910,19 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, AutoStart: true})
 	m.SetConn(model.Disconnected, "spytifyd is not running")
 	a.render()
+	snapshot(t, a, "starting")
 	all := texts(a.win.Content())
-	if !contains(all, "Starting the recorder…") || contains(all, "Start the recorder") {
+	if !contains(all, "Starting the recorder…") || contains(all, "Start the recorder") || contains(all, "The recorder is not running") {
 		t.Fatalf("starting: %v", all)
 	}
+	if a.center.Objects[0] != a.tabsView || a.tabs.SelectedIndex() != tabRecord {
+		t.Fatal("the Record tab is not shown while the recorder starts")
+	}
+	for i := range a.tabs.Items {
+		a.showTab(i)
+		a.render()
+	}
+	a.showTab(tabRecord)
 	a.startFailed(errors.New("spytifyd not found next to Spytify"))
 	all = texts(a.win.Content())
 	for _, want := range []string{"The recorder is not running", "spytifyd not found next to Spytify", "Start the recorder"} {

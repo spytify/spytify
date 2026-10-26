@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -153,7 +154,7 @@ func TestASavedTrackGoesToTheHistoryWithItsCoverAndToTheLibrary(t *testing.T) {
 	if all := texts(content); !contains(all, "Midnight City") || !contains(all, "Saved") {
 		t.Fatalf("history: %v", all)
 	}
-	if !contains(images(content), coverURL) {
+	if row := a.covers.get(coverURL).row; row == nil || !contains(images(content), picture(row)) {
 		t.Errorf("the history row does not show the cover: %v", images(content))
 	}
 	a.showTab(tabLibrary)
@@ -259,15 +260,54 @@ func TestClosingToTheTrayKeepsSpytifyThere(t *testing.T) {
 			open = it
 		}
 	}
-	for _, want := range []string{"Start recording", "Stop", "Open window"} {
-		if !contains(labels, want) {
-			t.Errorf("tray menu %v has no %q", labels, want)
+	if len(labels) != 3 || labels[0] != "Record" || labels[2] != "Open window" {
+		t.Errorf("tray menu %v, want Record, a separator and Open window", labels)
+	}
+	// The tray's action follows the session, as the app bar's does.
+	action := tray.menu.Items[0]
+	for _, step := range []struct {
+		state proto.SessionState
+		want  string
+	}{{proto.StateIdle, "Record"}, {proto.StateRecording, "Stop"}, {proto.StateStopping, "Stop now"}, {proto.StateIdle, "Record"}} {
+		m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: step.state}))
+		a.render()
+		if action.Label != step.want || action.Disabled || action.Label != a.action.Text {
+			t.Errorf("%s: tray action %q (disabled %v), app bar %q; want %q", step.state, action.Label, action.Disabled, a.action.Text, step.want)
 		}
+	}
+	m.SetConn(model.Disconnected, "")
+	a.render()
+	if !action.Disabled {
+		t.Error("the tray's action is enabled with no recorder")
 	}
 	if open == nil {
 		t.Fatal("no way back to the window from the tray")
 	}
 	open.Action()
+}
+
+// With Minimize to tray off, the default, Spytify puts nothing in the tray;
+// turned on, its icon and menu come at once.
+func TestTheTrayIconComesWithMinimizeToTray(t *testing.T) {
+	tray := &trayApp{App: test.NewTempApp(t)}
+	tray.Preferences().SetBool(firstRunKey, true)
+	m := model.New()
+	l := link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
+	a := New(tray, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true})
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	values := defaults()
+	m.SetSettings(values)
+	a.render()
+	if tray.menu != nil {
+		t.Fatal("a tray menu with Minimize to tray off")
+	}
+	values["app.minimize_to_tray"] = true
+	m.SetSettings(values)
+	a.render()
+	if tray.menu == nil || tray.menu.Items[0].Label != "Record" {
+		t.Fatalf("tray menu %v once Minimize to tray is on", tray.menu)
+	}
 }
 
 // iconButtons are the visible buttons that show only icon.
@@ -312,6 +352,8 @@ func images(o fyne.CanvasObject) []string {
 		case *canvas.Image:
 			if w.Resource != nil {
 				out = append(out, w.Resource.Name())
+			} else if w.Image != nil {
+				out = append(out, picture(w.Image))
 			}
 			return
 		case *fyne.Container:
@@ -329,3 +371,6 @@ func images(o fyne.CanvasObject) []string {
 	walk(o)
 	return out
 }
+
+// picture names an image shown from its pixels, such as a cover's thumbnail.
+func picture(img image.Image) string { return fmt.Sprintf("picture %p", img) }

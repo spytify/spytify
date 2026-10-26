@@ -37,6 +37,15 @@ func TestEveryDefaultIsValid(t *testing.T) {
 	}
 }
 
+// A choice list names every value of its setting, in order.
+func TestChoicesNameEveryValue(t *testing.T) {
+	for _, d := range Table {
+		if d.Choices != nil && len(d.Choices) != len(d.Enum) {
+			t.Errorf("%s: %d choices for %d values", d.Key, len(d.Choices), len(d.Enum))
+		}
+	}
+}
+
 func TestSetPersistsAndReloads(t *testing.T) {
 	s, path := openTemp(t)
 	applied, rejected, changed, err := s.Set(map[string]any{
@@ -76,6 +85,25 @@ func TestSetPersistsAndReloads(t *testing.T) {
 	}
 	if len(again.Warnings()) != 0 {
 		t.Fatalf("warnings = %v", again.Warnings())
+	}
+}
+
+// A config file of an earlier version loads: a renamed key's value moves
+// to its new key, a retired key goes without a warning.
+func TestEarlierKeysLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[output]\ncounter_start = 42\n[tags]\ntrack_from_counter = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := s.Values().Int("output.counter_next"); n != 42 {
+		t.Errorf("output.counter_next %d, want 42 from counter_start", n)
+	}
+	if w := s.Warnings(); len(w) != 0 {
+		t.Errorf("warnings %v", w)
 	}
 }
 

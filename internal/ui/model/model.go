@@ -140,6 +140,8 @@ type Model struct {
 	// levels hear the 10 Hz level events, which change nothing else; the
 	// OnChange listeners do not, so the meter does not redraw the window.
 	levels []func()
+	// events hear each live event once applied, not the replayed ones.
+	events []func(proto.Event)
 	// cleared are the rows the user cleared; a replay of the core's recent
 	// events must not bring them back.
 	cleared map[string]bool
@@ -277,9 +279,27 @@ func (m *Model) Apply(ev proto.Event) {
 				l()
 			}
 		}
+		m.notify(ev)
 		return
 	}
 	m.update(func(s *State) { m.apply(s, ev) })
+	m.notify(ev)
+}
+
+// OnEvent registers fn for each live event, after the state took it in.
+func (m *Model) OnEvent(fn func(proto.Event)) {
+	m.mu.Lock()
+	m.events = append(m.events, fn)
+	m.mu.Unlock()
+}
+
+func (m *Model) notify(ev proto.Event) {
+	m.mu.Lock()
+	events := append([]func(proto.Event){}, m.events...)
+	m.mu.Unlock()
+	for _, fn := range events {
+		fn(ev)
+	}
 }
 
 // OnLevel registers fn for level events.
