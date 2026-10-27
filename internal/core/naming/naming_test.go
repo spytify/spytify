@@ -77,6 +77,11 @@ func TestExample(t *testing.T) {
 	if got, want := Example(o, 1), filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
 		t.Errorf("grouped %q, want %q", got, want)
 	}
+	// The sample has a guest, so the example shows what all artists do.
+	o.GroupBy = "artists/album"
+	if got, want := Example(o, 1), filepath.Join("Neon_Harbor,_Lumen", "Harbor_Lights_(2024)", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
+		t.Errorf("grouped by all artists %q, want %q", got, want)
+	}
 }
 
 func TestAlbumTrackPrefix(t *testing.T) {
@@ -122,14 +127,19 @@ func TestArtistAndAlbumFolders(t *testing.T) {
 	if got := Build(tr, o).Dir; filepath.ToSlash(got) != "Artist_DJ/Single_(2020)" {
 		t.Fatalf("got %q", got)
 	}
+	// The main artist: the first album artist, else the first performer.
 	tr.AlbumArtists = []string{"Band", "Other"}
-	if got := Build(tr, o).Dir; filepath.ToSlash(got) != "Band,_Other/Single_(2020)" {
+	if got := Build(tr, o).Dir; filepath.ToSlash(got) != "Band/Single_(2020)" {
 		t.Fatalf("album artists: got %q", got)
 	}
 	tr.AlbumArtists = nil
 	tr.Artists = []string{"Artist", "Guest", "Artist"}
-	if got := Build(tr, o).Dir; filepath.ToSlash(got) != "Artist,_Guest/Single_(2020)" {
+	if got := Build(tr, o).Dir; filepath.ToSlash(got) != "Artist/Single_(2020)" {
 		t.Fatalf("performers: got %q", got)
+	}
+	o.GroupBy = "artists/album"
+	if got := Build(tr, o).Dir; filepath.ToSlash(got) != "Artist,_Guest/Single_(2020)" {
+		t.Fatalf("all performers: got %q", got)
 	}
 }
 
