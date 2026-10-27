@@ -40,8 +40,9 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", path}
 	var coverPath string
 	if o.Cover && len(t.Cover) > 0 {
+		cover, mime := fitCover(t.Cover, t.CoverMIME, o.CoverSize)
 		ext := ".jpg"
-		if t.CoverMIME == "image/png" {
+		if mime == "image/png" {
 			ext = ".png"
 		}
 		cf, err := os.CreateTemp(dir, ".cover-*"+ext)
@@ -50,7 +51,7 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 		}
 		coverPath = cf.Name()
 		defer os.Remove(coverPath)
-		if _, err := cf.Write(t.Cover); err != nil {
+		if _, err := cf.Write(cover); err != nil {
 			cf.Close()
 			return err
 		}
