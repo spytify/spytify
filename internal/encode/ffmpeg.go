@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/proc"
 )
 
 // FFmpeg is a located ffmpeg binary.
@@ -78,8 +79,7 @@ func Find(name string) (*FFmpeg, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w (%s)", ErrMissing, name)
 	}
-	probe := exec.Command(path, "-hide_banner", "-version")
-	hideConsole(probe)
+	probe := proc.Command(path, "-hide_banner", "-version")
 	out, err := probe.Output()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s -version: %v", ErrMissing, path, err)
@@ -90,8 +90,7 @@ func Find(name string) (*FFmpeg, error) {
 
 // HasEncoder reports whether this ffmpeg build has an encoder.
 func (f *FFmpeg) HasEncoder(name string) bool {
-	encoders := exec.Command(f.Path, "-hide_banner", "-encoders")
-	hideConsole(encoders)
+	encoders := proc.Command(f.Path, "-hide_banner", "-encoders")
 	out, err := encoders.Output()
 	if err != nil {
 		return false
@@ -216,7 +215,7 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
 
 func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudness, error) {
 	af := append(append([]string{}, filters...), "loudnorm=I="+num(j.TargetLUFS)+":TP="+truePeak+":LRA=11:print_format=json")
-	cmd := exec.CommandContext(ctx, f.Path, "-nostdin", "-hide_banner", "-i", j.In, "-af", strings.Join(af, ","), "-f", "null", "-")
+	cmd := proc.CommandContext(ctx, f.Path, "-nostdin", "-hide_banner", "-i", j.In, "-af", strings.Join(af, ","), "-f", "null", "-")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -240,7 +239,7 @@ func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudnes
 }
 
 func (f *FFmpeg) run(ctx context.Context, args []string) error {
-	cmd := exec.CommandContext(ctx, f.Path, args...)
+	cmd := proc.CommandContext(ctx, f.Path, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

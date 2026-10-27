@@ -4,9 +4,10 @@ package target
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/spytify/spytify/internal/proc"
 )
 
 // appDirs are where installed apps live; tests replace them.
@@ -32,7 +33,7 @@ func bundleIDOf(name string) string {
 				continue
 			}
 			plist := filepath.Join(dir, e.Name(), "Contents", "Info.plist")
-			out, err := exec.Command("plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", plist).Output()
+			out, err := proc.Command("plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", plist).Output()
 			if err == nil {
 				return strings.TrimSpace(string(out))
 			}

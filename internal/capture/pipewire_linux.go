@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
 )
 
@@ -240,7 +241,7 @@ type pwObject struct {
 }
 
 func (pipewireTools) find(t target.Target) (streamNode, bool, error) {
-	out, err := exec.Command("pw-dump", "--no-colors").Output()
+	out, err := proc.Command("pw-dump", "--no-colors").Output()
 	if err != nil {
 		return streamNode{}, false, fmt.Errorf("pw-dump: %w", err)
 	}
@@ -300,7 +301,7 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 }
 
 func (pipewireTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.Cmd {
-	return exec.CommandContext(ctx, "pw-record",
+	return proc.CommandContext(ctx, "pw-record",
 		"--target", n.key,
 		"--raw",
 		"--rate", strconv.Itoa(f.Rate),
@@ -331,7 +332,7 @@ func (pipewireTools) silence(n streamNode) error {
 	if _, ok := pipewireNodeID(mutedSink); !ok {
 		props := "{ factory.name=support.null-audio-sink node.name=" + mutedSink + " node.description=\"" + mutedDescription + "\"" +
 			" media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] priority.session=1 priority.driver=1 }"
-		if out, err := exec.Command("pw-cli", "create-node", "adapter", props).CombinedOutput(); err != nil {
+		if out, err := proc.Command("pw-cli", "create-node", "adapter", props).CombinedOutput(); err != nil {
 			return fmt.Errorf("pw-cli create-node: %v %s", err, out)
 		}
 		// The policy routes to a sink once it is in the graph.
@@ -346,25 +347,25 @@ func (pipewireTools) silence(n streamNode) error {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	if out, err := exec.Command("pw-metadata", strconv.Itoa(n.id), "target.object", mutedSink).CombinedOutput(); err != nil {
+	if out, err := proc.Command("pw-metadata", strconv.Itoa(n.id), "target.object", mutedSink).CombinedOutput(); err != nil {
 		return fmt.Errorf("pw-metadata: %v %s", err, out)
 	}
 	return nil
 }
 
 func (pipewireTools) unsilence(n streamNode) error {
-	return exec.Command("pw-metadata", "-d", strconv.Itoa(n.id), "target.object").Run()
+	return proc.Command("pw-metadata", "-d", strconv.Itoa(n.id), "target.object").Run()
 }
 
 func (pipewireTools) dropSink() {
 	if id, ok := pipewireNodeID(mutedSink); ok {
-		_ = exec.Command("pw-cli", "destroy", strconv.Itoa(id)).Run()
+		_ = proc.Command("pw-cli", "destroy", strconv.Itoa(id)).Run()
 	}
 }
 
 // pipewireNodeID finds a node by its node.name.
 func pipewireNodeID(name string) (int, bool) {
-	out, err := exec.Command("pw-dump").Output()
+	out, err := proc.Command("pw-dump").Output()
 	if err != nil {
 		return 0, false
 	}

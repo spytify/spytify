@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/spytify/spytify/internal/proc"
 )
 
 // Writer writes tags into an encoded file. MP3 gets ID3v2.4, FLAC gets
@@ -70,7 +71,7 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 		args = append(args, "-metadata", kv)
 	}
 	args = append(args, "-f", muxer, tmp.Name())
-	out, err := exec.CommandContext(ctx, w.FFmpeg, args...).CombinedOutput()
+	out, err := proc.CommandContext(ctx, w.FFmpeg, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tag: ffmpeg: %v: %s", err, strings.TrimSpace(string(out)))
 	}
