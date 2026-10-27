@@ -103,13 +103,6 @@ func containsKey(crashes []Crash, key string) bool {
 	return false
 }
 
-func orUnknown(s string) string {
-	if s == "" {
-		return "unknown"
-	}
-	return s
-}
-
 // CrashReport is a crash as the user can report it by hand: its error, and
 // the details with the trace. The home folder and the user name are
 // replaced, as in what Sentry gets.

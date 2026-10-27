@@ -436,38 +436,6 @@ func TestScrubberOutput(t *testing.T) {
 	}
 }
 
-func TestParseLocale(t *testing.T) {
-	for in, want := range map[string]string{
-		"fr_CA.UTF-8":     "CA",
-		"en-US":           "US",
-		"en_US@rg=cazzzz": "CA",
-		"C":               "",
-		"C.UTF-8":         "",
-		"POSIX":           "",
-		"CA\n":            "CA",
-		"de_DE@euro":      "DE",
-	} {
-		if got := parseLocale(in); got != want {
-			t.Errorf("parseLocale(%q) = %q, want %q", in, got, want)
-		}
-	}
-	env := map[string]string{"LANG": "fr_CA.UTF-8", "LC_ALL": "C"}
-	if got := envRegion(func(k string) string { return env[k] }); got != "CA" {
-		t.Errorf("envRegion = %q", got)
-	}
-}
-
-// The system's own region setting reads as a country; Windows always has
-// one.
-func TestOSRegion(t *testing.T) {
-	raw := osLocale()
-	got := parseLocale(raw)
-	t.Logf("system region %q, country %q", raw, got)
-	if runtime.GOOS == "windows" && got == "" {
-		t.Errorf("no country in Windows's region setting %q", raw)
-	}
-}
-
 func TestEnvironment(t *testing.T) {
 	if environment("v2.0.0-alpha.dev") != "development" || environment("v2.0.0-alpha+3f2c1d") != "development" || environment("v2.0.0-alpha.3") != "production" {
 		t.Error("environments")

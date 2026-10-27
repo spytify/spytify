@@ -99,11 +99,10 @@ func New(opts Options) *Client {
 	}
 	c := &Client{opts: opts, dsn: dsn, scrub: NewScrubber(), seen: map[string]bool{}}
 	if c.Available() {
-		// Both may run a command: not on the UI's thread when it turns on.
+		// computerID may run a command: not on the UI's thread when it turns on.
 		go func() {
 			defer quietly()
 			computerID()
-			Region()
 		}()
 	}
 	return c
@@ -181,7 +180,6 @@ func (c *Client) newHub() (*sentry.Hub, error) {
 		BeforeSendLog:         c.beforeSendLog,
 		BeforeSendMetric:      c.beforeSendMetric,
 		BeforeBreadcrumb:      c.beforeBreadcrumb,
-		Tags:                  map[string]string{"os_region": Region()},
 	})
 	if err != nil {
 		return nil, err

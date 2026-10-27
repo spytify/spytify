@@ -38,8 +38,8 @@ func (r Checks) failingNames() []string {
 // ChecksPreview is the report as it will leave.
 func (c *Client) ChecksPreview(r Checks) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Version: %s\nSystem: %s/%s\nCountry: from the connection, or %s\n\nChecks that fail:\n",
-		proto.Version, runtime.GOOS, runtime.GOARCH, orUnknown(Region()))
+	fmt.Fprintf(&b, "Version: %s\nSystem: %s/%s\nCountry: from the connection\n\nChecks that fail:\n",
+		proto.Version, runtime.GOOS, runtime.GOARCH)
 	for _, ch := range r.Failing {
 		fmt.Fprintf(&b, "  %s: %s\n", ch.Name, c.scrub.String(ch.Detail))
 	}
