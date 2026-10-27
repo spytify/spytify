@@ -43,6 +43,9 @@ type finishJob struct {
 	rejected proto.SkipReason
 	// keep saves a held take after all, whatever part of it played.
 	keep bool
+	// cover is a held take's file cover, read while the file was there.
+	cover     []byte
+	coverMIME string
 }
 
 // finisher turns closed temp WAVs into tagged files, one at a time and in
@@ -257,7 +260,11 @@ func (f *finisher) process(j finishJob) {
 	tags := tag.FromLocal(j.info, topts)
 	if topts.Cover && tags.CoverURL != "" {
 		step := time.Now()
-		data, mime, err := tag.FetchCover(ctx, nil, tags.CoverURL)
+		data, mime := j.cover, j.coverMIME
+		var err error
+		if data == nil {
+			data, mime, err = tag.FetchCover(ctx, nil, tags.CoverURL)
+		}
 		timings.CoverMs = since(step)
 		if err == nil {
 			tags.Cover, tags.CoverMIME = data, mime

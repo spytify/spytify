@@ -1,9 +1,12 @@
 package core
 
 import (
+	"context"
 	"os"
+	"strings"
 	"sync"
 
+	"github.com/spytify/spytify/internal/tag"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -19,10 +22,14 @@ type keeper struct {
 }
 
 // hold keeps j's audio in place of the take held before; it tells whether
-// it did. A nil keeper holds nothing.
+// it did. A nil keeper holds nothing. A file cover is read now: the session
+// removes its covers as it ends, and the take may be kept after that.
 func (k *keeper) hold(j finishJob) bool {
 	if k == nil || j.played <= 0 {
 		return false
+	}
+	if strings.HasPrefix(j.info.ArtURL, "file://") {
+		j.cover, j.coverMIME, _ = tag.FetchCover(context.Background(), nil, j.info.ArtURL)
 	}
 	k.mu.Lock()
 	old := k.take
