@@ -69,12 +69,6 @@ func (w *WAVWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Frames is the number of frames written so far.
-func (w *WAVWriter) Frames() int64 { return w.frames }
-
-// Format is the format of the file.
-func (w *WAVWriter) Format() Format { return w.format }
-
 // Path is the file being written.
 func (w *WAVWriter) Path() string { return w.f.Name() }
 
@@ -149,6 +143,11 @@ func readWAVHeader(r io.Reader) (Format, uint32, error) {
 		size := binary.LittleEndian.Uint32(hdr[4:])
 		switch string(hdr[0:4]) {
 		case "fmt ":
+			// 16 bytes at least; a broken size must not panic nor allocate
+			// gigabytes.
+			if size < 16 || size > 1<<10 {
+				return Format{}, 0, fmt.Errorf("pcm: fmt chunk of %d bytes", size)
+			}
 			body := make([]byte, size)
 			if _, err := io.ReadFull(r, body); err != nil {
 				return Format{}, 0, err

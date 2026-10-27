@@ -134,6 +134,9 @@ func run() int {
 
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	// The app that started this daemon reads its stderr, then quits; a log
+	// line written after that must not kill a recording.
+	signal.Ignore(syscall.SIGPIPE)
 
 	if *once && !*serve {
 		c.SetBroadcaster(events)

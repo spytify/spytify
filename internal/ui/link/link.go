@@ -254,24 +254,33 @@ func (l *Link) StartDaemon() error {
 		}
 		return errors.New("spytifyd stopped: " + msg)
 	case <-time.After(1500 * time.Millisecond):
-		// Still running: its log goes to its own file from here on.
-		cmd.Stderr = nil
+		// Still running: its log file has the rest. The pipe stays open
+		// until the app quits, so what comes through is dropped.
+		stderr.stop()
 		return nil
 	}
 }
 
 type lockedBuffer struct {
-	mu sync.Mutex
-	b  []byte
+	mu      sync.Mutex
+	b       []byte
+	stopped bool
 }
 
 func (w *lockedBuffer) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if len(w.b) < 64<<10 {
+	if !w.stopped && len(w.b) < 64<<10 {
 		w.b = append(w.b, p...)
 	}
 	return len(p), nil
+}
+
+// stop drops what is written from now on and what was kept.
+func (w *lockedBuffer) stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.stopped, w.b = true, nil
 }
 
 func (w *lockedBuffer) String() string {

@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -330,4 +332,86 @@ func TestYesNoSettingsAreSwitches(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("a tap beside the switch flipped it: %v", got)
 	}
+}
+
+// The folder picker opens at the output folder or, when it is gone, at the
+// nearest folder above it that exists: for a USB key that is not plugged
+// in, the folder the drives are in.
+func TestTheFolderPickerStartsAtTheOutputFolder(t *testing.T) {
+	root := t.TempDir()
+	volumes := filepath.Join(root, "Volumes")
+	music := filepath.Join(root, "Music", "Spytify")
+	for _, d := range []string{volumes, music} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, want := range map[string]string{
+		music:                           music,
+		filepath.Join(music, "not yet"): music,
+		filepath.Join(volumes, "KINGSTON", "Music", "Spytify"): volumes,
+	} {
+		got := startFolder(path)
+		if got == nil {
+			t.Errorf("%s: no start folder", path)
+			continue
+		}
+		if p, _ := filepath.EvalSymlinks(got.Path()); p != mustEval(t, want) {
+			t.Errorf("%s: starts at %s, want %s", path, got.Path(), want)
+		}
+	}
+	if got := startFolder(""); got != nil {
+		t.Errorf("no output folder: starts at %s", got.Path())
+	}
+}
+
+func mustEval(t *testing.T, p string) string {
+	t.Helper()
+	r, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// The picker is a third larger than Fyne's, centred in the window, and
+// shows the output folder.
+func TestTheFolderPickerIsLargerAndCentred(t *testing.T) {
+	a, m, s := settingsApp(t)
+	out := filepath.Join(t.TempDir(), "Spytify Output")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	v := defaults()
+	v["output.dir"] = out
+	m.SetSettings(v)
+	a.render()
+	var browse *widget.Button
+	for _, o := range s.fields["output.dir"].input.(*fyne.Container).Objects {
+		if b, ok := o.(*widget.Button); ok {
+			browse = b
+		}
+	}
+	if browse == nil {
+		t.Fatal("no browse button next to the output folder")
+	}
+	test.Tap(browse)
+	top := a.win.Canvas().Overlays().Top()
+	if top == nil {
+		t.Fatal("the picker did not open")
+	}
+	// The overlay is Fyne's internal container: its Content is the dialog.
+	dlg := reflect.ValueOf(top).Elem().FieldByName("Content").Interface().(fyne.CanvasObject)
+	win := a.win.Canvas().Size()
+	if dlg.Size() != pickerSize {
+		t.Errorf("picker %v, want %v", dlg.Size(), pickerSize)
+	}
+	want := fyne.NewPos((win.Width-pickerSize.Width)/2, (win.Height-pickerSize.Height)/2)
+	if p := dlg.Position(); math.Abs(float64(p.X-want.X)) > 1 || math.Abs(float64(p.Y-want.Y)) > 1 {
+		t.Errorf("picker at %v, centred is %v", p, want)
+	}
+	if !contains(texts(top), "Spytify Output") {
+		t.Errorf("the picker does not show the output folder: %v", texts(top))
+	}
+	snapshot(t, a, "folder-picker")
 }

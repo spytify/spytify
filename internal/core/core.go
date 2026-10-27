@@ -141,6 +141,39 @@ func (c *Core) Startup() {
 		c.log.Infof("ffmpeg %s (%s)", c.ffmpeg.Path, c.ffmpeg.Version)
 	}
 	c.recoverCrash()
+	c.sweepTemp(time.Now())
+}
+
+// staleTemp is how long a temp file stays untouched before a new run
+// removes it: another computer may record to the same folder.
+const staleTemp = 10 * time.Minute
+
+// sweepTemp removes the takes and covers an earlier run left in the temp
+// folder when it stopped without cleaning up. A new run holds no take for
+// track.keep yet, so none of them can still be saved.
+func (c *Core) sweepTemp(now time.Time) {
+	dir := filepath.Join(c.store.Values().Path("output.dir"), ".spytify")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	removed := 0
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !(strings.HasSuffix(name, ".wav") || strings.HasPrefix(name, "cover-")) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || now.Sub(info.ModTime()) < staleTemp {
+			continue
+		}
+		if os.Remove(filepath.Join(dir, name)) == nil {
+			removed++
+		}
+	}
+	if removed > 0 {
+		c.log.Infof("removed %d temporary files an earlier run left in %s", removed, dir)
+	}
 }
 
 // WatchTarget reports the player process appearing and exiting.

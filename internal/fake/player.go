@@ -67,6 +67,7 @@ type Player struct {
 	hooks   []hook
 	seq     int
 	cmds    chan string
+	sent    []string
 	volume  float64
 	paused  bool
 	status  meta.Status
@@ -248,8 +249,19 @@ func (p *Player) Control(cmd string) error {
 	default:
 		return meta.ErrUnsupported
 	}
+	p.mu.Lock()
+	p.sent = append(p.sent, cmd)
+	p.mu.Unlock()
 	p.cmds <- cmd
 	return nil
+}
+
+// Commands lists the transport commands the player was sent, in order,
+// whether or not it played on long enough to act on them.
+func (p *Player) Commands() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.sent...)
 }
 
 func (p *Player) Volume() (float64, error) {

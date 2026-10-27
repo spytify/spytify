@@ -162,12 +162,30 @@ type loudness struct {
 
 const truePeak = "-1.5"
 
+// mp3Rate is the rate an MP3 of a source at rate is written at: the
+// source's, unless MP3 has no such rate. Above 48 kHz, as a Mac whose
+// output runs at 88.2 or 96 kHz delivers, it is the rate the source's
+// divides into.
+func mp3Rate(rate int) int {
+	switch {
+	case rate <= 48000:
+		return rate
+	case rate%44100 == 0:
+		return 44100
+	}
+	return 48000
+}
+
 // Encode runs the job. Normalisation is ffmpeg's two-pass linear loudnorm,
 // so it applies one gain to the whole track instead of compressing it.
 func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
 	p, ok := presets[j.Format]
 	if !ok {
 		return fmt.Errorf("encode: unknown format %q", j.Format)
+	}
+	rate := j.Source.Rate
+	if p.Format == "mp3" {
+		rate = mp3Rate(rate)
 	}
 	var filters []string
 	if t := j.trimFilter(); t != "" {
@@ -182,7 +200,7 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
 			filters = append(filters, fmt.Sprintf(
 				"loudnorm=I=%s:TP=%s:LRA=11:measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s:linear=true",
 				num(j.TargetLUFS), truePeak, ln.InputI, ln.InputTP, ln.InputLRA, ln.InputThresh, ln.Offset))
-			filters = append(filters, "aresample="+strconv.Itoa(j.Source.Rate))
+			filters = append(filters, "aresample="+strconv.Itoa(rate))
 		}
 	}
 
@@ -190,7 +208,7 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
 	if len(filters) > 0 {
 		args = append(args, "-af", strings.Join(filters, ","))
 	}
-	args = append(args, "-ar", strconv.Itoa(j.Source.Rate))
+	args = append(args, "-ar", strconv.Itoa(rate))
 	switch p.Format {
 	case "mp3":
 		args = append(args, "-c:a", p.Encoder, "-b:a", strconv.Itoa(j.BitrateKbps)+"k", "-write_xing", "1", "-id3v2_version", "0", "-write_id3v1", "0")

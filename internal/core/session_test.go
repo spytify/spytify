@@ -691,3 +691,33 @@ func TestSessionStartedMidTrackWaitsForNextTrack(t *testing.T) {
 		t.Fatalf("files %v", files)
 	}
 }
+
+// With the output disk full, the recording ends at once with an error,
+// and the player is paused when recorder.pause_on_disk_full asks for it.
+func TestAFullDiskStopsTheRecording(t *testing.T) {
+	old := diskFree
+	diskFree = func(string) (int64, bool) { return 10 << 20, true }
+	defer func() { diskFree = old }()
+	for _, pause := range []bool{true, false} {
+		tl := loadTimeline(t, "basic")
+		s := newScenario(t, tl, map[string]any{"recorder.pause_on_disk_full": pause})
+		s.run(t, tl)
+		full := false
+		for _, ev := range s.events.all() {
+			if ev.Method == proto.EventTrackFinished {
+				t.Errorf("pause %v: a track was saved on a full disk", pause)
+			}
+			var e proto.ErrorEvent
+			if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == "disk_full" {
+				full = true
+			}
+		}
+		if !full {
+			t.Errorf("pause %v: no disk_full error", pause)
+		}
+		time.Sleep(100 * time.Millisecond)
+		if got := slices.Contains(s.player.Commands(), proto.CmdPause); got != pause {
+			t.Errorf("pause %v: the player was sent %v", pause, s.player.Commands())
+		}
+	}
+}
