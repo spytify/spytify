@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/spytify/spytify/internal/fake"
+	"github.com/spytify/spytify/internal/ui/link"
+	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -29,6 +32,14 @@ func exe(name string) string {
 }
 
 func TestMain(m *testing.M) {
+	if os.Getenv("SPYTIFY_E2E_APP") != "" {
+		// Stand in for the app: start the recorder its way, then quit.
+		if err := link.New(os.Getenv("SPYTIFY_SOCKET"), model.New()).StartDaemon(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	dir, err := os.MkdirTemp("", "spy-bin")
 	if err != nil {
 		panic(err)
@@ -243,5 +254,32 @@ func TestDaemonRefusesWithoutTarget(t *testing.T) {
 	out, err := d.CombinedOutput()
 	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 || !strings.Contains(string(out), "SPYTIFY_TARGET_PROCESS is not set") {
 		t.Fatalf("exit %v:\n%s", err, out)
+	}
+}
+
+// The app starts the recorder detached, so quitting the window does not
+// stop a recording. The recorder's error output was a pipe to the app:
+// once the app was gone, the recorder's next log line killed it (SIGPIPE).
+func TestTheRecorderOutlivesTheAppThatStartedIt(t *testing.T) {
+	e := newEnv(t)
+	launch := "true"
+	if runtime.GOOS == "windows" {
+		launch = "rem"
+	}
+	e.vars = append(e.vars, "SPYTIFY_TARGET_LAUNCH="+launch, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	app := exec.Command(os.Args[0], "-test.run=^$")
+	app.Env = append(e.vars, "SPYTIFY_E2E_APP=1")
+	if out, err := app.CombinedOutput(); err != nil {
+		t.Fatalf("the app could not start the recorder: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { e.cli("shutdown") })
+	if _, err := e.cli("info"); err != nil {
+		t.Fatalf("the recorder is not up: %v", err)
+	}
+	// The recorder logs "starting the player" now that the app is gone.
+	e.cli("launch")
+	time.Sleep(500 * time.Millisecond)
+	if out, err := e.cli("info"); err != nil {
+		t.Fatalf("the recorder died after the app quit: %v\n%s", err, out)
 	}
 }

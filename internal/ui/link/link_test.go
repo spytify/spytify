@@ -169,3 +169,20 @@ func TestFindDaemonTellsAnArchiveFromAMissingRecorder(t *testing.T) {
 		t.Errorf("next to the app: %q, %v", p, err)
 	}
 }
+
+// Once the recorder is up, what it writes to stderr is not kept in the
+// app: its log file has it.
+func TestTheDaemonOutputIsNotKeptAfterStart(t *testing.T) {
+	var b lockedBuffer
+	b.Write([]byte("spytifyd: starting\n"))
+	if lastLine(b.String()) != "spytifyd: starting" {
+		t.Fatalf("before start: %q", b.String())
+	}
+	b.stop()
+	for i := 0; i < 1000; i++ {
+		b.Write([]byte("a log line\n"))
+	}
+	if b.String() != "" {
+		t.Fatalf("kept %d bytes after start", len(b.String()))
+	}
+}
