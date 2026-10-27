@@ -180,9 +180,9 @@ func encodeCommand(script string) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-func powershell(ctx context.Context, script string) *exec.Cmd {
-	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodeCommand(script))
-	return cmd
+// powershell runs script in Windows PowerShell. Tests replace it.
+var powershell = func(ctx context.Context, script string) *exec.Cmd {
+	return proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodeCommand(script))
 }
 
 func (m *SMTC) current() []string {

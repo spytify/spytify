@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -142,5 +143,74 @@ func TestPickRootFindsTheTreeRoot(t *testing.T) {
 	}
 	if _, ok := pickRoot(tg, []Process{{PID: 9, Name: "other"}}); ok {
 		t.Fatal("matched a process of another name")
+	}
+}
+
+// A variable set in the environment wins over the working directory's
+// .env, which wins over the user's (the one the app writes).
+func TestLoadDotEnvKeepsTheFirstValue(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("SPYTIFY_TEST_A", "env")
+	for _, k := range []string{"SPYTIFY_TEST_B", "SPYTIFY_TEST_C"} {
+		t.Setenv(k, "")
+		os.Unsetenv(k)
+	}
+	if err := os.MkdirAll(filepath.Dir(UserEnvPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(UserEnvPath(), []byte("SPYTIFY_TEST_B=user\nSPYTIFY_TEST_C=user\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	if err := os.WriteFile(filepath.Join(work, ".env"), []byte("SPYTIFY_TEST_A=cwd\nSPYTIFY_TEST_B=cwd\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(work)
+	LoadDotEnv()
+	for k, want := range map[string]string{"SPYTIFY_TEST_A": "env", "SPYTIFY_TEST_B": "cwd", "SPYTIFY_TEST_C": "user"} {
+		if got := os.Getenv(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestProcessNameIsTheFirstName(t *testing.T) {
+	if got := (Target{}).ProcessName(); got != "" {
+		t.Errorf("no name: %q", got)
+	}
+	if got := (Target{ProcessNames: []string{"Player.app", "PlayerHelper"}}).ProcessName(); got != "Player.app" {
+		t.Errorf("first name: %q", got)
+	}
+	if got := (Target{ProcessNames: []string{"Player.app"}}).AppSpecifier(); got != "Player" {
+		t.Errorf("app specifier: %q", got)
+	}
+}
+
+// The socket and the state folder follow each OS's place for them.
+func TestDefaultPaths(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", dir)
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	t.Setenv("XDG_STATE_HOME", dir)
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	socket, state := DefaultSocketPath(), defaultStateDir()
+	want := map[string][2]string{
+		"windows": {filepath.Join(dir, "Spytify", "spytify.sock"), filepath.Join(dir, "Spytify")},
+		"darwin":  {filepath.Join(dir, "Library", "Application Support", "Spytify", "spytify.sock"), filepath.Join(dir, "spytify")},
+		"linux":   {filepath.Join(dir, "spytify.sock"), filepath.Join(dir, "spytify")},
+	}[runtime.GOOS]
+	if socket != want[0] || state != want[1] {
+		t.Errorf("socket %s, state %s; want %s, %s", socket, state, want[0], want[1])
+	}
+	if runtime.GOOS == "linux" {
+		t.Setenv("XDG_RUNTIME_DIR", "")
+		if got := DefaultSocketPath(); filepath.Dir(got) != os.TempDir() {
+			t.Errorf("without XDG_RUNTIME_DIR: %s", got)
+		}
 	}
 }
