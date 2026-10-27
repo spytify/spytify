@@ -4,8 +4,10 @@
 // then interleaved 32-bit float frames. It is spytifyd's macOS counterpart of
 // pw-record. The processes to tap are matched by bundle id (or a bundle id
 // prefix), executable name, or parent process, so a player that plays from a
-// helper process is found too. When the set of matching processes or the tap
-// format changes, it exits with status 3 and spytifyd starts it again.
+// helper process is found too. It records at the rate of the device the
+// player plays to, so nothing is resampled. When the set of matching
+// processes, their device or the tap format changes, it exits with status 3
+// and spytifyd starts it again.
 //
 // Usage: spytify-tap [--bundle-id ID]... [--name NAME]... [--pid PID]...
 //                    [--mute] [--list]
@@ -48,12 +50,12 @@ func log(_ s: String) { fputs("spytify-tap: \(s)\n", stderr) }
 
 // MARK: - Core Audio property helpers
 
-func address(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
-    AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+func address(_ selector: AudioObjectPropertySelector, _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> AudioObjectPropertyAddress {
+    AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
 }
 
-func objectList(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> [AudioObjectID] {
-    var addr = address(selector)
+func objectList(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> [AudioObjectID] {
+    var addr = address(selector, scope)
     var size: UInt32 = 0
     guard AudioObjectGetPropertyDataSize(object, &addr, 0, nil, &size) == noErr, size > 0 else { return [] }
     var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
@@ -137,9 +139,21 @@ func matches(_ p: AudioProcess, _ o: Options) -> Bool {
 
 // MARK: - Tap
 
-func defaultOutputUID() -> String? {
-    guard let dev: AudioObjectID = scalar(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultSystemOutputDevice, AudioObjectID(0)) else { return nil }
-    return string(dev, kAudioDevicePropertyDeviceUID)
+// The aggregate device runs at the rate of its main device, and Core Audio
+// resamples the tap to it. So the main device is the one the player plays to,
+// whose rate the tap already has: nothing is resampled. Another device, such
+// as the one for alert sounds (a Bluetooth headset in call mode runs at
+// 16 kHz), would resample the music.
+func playerOutputDevice(_ processes: [AudioObjectID]) -> AudioObjectID? {
+    for p in processes {
+        if let dev = objectList(p, kAudioProcessPropertyDevices, kAudioObjectPropertyScopeOutput).first { return dev }
+    }
+    return nil
+}
+
+// Before the player outputs, the device it will most likely play to.
+func defaultOutputDevice() -> AudioObjectID? {
+    scalar(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice, AudioObjectID(0))
 }
 
 final class Recorder {
@@ -150,7 +164,7 @@ final class Recorder {
     let queue = DispatchQueue(label: "spytify-tap.io", qos: .userInitiated)
     var interleaved = [Float]()
 
-    init(processes: [AudioObjectID], mute: Bool) throws {
+    init(processes: [AudioObjectID], device: AudioObjectID?, mute: Bool) throws {
         let desc = CATapDescription(stereoMixdownOfProcesses: processes)
         desc.uuid = UUID()
         desc.name = "spytify-tap"
@@ -179,7 +193,7 @@ final class Recorder {
             kAudioAggregateDeviceTapAutoStartKey: true,
             kAudioAggregateDeviceTapListKey: [[kAudioSubTapDriftCompensationKey: true, kAudioSubTapUIDKey: desc.uuid.uuidString]],
         ]
-        if let out = defaultOutputUID() {
+        if let dev = device, let out = string(dev, kAudioDevicePropertyDeviceUID) {
             description[kAudioAggregateDeviceMainSubDeviceKey] = out
             description[kAudioAggregateDeviceSubDeviceListKey] = [[kAudioSubDeviceUIDKey: out]]
         }
@@ -192,7 +206,7 @@ final class Recorder {
         aggregateID = agg
     }
 
-    // Frames arrive at the aggregate device's rate, which follows the output
+    // Frames arrive at the aggregate device's rate, which follows its main
     // device, not at the rate the tap format reports.
     var rate: Float64 {
         scalar(aggregateID, kAudioDevicePropertyNominalSampleRate, Float64(0)) ?? format.mSampleRate
@@ -277,6 +291,7 @@ for s in [SIGINT, SIGTERM, SIGHUP] {
 
 var waiting = false
 var current: Set<AudioObjectID> = []
+var device: AudioObjectID?
 while recorder == nil {
     let found = audioProcesses().filter { matches($0, options) }
     if found.isEmpty {
@@ -285,11 +300,13 @@ while recorder == nil {
         continue
     }
     current = Set(found.map(\.object))
+    device = playerOutputDevice(Array(current)) ?? defaultOutputDevice()
     do {
-        let r = try Recorder(processes: Array(current), mute: options.mute)
+        let r = try Recorder(processes: Array(current), device: device, mute: options.mute)
         try r.start()
         recorder = r
-        log("tapping " + found.map { "\($0.name)[\($0.pid)]" }.joined(separator: ", ") + " at \(Int(r.rate)) Hz (tap reports \(Int(r.format.mSampleRate)) Hz)")
+        let on = device.flatMap { string($0, kAudioObjectPropertyName) } ?? "no output device"
+        log("tapping " + found.map { "\($0.name)[\($0.pid)]" }.joined(separator: ", ") + " on \(on) at \(Int(r.rate)) Hz (tap reports \(Int(r.format.mSampleRate)) Hz)")
     } catch {
         log("\(error.localizedDescription)")
         shutdown(1)
@@ -300,12 +317,15 @@ while recorder == nil {
 // means a new tap.
 let startFormat = recorder!.format
 let startRate = recorder!.rate
-let startOutput = defaultOutputUID()
+let startDefault = defaultOutputDevice()
 while true {
     pause(0.5)
     let now = Set(audioProcesses().filter { matches($0, options) }.map(\.object))
     let fmt: AudioStreamBasicDescription? = scalar(recorder!.tapID, kAudioTapPropertyFormat, AudioStreamBasicDescription())
-    if now != current || recorder!.rate != startRate || fmt?.mSampleRate != startFormat.mSampleRate || fmt?.mChannelsPerFrame != startFormat.mChannelsPerFrame || defaultOutputUID() != startOutput {
+    // A paused player plays to no device; then only a new default output counts.
+    let playing = playerOutputDevice(Array(now))
+    let moved = playing != nil ? playing != device : defaultOutputDevice() != startDefault
+    if now != current || recorder!.rate != startRate || fmt?.mSampleRate != startFormat.mSampleRate || fmt?.mChannelsPerFrame != startFormat.mChannelsPerFrame || moved {
         log("target processes or output format changed")
         shutdown(exitChanged)
     }
