@@ -17,12 +17,15 @@ import (
 )
 
 // With app.check_updates off the app never asks GitHub for releases; on,
-// it asks once it is connected and shows a newer one.
+// it asks once it is connected. The release is an older one, so the check
+// touches no widget from its goroutine (TestANewerReleaseShowsTheBadge
+// covers the badge): Fyne's test driver runs fyne.Do on the spot, which
+// would race with the render that started the check.
 func TestTheUpdateCheckFollowsTheSetting(t *testing.T) {
 	var asked atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		asked.Add(1)
-		fmt.Fprint(w, `[{"tag_name":"v9.0.0","html_url":"https://x/v9","draft":false}]`)
+		fmt.Fprint(w, `[{"tag_name":"v1.0.0","html_url":"https://x/v1","draft":false}]`)
 	}))
 	defer srv.Close()
 	defer func(u string) { releasesURL = u }(releasesURL)
