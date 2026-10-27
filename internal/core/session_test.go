@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -346,6 +347,37 @@ func TestStopNowTakeCanBeKept(t *testing.T) {
 	}
 	if err := s.core.Keep(id); err == nil {
 		t.Fatal("kept the same take twice")
+	}
+}
+
+// A take kept once its session ended still gets its cover, though the
+// session removed its copies of the player's cover files as it ended.
+func TestATakeKeptAfterTheSessionHasItsCover(t *testing.T) {
+	ff, err := encode.Find("ffmpeg")
+	if err != nil {
+		t.Skip(err)
+	}
+	tl := loadTimeline(t, "basic")
+	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
+	// Paper Lanterns starts at 6.5 s: stop 2 s into it.
+	s.player.At(8500, func() { _, _ = s.core.StopSession(true) })
+	runWith(t, s, SessionOptions{EndOnStop: true})
+	id := idOf(s, "Paper Lanterns")
+	if err := s.core.Keep(id); err != nil {
+		t.Fatal(err)
+	}
+	f := finished(t, s, id)
+	want, err := os.ReadFile(tl.Items[1].Art)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if art, err := ff.Cover(ctx, f.Path); !bytes.Equal(art, want) {
+		t.Fatalf("%s: cover of %d bytes, want its own of %d: %v\n%s", filepath.Base(f.Path), len(art), len(want), err, s.logs)
+	}
+	if left, _ := filepath.Glob(filepath.Join(s.out, ".spytify", "cover-*")); len(left) > 0 {
+		t.Fatalf("covers left behind: %v", left)
 	}
 }
 
