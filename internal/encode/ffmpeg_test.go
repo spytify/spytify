@@ -96,3 +96,11 @@ func TestNormalizeAndMP3(t *testing.T) {
 		t.Fatalf("normalisation did not raise a quiet track: in %.1f dBFS, out %.1f dBFS", rmsIn, rmsOut)
 	}
 }
+
+func TestMP3RatesStayInWhatMP3Allows(t *testing.T) {
+	for in, want := range map[int]int{22050: 22050, 44100: 44100, 48000: 48000, 88200: 44100, 96000: 48000, 176400: 44100, 192000: 48000} {
+		if got := mp3Rate(in); got != want {
+			t.Errorf("mp3Rate(%d) = %d, want %d", in, got, want)
+		}
+	}
+}
