@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -85,4 +86,54 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// Install writes the file then runs its commands in order; Uninstall runs
+// its commands then removes the file. Harmless commands stand in for
+// systemctl and launchctl, which would change the machine running the test.
+func TestInstallAndUninstallRunThePlan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the plan's commands are POSIX")
+	}
+	dir := t.TempDir()
+	order := filepath.Join(dir, "order")
+	p := Plan{
+		Path:      filepath.Join(dir, "agents", "spytifyd.service"),
+		Content:   []byte("[Service]\n"),
+		Install:   [][]string{{"sh", "-c", "test -f " + filepath.Join(dir, "agents", "spytifyd.service") + " && echo installed >> " + order}},
+		Uninstall: [][]string{{"sh", "-c", "test -f " + filepath.Join(dir, "agents", "spytifyd.service") + " && echo stopped >> " + order}},
+	}
+	if Installed(p) {
+		t.Fatal("installed before Install")
+	}
+	if err := Install(p); err != nil {
+		t.Fatal(err)
+	}
+	if !Installed(p) {
+		t.Fatal("not installed after Install")
+	}
+	if err := Uninstall(p); err != nil {
+		t.Fatal(err)
+	}
+	if Installed(p) {
+		t.Fatal("still installed after Uninstall")
+	}
+	if b, _ := os.ReadFile(order); string(b) != "installed\nstopped\n" {
+		t.Fatalf("commands ran as %q, want install with the file there, then stop before it went", b)
+	}
+	if err := Uninstall(p); err != nil {
+		t.Fatalf("uninstalling twice: %v", err)
+	}
+}
+
+// A failing command says which one and what it printed.
+func TestAFailingCommandIsReported(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the plan's commands are POSIX")
+	}
+	p := Plan{Path: filepath.Join(t.TempDir(), "unit"), Install: [][]string{{"sh", "-c", "echo no bus >&2; exit 3"}}}
+	err := Install(p)
+	if err == nil || !strings.Contains(err.Error(), "sh -c") || !strings.Contains(err.Error(), "no bus") {
+		t.Fatalf("error %v", err)
+	}
 }
