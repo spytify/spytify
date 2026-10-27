@@ -309,7 +309,7 @@ func (f *finisher) process(j finishJob) {
 	part := final + ".part"
 	format := timings.Format
 	step := time.Now()
-	err := f.ffmpeg.Encode(ctx, encode.Job{
+	gain, err := f.ffmpeg.Encode(ctx, encode.Job{
 		In:          j.tmp,
 		Out:         part,
 		Format:      format,
@@ -325,6 +325,9 @@ func (f *finisher) process(j finishJob) {
 		os.Remove(part)
 		f.fail(j, "encode", err)
 		return
+	}
+	if gain != nil {
+		tags.ReplayGain = &tag.ReplayGain{Gain: gain.DB, Peak: gain.Peak}
 	}
 	tagged := true
 	step = time.Now()

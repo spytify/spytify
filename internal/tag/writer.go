@@ -116,6 +116,10 @@ func metadataPairs(t Track, format, sep string) []string {
 		add("TIT3", t.Subtitle)
 	case "flac":
 		add("SUBTITLE", t.Subtitle)
+		if g := t.ReplayGain; g != nil {
+			add("REPLAYGAIN_TRACK_GAIN", fmt.Sprintf("%.2f dB", g.Gain))
+			add("REPLAYGAIN_TRACK_PEAK", fmt.Sprintf("%.6f", g.Peak))
+		}
 	}
 	return kv
 }

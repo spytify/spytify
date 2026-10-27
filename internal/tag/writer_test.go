@@ -2,6 +2,7 @@ package tag
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -32,5 +33,20 @@ func TestAACKeepsTheExtraInItsTitle(t *testing.T) {
 	tr := Track{Title: "Song", Subtitle: "Live"}
 	if got := metadataPairs(tr, "aac", ""); !slices.Contains(got, "title=Song - Live") {
 		t.Errorf("provider subtitle: aac tags %v", got)
+	}
+}
+
+// FLAC is normalised by tags: the gain in dB with two decimals, the peak
+// linear with six, as ReplayGain readers expect them.
+func TestFLACCarriesItsReplayGain(t *testing.T) {
+	tr := Track{Title: "Song", ReplayGain: &ReplayGain{Gain: -3.2149, Peak: 0.89125094}}
+	got := metadataPairs(tr, "flac", "")
+	for _, want := range []string{"REPLAYGAIN_TRACK_GAIN=-3.21 dB", "REPLAYGAIN_TRACK_PEAK=0.891251"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("%s missing from %v", want, got)
+		}
+	}
+	if got := metadataPairs(Track{Title: "Song"}, "flac", ""); slices.ContainsFunc(got, func(kv string) bool { return strings.HasPrefix(kv, "REPLAYGAIN") }) {
+		t.Errorf("a ReplayGain with none measured: %v", got)
 	}
 }

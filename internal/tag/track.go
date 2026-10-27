@@ -27,8 +27,17 @@ type Track struct {
 	// SubtitleSep is how the subtitle was attached to the title, to put it
 	// back in a format with no subtitle tag.
 	SubtitleSep Separator `json:"-"`
+	// ReplayGain is set on a FLAC file normalised by tags.
+	ReplayGain *ReplayGain `json:"-"`
 	// Source is where the tags came from: local, the player itself.
 	Source string `json:"source"`
+}
+
+// ReplayGain is the gain, in dB, that plays a file at the target loudness
+// in players that honour ReplayGain, and the file's true peak, linear.
+type ReplayGain struct {
+	Gain float64
+	Peak float64
 }
 
 // Options are the tags.* settings that shape the mapping.

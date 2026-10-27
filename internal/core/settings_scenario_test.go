@@ -320,21 +320,27 @@ func TestEncodingSettingsReachTheFiles(t *testing.T) {
 	})
 }
 
-// loudness is the integrated loudness of a file, in LUFS.
-func loudness(t *testing.T, path string) float64 {
+// loudness is the integrated loudness of a file, in LUFS, and its true
+// peak, in dBFS.
+func loudness(t *testing.T, path string) (lufs, peak float64) {
 	t.Helper()
-	out, _ := exec.Command("ffmpeg", "-nostats", "-hide_banner", "-i", path, "-af", "ebur128", "-f", "null", "-").CombinedOutput()
-	m := regexp.MustCompile(`(?s)Integrated loudness:\s*I:\s*(-?[\d.]+) LUFS`).FindSubmatch(out)
+	out, _ := exec.Command("ffmpeg", "-nostats", "-hide_banner", "-i", path, "-af", "ebur128=peak=true", "-f", "null", "-").CombinedOutput()
+	m := regexp.MustCompile(`(?s)Integrated loudness:\s*I:\s*(-?[\d.]+) LUFS.*True peak:\s*Peak:\s*(-?[\d.]+) dBFS`).FindSubmatch(out)
 	if m == nil {
 		t.Fatalf("no loudness for %s:\n%s", path, out)
 	}
-	v, _ := strconv.ParseFloat(string(m[1]), 64)
-	return v
+	lufs, _ = strconv.ParseFloat(string(m[1]), 64)
+	peak, _ = strconv.ParseFloat(string(m[2]), 64)
+	return lufs, peak
 }
 
-// Normalizing brings a track to the target loudness; off, the track keeps
-// the loudness it played at.
+// Normalizing brings an MP3 to the target loudness. A FLAC keeps the
+// loudness it played at, normalize on or off; on, its ReplayGain tags carry
+// the gain to the target and its true peak.
 func TestLoudnessSettings(t *testing.T) {
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not installed")
+	}
 	tl := loadTimeline(t, "settings")
 	f, audio, err := tl.ItemAudio(1)
 	if err != nil {
@@ -347,18 +353,35 @@ func TestLoudnessSettings(t *testing.T) {
 	}
 	w.Write(audio)
 	w.Close()
-	source := loudness(t, src)
+	source, peak := loudness(t, src)
 
 	off := runSettings(t, map[string]any{"encode.format": "flac"})
 	saved, _ := off.results()
-	if got := loudness(t, saved[slash]); math.Abs(got-source) > 0.5 {
+	if got, _ := loudness(t, saved[slash]); math.Abs(got-source) > 0.5 {
 		t.Errorf("normalize off: %.1f LUFS, the source is %.1f", got, source)
+	}
+	if tags := ffprobe(t, saved[slash]).Format.Tags; tags["replaygain_track_gain"] != "" || tags["replaygain_track_peak"] != "" {
+		t.Errorf("normalize off: ReplayGain tags %v", tags)
 	}
 	for _, target := range []float64{-20, -10} {
 		on := runSettings(t, map[string]any{"encode.format": "flac", "recorder.normalize": true, "recorder.target_lufs": target})
 		saved, _ := on.results()
-		if got := loudness(t, saved[slash]); math.Abs(got-target) > 1 {
-			t.Errorf("normalize to %.0f: %.1f LUFS (source %.1f)", target, got, source)
+		if got, _ := loudness(t, saved[slash]); math.Abs(got-source) > 0.5 {
+			t.Errorf("flac normalized to %.0f: %.1f LUFS, the source is %.1f", target, got, source)
+		}
+		tags := ffprobe(t, saved[slash]).Format.Tags
+		var gain float64
+		if _, err := fmt.Sscanf(tags["replaygain_track_gain"], "%f dB", &gain); err != nil || math.Abs(gain-(target-source)) > 0.5 {
+			t.Errorf("flac normalized to %.0f: track gain %q, want %.2f dB", target, tags["replaygain_track_gain"], target-source)
+		}
+		if linear, err := strconv.ParseFloat(tags["replaygain_track_peak"], 64); err != nil || math.Abs(20*math.Log10(linear)-peak) > 0.5 {
+			t.Errorf("flac normalized to %.0f: track peak %q, want %.6f", target, tags["replaygain_track_peak"], math.Pow(10, peak/20))
+		}
+
+		mp3 := runSettings(t, map[string]any{"encode.format": "mp3", "recorder.normalize": true, "recorder.target_lufs": target})
+		saved, _ = mp3.results()
+		if got, _ := loudness(t, saved[slash]); math.Abs(got-target) > 1 {
+			t.Errorf("mp3 normalized to %.0f: %.1f LUFS (source %.1f)", target, got, source)
 		}
 	}
 }

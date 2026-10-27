@@ -176,12 +176,23 @@ func mp3Rate(rate int) int {
 	return 48000
 }
 
-// Encode runs the job. Normalisation is ffmpeg's two-pass linear loudnorm,
-// so it applies one gain to the whole track instead of compressing it.
-func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
+// Gain is what brings a lossless file to the target loudness, carried in
+// its ReplayGain tags instead of its samples: the gain in dB and the true
+// peak, linear.
+type Gain struct {
+	DB   float64
+	Peak float64
+}
+
+// Encode runs the job. Normalize brings MP3 and AAC to the target with
+// ffmpeg's two-pass linear loudnorm, which applies one gain to the whole
+// track instead of compressing it. FLAC and WAV keep the samples captured:
+// for FLAC, Encode returns the gain to the target for its ReplayGain tags;
+// WAV has nowhere to carry it.
+func (f *FFmpeg) Encode(ctx context.Context, j Job) (*Gain, error) {
 	p, ok := presets[j.Format]
 	if !ok {
-		return fmt.Errorf("encode: unknown format %q", j.Format)
+		return nil, fmt.Errorf("encode: unknown format %q", j.Format)
 	}
 	rate := j.Source.Rate
 	if p.Format == "mp3" {
@@ -191,16 +202,24 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
 	if t := j.trimFilter(); t != "" {
 		filters = append(filters, t)
 	}
-	if j.Normalize {
+	var gain *Gain
+	if j.Normalize && p.Format != "wav" {
 		ln, err := f.measure(ctx, j, filters)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if ln != nil {
+		switch {
+		case ln == nil:
+			// Silence: nothing to normalise.
+		case p.Lossy:
 			filters = append(filters, fmt.Sprintf(
 				"loudnorm=I=%s:TP=%s:LRA=11:measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s:linear=true",
 				num(j.TargetLUFS), truePeak, ln.InputI, ln.InputTP, ln.InputLRA, ln.InputThresh, ln.Offset))
 			filters = append(filters, "aresample="+strconv.Itoa(rate))
+		default:
+			if gain, err = ln.gain(j.TargetLUFS); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -228,7 +247,24 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
 		}
 	}
 	args = append(args, "-f", p.Muxer, j.Out)
-	return f.run(ctx, args)
+	if err := f.run(ctx, args); err != nil {
+		return nil, err
+	}
+	return gain, nil
+}
+
+// gain is the gain from the measured loudness to target, with the measured
+// true peak.
+func (ln loudness) gain(target float64) (*Gain, error) {
+	i, err := strconv.ParseFloat(ln.InputI, 64)
+	if err != nil {
+		return nil, fmt.Errorf("encode: loudness report: %w", err)
+	}
+	tp, err := strconv.ParseFloat(ln.InputTP, 64)
+	if err != nil {
+		return nil, fmt.Errorf("encode: loudness report: %w", err)
+	}
+	return &Gain{DB: target - i, Peak: math.Pow(10, tp/20)}, nil
 }
 
 func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudness, error) {
