@@ -87,7 +87,16 @@ func metadataPairs(t Track, format, sep string) []string {
 			kv = append(kv, k+"="+v)
 		}
 	}
-	add("title", t.Title)
+	title := t.Title
+	if format == "aac" {
+		// MP4 has no subtitle tag: the extra part stays in the title.
+		join := t.SubtitleSep
+		if join == SepNone {
+			join = SepDash
+		}
+		title = JoinTitle(t.Title, t.Subtitle, join)
+	}
+	add("title", title)
 	add("artist", strings.Join(t.Performers, sep))
 	add("album_artist", strings.Join(t.AlbumArtists, sep))
 	add("album", t.Album)
