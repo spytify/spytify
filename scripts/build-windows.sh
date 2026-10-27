@@ -8,7 +8,8 @@
 #                     build from BtbN/FFmpeg-Builds, pinned and checked
 #                     (SPYTIFY_NO_FFMPEG=1 leaves it out)
 # Cross-compiles from Linux or macOS with Go and MinGW-w64
-# (x86_64-w64-mingw32-gcc and -g++; Debian: apt install mingw-w64).
+# (x86_64-w64-mingw32-gcc, -g++ and -windres; Debian: apt install
+# mingw-w64). Every .exe carries the logo as its icon and its version.
 #
 # The player recorded when none is chosen comes from SPYTIFY_DEFAULT_PROCESS,
 # from the environment or an untracked build.env; without it the app asks
@@ -28,6 +29,30 @@ ldflags+=" -X github.com/spytify/spytify/internal/target.DefaultProcess=${SPYTIF
 # Crash reports and anonymous stats go to the Sentry project in
 # SPYTIFY_SENTRY_DSN; a build without it sends nothing.
 ldflags+=" -X github.com/spytify/spytify/internal/telemetry.DSN=${SPYTIFY_SENTRY_DSN:-}"
+tmp=$(mktemp -d)
+# Nothing made here stays in the tree, where a later Windows build would
+# link a stale .syso.
+trap 'rm -rf "$tmp" cmd/*/rsrc_windows_amd64.syso' EXIT
+
+# The icon and version information of each program: windres compiles
+# windows/spytify.rc into an object, which go build links from the
+# package's folder and g++ as given. The tools that make the icon and
+# check the result run here, so they build before GOOS is set.
+go build -o "$tmp/" ./internal/tools/genico ./internal/tools/checkexe
+"$tmp/genico" -o "$tmp/spytify.ico" assets/logo256px.png
+IFS=. read -r major minor patch <<<"${version%%[-+]*}"
+rsrc() { # object, file name, description
+  # windres passes -D to the preprocessor through a shell: the quotes of a
+  # string are escaped.
+  x86_64-w64-mingw32-windres -O coff -I "$tmp" \
+    -D VERSION_MAJOR="$major" -D VERSION_MINOR="$minor" -D VERSION_PATCH="$patch" \
+    -D "VERSION=\\\"$version\\\"" -D "FILENAME=\\\"$2\\\"" -D "DESCRIPTION=\\\"$3\\\"" \
+    -o "$1" windows/spytify.rc
+}
+rsrc cmd/spytify-ui/rsrc_windows_amd64.syso Spytify.exe "Spytify"
+rsrc cmd/spytifyd/rsrc_windows_amd64.syso spytifyd.exe "Spytify recorder"
+rsrc cmd/spytify-cli/rsrc_windows_amd64.syso spytify-cli.exe "Spytify command line"
+rsrc "$tmp/spytify-tap.o" spytify-tap.exe "Spytify capture helper"
 
 export GOOS=windows GOARCH=amd64
 for cmd in spytifyd spytify-cli; do
@@ -36,7 +61,8 @@ done
 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
   go build -trimpath -ldflags "$ldflags -H=windowsgui" -o "$out/Spytify.exe" ./cmd/spytify-ui
 x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -std=c++17 -static -municode \
-  -o "$out/spytify-tap.exe" windows/spytify-tap/main.cpp -lole32 -luuid
+  -o "$out/spytify-tap.exe" windows/spytify-tap/main.cpp "$tmp/spytify-tap.o" -lole32 -luuid
+"$tmp/checkexe" "$out/Spytify.exe" "$out/spytifyd.exe" "$out/spytify-cli.exe" "$out/spytify-tap.exe"
 
 # ffmpeg, beside spytifyd.exe, which looks there first after PATH.
 ffmpeg_url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-23-13-04/ffmpeg-n9.0.2-35-g9a9b70bb8c-win64-lgpl-9.0.zip"

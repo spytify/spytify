@@ -34,7 +34,7 @@ scripts/build-windows.sh                                             # Windows, 
 - `spytifyd` and `spytify-cli` are pure Go (`CGO_ENABLED=0` works). The desktop app needs cgo:
   - Linux: `gcc`, `libgl1-mesa-dev`, `xorg-dev`, `libwayland-dev`, `libxkbcommon-dev`, `wayland-protocols` (Debian names).
   - macOS: the Xcode command line tools, which also build `spytify-tap`.
-  - Windows: MinGW-w64 (`x86_64-w64-mingw32-gcc` and `-g++`), from Linux or macOS; it also builds `spytify-tap.exe`.
+  - Windows: MinGW-w64 (`x86_64-w64-mingw32-gcc`, `-g++` and `-windres`), from Linux or macOS; it also builds `spytify-tap.exe` and puts the icon and version information in every `.exe` ([`windows/spytify.rc`](windows/spytify.rc)).
 - What the app needs at run time (ffmpeg, PipeWire, the macOS permissions) is on the [Install](https://spytify.github.io/spytify/v2/install.html) page.
 - The macOS app is ad-hoc signed: macOS asks for its permissions again after every rebuild, and another Mac refuses it until it is signed and notarised.
 
