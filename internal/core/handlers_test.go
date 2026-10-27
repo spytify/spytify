@@ -251,3 +251,36 @@ func TestPlayerLaunch(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// A run stopped by force (a crash, kill -9, a power cut) leaves its takes
+// in the temp folder; the next run removes them. A file written in the
+// last minutes stays: another computer may record to the same folder.
+func TestTempFilesLeftByAnEarlierRunAreRemoved(t *testing.T) {
+	c, _ := newTestCore(t, false)
+	tmp := filepath.Join(c.store.Values().Path("output.dir"), ".spytify")
+	if err := os.MkdirAll(tmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	for name, stale := range map[string]bool{"20261027-101500-1.wav": true, "cover-0.jpg": true, "20261027-111500-1.wav": false, "recorded.jsonl": false} {
+		p := filepath.Join(tmp, name)
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if stale || name == "recorded.jsonl" {
+			if err := os.Chtimes(p, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	c.Startup()
+	for name, gone := range map[string]bool{"20261027-101500-1.wav": true, "cover-0.jpg": true, "20261027-111500-1.wav": false, "recorded.jsonl": false} {
+		_, err := os.Stat(filepath.Join(tmp, name))
+		if gone && err == nil {
+			t.Errorf("%s is still there", name)
+		}
+		if !gone && err != nil {
+			t.Errorf("%s went: %v", name, err)
+		}
+	}
+}
