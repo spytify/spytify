@@ -1,6 +1,7 @@
 package wintest
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -238,13 +239,21 @@ func TestSavingASongOpensNoWindow(t *testing.T) {
 	}
 	time.Sleep(500 * time.Millisecond)
 
-	saved, _ := filepath.Glob(filepath.Join(out, "*.mp3"))
-	if len(saved) != 3 {
-		t.Fatalf("saved %v, want 3 mp3 files", saved)
-	}
 	for _, win := range w.windows() {
 		if win.ours() {
 			t.Errorf("a %v while saving", win)
+		} else {
+			t.Logf("not ours: a %v", win)
 		}
+	}
+	var saved []string
+	filepath.WalkDir(out, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && strings.HasSuffix(p, ".mp3") {
+			saved = append(saved, p)
+		}
+		return nil
+	})
+	if len(saved) != 3 {
+		t.Errorf("saved %v, want 3 mp3 files", saved)
 	}
 }
