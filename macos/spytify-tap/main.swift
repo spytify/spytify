@@ -10,7 +10,15 @@
 // and spytifyd starts it again.
 //
 // Usage: spytify-tap [--bundle-id ID]... [--name NAME]... [--pid PID]...
-//                    [--mute] [--list]
+//                    [--mute] [--list] [--plan]
+//
+// --list prints every process Core Audio knows. --plan taps nothing: it
+// prints what a recording of the target would use, one tab-separated line
+// each, a device being "<uid> <nominal rate> <name>" or "-" for none:
+//   process <pid> <outputting> <name>   each matching process
+//   playing <device>                    the device they play to
+//   default <device>                    the default output device
+//   clock <device>                      the device the recording runs at
 
 import AudioToolbox
 import CoreAudio
@@ -26,6 +34,7 @@ struct Options {
     var pids: [pid_t] = []
     var mute = false
     var list = false
+    var plan = false
 }
 
 func parseOptions() -> Options {
@@ -38,6 +47,7 @@ func parseOptions() -> Options {
         case "--pid": if let v = args.next(), let p = pid_t(v) { o.pids.append(p) }
         case "--mute": o.mute = true
         case "--list": o.list = true
+        case "--plan": o.plan = true
         default:
             fputs("spytify-tap: unknown argument \(a)\n", stderr)
             exit(2)
@@ -137,6 +147,8 @@ func matches(_ p: AudioProcess, _ o: Options) -> Bool {
     return false
 }
 
+func targets(_ o: Options) -> [AudioProcess] { audioProcesses().filter { matches($0, o) } }
+
 // MARK: - Tap
 
 // The aggregate device runs at the rate of its main device, and Core Audio
@@ -154,6 +166,25 @@ func playerOutputDevice(_ processes: [AudioObjectID]) -> AudioObjectID? {
 // Before the player outputs, the device it will most likely play to.
 func defaultOutputDevice() -> AudioObjectID? {
     scalar(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice, AudioObjectID(0))
+}
+
+// The aggregate's main device. A recording and --plan both choose here.
+func clockDevice(_ processes: [AudioObjectID]) -> AudioObjectID? {
+    playerOutputDevice(processes) ?? defaultOutputDevice()
+}
+
+// Whether the tap must start again on another device. A paused player plays
+// to no device; then only a new default output counts.
+func moved(playing: AudioObjectID?, clock: AudioObjectID?, defaultNow: AudioObjectID?, defaultAtStart: AudioObjectID?) -> Bool {
+    if let playing { return playing != clock }
+    return defaultNow != defaultAtStart
+}
+
+// A --plan device: uid, nominal rate and name, or "-".
+func describe(_ dev: AudioObjectID?) -> String {
+    guard let dev, let uid = string(dev, kAudioDevicePropertyDeviceUID) else { return "-" }
+    let rate: Float64 = scalar(dev, kAudioDevicePropertyNominalSampleRate, Float64(0)) ?? 0
+    return "\(uid)\t\(Int(rate))\t\(string(dev, kAudioObjectPropertyName) ?? "")"
 }
 
 final class Recorder {
@@ -279,6 +310,15 @@ if options.bundleIDs.isEmpty && options.names.isEmpty && options.pids.isEmpty {
     log("give at least one --bundle-id, --name or --pid")
     exit(2)
 }
+if options.plan {
+    let found = targets(options)
+    let objects = found.map(\.object)
+    for p in found { print("process\t\(p.pid)\t\(p.outputting)\t\(p.name)") }
+    print("playing\t" + describe(playerOutputDevice(objects)))
+    print("default\t" + describe(defaultOutputDevice()))
+    print("clock\t" + describe(clockDevice(objects)))
+    exit(0)
+}
 
 var recorder: Recorder?
 func shutdown(_ code: Int32) -> Never {
@@ -293,14 +333,15 @@ var waiting = false
 var current: Set<AudioObjectID> = []
 var device: AudioObjectID?
 while recorder == nil {
-    let found = audioProcesses().filter { matches($0, options) }
+    let found = targets(options)
     if found.isEmpty {
         if !waiting { log("waiting for the target's audio"); waiting = true }
         pause(0.25)
         continue
     }
-    current = Set(found.map(\.object))
-    device = playerOutputDevice(Array(current)) ?? defaultOutputDevice()
+    let objects = found.map(\.object)
+    current = Set(objects)
+    device = clockDevice(objects)
     do {
         let r = try Recorder(processes: Array(current), device: device, mute: options.mute)
         try r.start()
@@ -320,12 +361,11 @@ let startRate = recorder!.rate
 let startDefault = defaultOutputDevice()
 while true {
     pause(0.5)
-    let now = Set(audioProcesses().filter { matches($0, options) }.map(\.object))
+    let found = targets(options).map(\.object)
+    let now = Set(found)
     let fmt: AudioStreamBasicDescription? = scalar(recorder!.tapID, kAudioTapPropertyFormat, AudioStreamBasicDescription())
-    // A paused player plays to no device; then only a new default output counts.
-    let playing = playerOutputDevice(Array(now))
-    let moved = playing != nil ? playing != device : defaultOutputDevice() != startDefault
-    if now != current || recorder!.rate != startRate || fmt?.mSampleRate != startFormat.mSampleRate || fmt?.mChannelsPerFrame != startFormat.mChannelsPerFrame || moved {
+    let away = moved(playing: playerOutputDevice(found), clock: device, defaultNow: defaultOutputDevice(), defaultAtStart: startDefault)
+    if now != current || recorder!.rate != startRate || fmt?.mSampleRate != startFormat.mSampleRate || fmt?.mChannelsPerFrame != startFormat.mChannelsPerFrame || away {
         log("target processes or output format changed")
         shutdown(exitChanged)
     }
