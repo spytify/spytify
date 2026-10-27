@@ -10,10 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/spytify/spytify/internal/proc"
 )
 
 // Label names the service on every OS.
@@ -140,7 +141,7 @@ func Installed(p Plan) bool {
 
 func runAll(cmds [][]string) error {
 	for _, c := range cmds {
-		if out, err := exec.Command(c[0], c[1:]...).CombinedOutput(); err != nil {
+		if out, err := proc.Command(c[0], c[1:]...).CombinedOutput(); err != nil {
 			return fmt.Errorf("%s: %v: %s", strings.Join(c, " "), err, strings.TrimSpace(string(out)))
 		}
 	}

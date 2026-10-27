@@ -18,6 +18,7 @@ import (
 	"github.com/spytify/spytify/internal/capture"
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/meta"
+	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/pkg/proto"
@@ -581,19 +582,19 @@ func (c *Core) launch() error {
 	var cmd *exec.Cmd
 	switch {
 	case t.Launch != "" && runtime.GOOS == "windows":
-		cmd = exec.Command("cmd", "/C", t.Launch)
+		cmd = proc.Command("cmd", "/C", t.Launch)
 	case t.Launch != "":
-		cmd = exec.Command("/bin/sh", "-c", t.Launch)
+		cmd = proc.Command("/bin/sh", "-c", t.Launch)
 	case len(t.ProcessNames) == 0:
 		return errors.New("no player chosen")
 	case runtime.GOOS == "darwin" && t.BundleID != "":
-		cmd = exec.Command("open", "-b", t.BundleID)
+		cmd = proc.Command("open", "-b", t.BundleID)
 	case runtime.GOOS == "darwin":
-		cmd = exec.Command("open", "-a", t.ProcessNames[0])
+		cmd = proc.Command("open", "-a", t.ProcessNames[0])
 	case runtime.GOOS == "windows":
-		cmd = exec.Command("cmd", "/C", "start", "", t.ProcessNames[0])
+		cmd = proc.Command("cmd", "/C", "start", "", t.ProcessNames[0])
 	default:
-		cmd = exec.Command(t.ProcessNames[0])
+		cmd = proc.Command(t.ProcessNames[0])
 	}
 	c.log.Infof("starting the player: %s", strings.Join(cmd.Args, " "))
 	if err := cmd.Start(); err != nil {

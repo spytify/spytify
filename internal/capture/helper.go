@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
 )
 
@@ -134,10 +135,9 @@ func (c *Helper) run(ctx context.Context, t target.Target) {
 
 // stream runs the helper once and returns its exit status.
 func (c *Helper) stream(ctx context.Context, args []string, t target.Target) int {
-	cmd := exec.CommandContext(ctx, c.helper, args...)
+	cmd := proc.CommandContext(ctx, c.helper, args...)
 	cmd.Cancel = func() error { return stopHelper(cmd.Process) }
 	cmd.WaitDelay = 2 * time.Second
-	hideWindow(cmd)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		c.logf("capture: %v", err)
