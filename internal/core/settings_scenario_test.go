@@ -87,7 +87,7 @@ func TestOutputLayoutForEverySetting(t *testing.T) {
 		underscores, ascii bool
 	}
 	var layouts []layout
-	for _, g := range []string{"none", "artist", "artist/album"} {
+	for _, g := range []string{"none", "artist", "artist/album", "artists", "artists/album"} {
 		for _, p := range []string{"none", "counter", "album_track"} {
 			layouts = append(layouts, layout{g, p, false, false})
 		}
@@ -105,7 +105,7 @@ func TestOutputLayoutForEverySetting(t *testing.T) {
 				t.Fatalf("%v\nlog:\n%s", problems, s.logs)
 			}
 			saved, _ := s.results()
-			depth := map[string]int{"none": 0, "artist": 1, "artist/album": 2}[l.group]
+			depth := map[string]int{"none": 0, "artist": 1, "artist/album": 2, "artists": 1, "artists/album": 2}[l.group]
 			counters := map[string]int{accents: 1, slash: 2, tl.Items[longItem].Title: 3, feat: 4}
 			tracks := map[string]int{accents: 7, slash: 1, tl.Items[longItem].Title: 2, feat: 3}
 			for title, path := range saved {

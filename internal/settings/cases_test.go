@@ -18,7 +18,7 @@ var cases = map[string][]string{
 	"app.autostart_recording":          {"test/e2e:TestAutostartRecordsOnLaunch"},
 	"app.check_updates":                {"internal/ui:TestTheUpdateCheckFollowsTheSetting"},
 	"output.dir":                       {"internal/core:TestOutputFolderGoneStopsTheRecording", "internal/core:TestNoRecordingStartsWithoutAnOutputFolder"},
-	"output.group_by":                  {"internal/core:TestOutputLayoutForEverySetting"},
+	"output.group_by":                  {"internal/core:TestOutputLayoutForEverySetting", "internal/core:TestFlatAndArtistFolders"},
 	"output.template":                  {"internal/core:TestOutputPathsOfTheSettingsTimeline"},
 	"output.underscores":               {"internal/core:TestOutputLayoutForEverySetting"},
 	"output.ascii_filenames":           {"internal/core:TestOutputLayoutForEverySetting"},
