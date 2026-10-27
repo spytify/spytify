@@ -252,7 +252,22 @@ func component(s string, ascii bool, sep string) string {
 		return invalidName
 	}
 	s = truncateBytes(s, maxComponent)
+	if reserved(s) {
+		s += "_"
+	}
 	return spaces.ReplaceAllString(s, sep)
+}
+
+// reserved says whether Windows refuses s as a file or folder name, with or
+// without an extension: CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9. The
+// rule applies on every OS, so a library moves between them.
+func reserved(s string) bool {
+	name := strings.ToUpper(strings.TrimSpace(strings.SplitN(s, ".", 2)[0]))
+	switch name {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	return len(name) == 4 && (strings.HasPrefix(name, "COM") || strings.HasPrefix(name, "LPT")) && name[3] >= '1' && name[3] <= '9'
 }
 
 func stripDiacritics(s string) string {
