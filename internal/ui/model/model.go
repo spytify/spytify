@@ -431,9 +431,17 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 	case proto.EventError:
 		var e proto.ErrorEvent
-		if ev.Decode(&e) == nil {
-			s.LastError = &e
+		if ev.Decode(&e) != nil {
+			return
 		}
+		// No message withdraws the warning of that code, and no other.
+		if e.Msg == "" {
+			if s.LastError != nil && s.LastError.Code == e.Code {
+				s.LastError = nil
+			}
+			return
+		}
+		s.LastError = &e
 	}
 }
 

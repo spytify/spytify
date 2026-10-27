@@ -587,7 +587,7 @@
   "description": "Newline-delimited JSON-RPC 2.0. Actions are requests, events are notifications.",
   "events": {
     "error": {
-      "description": "capture, encoder or disk failure",
+      "description": "capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code",
       "params": {
         "$ref": "#/$defs/ErrorEvent"
       }

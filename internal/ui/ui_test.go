@@ -1187,6 +1187,28 @@ func TestTheOutputFolderIsCheckedAgain(t *testing.T) {
 	eventually(t, "the checks did not run again for a folder lost while recording", failing)
 }
 
+// The warning of an output device too poor to record from shows as soon
+// as the capture says so, while the session waits for the next track, and
+// goes once the device is fit again.
+func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(defaults())
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
+	msg := "The player plays to a device at 16 kHz mono, not fit for recording: tracks will sound like a phone call."
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: msg}))
+	a.render()
+	if !a.banner.Visible() || a.banner.Text != msg {
+		t.Fatalf("banner shown %v, text %q", a.banner.Visible(), a.banner.Text)
+	}
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
+	a.render()
+	if a.banner.Visible() {
+		t.Fatalf("banner still shows %q with the device fit again", a.banner.Text)
+	}
+}
+
 // The cache keeps the covers used last, up to maxCovers: a long session or
 // a scroll through a big library does not grow the app's memory for good.
 func TestTheCoverCacheKeepsAtMostMaxCovers(t *testing.T) {
