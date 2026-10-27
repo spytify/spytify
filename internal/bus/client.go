@@ -8,7 +8,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -161,23 +160,3 @@ func (c *Client) Done() <-chan struct{} { return c.done }
 
 // Close ends the connection.
 func (c *Client) Close() error { return c.conn.Close() }
-
-// DialRetry dials until it succeeds, backing off up to max between tries,
-// or ctx ends. The UI uses it to reconnect after starting the daemon.
-func DialRetry(ctx context.Context, addr string, max time.Duration) (*Client, error) {
-	wait := 100 * time.Millisecond
-	for {
-		c, err := Dial(ctx, addr)
-		if err == nil {
-			return c, nil
-		}
-		select {
-		case <-ctx.Done():
-			return nil, err
-		case <-time.After(wait):
-		}
-		if wait *= 2; wait > max {
-			wait = max
-		}
-	}
-}

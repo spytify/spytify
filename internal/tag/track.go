@@ -28,14 +28,6 @@ type Track struct {
 	Source string `json:"source"`
 }
 
-// Artist is the first performer.
-func (t Track) Artist() string {
-	if len(t.Performers) == 0 {
-		return ""
-	}
-	return t.Performers[0]
-}
-
 // Options are the tags.* settings that shape the mapping.
 type Options struct {
 	ExtraToSubtitle bool
@@ -85,45 +77,6 @@ func (t Track) withSubtitle(o Options) Track {
 	}
 	if base, extra, sep := SplitTitle(t.Title); sep != SepNone && extra != "" {
 		t.Title, t.Subtitle = base, extra
-	}
-	return t
-}
-
-// Merge fills zero fields of t from other and keeps t's Source unless other
-// supplied the album identification.
-func (t Track) Merge(other Track) Track {
-	if other.Album != "" {
-		t.Source = other.Source
-	}
-	if other.Title != "" {
-		t.Title = other.Title
-	}
-	if t.Subtitle == "" {
-		t.Subtitle = other.Subtitle
-	}
-	if len(other.Performers) > 0 {
-		t.Performers = other.Performers
-	}
-	if len(other.AlbumArtists) > 0 {
-		t.AlbumArtists = other.AlbumArtists
-	}
-	if other.Album != "" {
-		t.Album = other.Album
-	}
-	if len(other.Genres) > 0 {
-		t.Genres = other.Genres
-	}
-	if other.Disc > 0 {
-		t.Disc = other.Disc
-	}
-	if other.Track > 0 {
-		t.Track = other.Track
-	}
-	if other.Year > 0 {
-		t.Year = other.Year
-	}
-	if other.CoverURL != "" {
-		t.CoverURL = other.CoverURL
 	}
 	return t
 }
