@@ -22,6 +22,8 @@ const (
 	logRingSize  = 1000
 	logMaxBytes  = 5 << 20
 	logKeepFiles = 3
+	// logMaxAge is how long a log nobody writes to stays on the computer.
+	logMaxAge = 30 * 24 * time.Hour
 )
 
 // Logger writes a rotating log file, keeps the last lines for log.tail and
@@ -43,6 +45,7 @@ func NewLogger(path string, console io.Writer) (*Logger, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return nil, err
 		}
+		removeStale(path, time.Now())
 		if err := l.open(); err != nil {
 			return nil, err
 		}
@@ -62,6 +65,21 @@ func (l *Logger) open() error {
 	}
 	l.file, l.size = f, info.Size()
 	return nil
+}
+
+// removeStale deletes the log and its rotated copies when nothing was
+// written to them for logMaxAge: rotation alone keeps them forever once
+// the app is no longer used.
+func removeStale(path string, now time.Time) {
+	for i := 0; i <= logKeepFiles; i++ {
+		p := path
+		if i > 0 {
+			p = fmt.Sprintf("%s.%d", path, i)
+		}
+		if st, err := os.Stat(p); err == nil && now.Sub(st.ModTime()) > logMaxAge {
+			_ = os.Remove(p)
+		}
+	}
 }
 
 func (l *Logger) rotate() {
