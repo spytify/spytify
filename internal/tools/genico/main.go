@@ -1,6 +1,6 @@
-// Command genico makes the icon of the Windows programs from the logo: an
-// .ico with a PNG of each size Windows draws it at, which
-// scripts/build-windows.sh puts in every .exe:
+// Command genico makes the icon of the Windows app from the logo: an .ico
+// with a PNG of each size Windows draws it at, which
+// scripts/build-windows.sh puts in Spytify.exe:
 //
 //	go run ./internal/tools/genico -o spytify.ico assets/logo256px.png
 package main

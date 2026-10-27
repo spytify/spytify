@@ -1,7 +1,7 @@
-// The icon and version information of each Windows program, which
-// scripts/build-windows.sh compiles with windres once per program. The
-// -D options give VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION,
-// FILENAME and DESCRIPTION; genico makes spytify.ico.
+// The icon and version information of Spytify.exe, which
+// scripts/build-windows.sh compiles with windres. The -D options give
+// VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH and VERSION; genico makes
+// spytify.ico.
 #include <winver.h>
 
 // The first icon group is the one Explorer, shortcuts and the taskbar show.
@@ -23,10 +23,10 @@ BEGIN
     BEGIN
       VALUE "ProductName", "Spytify"
       VALUE "ProductVersion", VERSION
-      VALUE "FileDescription", DESCRIPTION
+      VALUE "FileDescription", "Spytify"
       VALUE "FileVersion", VERSION
-      VALUE "InternalName", FILENAME
-      VALUE "OriginalFilename", FILENAME
+      VALUE "InternalName", "Spytify.exe"
+      VALUE "OriginalFilename", "Spytify.exe"
     END
   END
   BLOCK "VarFileInfo"

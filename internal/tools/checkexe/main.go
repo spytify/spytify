@@ -1,8 +1,8 @@
 // Command checkexe checks that Windows executables carry what Explorer,
 // shortcuts and Task Manager read from them: an icon and version
-// information. scripts/build-windows.sh runs it on what it built:
+// information. scripts/build-windows.sh runs it on Spytify.exe:
 //
-//	go run ./internal/tools/checkexe bin/windows/Spytify.exe bin/windows/spytifyd.exe
+//	go run ./internal/tools/checkexe bin/windows/Spytify.exe
 package main
 
 import (

@@ -155,17 +155,19 @@ jobs:
           ./spytify-cli.exe --help > /dev/null
           set +e; ./spytify-tap.exe; code=$?; set -e
           test "$code" -eq 2
-      - name: Windows finds each program's icon and version information
+      - name: Windows finds the app's icon and version information
         shell: pwsh
         run: |
           Add-Type -Namespace Win32 -Name Shell -MemberDefinition '[DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern uint ExtractIconEx(string file, int index, IntPtr[] large, IntPtr[] small, uint n);'
-          foreach ($f in "Spytify.exe", "spytifyd.exe", "spytify-cli.exe", "spytify-tap.exe") {
-            $path = (Resolve-Path $f).Path
-            # Index -1 counts the icons in the file.
-            $icons = [Win32.Shell]::ExtractIconEx($path, -1, $null, $null, 0)
-            $v = (Get-Item $path).VersionInfo
-            "${f}: $icons icon, $($v.ProductName) $($v.ProductVersion), $($v.FileDescription)"
-            if ($icons -lt 1 -or $v.ProductName -ne "Spytify") { throw "$f has no icon or no version information" }
+          $path = (Resolve-Path Spytify.exe).Path
+          # Index -1 counts the icons in the file.
+          $icons = [Win32.Shell]::ExtractIconEx($path, -1, $null, $null, 0)
+          $v = (Get-Item $path).VersionInfo
+          "Spytify.exe: $icons icon, $($v.ProductName) $($v.ProductVersion), $($v.FileDescription)"
+          if ($icons -lt 1 -or $v.ProductName -ne "Spytify") { throw "Spytify.exe has no icon or no version information" }
+          # Only the app has one.
+          foreach ($f in "spytifyd.exe", "spytify-cli.exe", "spytify-tap.exe") {
+            if ([Win32.Shell]::ExtractIconEx((Resolve-Path $f).Path, -1, $null, $null, 0) -ne 0) { throw "$f has an icon" }
           }
       - name: spytifyd finds the ffmpeg.exe shipped beside it
         run: |
