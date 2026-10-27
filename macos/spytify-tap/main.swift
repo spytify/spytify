@@ -73,7 +73,7 @@ func objectList(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector
     return ids
 }
 
-func scalar<T: BitwiseCopyable>(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ initial: T) -> T? {
+func scalar<T>(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ initial: T) -> T? {
     var addr = address(selector)
     var value = initial
     var size = UInt32(MemoryLayout<T>.size)
