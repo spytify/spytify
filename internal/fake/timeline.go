@@ -117,7 +117,13 @@ func Load(path string) (*Timeline, error) {
 	if err := json.Unmarshal(b, &tl); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	tl.dir = filepath.Dir(path)
+	// Absolute, so an item's art, relative to the timeline, makes a file
+	// URL that reaches it whatever the working folder.
+	dir, err := filepath.Abs(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	tl.dir = dir
 	return &tl, tl.validate()
 }
 

@@ -72,6 +72,13 @@ type scenario struct {
 
 func newScenario(t *testing.T, tl *fake.Timeline, extra map[string]any) *scenario {
 	t.Helper()
+	return newScenarioAt(t, tl, extra, false)
+}
+
+// newScenarioAt plays the timeline in real time when realtime is set, for
+// what depends on the clock, such as the session timer.
+func newScenarioAt(t *testing.T, tl *fake.Timeline, extra map[string]any, realtime bool) *scenario {
+	t.Helper()
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg not installed")
 	}
@@ -90,7 +97,7 @@ func newScenario(t *testing.T, tl *fake.Timeline, extra map[string]any) *scenari
 	if rej := store.Override(overrides); len(rej) > 0 {
 		t.Fatalf("settings rejected: %v", rej)
 	}
-	player, err := fake.NewPlayer(tl, false)
+	player, err := fake.NewPlayer(tl, realtime)
 	if err != nil {
 		t.Fatal(err)
 	}

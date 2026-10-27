@@ -1,7 +1,10 @@
 package fake
 
 import (
+	"net/url"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -46,5 +49,29 @@ func TestTracksGetACoverAndAdsDoNot(t *testing.T) {
 	}
 	if url := p.Info(0).ArtURL; !strings.HasPrefix(url, "file:///") {
 		t.Errorf("the player reports art %q", url)
+	}
+}
+
+// An item's art, relative to its timeline, becomes a file URL that reaches
+// it, though the timeline was loaded by a relative path.
+func TestRelativeArtBecomesAReachableURL(t *testing.T) {
+	tl, err := Load(filepath.Join("..", "..", "testdata", "timelines", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := NewPlayer(tl, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(p.Info(0).ArtURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := u.Path
+	if runtime.GOOS == "windows" {
+		path = strings.TrimPrefix(path, "/")
+	}
+	if _, err := os.Stat(filepath.FromSlash(path)); err != nil {
+		t.Fatalf("art %s: %v", p.Info(0).ArtURL, err)
 	}
 }
