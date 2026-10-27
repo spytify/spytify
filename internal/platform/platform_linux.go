@@ -11,6 +11,7 @@ import (
 
 	"github.com/spytify/spytify/internal/capture"
 	"github.com/spytify/spytify/internal/meta"
+	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -64,7 +65,7 @@ var allowedRates = regexp.MustCompile(`key:'clock\.allowed-rates' value:'\[([^\]
 // rateCheck warns when PipeWire can only run at 48 kHz: 44.1 kHz players
 // are then resampled before they are recorded.
 func rateCheck() proto.Check {
-	out, err := exec.Command("pw-metadata", "-n", "settings", "0").Output()
+	out, err := proc.Command("pw-metadata", "-n", "settings", "0").Output()
 	m := allowedRates.FindSubmatch(out)
 	if err != nil || m == nil {
 		return proto.Check{Name: "PipeWire sample rates", OK: true, Detail: "allowed rates unknown"}

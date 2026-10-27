@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/spytify/spytify/internal/proc"
 )
 
 // Process is a running process that matched one of the target names.
@@ -149,7 +150,7 @@ func zombie(pid string) bool {
 }
 
 func listPS() []Process {
-	out, err := exec.Command("ps", "-axo", "pid=,comm=").Output()
+	out, err := proc.Command("ps", "-axo", "pid=,comm=").Output()
 	if err != nil {
 		return nil
 	}

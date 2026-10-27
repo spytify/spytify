@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
 )
 
@@ -30,7 +31,7 @@ type sinkInput struct {
 var sampleSpec = regexp.MustCompile(`(\d+)ch (\d+)Hz`)
 
 func (pulseTools) find(t target.Target) (streamNode, bool, error) {
-	out, err := exec.Command("pactl", "-f", "json", "list", "sink-inputs").Output()
+	out, err := proc.Command("pactl", "-f", "json", "list", "sink-inputs").Output()
 	if err != nil {
 		return streamNode{}, false, fmt.Errorf("pactl: %w", err)
 	}
@@ -67,7 +68,7 @@ func findSinkInput(doc []byte, t target.Target) (streamNode, bool, error) {
 }
 
 func (pulseTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.Cmd {
-	return exec.CommandContext(ctx, "parec",
+	return proc.CommandContext(ctx, "parec",
 		"--monitor-stream="+n.key,
 		"--raw",
 		"--format=float32le",
@@ -79,30 +80,30 @@ func (pulseTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.
 
 func (pulseTools) silence(n streamNode) error {
 	if _, ok := pulseMutedModule(); !ok {
-		if out, err := exec.Command("pactl", "load-module", "module-null-sink", "sink_name="+mutedSink,
+		if out, err := proc.Command("pactl", "load-module", "module-null-sink", "sink_name="+mutedSink,
 			"sink_properties=device.description=\""+mutedDescription+"\"").CombinedOutput(); err != nil {
 			return fmt.Errorf("pactl load-module: %v %s", err, out)
 		}
 	}
-	if out, err := exec.Command("pactl", "move-sink-input", n.key, mutedSink).CombinedOutput(); err != nil {
+	if out, err := proc.Command("pactl", "move-sink-input", n.key, mutedSink).CombinedOutput(); err != nil {
 		return fmt.Errorf("pactl move-sink-input: %v %s", err, out)
 	}
 	return nil
 }
 
 func (pulseTools) unsilence(n streamNode) error {
-	return exec.Command("pactl", "move-sink-input", n.key, "@DEFAULT_SINK@").Run()
+	return proc.Command("pactl", "move-sink-input", n.key, "@DEFAULT_SINK@").Run()
 }
 
 func (pulseTools) dropSink() {
 	if idx, ok := pulseMutedModule(); ok {
-		_ = exec.Command("pactl", "unload-module", idx).Run()
+		_ = proc.Command("pactl", "unload-module", idx).Run()
 	}
 }
 
 // pulseMutedModule finds the module that made the muted sink.
 func pulseMutedModule() (string, bool) {
-	out, err := exec.Command("pactl", "list", "short", "modules").Output()
+	out, err := proc.Command("pactl", "list", "short", "modules").Output()
 	if err != nil {
 		return "", false
 	}

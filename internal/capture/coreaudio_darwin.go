@@ -5,7 +5,6 @@ package capture
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"syscall"
 
 	"github.com/spytify/spytify/internal/target"
@@ -68,5 +67,3 @@ func TapArgs(t target.Target, mute bool) []string {
 }
 
 func stopHelper(p *os.Process) error { return p.Signal(syscall.SIGTERM) }
-
-func hideWindow(*exec.Cmd) {}

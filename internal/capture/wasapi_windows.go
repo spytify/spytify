@@ -9,10 +9,10 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"golang.org/x/sys/windows"
 
+	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
 )
 
@@ -50,11 +50,6 @@ func NewWindows(helperPath string, find func(target.Target) (target.Process, boo
 
 func stopHelper(p *os.Process) error { return p.Kill() }
 
-// hideWindow keeps the helper from opening a console window.
-func hideWindow(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
-}
-
 // ErrNoSession means the player has not opened an audio session yet: it
 // has played nothing since it started.
 var ErrNoSession = errors.New("the player has no audio session yet")
@@ -76,8 +71,7 @@ func SetSessionVolume(helper string, pid int, v float64) error {
 }
 
 func volumeCmd(helper string, pid int, args ...string) (string, error) {
-	cmd := exec.Command(helper, append([]string{"--pid", strconv.Itoa(pid)}, args...)...)
-	hideWindow(cmd)
+	cmd := proc.Command(helper, append([]string{"--pid", strconv.Itoa(pid)}, args...)...)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

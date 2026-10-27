@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
 )
 
@@ -180,8 +181,7 @@ func encodeCommand(script string) string {
 }
 
 func powershell(ctx context.Context, script string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodeCommand(script))
-	hideConsole(cmd)
+	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodeCommand(script))
 	return cmd
 }
 
