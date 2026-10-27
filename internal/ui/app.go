@@ -258,7 +258,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
 
 	if !opts.ManualRender {
-		onReopen(func() { fyne.Do(a.showWindow) })
+		onReopen(a.Reopen)
 	}
 	_, a.tray = fa.(desktop.App)
 	a.quitApp = fa.Quit
@@ -826,4 +826,10 @@ func (a *App) showWindow() {
 	}
 	a.win.Show()
 	a.win.RequestFocus()
+}
+
+// Reopen brings the window back, hidden to the tray or not: Spytify was
+// opened again while it runs. It may be called from any goroutine.
+func (a *App) Reopen() {
+	fyne.Do(a.showWindow)
 }

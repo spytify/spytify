@@ -980,6 +980,41 @@ func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
 	}
 }
 
+// spyWindow is the window, telling whether it is shown and was brought to
+// the front.
+type spyWindow struct {
+	fyne.Window
+	shown, focused bool
+}
+
+func (w *spyWindow) Show()         { w.shown = true; w.Window.Show() }
+func (w *spyWindow) Hide()         { w.shown, w.focused = false, false; w.Window.Hide() }
+func (w *spyWindow) RequestFocus() { w.focused = true; w.Window.RequestFocus() }
+
+// On Windows, opening Spytify again with its window hidden to the tray
+// did not bring the window back. The second launch asks the running app
+// to reopen (cmd/spytify-ui), which shows the window, in front.
+func TestReopeningShowsTheWindowHiddenToTheTray(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["app.minimize_to_tray"] = true
+	m.SetConn(model.Connected, "")
+	m.SetSettings(values)
+	a.render()
+	win := &spyWindow{Window: a.win}
+	a.win = win
+	win.Show()
+	a.tray, a.quitApp = true, func() { t.Error("closing quit with Minimize to tray on") }
+	a.closeWindow()
+	if win.shown {
+		t.Fatal("the window is still shown after closing to the tray")
+	}
+	a.Reopen()
+	if !win.shown || !win.focused {
+		t.Fatalf("reopened: shown %v, in front %v; want both", win.shown, win.focused)
+	}
+}
+
 // With a player set, the app starts the recorder itself: the tabs show,
 // saying so, instead of the offline screen, which only a start that failed
 // shows, with the reason.

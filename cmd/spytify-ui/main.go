@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2/app"
@@ -15,6 +17,7 @@ import (
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui"
+	"github.com/spytify/spytify/internal/ui/instance"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 )
@@ -22,6 +25,14 @@ import (
 func main() {
 	target.LoadDotEnv()
 	env := target.Load()
+
+	// Opened again while it runs, Spytify shows the window it has, hidden
+	// to the tray or not, rather than starting a second app. Should the
+	// socket fail, the app runs all the same.
+	inst, err := instance.Claim(strings.TrimSuffix(env.SocketPath, ".sock") + "-ui.sock")
+	if errors.Is(err, instance.ErrRunning) {
+		return
+	}
 
 	// A crash of the app leaves its trace for the next launch to send.
 	crash.Keep(filepath.Join(env.StateDir, "spytify-ui.crash.log"))
@@ -38,6 +49,10 @@ func main() {
 	auto := len(env.Target.ProcessNames) > 0
 	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
 		Telemetry: tel, Privacy: privacySettings(env.ConfigPath)})
+	if inst != nil {
+		defer inst.Close()
+		go inst.Serve(w.Reopen)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
