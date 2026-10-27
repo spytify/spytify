@@ -41,7 +41,7 @@ type Track struct {
 
 // Options are the output.* settings.
 type Options struct {
-	GroupBy         string // none, artist, artist/album
+	GroupBy         string // none, artist, artist/album, artists, artists/album
 	Prefix          string // none, counter, album_track
 	Underscores     bool
 	Template        string
@@ -68,8 +68,12 @@ func Build(t Track, o Options) Plan {
 	}
 	var dirs []string
 	if o.GroupBy != "none" && o.GroupBy != "" && !t.Unknown {
-		dirs = append(dirs, component(artistsOf(t, o.ArtistSeparator), o.ASCII, sep))
-		if o.GroupBy == "artist/album" {
+		artist := mainArtist(t)
+		if strings.HasPrefix(o.GroupBy, "artists") {
+			artist = allArtists(t, o.ArtistSeparator)
+		}
+		dirs = append(dirs, component(artist, o.ASCII, sep))
+		if strings.HasSuffix(o.GroupBy, "/album") {
 			album := t.Album
 			if strings.TrimSpace(album) == "" {
 				album = untitledAlbum
@@ -129,8 +133,9 @@ func CounterLimit(width int) int64 {
 // Example is the path, from the output folder, a sample track gets with o
 // and the counter at counter: the settings show it under the template.
 func Example(o Options, counter int64) string {
-	// Its accents show what removing diacritics does.
-	t := Track{Artists: []string{"Neon Harbor"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Café Lumière",
+	// Its accents show what removing diacritics does, its guest what all
+	// artists folders do.
+	t := Track{Artists: []string{"Neon Harbor", "Lumen"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Café Lumière",
 		Album: "Harbor Lights", TrackNumber: 4, Year: 2024}
 	p := Build(t, o)
 	return filepath.Join(p.Dir, FileName(p, o, counter, t.TrackNumber))
@@ -224,15 +229,41 @@ func artistsOf(t Track, sep string) string {
 	if len(t.AlbumArtists) > 0 {
 		return strings.Join(t.AlbumArtists, sep)
 	}
+	return strings.Join(unique(t.Artists), sep)
+}
+
+// mainArtist names a main artist folder: the album's first artist, else
+// the track's first, so a collaboration goes in its main artist's folder
+// and a compilation stays together.
+func mainArtist(t Track) string {
+	for _, list := range [][]string{t.AlbumArtists, t.Artists} {
+		if names := unique(list); len(names) > 0 {
+			return names[0]
+		}
+	}
+	return ""
+}
+
+// allArtists names an all-artists folder: every artist of the track, a
+// folder for each group of artists; the album's when the track names none.
+func allArtists(t Track, sep string) string {
+	if names := unique(t.Artists); len(names) > 0 {
+		return strings.Join(names, sep)
+	}
+	return strings.Join(unique(t.AlbumArtists), sep)
+}
+
+// unique is names trimmed, without the empty ones and the repeats.
+func unique(names []string) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, a := range t.Artists {
+	for _, a := range names {
 		if a = strings.TrimSpace(a); a != "" && !seen[a] {
 			seen[a] = true
 			out = append(out, a)
 		}
 	}
-	return strings.Join(out, sep)
+	return out
 }
 
 var invalidChars = regexp.MustCompile(`[/\\:*?"<>|\x00-\x1f\x7f]`)
