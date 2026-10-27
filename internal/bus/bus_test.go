@@ -237,3 +237,84 @@ func TestReplyBeforeCloseIsDelivered(t *testing.T) {
 		srv.Close()
 	}
 }
+
+// --listen serves the same protocol over TCP, next to the socket.
+func TestTCPServesTheSameProtocol(t *testing.T) {
+	srv, path := echoServer(t)
+	if err := srv.ListenTCP("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	var tcp string
+	for _, a := range srv.Addrs() {
+		if a.Network() == "tcp" {
+			tcp = a.String()
+		} else if a.String() != path {
+			t.Errorf("unix address %s, want %s", a, path)
+		}
+	}
+	if tcp == "" {
+		t.Fatalf("no TCP address in %v", srv.Addrs())
+	}
+	ctx := context.Background()
+	c, err := Dial(ctx, "tcp://"+tcp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var out struct{ Echo string }
+	if err := c.Call(ctx, "echo", "over tcp", &out); err != nil || out.Echo != "over tcp" {
+		t.Fatalf("echo: %v %v", out, err)
+	}
+	if err := srv.ListenTCP(tcp); err == nil {
+		t.Fatal("a second listener took a busy port")
+	}
+}
+
+// A client that stops reading is dropped once its backlog is full, so
+// events never wait for it.
+func TestAClientThatStopsReadingIsDropped(t *testing.T) {
+	srv, path := echoServer(t)
+	nc, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nc.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		srv.mu.Lock()
+		n := len(srv.conns)
+		srv.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the client never connected")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	big := strings.Repeat("x", 64<<10)
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 4*sendBacklog+400; i++ {
+			srv.Broadcast("log", map[string]string{"msg": big})
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Broadcast waited for a client that does not read")
+	}
+	for {
+		srv.mu.Lock()
+		n := len(srv.conns)
+		srv.mu.Unlock()
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline.Add(5 * time.Second)) {
+			t.Fatal("the slow client is still connected")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
