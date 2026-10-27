@@ -136,7 +136,7 @@ func recorded(t *testing.T) (a *App, m *model.Model, file, coverURL string) {
 	a.render()
 	// The cover loads on its own goroutine; draw again once it is in.
 	deadline := time.Now().Add(5 * time.Second)
-	for a.covers.count() == 0 {
+	for a.covers.loads() == 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("the cover never loaded")
 		}
