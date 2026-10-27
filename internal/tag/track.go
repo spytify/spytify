@@ -24,6 +24,9 @@ type Track struct {
 	CoverURL     string   `json:"cover_url,omitempty"`
 	Cover        []byte   `json:"-"`
 	CoverMIME    string   `json:"-"`
+	// SubtitleSep is how the subtitle was attached to the title, to put it
+	// back in a format with no subtitle tag.
+	SubtitleSep Separator `json:"-"`
 	// Source is where the tags came from: local, the player itself.
 	Source string `json:"source"`
 }
@@ -84,7 +87,7 @@ func (t Track) withSubtitle(o Options) Track {
 		return t
 	}
 	if base, extra, sep := SplitTitle(t.Title); sep != SepNone && extra != "" {
-		t.Title, t.Subtitle = base, extra
+		t.Title, t.Subtitle, t.SubtitleSep = base, extra, sep
 	}
 	return t
 }
@@ -99,7 +102,7 @@ func (t Track) Merge(other Track) Track {
 		t.Title = other.Title
 	}
 	if t.Subtitle == "" {
-		t.Subtitle = other.Subtitle
+		t.Subtitle, t.SubtitleSep = other.Subtitle, other.SubtitleSep
 	}
 	if len(other.Performers) > 0 {
 		t.Performers = other.Performers

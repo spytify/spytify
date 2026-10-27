@@ -41,7 +41,9 @@ func TestFetchCoverCapsSize(t *testing.T) {
 	}
 }
 
-func TestWriterTagsFLACAndMP3(t *testing.T) {
+// Every format gets its tags back from ffprobe, the track and disc numbers
+// the player gave included.
+func TestWriterTagsEveryFormat(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("ffmpeg not installed")
@@ -59,12 +61,12 @@ func TestWriterTagsFLACAndMP3(t *testing.T) {
 
 	var cover bytes.Buffer
 	png.Encode(&cover, image.NewRGBA(image.Rect(0, 0, 4, 4)))
-	track := Track{Title: "Song", Subtitle: "Live", Performers: []string{"Artist", "Guest"}, AlbumArtists: []string{"Artist"},
+	track := Track{Title: "Song", Subtitle: "Live", SubtitleSep: SepParenthesis, Performers: []string{"Artist", "Guest"}, AlbumArtists: []string{"Artist"},
 		Album: "Album", Genres: []string{"pop"}, Track: 2, Disc: 1, Year: 2001, Cover: cover.Bytes(), CoverMIME: "image/png"}
 
-	for _, format := range []string{"flac", "mp3"} {
-		codec := map[string]string{"flac": "flac", "mp3": "libmp3lame"}[format]
-		out := filepath.Join(dir, "out."+format)
+	for _, format := range []string{"flac", "mp3", "aac"} {
+		codec := map[string]string{"flac": "flac", "mp3": "libmp3lame", "aac": "aac"}[format]
+		out := filepath.Join(dir, "out."+map[string]string{"flac": "flac", "mp3": "mp3", "aac": "m4a"}[format])
 		if b, err := exec.Command(ffmpeg, "-loglevel", "error", "-i", in, "-c:a", codec, out).CombinedOutput(); err != nil {
 			t.Skipf("cannot encode %s: %v %s", format, err, b)
 		}
@@ -76,7 +78,9 @@ func TestWriterTagsFLACAndMP3(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := strings.ToLower(string(probe))
-		for _, want := range []string{`"title": "song"`, `"artist": "artist, guest"`, `"album": "album"`, `"video"`, "2001"} {
+		title := map[string]string{"flac": `"title": "song"`, "mp3": `"title": "song"`, "aac": `"title": "song (live)"`}[format]
+		sub := map[string]string{"flac": `"subtitle": "live"`, "mp3": `"tit3": "live"`, "aac": `"artist"`}[format]
+		for _, want := range []string{title, sub, `"artist": "artist, guest"`, `"album": "album"`, `"track": "2`, `"disc": "1`, `"video"`, "2001"} {
 			if !strings.Contains(s, want) {
 				t.Errorf("%s: %s missing from %s", format, want, s)
 			}
