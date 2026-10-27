@@ -330,7 +330,7 @@ func (r *recordScreen) render(s model.State) {
 	r.renderLive(s.Current, s.Session, s.Level)
 
 	r.rows = s.Rows
-	if shown := fmt.Sprint(r.rows, r.app.covers.count()); shown != r.shown {
+	if shown := fmt.Sprint(r.rows, r.app.covers.loads()); shown != r.shown {
 		r.shown = shown
 		r.listCard.Refresh()
 	}
