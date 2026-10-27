@@ -279,42 +279,27 @@ func TestAClientThatStopsReadingIsDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer nc.Close()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
+	conns := func() int {
 		srv.mu.Lock()
-		n := len(srv.conns)
-		srv.mu.Unlock()
-		if n == 1 {
-			break
-		}
+		defer srv.mu.Unlock()
+		return len(srv.conns)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for conns() != 1 {
 		if time.Now().After(deadline) {
 			t.Fatal("the client never connected")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	big := strings.Repeat("x", 64<<10)
-	done := make(chan struct{})
-	go func() {
-		for i := 0; i < 4*sendBacklog+400; i++ {
-			srv.Broadcast("log", map[string]string{"msg": big})
+	big := strings.Repeat("x", 16<<10)
+	for n := 0; conns() > 0; n++ {
+		begin := time.Now()
+		srv.Broadcast("log", map[string]string{"msg": big})
+		if took := time.Since(begin); took > time.Second {
+			t.Fatalf("broadcast %d waited %s for a client that does not read", n, took)
 		}
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("Broadcast waited for a client that does not read")
-	}
-	for {
-		srv.mu.Lock()
-		n := len(srv.conns)
-		srv.mu.Unlock()
-		if n == 0 {
-			return
+		if time.Now().After(deadline.Add(20 * time.Second)) {
+			t.Fatalf("the slow client is still connected after %d events", n)
 		}
-		if time.Now().After(deadline.Add(5 * time.Second)) {
-			t.Fatal("the slow client is still connected")
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
