@@ -8,7 +8,11 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"time"
 )
+
+// MaxAge is how long the previous run's trace stays, as for logs.
+const MaxAge = 30 * 24 * time.Hour
 
 // Keep copies a fatal panic's trace to path as well as stderr, so a
 // crash leaves a trace whoever started the program: the app drops
@@ -17,6 +21,9 @@ import (
 func Keep(path string) (previous string) {
 	// Let go of a file set before, which Windows would not rename.
 	_ = debug.SetCrashOutput(nil, debug.CrashOptions{})
+	if st, err := os.Stat(path + ".1"); err == nil && time.Since(st.ModTime()) > MaxAge {
+		_ = os.Remove(path + ".1")
+	}
 	if b, err := os.ReadFile(path); err == nil && len(bytes.TrimSpace(b)) > 0 {
 		previous = Summary(string(b))
 		_ = os.Rename(path, path+".1")
