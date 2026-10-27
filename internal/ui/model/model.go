@@ -56,9 +56,6 @@ type Row struct {
 	Partial  bool
 }
 
-// Done reports whether the row's file is closed (saved or skipped).
-func (r Row) Done() bool { return r.Status == Saved || r.Status == Tagged || r.Status == Skipped }
-
 // StatusText is the chip label: "Tagged", "Skipped: duplicate".
 func (r Row) StatusText() string {
 	if r.Status == Skipped && r.Reason != "" {
