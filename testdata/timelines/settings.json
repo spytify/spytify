@@ -1,0 +1,19 @@
+{
+  "name": "settings",
+  "seed": 11,
+  "lead_in_ms": 500,
+  "tail_ms": 1500,
+  "items": [
+    {"artists": ["Zoë Ångström", "Élodie Brûlé", "Guest"], "title": "Ça plane (Live)", "album": "Œuvres: complètes?", "track_number": 7, "year": 1977,
+     "length_ms": 4000, "gap_ms": 600, "art": "settings-cover.jpg"},
+    {"artist": "AC/DC", "title": "Back - Remastered 2011", "album": "Back in Black", "track_number": 1, "year": 1980, "length_ms": 4000, "gap_ms": 600},
+    {"artist": "Long Names", "title": "Un titre vraiment très long qui ne tient pas dans un nom de fichier parce qu'il continue encore et encore, bien au-delà de ce qu'un disque accepte pour un seul nom, avec des accents à chaque mot pour que la coupe tombe au milieu d'une lettre écrite sur deux octets",
+     "album": "Long", "track_number": 2, "length_ms": 4000, "gap_ms": 600},
+    {"artist": "Quiet Start", "title": "Song (feat. Someone)", "album": "Lead", "track_number": 3, "year": 2024, "lead_ms": 1500, "length_ms": 5000, "gap_ms": 600},
+    {"artist": "Promo", "title": "Short Clip", "length_ms": 3000, "gap_ms": 600}
+  ],
+  "expect": [
+    {"item": 0, "saved": true}, {"item": 1, "saved": true}, {"item": 2, "saved": true}, {"item": 3, "saved": true},
+    {"item": 4, "saved": false, "reason": "ad"}
+  ]
+}
