@@ -69,12 +69,6 @@ func (w *WAVWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Frames is the number of frames written so far.
-func (w *WAVWriter) Frames() int64 { return w.frames }
-
-// Format is the format of the file.
-func (w *WAVWriter) Format() Format { return w.format }
-
 // Path is the file being written.
 func (w *WAVWriter) Path() string { return w.f.Name() }
 

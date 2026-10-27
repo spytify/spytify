@@ -28,7 +28,6 @@ func NewRing(f pcm.Format, seconds float64) *Ring {
 func (r *Ring) Format() pcm.Format { return r.format }
 func (r *Ring) Start() int64       { return r.start }
 func (r *Ring) End() int64         { return r.end }
-func (r *Ring) Cap() int64         { return r.cap }
 func (r *Ring) Len() int64         { return r.end - r.start }
 func (r *Ring) Free() int64        { return r.cap - r.Len() }
 
