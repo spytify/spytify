@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -326,12 +328,21 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 	case settings.KindPath:
 		e := newApplyEntry(func(v string) { s.apply(key, v) })
 		browse := widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() {
-			dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
+			pick := dialog.NewFolderOpen(func(u fyne.ListableURI, err error) {
 				if err == nil && u != nil {
 					e.SetText(u.Path())
 					s.apply(key, u.Path())
 				}
 			}, s.app.win)
+			if start := startFolder(e.Text); start != nil {
+				pick.SetLocation(start)
+			}
+			pick.Resize(pickerSize)
+			pick.Show()
+			// Fyne centres the picker at its own size before growing it.
+			if top := s.app.win.Canvas().Overlays().Top(); top != nil {
+				top.Refresh()
+			}
 		})
 		f.set = func(v any) {
 			if str, _ := v.(string); !s.focused(e) {
@@ -599,4 +610,33 @@ func (p *playerCard) restart() {
 		return
 	}
 	restart()
+}
+
+// pickerSize is the folder picker's size: a third larger than Fyne's, room
+// for six columns of folders and the whole sidebar. A smaller window
+// shrinks it.
+var pickerSize = fyne.NewSize(680, 480)
+
+// startFolder is where the folder picker opens: the folder path names or,
+// when it is gone, the nearest folder above it that exists, which for a
+// USB key that is not plugged in is the folder the drives are in.
+func startFolder(path string) fyne.ListableURI {
+	p := settings.ExpandHome(strings.TrimSpace(path))
+	if p == "" {
+		return nil
+	}
+	for {
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			l, err := storage.ListerForURI(storage.NewFileURI(p))
+			if err != nil {
+				return nil
+			}
+			return l
+		}
+		up := filepath.Dir(p)
+		if up == p {
+			return nil
+		}
+		p = up
+	}
 }

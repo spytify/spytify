@@ -191,11 +191,18 @@ func shrink(img image.Image, px int) image.Image {
 	return dst
 }
 
+// maxCovers is how many covers the cache keeps, the ones used last: about
+// 35 MB of thumbnails.
+const maxCovers = 200
+
 // covers loads album art once per URL, off the toolkit's goroutine, and
-// keeps its thumbnails.
+// keeps the thumbnails of the covers used last.
 type covers struct {
 	mu      sync.Mutex
 	cache   map[string]thumbs
+	used    map[string]uint64
+	tick    uint64
+	done    int
 	pending map[string]bool
 	loaded  func()
 	// slots bounds the loads running at once.
@@ -203,15 +210,15 @@ type covers struct {
 }
 
 func newCovers(loaded func()) *covers {
-	return &covers{cache: map[string]thumbs{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
+	return &covers{cache: map[string]thumbs{}, used: map[string]uint64{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 }
 
-// count is how many covers are in the cache, loaded or failed: a screen
-// that changed nothing else redraws its rows when it grows.
-func (c *covers) count() int {
+// loads is how many covers finished loading, failed ones included: a
+// screen that changed nothing else redraws its rows when it grows.
+func (c *covers) loads() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return len(c.cache)
+	return c.done
 }
 
 // get returns the cover at url, none while it loads or when it failed.
@@ -232,6 +239,8 @@ func (c *covers) load(key string, fetch func(context.Context) ([]byte, error)) t
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if t, ok := c.cache[key]; ok {
+		c.tick++
+		c.used[key] = c.tick
 		return t
 	}
 	if !c.pending[key] {
@@ -247,7 +256,9 @@ func (c *covers) load(key string, fetch func(context.Context) ([]byte, error)) t
 			}
 			<-c.slots
 			c.mu.Lock()
-			c.cache[key] = t
+			delete(c.pending, key)
+			c.put(key, t)
+			c.done++
 			c.mu.Unlock()
 			if c.loaded != nil {
 				c.loaded()
@@ -255,6 +266,23 @@ func (c *covers) load(key string, fetch func(context.Context) ([]byte, error)) t
 		}()
 	}
 	return thumbs{}
+}
+
+// put caches t under key, in place of the cover used longest ago when the
+// cache is full. c.mu is held.
+func (c *covers) put(key string, t thumbs) {
+	if _, ok := c.cache[key]; !ok && len(c.cache) >= maxCovers {
+		oldest := ""
+		for k, u := range c.used {
+			if oldest == "" || u < c.used[oldest] {
+				oldest = k
+			}
+		}
+		delete(c.cache, oldest)
+		delete(c.used, oldest)
+	}
+	c.tick++
+	c.cache[key], c.used[key] = t, c.tick
 }
 
 // bar is a thin meter; widget.ProgressBar is as tall as a button.

@@ -189,6 +189,8 @@ type Session struct {
 	stalled   bool
 	peak, sum float64
 	count     int64
+	// diskFull is set when the output disk had no room for a track.
+	diskFull  bool
 	warnedLen bool
 	adMuted   bool
 
@@ -359,6 +361,9 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 // captureStall is how long the player may play with no audio arriving
 // before the session says so.
 var captureStall = 10 * time.Second
+
+// diskFree reports the free space of a folder's disk; tests replace it.
+var diskFree = freeBytes
 
 // stallHint is what to look at when no audio arrives.
 func stallHint(goos string) string {
@@ -898,6 +903,16 @@ func (s *Session) cutAt(cut int64, info meta.TrackInfo, first, restart bool, how
 	s.cur = seg
 	s.announce(seg)
 	s.refreshState()
+	s.stopIfDiskFull()
+}
+
+// stopIfDiskFull ends the session at once when the output disk is full:
+// nothing more can be saved, and a graceful stop would wait for the end of
+// a track the player, paused for the full disk, may never play.
+func (s *Session) stopIfDiskFull() {
+	if s.diskFull {
+		s.handleStop(stopNow)
+	}
 }
 
 // firstSound is where a track starts when it starts at its first sound:
@@ -960,13 +975,13 @@ func (s *Session) classify(seg *segment) {
 		}
 	}
 	if seg.reason == "" && !seg.ghost && !seg.provisional {
-		if free, ok := freeBytes(v.Path("output.dir")); ok && free < minFreeBytes {
+		if free, ok := diskFree(v.Path("output.dir")); ok && free < minFreeBytes {
 			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: fmt.Sprintf("only %d MB free in the output folder", free>>20)})
 			seg.reason = proto.SkipIncomplete
 			if v.Bool("recorder.pause_on_disk_full") {
 				go func() { _ = s.deps.control(proto.CmdPause) }()
 			}
-			s.stop = stopGraceful
+			s.diskFull = true
 			return
 		}
 		w, err := s.tempWAV(seg.id, seg.format)
@@ -1387,6 +1402,7 @@ func (s *Session) adopt(c *segment, info meta.TrackInfo) {
 	s.classify(c)
 	s.announce(c)
 	s.refreshState()
+	s.stopIfDiskFull()
 }
 
 // expireProvisional keeps the stream after a format change as the rest of

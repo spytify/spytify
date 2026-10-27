@@ -75,3 +75,42 @@ func TestCrashOutputIsKept(t *testing.T) {
 		t.Fatalf("summary %q", got)
 	}
 }
+
+func TestTheCrashLogKeepsTwoFiles(t *testing.T) {
+	path := filepath.Join(crashDir(t), "spytifyd.crash.log")
+	for i := 0; i < 3; i++ {
+		Keep(path)
+		if err := os.WriteFile(path, []byte("panic: boom\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	Keep(path)
+	files, _ := filepath.Glob(path + "*")
+	if len(files) != 2 {
+		t.Fatalf("crash logs: %v", files)
+	}
+}
+
+// A trace from more than 30 days ago goes, like old logs.
+func TestOldCrashTracesAreDeleted(t *testing.T) {
+	path := filepath.Join(crashDir(t), "spytifyd.crash.log")
+	if err := os.WriteFile(path+".1", []byte("panic: long ago\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-40 * 24 * time.Hour)
+	if err := os.Chtimes(path+".1", old, old); err != nil {
+		t.Fatal(err)
+	}
+	Keep(path)
+	if _, err := os.Stat(path + ".1"); err == nil {
+		t.Fatal("a 40-day-old trace is still there")
+	}
+
+	if err := os.WriteFile(path+".1", []byte("panic: last week\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	Keep(path)
+	if _, err := os.Stat(path + ".1"); err != nil {
+		t.Fatalf("a recent trace went: %v", err)
+	}
+}

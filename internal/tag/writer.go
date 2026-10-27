@@ -40,8 +40,9 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", path}
 	var coverPath string
 	if o.Cover && len(t.Cover) > 0 {
+		cover, mime := fitCover(t.Cover, t.CoverMIME, o.CoverSize)
 		ext := ".jpg"
-		if t.CoverMIME == "image/png" {
+		if mime == "image/png" {
 			ext = ".png"
 		}
 		cf, err := os.CreateTemp(dir, ".cover-*"+ext)
@@ -50,7 +51,7 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 		}
 		coverPath = cf.Name()
 		defer os.Remove(coverPath)
-		if _, err := cf.Write(t.Cover); err != nil {
+		if _, err := cf.Write(cover); err != nil {
 			cf.Close()
 			return err
 		}
@@ -87,7 +88,16 @@ func metadataPairs(t Track, format, sep string) []string {
 			kv = append(kv, k+"="+v)
 		}
 	}
-	add("title", t.Title)
+	title := t.Title
+	if format == "aac" {
+		// MP4 has no subtitle tag: the extra part stays in the title.
+		join := t.SubtitleSep
+		if join == SepNone {
+			join = SepDash
+		}
+		title = JoinTitle(t.Title, t.Subtitle, join)
+	}
+	add("title", title)
 	add("artist", strings.Join(t.Performers, sep))
 	add("album_artist", strings.Join(t.AlbumArtists, sep))
 	add("album", t.Album)
