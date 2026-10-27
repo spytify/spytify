@@ -174,7 +174,9 @@ func Recorded(root string, p Plan, o Options) bool {
 	}
 	prefixed := regexp.MustCompile(`^\d+[ _]` + regexp.QuoteMeta(want) + `$`)
 	for _, e := range entries {
-		if !e.IsDir() && prefixed.MatchString(e.Name()) {
+		// macOS and some network drives return accents decomposed (NFD);
+		// want is composed.
+		if name := norm.NFC.String(e.Name()); !e.IsDir() && (name == want || prefixed.MatchString(name)) {
 			return true
 		}
 	}
