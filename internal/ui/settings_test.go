@@ -181,8 +181,13 @@ func TestEveryNoteShowsUnderItsLabel(t *testing.T) {
 		}
 	}
 	// The whole page, every note on it, at the default width.
+	size := a.win.Canvas().Size()
 	a.win.Resize(fyne.NewSize(920, drv.AbsolutePositionForObject(s.scroll).Y+s.scroll.Content.MinSize().Height))
 	snapshot(t, a, "settings-notes-all")
+	a.win.Resize(size)
+	s.search.SetText("tag")
+	a.render()
+	snapshot(t, a, "settings-notes-tags")
 }
 
 // richText is the rich text in o's containers that says text.

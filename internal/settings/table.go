@@ -71,7 +71,7 @@ var Table = []Def{
 	{Key: "encode.bitrate_kbps", Tab: "Recorder", Group: "Encoding", Label: "Bitrate", Kind: KindIntEnum, Ints: bitrates, Choices: sizesPerMinute(bitrates), Default: int64(160), Note: "Not used by FLAC and WAV."},
 	{Key: "tags.cover", Tab: "Tags", Group: "Encoding", Label: "Embed album cover", Kind: KindBool, Default: true, Advanced: true},
 	{Key: "tags.cover_size", Tab: "Tags", Group: "Encoding", Label: "Cover size", Kind: KindEnum, Enum: []string{"small", "medium", "large"}, Choices: []string{"Small (300 px)", "Medium (640 px)", "Large (as it comes)"}, Default: "medium", Advanced: true, Note: "A cover is shrunk to fit, never enlarged."},
-	{Key: "tags.extra_to_subtitle", Tab: "Tags", Group: "Encoding", Label: "Move parenthesised extra title to subtitle", Kind: KindBool, Default: false, Advanced: true},
+	{Key: "tags.extra_to_subtitle", Tab: "Tags", Group: "Encoding", Label: "Move parenthesised extra title to subtitle", Kind: KindBool, Default: false, Advanced: true, Note: `Moves "Live" from "Song (Live)" or "Song - Live" to the subtitle tag (MP3, FLAC).`},
 	{Key: "tags.artist_separator", Tab: "Tags", Group: "Encoding", Label: "Multiple artists separator", Kind: KindString, Default: ", ", Advanced: true},
 
 	{Key: "recorder.duplicates", Tab: "Recorder", Group: "Recording", Label: "Already recorded tracks", Kind: KindEnum, Enum: []string{"skip", "suffix", "overwrite"}, Default: "skip"},
