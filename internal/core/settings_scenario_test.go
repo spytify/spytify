@@ -497,9 +497,9 @@ func decoded(t *testing.T, path string) (pcm.Format, []byte) {
 }
 
 // The bitrate setting is the bitrate of the file whatever the player
-// delivers (rate, channels, 16-bit or float); the file keeps the source's
-// rate where the format allows it; and a higher bitrate is closer to the
-// source once decoded.
+// delivers (rate, channels, 16-bit or float), a take in low quality kept
+// after all included; the file keeps the source's rate where the format
+// allows it; and a higher bitrate is closer to the source once decoded.
 func TestBitrateWithEverySource(t *testing.T) {
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		t.Skip("ffprobe not installed")
@@ -522,7 +522,17 @@ func TestBitrateWithEverySource(t *testing.T) {
 				s := newScenario(t, tl, map[string]any{"encode.format": c.format, "encode.bitrate_kbps": c.bitrate})
 				s.run(t, tl)
 				saved, _ := s.results()
-				path := saved[tl.Items[1].Title]
+				item := 1
+				path := saved[tl.Items[item].Title]
+				if poorFormat(tl.Format()) {
+					// Mono is saved only once kept: the last take is held.
+					item = len(tl.Items) - 1
+					id := idOf(s, tl.Items[item].Title)
+					if err := s.core.Keep(id); err != nil {
+						t.Fatalf("%s: %v", enc, err)
+					}
+					path = finished(t, s, id).Path
+				}
 				if path == "" {
 					t.Errorf("%s: not saved; log:\n%s", enc, s.logs)
 					continue
@@ -545,7 +555,7 @@ func TestBitrateWithEverySource(t *testing.T) {
 					t.Errorf("%s: file at %d Hz, %d channels; want %d Hz, %d", enc, gotF.Rate, gotF.Channels, wantRate, src.channels)
 				}
 				if gotF.Rate == src.rate {
-					wantF, want, err := tl.ItemAudio(1)
+					wantF, want, err := tl.ItemAudio(item)
 					if err != nil {
 						t.Fatal(err)
 					}

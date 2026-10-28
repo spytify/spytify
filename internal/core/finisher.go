@@ -38,8 +38,9 @@ type finishJob struct {
 	played  int64
 	length  int64
 	partial bool
-	// rejected is why the session already skipped this take, when it did:
-	// the file is not made, but the audio is held for track.keep.
+	// rejected is why the take was skipped, when the session already did
+	// or once it is held: the file is not made, but the audio is held for
+	// track.keep.
 	rejected proto.SkipReason
 	// keep saves a held take after all, whatever part of it played.
 	keep bool
@@ -69,7 +70,8 @@ type finisher struct {
 	advance func(next int64)
 	full    func()
 	lost    func()
-	// keep holds the last take cut short, for track.keep.
+	// keep holds the last take cut short or in low quality, for
+	// track.keep.
 	keep *keeper
 }
 
@@ -214,13 +216,13 @@ func (f *finisher) process(j finishJob) {
 	v := f.values()
 	playedMs := j.format.MsFromFrames(j.played)
 	if j.rejected != "" {
-		held = f.keep.hold(j)
+		held = f.keep.hold(j, j.rejected)
 		return
 	}
 	if !j.keep && (j.partial || (j.length > 0 && j.played < j.length-j.format.FramesFromMs(completeToleranceMs))) {
 		f.log.Infof("%q: only %d of %d ms played, not kept", j.info.Title, playedMs, j.format.MsFromFrames(j.length))
 		f.skip(j.id, proto.SkipIncomplete)
-		held = f.keep.hold(j)
+		held = f.keep.hold(j, proto.SkipIncomplete)
 		return
 	}
 	tooShort := func(frames int64) bool {
@@ -252,6 +254,14 @@ func (f *finisher) process(j finishJob) {
 			f.skip(j.id, proto.SkipTooShort)
 			return
 		}
+	}
+	// Low quality skips a take that nothing above skipped, before it takes
+	// a cover, a counter number or a name.
+	if !j.keep && poorFormat(j.format) {
+		f.log.Infof("%q: recorded at %s, too poor for music, not kept", j.info.Title, j.format)
+		f.skip(j.id, proto.SkipLowQuality)
+		held = f.keep.hold(j, proto.SkipLowQuality)
+		return
 	}
 
 	topts := tagOptions(v)

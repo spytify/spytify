@@ -457,11 +457,17 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	s.progress()
 }
 
+// poorFormat is a format too poor for music, under 44.1 kHz or in mono:
+// what is recorded in it sounds like a phone call.
+func poorFormat(f pcm.Format) bool {
+	return f.Rate < 44100 || f.Channels < 2
+}
+
 // checkQuality runs on the capture's first format and on each change: a
 // format too poor for music is reported each time, and the report is
 // withdrawn, the same code with no message, once the format is fit again.
 func (s *Session) checkQuality(f pcm.Format) {
-	low := f.Rate < 44100 || f.Channels < 2
+	low := poorFormat(f)
 	switch {
 	case low:
 		s.deps.log.Errorf("the capture is %s: tracks will sound like a phone call", f)

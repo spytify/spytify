@@ -57,8 +57,11 @@ type Item struct {
 	// first sample of the item: negative is early, positive is late.
 	NotifyOffsetMs int64 `json:"notify_offset_ms"`
 	// JitterMs adds a seeded random offset in [-JitterMs, +JitterMs].
-	JitterMs  int64  `json:"jitter_ms"`
+	JitterMs int64 `json:"jitter_ms"`
+	// Rate and Channels play this item in another format than the
+	// timeline's.
 	Rate      int    `json:"rate"`
+	Channels  int    `json:"channels"`
 	FadeMs    *int64 `json:"fade_ms"`
 	Seed      int64  `json:"seed"`
 	WAV       string `json:"wav"`
@@ -209,6 +212,9 @@ func (tl *Timeline) ItemAudio(i int) (pcm.Format, []byte, error) {
 	f := tl.Format()
 	if it.Rate != 0 {
 		f.Rate = it.Rate
+	}
+	if it.Channels != 0 {
+		f.Channels = it.Channels
 	}
 	fade := int64(30)
 	if it.FadeMs != nil {

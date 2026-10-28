@@ -28,7 +28,7 @@ var Methods = []MethodSpec{
 	{MethodPlayerLaunch, nil, Empty{}, "opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way"},
 	{MethodLogTail, LogTailParams{}, LogTailResult{}, "last N log lines"},
 	{MethodEventsRecent, nil, EventsRecentResult{}, "the last 200 events, for a client that connects mid-session"},
-	{MethodTrackKeep, TrackKeepParams{}, Empty{}, "saves a keepable take after all, as \"<title> (partial)\"; fails once it is no longer keepable"},
+	{MethodTrackKeep, TrackKeepParams{}, Empty{}, "saves a keepable take after all, as \"<title> (partial)\", or \"<title> (low quality)\" for one skipped as low_quality; fails once it is no longer keepable"},
 	{MethodCoreShutdown, nil, Empty{}, "stops the session first"},
 }
 
@@ -37,8 +37,8 @@ var Events = []EventSpec{
 	{EventSessionState, SessionStateEvent{}, "every transition"},
 	{EventTrackStarted, TrackStartedEvent{}, "boundary committed"},
 	{EventTrackFinished, TrackFinishedEvent{}, "file closed and tagged"},
-	{EventTrackSkipped, TrackSkippedEvent{}, "decision made: duplicate, too_short, ad, incomplete, seeked"},
-	{EventTrackKeepable, TrackKeepableEvent{}, "a take cut short, stopped or moved along its track bar can be saved with track.keep, or no longer"},
+	{EventTrackSkipped, TrackSkippedEvent{}, "decision made: duplicate, too_short, ad, incomplete, seeked, low_quality"},
+	{EventTrackKeepable, TrackKeepableEvent{}, "a take cut short, stopped, moved along its track bar or recorded in low quality can be saved with track.keep, or no longer"},
 	{EventLevel, LevelEvent{}, "10 Hz while recording"},
 	{EventSettingsChanged, SettingsValues{}, "after any successful settings.set or settings.reset"},
 	{EventTargetState, TargetStateEvent{}, "player process appears or exits"},

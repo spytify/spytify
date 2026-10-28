@@ -629,13 +629,13 @@
       }
     },
     "track.keepable": {
-      "description": "a take cut short, stopped or moved along its track bar can be saved with track.keep, or no longer",
+      "description": "a take cut short, stopped, moved along its track bar or recorded in low quality can be saved with track.keep, or no longer",
       "params": {
         "$ref": "#/$defs/TrackKeepableEvent"
       }
     },
     "track.skipped": {
-      "description": "decision made: duplicate, too_short, ad, incomplete, seeked",
+      "description": "decision made: duplicate, too_short, ad, incomplete, seeked, low_quality",
       "params": {
         "$ref": "#/$defs/TrackSkippedEvent"
       }
@@ -742,7 +742,7 @@
       }
     },
     "track.keep": {
-      "description": "saves a keepable take after all, as \"<title> (partial)\"; fails once it is no longer keepable",
+      "description": "saves a keepable take after all, as \"<title> (partial)\", or \"<title> (low quality)\" for one skipped as low_quality; fails once it is no longer keepable",
       "params": {
         "$ref": "#/$defs/TrackKeepParams"
       },

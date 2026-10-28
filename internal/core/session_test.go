@@ -248,7 +248,7 @@ func TestASaveWithTheOutputFolderGoneStopsTheRecording(t *testing.T) {
 	var lost atomic.Bool
 	fin.lost = func() { lost.Store(true) }
 
-	f := pcm.Format{Rate: 8000, Channels: 1, Sample: pcm.S16LE}
+	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
 	take := filepath.Join(dir, "take.wav")
 	w, err := pcm.CreateWAV(take, f)
 	if err != nil {
@@ -707,9 +707,6 @@ func TestALowQualityCaptureIsReportedOnce(t *testing.T) {
 		tl.Rate, tl.Channels = c.rate, c.channels
 		s := newScenario(t, tl, nil)
 		s.run(t, tl)
-		if saved, _ := outcome(t, s); len(saved) != len(tl.Items) {
-			t.Errorf("%d Hz, %d channels: saved %v", c.rate, c.channels, saved)
-		}
 		got := lowQuality(s.events.all())
 		if c.want == "" {
 			if len(got) != 0 {
@@ -756,9 +753,81 @@ func TestTheLowQualityWarningFollowsTheCapture(t *testing.T) {
 	}
 }
 
+// Each track recorded in a format too poor for music, under 44.1 kHz or
+// in mono, is skipped as low quality and held for track.keep, each in
+// turn, the last one until a track is saved. Kept, it is saved as it was
+// recorded, at its own rate, as "<title> (low quality)". A capture fit for
+// music saves every track.
+func TestTracksRecordedInLowQualityAreSkippedAndCanBeKept(t *testing.T) {
+	for _, c := range []struct {
+		rate, channels int
+		low            bool
+	}{
+		{16000, 1, true},
+		{16000, 2, true},
+		{44100, 1, true},
+		{44100, 2, false},
+		{48000, 2, false},
+	} {
+		tl := loadTimeline(t, "basic")
+		tl.Rate, tl.Channels = c.rate, c.channels
+		s := newScenario(t, tl, nil)
+		s.run(t, tl)
+		saved, skipped := outcome(t, s)
+		if !c.low {
+			if len(saved) != len(tl.Items) || len(skipped) != 0 {
+				t.Errorf("%d Hz, %d channels: saved %v, skipped %v", c.rate, c.channels, saved, skipped)
+			}
+			continue
+		}
+		if len(saved) != 0 || len(fake.AudioFiles(s.out)) != 0 {
+			t.Errorf("%d Hz, %d channels: saved %v", c.rate, c.channels, saved)
+		}
+		last := len(tl.Items) - 1
+		for i, it := range tl.Items {
+			want := []bool{true, false}
+			if i == last {
+				want = []bool{true}
+			}
+			if skipped[it.Title] != proto.SkipLowQuality || !slices.Equal(keepable(s, it.Title), want) {
+				t.Errorf("%d Hz, %d channels: %q skipped %q, keepable %v, want %v", c.rate, c.channels, it.Title, skipped[it.Title], keepable(s, it.Title), want)
+			}
+		}
+		id := idOf(s, tl.Items[last].Title)
+		if err := s.core.Keep(id); err != nil {
+			t.Fatalf("%d Hz, %d channels: %v", c.rate, c.channels, err)
+		}
+		f := finished(t, s, id)
+		got, _, err := pcm.ReadWAV(f.Path)
+		if err != nil || got.Rate != c.rate || got.Channels != c.channels || !strings.Contains(filepath.Base(f.Path), " (low quality).") ||
+			!f.Partial || f.DurationMs < tl.Items[last].LengthMs-1000 {
+			t.Errorf("%d Hz, %d channels: kept %+v as %s, %v", c.rate, c.channels, f, got, err)
+		}
+	}
+}
+
+// Another microphone picked between two tracks brings a headset in call
+// mode back to 44.1 kHz stereo: the tracks played from then on are saved.
+func TestTracksAreSavedOnceTheCaptureIsFitAgain(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	tl.Rate, tl.Channels = 16000, 1
+	for i := 1; i < len(tl.Items); i++ {
+		tl.Items[i].Rate, tl.Items[i].Channels = 44100, 2
+	}
+	s := newScenario(t, tl, nil)
+	s.run(t, tl)
+	expect := []fake.Expect{{Item: 0, Reason: string(proto.SkipLowQuality)}, {Item: 1, Saved: true}, {Item: 2, Saved: true}}
+	if problems := fake.Verify(tl, expect, 2, s.out, s.events.all()); len(problems) > 0 {
+		t.Fatalf("%v\n%s", problems, s.logs)
+	}
+	if got := keepable(s, tl.Items[0].Title); !slices.Equal(got, []bool{true, false}) {
+		t.Fatalf("keepable %v: the take in low quality is held until a track is saved", got)
+	}
+}
+
 func TestSessionStartedMidTrackWaitsForNextTrack(t *testing.T) {
 	s, rec, out := directSession(t)
-	f := pcm.Format{Rate: 8000, Channels: 1, Sample: pcm.S16LE}
+	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
 	frames := make(chan capture.Chunk)
 	events := make(chan meta.Event)
 	go s.Run(context.Background(), frames, events)
@@ -776,10 +845,10 @@ func TestSessionStartedMidTrackWaitsForNextTrack(t *testing.T) {
 	}
 	send(pcm.Synth{Seed: 1, FadeOut: 20}, 1500) // the rest of "Already Playing"
 	send(pcm.Synth{}, 0)
-	frames <- capture.Chunk{Data: make([]byte, f.FramesFromMs(300)*2), Format: f}
+	frames <- capture.Chunk{Data: make([]byte, f.FramesFromMs(300)*int64(f.FrameBytes())), Format: f}
 	events <- meta.Event{Kind: meta.TrackChanged, Track: b, PositionMs: 0}
 	send(pcm.Synth{Seed: 2, FadeInMs: 20, FadeOut: 20}, 3000)
-	frames <- capture.Chunk{Data: make([]byte, f.FramesFromMs(800)*2), Format: f}
+	frames <- capture.Chunk{Data: make([]byte, f.FramesFromMs(800)*int64(f.FrameBytes())), Format: f}
 	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Stopped, PositionMs: -1}
 	close(frames)
 

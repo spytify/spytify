@@ -145,6 +145,26 @@ func TestKeepableTakes(t *testing.T) {
 	}
 }
 
+// A take in low quality says so, offers Keep anyway like a take cut short,
+// and once kept reads "Saved: low quality", not partial.
+func TestALowQualityTakeSaysSo(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(started(t, "a", "First"))
+	m.Apply(started(t, "b", "Second"))
+	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "a", Reason: proto.SkipLowQuality}))
+	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a", Keepable: true}))
+	if r := m.Snapshot().Rows[0]; !r.Keepable || r.StatusText() != "Skipped: low quality" {
+		t.Fatalf("skipped %+v, %q", r, r.StatusText())
+	}
+	m.Keeping("a", true)
+	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a"}))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (low quality).flac", Partial: true}))
+	if r := m.Snapshot().Rows[0]; r.StatusText() != "Saved: low quality" {
+		t.Fatalf("kept %+v, %q", r, r.StatusText())
+	}
+}
+
 func TestSettingsLogsAndErrors(t *testing.T) {
 	m := New()
 	m.SetSettings(map[string]any{"encode.format": "mp3", "output.dir": "/m"})
