@@ -76,7 +76,7 @@ var Table = []Def{
 	{Key: "recorder.duplicates", Tab: "Recorder", Group: "Recording", Label: "Already recorded tracks", Kind: KindEnum, Enum: []string{"skip", "suffix", "overwrite"}, Default: "skip"},
 	{Key: "recorder.skip_duplicates_forward", Tab: "Recorder", Group: "Recording", Label: "Skip to the next track when already recorded", Kind: KindBool, Default: false},
 	{Key: "recorder.single_track", Tab: "Recorder", Group: "Recording", Label: "Record a single track then stop", Kind: KindBool, Default: false},
-	{Key: "recorder.normalize", Tab: "Advanced", Group: "Recording", Label: "Normalize volume", Kind: KindBool, Default: true},
+	{Key: "recorder.normalize", Tab: "Advanced", Group: "Recording", Label: "Normalize volume", Kind: KindBool, Default: false},
 	{Key: "recorder.trim_silence", Tab: "Recorder", Group: "Recording", Label: "Trim leading/trailing silence", Kind: KindBool, Default: true, Advanced: true},
 	{Key: "recorder.silence_db", Tab: "Recorder", Group: "Recording", Label: "Silence threshold (dBFS)", Kind: KindFloat, Default: -50.0, Min: -90, Max: -20, Ranged: true, Advanced: true},
 	{Key: "recorder.boundary_window_ms", Tab: "Recorder", Group: "Recording", Label: "Boundary search window (ms)", Kind: KindInt, Default: int64(300), Min: 20, Max: 2000, Ranged: true, Advanced: true},

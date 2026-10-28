@@ -61,6 +61,7 @@ func (s *Store) load() error {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	full := false
 	for _, k := range keys {
 		key := k
 		if to, ok := renamed[k]; ok {
@@ -80,6 +81,13 @@ func (s *Store) load() error {
 			continue
 		}
 		s.values[key] = v
+		full = full || v == d.Default
+	}
+	// Up to 2.0.0-alpha.4, config.toml held every setting, defaults too, so
+	// its normalize = true was the default of the time, not a choice. A file
+	// saved since holds no default, which tells the two apart.
+	if full && s.values["recorder.normalize"] == true {
+		s.values["recorder.normalize"] = false
 	}
 	return nil
 }
@@ -267,7 +275,9 @@ func save(path string, values map[string]any) error {
 	nested := map[string]any{}
 	for _, d := range Table {
 		v, ok := values[d.Key]
-		if !ok {
+		// A setting at its default is left out, so that a default changed in
+		// a later version reaches it.
+		if !ok || v == d.Default {
 			continue
 		}
 		parts := strings.Split(d.Key, ".")
@@ -284,7 +294,7 @@ func save(path string, values map[string]any) error {
 	}
 	var buf bytes.Buffer
 	buf.WriteString("# spytify settings. Edit through spytify-cli set key=value or the UI;\n")
-	buf.WriteString("# the daemon validates every value.\n\n")
+	buf.WriteString("# the daemon validates every value. A setting at its default is left out.\n\n")
 	if err := toml.NewEncoder(&buf).Encode(nested); err != nil {
 		return err
 	}
