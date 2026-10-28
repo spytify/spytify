@@ -236,20 +236,73 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	}
 }
 
-// A device above 48 kHz is written at a lower rate, and the card says so.
+// A device above 48 kHz is written at a lower rate, and the card says so on
+// a line of its own, under the artist and album.
 func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	// lines is the card's text, one entry per line as drawn, top to bottom.
+	lines := func() []string {
+		var out []string
+		y := float32(-1)
+		for _, o := range test.WidgetRenderer(r.track).Objects() {
+			if txt, ok := o.(*canvas.Text); ok && txt.Text != "" {
+				if txt.Position().Y <= y {
+					t.Errorf("%q is not on a line of its own", txt.Text)
+				}
+				y = txt.Position().Y
+				out = append(out, txt.Text)
+			}
+		}
+		return out
+	}
+	// No format known, no line for it.
+	if got, want := lines(), []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming"}; !slices.Equal(got, want) {
+		t.Errorf("card lines %q, want %q", got, want)
+	}
+
 	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-004", Path: "/Users/listener/Music/Spytify/M83/Midnight City.flac", DurationMs: 243000, Bytes: 31_400_000, Tagged: true, TaggedBy: "lastfm"}))
 	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000},
 		Source: &proto.AudioSource{SampleRate: 96000, Channels: 2}}))
 	a.render()
-	r := a.screens[tabRecord].(*recordScreen)
-	want := "M83 · Hurry Up, We're Dreaming · 96 kHz stereo, 48 kHz file"
-	if got := r.subtitle.Segments[0].(*widget.TextSegment).Text; got != want {
-		t.Errorf("card subtitle %q, want %q", got, want)
+	if got, want := lines(), []string{"● RECORDING", "Outro", "M83 · Hurry Up, We're Dreaming", "96 kHz stereo, 48 kHz file"}; !slices.Equal(got, want) {
+		t.Errorf("card lines %q, want %q", got, want)
 	}
-	snapshot(t, a, "record-96khz")
+	if all := texts(r.card); !contains(all, "Length") || !contains(all, "Level") || !contains(all, "0:00 / 4:07") {
+		t.Errorf("no Length and Level rows on the card: %q", all)
+	}
+	snapshot(t, a, "record-96khz-layout")
+
+	// At the narrowest the window goes, everything on the card stays on it.
+	a.win.Resize(a.win.Content().MinSize())
+	a.render()
+	panel := r.card.Objects[0]
+	d := fyne.CurrentApp().Driver()
+	box := d.AbsolutePositionForObject(panel)
+	var inside func(fyne.CanvasObject)
+	inside = func(o fyne.CanvasObject) {
+		if !o.Visible() {
+			return
+		}
+		p, s := d.AbsolutePositionForObject(o), o.Size()
+		if p.X < box.X || p.X+s.Width > box.X+panel.Size().Width {
+			t.Errorf("%T at x %v to %v, out of the card's %v to %v", o, p.X, p.X+s.Width, box.X, box.X+panel.Size().Width)
+		}
+		switch w := o.(type) {
+		case *fyne.Container:
+			for _, c := range w.Objects {
+				inside(c)
+			}
+		case fyne.Widget:
+			for _, c := range test.WidgetRenderer(w).Objects() {
+				inside(c)
+			}
+		}
+	}
+	inside(panel)
+	snapshot(t, a, "record-96khz-narrow")
 }
 
 // The last take cut short offers Keep anyway on its row, and only it.

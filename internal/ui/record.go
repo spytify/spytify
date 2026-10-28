@@ -36,11 +36,11 @@ type recordScreen struct {
 	diagnose   *widget.Button
 	session    *fyne.Container
 
-	card     *fyne.Container
-	cover    *canvas.Image
-	state    *widget.Label
-	title    *widget.Label
-	subtitle *widget.RichText
+	card  *fyne.Container
+	cover *canvas.Image
+	// track is the state, the title, the artist and album, then the
+	// format, one line each.
+	track    *widget.RichText
 	progress *bar
 	elapsed  *widget.RichText
 	level    *bar
@@ -95,13 +95,14 @@ func newRecordScreen(a *App) *recordScreen {
 	r.cover = canvas.NewImageFromResource(theme.MediaMusicIcon())
 	r.cover.FillMode = canvas.ImageFillContain
 	r.cover.SetMinSize(fyne.NewSquareSize(liveCover))
-	r.state = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	r.state.SizeName = theme.SizeNameCaptionText
-	r.state.Importance = widget.DangerImportance
-	r.title = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	r.title.SizeName = theme.SizeNameSubHeadingText
-	r.title.Truncation = fyne.TextTruncateEllipsis
-	r.subtitle = clipped("")
+	// One block, as a list row's: stacked widgets would each add their
+	// padding between the lines.
+	r.track = widget.NewRichText(
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameError, SizeName: theme.SizeNameCaptionText, TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameSubHeadingText, TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
+	)
+	r.track.Truncation = fyne.TextTruncateEllipsis
 	r.progress = newBar(theme.ColorNamePrimary)
 	r.elapsed = caption("0:00 / 0:00")
 	r.level = newBar(theme.ColorNameSuccess)
@@ -109,9 +110,12 @@ func newRecordScreen(a *App) *recordScreen {
 		a.noteAction("skip")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdNext}, nil)
 	})
-	info := container.NewVBox(r.state, r.title, r.subtitle,
-		container.NewBorder(nil, nil, nil, r.elapsed, r.progress),
-		container.NewBorder(nil, nil, caption("Level"), nil, r.level))
+	// Length and Level are a pair of rows as close as two lines of text,
+	// their bars starting and ending at one x.
+	meters := container.NewBorder(nil, nil, nil, tight(r.elapsed), container.New(layout.NewFormLayout(),
+		tight(caption("Length")), r.progress,
+		tight(caption("Level")), r.level))
+	info := container.NewVBox(r.track, meters)
 	// The track being recorded is on a card of its own colour, apart from
 	// the list.
 	pad := theme.Padding()
@@ -303,16 +307,15 @@ func (r *recordScreen) render(s model.State) {
 	if c := s.Current; c != nil {
 		r.card.Show()
 		r.waitRow.Hide()
-		setLabel(r.state, stateText(s.Session, c))
-		setLabel(r.title, c.Title)
 		sub := c.Artist
 		if c.Album != "" {
 			sub += " · " + c.Album
 		}
+		lines := []string{stateText(s.Session, c), c.Title, sub}
 		if src := sourceText(c.SourceRate, c.SourceChannels); src != "" {
-			sub += " · " + src
+			lines = append(lines, src)
 		}
-		setCaption(r.subtitle, sub)
+		setRowText(r.track, lines...)
 		setCover(r.cover, r.app.covers.get(c.CoverURL).live)
 	} else {
 		r.card.Hide()
@@ -369,7 +372,7 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 
 // relayout lays the screen out again when a part appeared or went away.
 func (r *recordScreen) relayout() {
-	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), r.waitRow.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
+	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), len(r.track.Segments), r.waitRow.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()

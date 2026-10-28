@@ -119,12 +119,29 @@ func rowText() *widget.RichText {
 	return rt
 }
 
-func setRowText(rt *widget.RichText, title, details string) {
-	t, d := rt.Segments[0].(*widget.TextSegment), rt.Segments[1].(*widget.TextSegment)
-	if t.Text != title || d.Text != details {
-		t.Text, d.Text = title, details
+// setRowText shows the lines one under another, each in the style of its
+// segment; a line past the text's segments takes the style of the one above.
+func setRowText(rt *widget.RichText, lines ...string) {
+	changed := len(rt.Segments) != len(lines)
+	for i, text := range lines {
+		if i == len(rt.Segments) {
+			rt.Segments = append(rt.Segments, &widget.TextSegment{Style: rt.Segments[i-1].(*widget.TextSegment).Style})
+		}
+		if seg := rt.Segments[i].(*widget.TextSegment); seg.Text != text {
+			seg.Text, changed = text, true
+		}
+	}
+	if changed {
+		rt.Segments = rt.Segments[:len(lines)]
 		rt.Refresh()
 	}
+}
+
+// tight takes a caption's padding off above and below it, so that rows of
+// captions sit as close as the lines of a paragraph.
+func tight(o fyne.CanvasObject) *fyne.Container {
+	p := -theme.InnerPadding()
+	return container.New(layout.NewCustomPaddedLayout(p, p, 0, 0), o)
 }
 
 // wrapped is a caption that breaks into lines.
