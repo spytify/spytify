@@ -197,6 +197,14 @@ jobs:
           cat info.txt
           ./spytify-cli.exe shutdown || true
           grep -F "[ok  ] ffmpeg found" info.txt
+      - name: Without an audio output, the capture helper takes 48 kHz and says why
+        run: |
+          # A process to record, by its Windows PID (bash's $! is not one).
+          pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-Command","Start-Sleep 30" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
+          set +e; timeout 20 ./spytify-tap.exe --pid "$pid" > /dev/null 2> tap-none.err; code=$?; set -e
+          echo "spytify-tap exit $code"
+          cat tap-none.err
+          grep -F "recording $pid at 48000 Hz: no output device gives its mix rate" tap-none.err
       - uses: actions/checkout@v4
         with:
           path: src
@@ -204,7 +212,7 @@ jobs:
       - name: An audio output for the runner (the Scream virtual driver)
         shell: pwsh
         run: src/scripts/ci/windows-audio-device.ps1
-      - name: The capture helper records a process playing a tone, and pins its volume
+      - name: The capture helper records a process playing a tone at its output's mix rate, and pins its volume
         run: |
           # A process playing, by its Windows PID (bash's $! is not one).
           pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
@@ -213,9 +221,17 @@ jobs:
           for i in $(seq 60); do [ -f "$ready" ] && break; sleep 1; done
           test -f "$ready" || { echo "the tone did not play within 60 s"; exit 1; }
           sleep 1
-          set +e; timeout 3 ./spytify-tap.exe --pid "$pid" > tap.raw; code=$?; set -e
+          set +e; timeout 3 ./spytify-tap.exe --pid "$pid" > tap.raw 2> tap.err; code=$?; set -e
           echo "spytify-tap exit $code (124: stopped by timeout)"
+          cat tap.err
           python src/scripts/ci/tap-level.py tap.raw 2 -20
+          # The tone plays to the runner's only output, whose mix rate the
+          # helper finds through the tone's audio session.
+          mix=$(powershell -NoProfile -ExecutionPolicy Bypass -File src/scripts/ci/mix-rate.ps1 | tr -d '\r')
+          echo "the default output mixes at $mix Hz"
+          head -n 1 tap.raw | grep -F "SPYTIFY-TAP f32le $mix 2"
+          grep -F "recording $pid at $mix Hz, the mix rate of" tap.err
+          if grep -q -F "the default output" tap.err; then echo "the helper did not find the tone's audio session"; exit 1; fi
           ./spytify-tap.exe --pid "$pid" --set-volume 0.25
           v=$(./spytify-tap.exe --pid "$pid" --get-volume | tr -d '\r')
           echo "volume $v"
