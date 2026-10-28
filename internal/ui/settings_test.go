@@ -147,6 +147,21 @@ func TestBitrateOnlyForLossyFormats(t *testing.T) {
 	}
 }
 
+// Normalize volume says under its label what it does to a track; the
+// settings whose note is not for the screen show none.
+func TestNormalizeVolumeShowsItsNote(t *testing.T) {
+	a, _, s := settingsApp(t)
+	all := texts(s.sections)
+	for _, d := range settings.Table {
+		if d.Note != "" && d.Kind != settings.KindTemplate && contains(all, d.Note) != d.ShowNote {
+			t.Errorf("%s: note shown %v, want %v", d.Key, !d.ShowNote, d.ShowNote)
+		}
+	}
+	s.search.SetText("normalize")
+	a.render()
+	snapshot(t, a, "settings-normalize")
+}
+
 // Each bitrate in the list says what a minute of it takes; picking one
 // sends its number, the value config.toml keeps.
 func TestPickingABitrateSendsItsNumber(t *testing.T) {
