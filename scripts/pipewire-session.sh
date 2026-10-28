@@ -28,13 +28,21 @@ fi
 
 # Let the graph run at the stream's rate, so 44.1 kHz audio is not
 # resampled to 48 kHz and back before it is recorded.
-mkdir -p "$XDG_RUNTIME_DIR/config/pipewire/pipewire.conf.d"
-cat >"$XDG_RUNTIME_DIR/config/pipewire/pipewire.conf.d/10-spytify-rates.conf" <<'EOF'
+# SPYTIFY_PIPEWIRE_RATES=default keeps PipeWire's own rates instead: the
+# graph at 48 kHz only, as on most computers.
+rates_conf="$XDG_RUNTIME_DIR/config/pipewire/pipewire.conf.d/10-spytify-rates.conf"
+if [ "${SPYTIFY_PIPEWIRE_RATES:-}" = default ]; then
+  rm -f "$rates_conf"
+else
+  mkdir -p "$(dirname "$rates_conf")"
+  cat >"$rates_conf" <<'EOF'
 context.properties = {
     default.clock.rate          = 44100
     default.clock.allowed-rates = [ 44100 48000 ]
 }
 EOF
+fi
+unset rates_conf
 
 if ! pw-cli info 0 >/dev/null 2>&1; then
   rm -f "$XDG_RUNTIME_DIR/pipewire-0" "$XDG_RUNTIME_DIR/pipewire-0.lock" "$XDG_RUNTIME_DIR/pipewire-0-manager" "$XDG_RUNTIME_DIR/pipewire-0-manager.lock"
