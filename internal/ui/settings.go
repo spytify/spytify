@@ -365,6 +365,11 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		f.input = e
 	}
+	if d.ShowNote {
+		note := widget.NewRichText(&widget.TextSegment{Text: d.Note, Style: widget.RichTextStyle{ColorName: colorSubtle, SizeName: theme.SizeNameCaptionText, Inline: true}})
+		note.Truncation = fyne.TextTruncateEllipsis
+		under = note
+	}
 	f.row = settingRow(d.Label, f.input, under)
 	return f
 }
