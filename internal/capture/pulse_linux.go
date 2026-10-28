@@ -55,7 +55,10 @@ func findSinkInput(doc []byte, t target.Target) (streamNode, bool, error) {
 		if !match {
 			continue
 		}
-		n := streamNode{key: strconv.Itoa(in.Index), id: in.Index, running: !in.Corked, order: int64(in.Index)}
+		// pipewire-pulse gives the stream's PipeWire properties; PulseAudio
+		// itself has no driver.
+		driver, _ := strconv.Atoi(p["node.driver-id"])
+		n := streamNode{key: strconv.Itoa(in.Index), id: in.Index, driver: driver, running: !in.Corked, order: int64(in.Index)}
 		if m := sampleSpec.FindStringSubmatch(in.SampleSpec); m != nil {
 			n.channels, _ = strconv.Atoi(m[1])
 			n.rate, _ = strconv.Atoi(m[2])

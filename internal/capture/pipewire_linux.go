@@ -28,6 +28,7 @@ const pollInterval = 250 * time.Millisecond
 type streamNode struct {
 	key      string // object.serial or sink-input index
 	id       int    // PipeWire's object id; the sink-input index on PulseAudio
+	driver   int    // node.driver-id: the node whose clock runs the graph, 0 when unknown
 	rate     int
 	channels int
 	running  bool
@@ -37,7 +38,8 @@ type streamNode struct {
 // PipeWire records the target's output stream with pw-record, found by
 // matching pw-dump's stream nodes to the target process. When the player
 // recreates its stream (a new item at another rate, a pause that tore the
-// stream down) the recorder follows the new node.
+// stream down) the recorder follows the new node. It records at the rate
+// PipeWire's graph runs at, and starts again when that rate changes.
 type PipeWire struct {
 	// MuteOutput sends the player's stream to a sink nobody hears while it
 	// is recorded (player.mute_output): the capture reads the stream itself,
@@ -46,6 +48,7 @@ type PipeWire struct {
 
 	logf    func(format string, args ...any)
 	backend procBackend
+	clock   graphClock
 	// silenced is the stream sent to the muted sink, if any.
 	silenced *streamNode
 
@@ -89,7 +92,7 @@ func NewLinux(logf func(format string, args ...any)) (*PipeWire, error) {
 	default:
 		return nil, errors.New("neither PipeWire (pw-record, pw-dump) nor PulseAudio (parec, pactl) tools were found")
 	}
-	return &PipeWire{logf: logf, backend: b, frames: make(chan Chunk, 256), done: make(chan struct{})}, nil
+	return &PipeWire{logf: logf, backend: b, clock: pipewireClock{}, frames: make(chan Chunk, 256), done: make(chan struct{})}, nil
 }
 
 func have(name string) bool {
@@ -159,23 +162,42 @@ func (p *PipeWire) run(ctx context.Context, t target.Target) {
 			continue
 		}
 		waiting = false
-		f := pcm.Format{Rate: node.rate, Channels: node.channels, Sample: pcm.F32LE}
-		if f.Rate <= 0 {
-			f.Rate = 44100
-		}
-		if f.Channels <= 0 {
-			f.Channels = 2
-		}
-		p.logf("capture: %s stream %s, %s", p.backend.name(), node.key, f)
+		f, fromStream := p.format(ctx, node)
 		p.silence(node)
-		p.stream(ctx, t, node, f)
+		p.stream(ctx, t, node, f, fromStream)
 		sleep(ctx, 100*time.Millisecond)
 	}
 }
 
-// stream records one node until it goes away, is replaced, or changes rate.
-func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode, f pcm.Format) {
+// format is the format to record a stream in: its channels, at the rate
+// recordRate chooses. The rate is chosen before the recording starts, as a
+// new rate starts a new file.
+func (p *PipeWire) format(ctx context.Context, node streamNode) (pcm.Format, bool) {
+	running := 0
+	if node.running {
+		running = p.clock.running(ctx, node.driver)
+	}
+	var s clockSettings
+	if running == 0 {
+		s = p.clock.settings(ctx)
+	}
+	rate, why, fromStream := recordRate(node.rate, running, s)
+	f := pcm.Format{Rate: rate, Channels: node.channels, Sample: pcm.F32LE}
+	if f.Channels <= 0 {
+		f.Channels = 2
+	}
+	p.logf("capture: %s stream %s, %d Hz %dch: recording at %d Hz, %s", p.backend.name(), node.key, node.rate, f.Channels, f.Rate, why)
+	return f, fromStream
+}
+
+// stream records one node until it goes away or is replaced, until the
+// graph runs at another rate, or, when the recording takes the stream's
+// rate, until the stream changes rate. A stream gets its rate a moment
+// after it appears; a recording at the graph's rate goes on through that.
+func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode, f pcm.Format, fromStream bool) {
 	sctx, cancel := context.WithCancel(ctx)
+	var watchers sync.WaitGroup
+	defer watchers.Wait()
 	defer cancel()
 	cmd := p.backend.record(sctx, node, f)
 	out, err := cmd.StdoutPipe()
@@ -187,7 +209,14 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 		p.logf("capture: start %s: %v", cmd.Path, err)
 		return
 	}
+	// driver is the running stream's driver, 0 while the stream is not running.
+	var driver atomic.Int64
+	if node.running {
+		driver.Store(int64(node.driver))
+	}
+	watchers.Add(2)
 	go func() {
+		defer watchers.Done()
 		tick := time.NewTicker(pollInterval)
 		defer tick.Stop()
 		for {
@@ -199,7 +228,31 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 				if err != nil {
 					continue
 				}
-				if !ok || now.key != node.key || (now.rate > 0 && now.rate != f.Rate) || (now.channels > 0 && now.channels != f.Channels) {
+				if !ok || now.key != node.key || (fromStream && now.rate > 0 && now.rate != f.Rate) || (now.channels > 0 && now.channels != f.Channels) {
+					cancel()
+					return
+				}
+				if now.running {
+					driver.Store(int64(now.driver))
+				} else {
+					driver.Store(0)
+				}
+			}
+		}
+	}()
+	// pw-top takes longer than a poll, so the graph's rate has a loop of
+	// its own and never delays following a recreated stream.
+	go func() {
+		defer watchers.Done()
+		tick := time.NewTicker(rateInterval)
+		defer tick.Stop()
+		for {
+			select {
+			case <-sctx.Done():
+				return
+			case <-tick.C:
+				if r := p.clock.running(sctx, int(driver.Load())); r > 0 && r != f.Rate && sctx.Err() == nil {
+					p.logf("capture: PipeWire runs at %d Hz now; recording again", r)
 					cancel()
 					return
 				}
@@ -288,7 +341,7 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 		if !match {
 			continue
 		}
-		n := streamNode{key: strconv.Itoa(num(props["object.serial"])), id: o.ID, running: o.Info.State == "running", order: int64(num(props["object.serial"]))}
+		n := streamNode{key: strconv.Itoa(num(props["object.serial"])), id: o.ID, driver: num(props["node.driver-id"]), running: o.Info.State == "running", order: int64(num(props["object.serial"]))}
 		if formats := o.Info.Params["Format"]; len(formats) > 0 {
 			n.rate = num(formats[0]["rate"])
 			n.channels = num(formats[0]["channels"])

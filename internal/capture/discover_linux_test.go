@@ -14,7 +14,7 @@ const dump = `[
  {"id": 31, "type": "PipeWire:Interface:Client", "info": {"props": {"application.process.binary": "other", "application.process.id": 4200}}},
  {"id": 40, "type": "PipeWire:Interface:Node", "info": {"state": "suspended", "props": {"media.class": "Stream/Output/Audio", "client.id": 30, "object.serial": 55, "node.name": "player"},
    "params": {"Format": [{"rate": 44100, "channels": 2}]}}},
- {"id": 41, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Output/Audio", "client.id": 30, "object.serial": 61, "node.name": "player"},
+ {"id": 41, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Output/Audio", "client.id": 30, "object.serial": 61, "node.name": "player", "node.driver-id": 43},
    "params": {"Format": [{"rate": 48000, "channels": 2}]}}},
  {"id": 42, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Output/Audio", "client.id": 31, "object.serial": 70, "node.name": "other"}}},
  {"id": 43, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Audio/Sink", "object.serial": 80, "node.name": "player"}}}
@@ -25,7 +25,7 @@ func TestFindPipeWireNodePrefersRunningNewest(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
-	if n.key != "61" || n.rate != 48000 || n.channels != 2 || !n.running {
+	if n.key != "61" || n.driver != 43 || n.rate != 48000 || n.channels != 2 || !n.running {
 		t.Fatalf("node = %+v", n)
 	}
 	if _, ok, _ := findPipeWireNode([]byte(dump), target.Target{ProcessNames: []string{"absent"}}); ok {
@@ -46,9 +46,9 @@ func TestFindPipeWireNodeByProcessTree(t *testing.T) {
 
 func TestFindSinkInput(t *testing.T) {
 	doc := `[{"index": 3, "corked": true, "sample_specification": "s16le 2ch 44100Hz", "properties": {"application.process.binary": "player"}},
-	         {"index": 7, "corked": false, "sample_specification": "float32le 2ch 48000Hz", "properties": {"application.name": "Player"}}]`
+	         {"index": 7, "corked": false, "sample_specification": "float32le 2ch 48000Hz", "properties": {"application.name": "Player", "node.driver-id": "33"}}]`
 	n, ok, err := findSinkInput([]byte(doc), target.Target{ProcessNames: []string{"player"}})
-	if err != nil || !ok || n.key != "7" || n.rate != 48000 {
+	if err != nil || !ok || n.key != "7" || n.driver != 33 || n.rate != 48000 {
 		t.Fatalf("n=%+v ok=%v err=%v", n, ok, err)
 	}
 }
