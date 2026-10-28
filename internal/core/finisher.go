@@ -326,7 +326,7 @@ func (f *finisher) process(j finishJob) {
 	part := final + ".part"
 	format := timings.Format
 	step := time.Now()
-	err := f.ffmpeg.Encode(ctx, encode.Job{
+	short, err := f.ffmpeg.Encode(ctx, encode.Job{
 		In:          j.tmp,
 		Out:         part,
 		Format:      format,
@@ -342,6 +342,14 @@ func (f *finisher) process(j finishJob) {
 		os.Remove(part)
 		f.fail(j, "encode", err)
 		return
+	}
+	if short != nil {
+		// A gain that shows as +0.0 dB left the track at its level.
+		if math.Round(short.GainDB*10) > 0 {
+			f.log.Infof("%q: normalized %+.1f dB; its peaks kept it %.1f dB under %g LUFS", j.info.Title, short.GainDB, short.Under(), short.TargetLUFS)
+		} else {
+			f.log.Infof("%q: left at its level; its peaks already reach %g dBTP, %.1f dB under %g LUFS", j.info.Title, encode.TruePeak, short.Under(), short.TargetLUFS)
+		}
 	}
 	tagged := true
 	step = time.Now()
