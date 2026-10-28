@@ -20,6 +20,7 @@ import (
 	"github.com/spytify/spytify/internal/ui/instance"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
+	"github.com/spytify/spytify/internal/ui/opengl"
 )
 
 func main() {
@@ -44,11 +45,18 @@ func main() {
 	tel := telemetry.New(telemetry.Options{Prefs: fa.Preferences()})
 	// At quit, what is queued leaves within 2 s or is dropped.
 	defer tel.Close()
+	privacy := privacySettings(env.ConfigPath)
+	// Without OpenGL, Fyne would close the app without a word: say why
+	// instead, and leave the recorder alone.
+	if err := opengl.Check(); err != nil {
+		ui.NoWindow(fa, tel, privacy, err)
+		return
+	}
 	// With a player to record, the app starts spytifyd itself; with none,
 	// it asks for one first.
 	auto := len(env.Target.ProcessNames) > 0
 	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
-		Telemetry: tel, Privacy: privacySettings(env.ConfigPath)})
+		Telemetry: tel, Privacy: privacy})
 	if inst != nil {
 		defer inst.Close()
 		go inst.Serve(w.Reopen)
