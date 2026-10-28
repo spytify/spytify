@@ -169,6 +169,24 @@ jobs:
           foreach ($f in "spytifyd.exe", "spytify-cli.exe", "spytify-tap.exe") {
             if ([Win32.Shell]::ExtractIconEx((Resolve-Path $f).Path, -1, $null, $null, 0) -ne 0) { throw "$f has an icon" }
           }
+      - name: Without OpenGL, the app says why instead of closing without a word
+        shell: pwsh
+        run: |
+          # The runner has no graphics card, so no driver offers OpenGL, as on
+          # a computer whose card is disabled. The app's message box waits for
+          # a click.
+          $p = Start-Process .\Spytify.exe -PassThru -RedirectStandardError ui-err.txt -RedirectStandardOutput ui-out.txt
+          # Keeps the exit code readable once the process is gone.
+          $null = $p.Handle
+          Start-Sleep -Seconds 10
+          $open = -not $p.HasExited
+          $recorder = [bool](Get-Process spytifyd -ErrorAction SilentlyContinue)
+          if ($open) { Stop-Process -Id $p.Id -Force; $p.WaitForExit() }
+          $said = Get-Content ui-err.txt -Raw
+          "Spytify.exe said: $said"
+          if (-not $open) { throw "Spytify.exe closed (exit $($p.ExitCode)) instead of showing why" }
+          if ($said -notmatch 'no graphics driver offers OpenGL') { throw "Spytify.exe did not say why" }
+          if ($recorder) { throw "Spytify.exe started the recorder" }
       - name: spytifyd finds the ffmpeg.exe shipped beside it
         run: |
           # No ffmpeg on this runner's PATH: only the bundled copy can pass.
