@@ -1,16 +1,20 @@
 // spytify-tap.exe records one process tree with WASAPI process loopback
 // (Windows 10 version 2004 and later) and writes, like the macOS helper,
 // a header line "SPYTIFY-TAP f32le <rate> <channels>" then interleaved
-// 32-bit float frames to stdout.
+// 32-bit float frames to stdout. It records at the mix rate of the output
+// device the process plays to, so Windows resamples nothing twice (rate.h).
 //
 // The stream follows the clock: when the player renders nothing, Windows
 // delivers no packets, so silence is written in their place, and each packet
 // lands at the frame its timestamp gives. spytifyd then sees one continuous
 // stream, as from PipeWire or Core Audio.
 //
-// Usage: spytify-tap.exe --pid <pid> [--rate 48000]
+// Usage: spytify-tap.exe --pid <pid> [--rate <Hz>]
+// --rate asks for another rate than the device's.
 // Exit status: 0 when spytifyd closes the pipe, 2 for bad arguments, 3 when
-// the process ended (spytifyd looks for the player again), 1 otherwise.
+// the process ended, plays to another device, or its device's mix rate
+// changed (spytifyd looks for the player again and starts this again at
+// once), 1 otherwise.
 //
 // spytify-tap.exe --pid <pid> --get-volume | --set-volume <0..1> reads or
 // sets the volume of the process tree's audio sessions, the player's slider
@@ -25,13 +29,16 @@
 #include <mmdeviceapi.h>
 #include <tlhelp32.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cwchar>
 #include <map>
 #include <set>
+#include <string>
 #include <vector>
+#include "rate.h"
 
 #include "placement.h"
 
@@ -65,6 +72,7 @@ static const GUID kIMMDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x4
 static const GUID kIAudioSessionManager2 = {0x77AA99A0, 0x1BD6, 0x484F, {0x8B, 0xC7, 0x2C, 0x65, 0x4C, 0x9A, 0x9B, 0x6F}};
 static const GUID kIAudioSessionControl2 = {0xbfb7ff88, 0x7239, 0x4fc9, {0x8f, 0xa2, 0x07, 0xc9, 0x50, 0xbe, 0x9c, 0x6d}};
 static const GUID kISimpleAudioVolume = {0x87CE5498, 0x68D6, 0x44E5, {0x92, 0x15, 0x6D, 0xA4, 0x7E, 0xF8, 0x83, 0xD8}};
+static const PROPERTYKEY kFriendlyName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};
 
 typedef HRESULT(WINAPI *ActivateFn)(LPCWSTR, REFIID, PROPVARIANT *, IActivateAudioInterfaceCompletionHandler *,
                                     IActivateAudioInterfaceAsyncOperation **);
@@ -156,22 +164,15 @@ static std::set<DWORD> processTree(DWORD root) {
   return tree;
 }
 
-// sessionVolume reads (set false) or sets the master volume of every audio
-// session of the tree, on every active output device.
-static int sessionVolume(DWORD pid, bool set, float value) {
-  HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  if (FAILED(hr)) return fail("CoInitializeEx", hr);
-  std::set<DWORD> tree = processTree(pid);
-  IMMDeviceEnumerator *devices = nullptr;
-  hr = CoCreateInstance(kMMDeviceEnumerator, nullptr, CLSCTX_ALL, kIMMDeviceEnumerator, reinterpret_cast<void **>(&devices));
-  if (FAILED(hr)) return fail("MMDeviceEnumerator", hr);
+// eachSession calls f(device, session) for every audio session of the tree,
+// on every active output device.
+template <class F>
+static HRESULT eachSession(IMMDeviceEnumerator *devices, const std::set<DWORD> &tree, F f) {
   IMMDeviceCollection *list = nullptr;
-  hr = devices->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &list);
-  if (FAILED(hr)) return fail("EnumAudioEndpoints", hr);
+  HRESULT hr = devices->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &list);
+  if (FAILED(hr)) return hr;
   UINT count = 0;
   list->GetCount(&count);
-  int found = 0;
-  float first = 0;
   for (UINT d = 0; d < count; d++) {
     IMMDevice *device = nullptr;
     IAudioSessionManager2 *manager = nullptr;
@@ -184,20 +185,12 @@ static int sessionVolume(DWORD pid, bool set, float value) {
       for (int i = 0; i < n; i++) {
         IAudioSessionControl *control = nullptr;
         IAudioSessionControl2 *control2 = nullptr;
-        ISimpleAudioVolume *volume = nullptr;
         DWORD owner = 0;
         if (SUCCEEDED(sessions->GetSession(i, &control)) &&
             SUCCEEDED(control->QueryInterface(kIAudioSessionControl2, reinterpret_cast<void **>(&control2))) &&
-            SUCCEEDED(control2->GetProcessId(&owner)) && tree.count(owner) &&
-            SUCCEEDED(control->QueryInterface(kISimpleAudioVolume, reinterpret_cast<void **>(&volume)))) {
-          if (set) {
-            volume->SetMasterVolume(value, nullptr);
-          } else if (found == 0) {
-            volume->GetMasterVolume(&first);
-          }
-          found++;
+            SUCCEEDED(control2->GetProcessId(&owner)) && tree.count(owner)) {
+          f(device, control);
         }
-        if (volume) volume->Release();
         if (control2) control2->Release();
         if (control) control->Release();
       }
@@ -207,6 +200,31 @@ static int sessionVolume(DWORD pid, bool set, float value) {
     device->Release();
   }
   list->Release();
+  return S_OK;
+}
+
+// sessionVolume reads (set false) or sets the master volume of every audio
+// session of the tree, on every active output device.
+static int sessionVolume(DWORD pid, bool set, float value) {
+  HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  if (FAILED(hr)) return fail("CoInitializeEx", hr);
+  IMMDeviceEnumerator *devices = nullptr;
+  hr = CoCreateInstance(kMMDeviceEnumerator, nullptr, CLSCTX_ALL, kIMMDeviceEnumerator, reinterpret_cast<void **>(&devices));
+  if (FAILED(hr)) return fail("MMDeviceEnumerator", hr);
+  int found = 0;
+  float first = 0;
+  hr = eachSession(devices, processTree(pid), [&](IMMDevice *, IAudioSessionControl *control) {
+    ISimpleAudioVolume *volume = nullptr;
+    if (FAILED(control->QueryInterface(kISimpleAudioVolume, reinterpret_cast<void **>(&volume)))) return;
+    if (set) {
+      volume->SetMasterVolume(value, nullptr);
+    } else if (found == 0) {
+      volume->GetMasterVolume(&first);
+    }
+    found++;
+    volume->Release();
+  });
+  if (FAILED(hr)) return fail("EnumAudioEndpoints", hr);
   devices->Release();
   if (found == 0) {
     fprintf(stderr, "spytify-tap: process %lu has no audio session yet\n", (unsigned long)pid);
@@ -216,10 +234,170 @@ static int sessionVolume(DWORD pid, bool set, float value) {
   return 0;
 }
 
+static std::string utf8(const wchar_t *s) {
+  int n = WideCharToMultiByte(CP_UTF8, 0, s, -1, nullptr, 0, nullptr, nullptr);
+  if (n <= 1) return "";
+  std::string out(n - 1, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, s, -1, &out[0], n, nullptr, nullptr);
+  return out;
+}
+
+// Output is an output device: its endpoint id, its name and its mix rate, 0
+// when it gives none.
+struct Output {
+  std::wstring id;
+  std::string name;
+  DWORD rate = 0;
+};
+
+// describe fills o from device and returns the result of reading its mix
+// rate.
+static HRESULT describe(IMMDevice *device, Output &o) {
+  LPWSTR id = nullptr;
+  if (SUCCEEDED(device->GetId(&id))) {
+    o.id = id;
+    CoTaskMemFree(id);
+  }
+  IPropertyStore *props = nullptr;
+  if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &props))) {
+    PROPVARIANT name;
+    PropVariantInit(&name);
+    if (SUCCEEDED(props->GetValue(kFriendlyName, &name)) && name.vt == VT_LPWSTR) o.name = utf8(name.pwszVal);
+    PropVariantClear(&name);
+    props->Release();
+  }
+  IAudioClient *client = nullptr;
+  WAVEFORMATEX *mix = nullptr;
+  HRESULT hr = device->Activate(kIAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&client));
+  if (SUCCEEDED(hr)) hr = client->GetMixFormat(&mix);
+  if (SUCCEEDED(hr)) {
+    o.rate = mix->nSamplesPerSec;
+    CoTaskMemFree(mix);
+  }
+  if (client) client->Release();
+  return hr;
+}
+
+static HRESULT deviceOutput(IMMDeviceEnumerator *devices, const std::wstring &id, Output &o) {
+  o.id = id;
+  IMMDevice *device = nullptr;
+  HRESULT hr = devices->GetDevice(id.c_str(), &device);
+  if (FAILED(hr)) return hr;
+  hr = describe(device, o);
+  device->Release();
+  return hr;
+}
+
+static HRESULT defaultOutput(IMMDeviceEnumerator *devices, Output &o) {
+  IMMDevice *device = nullptr;
+  HRESULT hr = devices->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+  if (FAILED(hr)) return hr;
+  hr = describe(device, o);
+  device->Release();
+  return hr;
+}
+
+// treeDevices lists the devices the tree has audio sessions on, and the one
+// it plays to now, with an active session.
+static void treeDevices(IMMDeviceEnumerator *devices, DWORD pid, std::wstring &playing, std::vector<std::wstring> &sessions) {
+  eachSession(devices, processTree(pid), [&](IMMDevice *device, IAudioSessionControl *control) {
+    LPWSTR id = nullptr;
+    if (FAILED(device->GetId(&id))) return;
+    AudioSessionState state = AudioSessionStateInactive;
+    if (playing.empty() && SUCCEEDED(control->GetState(&state)) && state == AudioSessionStateActive) playing = id;
+    sessions.push_back(id);
+    CoTaskMemFree(id);
+  });
+}
+
+// Source is the output device a recording's rate comes from. It is never
+// freed: the thread that follows it may outlive wmain's return.
+struct Source {
+  DWORD pid = 0;
+  Output device;
+  std::wstring defaultAtStart;
+  std::atomic<bool> changed{false};
+};
+
+// pickRate chooses the rate to record at and the device it comes from
+// (rate.h), and says which on stderr.
+static DWORD pickRate(Source &s, DWORD given) {
+  Output player, byDefault;
+  IMMDeviceEnumerator *devices = nullptr;
+  HRESULT hr = CoCreateInstance(kMMDeviceEnumerator, nullptr, CLSCTX_ALL, kIMMDeviceEnumerator, reinterpret_cast<void **>(&devices));
+  if (SUCCEEDED(hr)) {
+    hr = defaultOutput(devices, byDefault);
+    std::wstring playing;
+    std::vector<std::wstring> sessions;
+    treeDevices(devices, s.pid, playing, sessions);
+    std::wstring id = playerDevice(playing, sessions, byDefault.id);
+    if (!id.empty()) deviceOutput(devices, id, player);
+    devices->Release();
+  }
+  Rate rate = chooseRate(given, player.rate, byDefault.rate);
+  s.device = player.id.empty() ? byDefault : player;
+  s.defaultAtStart = byDefault.id;
+  unsigned long pid = s.pid;
+  switch (rate.from) {
+    case RateFrom::Given:
+      fprintf(stderr, "spytify-tap: recording %lu at %lu Hz, as --rate asks\n", pid, rate.hz);
+      break;
+    case RateFrom::Player:
+      fprintf(stderr, "spytify-tap: recording %lu at %lu Hz, the mix rate of %s\n", pid, rate.hz, player.name.c_str());
+      break;
+    case RateFrom::Default:
+      fprintf(stderr, "spytify-tap: recording %lu at %lu Hz, the mix rate of %s, the default output\n", pid, rate.hz,
+              byDefault.name.c_str());
+      break;
+    case RateFrom::Fallback:
+      fprintf(stderr, "spytify-tap: recording %lu at %lu Hz: no output device gives its mix rate (0x%08lx)\n", pid, rate.hz,
+              (unsigned long)hr);
+      break;
+  }
+  return rate.hz;
+}
+
+// sourceChanged says whether the recording must start again at another
+// rate: the player left the device the rate comes from, or that device
+// mixes at another rate now.
+static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s) {
+  std::wstring playing;
+  std::vector<std::wstring> sessions;
+  Output byDefault, now;
+  treeDevices(devices, s.pid, playing, sessions);
+  defaultOutput(devices, byDefault);
+  if (moved(playing, s.device.id, byDefault.id, s.defaultAtStart)) {
+    fprintf(stderr, "spytify-tap: the output device of process %lu changed\n", (unsigned long)s.pid);
+    return true;
+  }
+  if (!s.device.id.empty()) deviceOutput(devices, s.device.id, now);
+  if (now.rate != s.device.rate) {
+    fprintf(stderr, "spytify-tap: %s now mixes at %lu Hz\n", s.device.name.c_str(), (unsigned long)now.rate);
+    return true;
+  }
+  return false;
+}
+
+// followSource checks the source about once a second, on a thread of its
+// own: reading the devices can take longer than the capture's 20 ms buffer.
+static DWORD WINAPI followSource(void *arg) {
+  Source *s = static_cast<Source *>(arg);
+  IMMDeviceEnumerator *devices = nullptr;
+  if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) ||
+      FAILED(CoCreateInstance(kMMDeviceEnumerator, nullptr, CLSCTX_ALL, kIMMDeviceEnumerator, reinterpret_cast<void **>(&devices)))) {
+    return 0;
+  }
+  while (!s->changed) {
+    Sleep(1000);
+    s->changed = sourceChanged(devices, *s);
+  }
+  return 0;
+}
+
 int wmain(int argc, wchar_t **argv) {
   DWORD pid = 0;
-  DWORD rate = 48000;
-  bool getVolume = false, setVolume = false;
+  DWORD given = 0;
+  bool badRate = false, getVolume = false, setVolume = false;
   float volume = 0;
   for (int i = 1; i < argc; i++) {
     if (wcscmp(argv[i], L"--get-volume") == 0) {
@@ -227,14 +405,15 @@ int wmain(int argc, wchar_t **argv) {
     } else if (i + 1 < argc && wcscmp(argv[i], L"--pid") == 0) {
       pid = wcstoul(argv[++i], nullptr, 10);
     } else if (i + 1 < argc && wcscmp(argv[i], L"--rate") == 0) {
-      rate = wcstoul(argv[++i], nullptr, 10);
+      given = wcstoul(argv[++i], nullptr, 10);
+      badRate = given < 8000 || given > 384000;
     } else if (i + 1 < argc && wcscmp(argv[i], L"--set-volume") == 0) {
       setVolume = true;
       volume = wcstof(argv[++i], nullptr);
     }
   }
-  if (pid == 0 || rate < 8000 || rate > 384000 || (setVolume && (volume < 0 || volume > 1))) {
-    fprintf(stderr, "usage: spytify-tap.exe --pid <pid> [--rate 48000] | --get-volume | --set-volume <0..1>\n");
+  if (pid == 0 || badRate || (setVolume && (volume < 0 || volume > 1))) {
+    fprintf(stderr, "usage: spytify-tap.exe --pid <pid> [--rate <Hz>] | --get-volume | --set-volume <0..1>\n");
     return 2;
   }
   if (getVolume || setVolume) return sessionVolume(pid, setVolume, volume);
@@ -247,6 +426,10 @@ int wmain(int argc, wchar_t **argv) {
   }
   HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   if (FAILED(hr)) return fail("CoInitializeEx", hr);
+  Source *source = new Source();
+  source->pid = pid;
+  const DWORD rate = pickRate(*source, given);
+  if (given == 0) CloseHandle(CreateThread(nullptr, 0, followSource, source, 0, nullptr));
 
   HMODULE mmdevapi = LoadLibraryW(L"Mmdevapi.dll");
   auto activate = mmdevapi ? reinterpret_cast<ActivateFn>(reinterpret_cast<void *>(GetProcAddress(mmdevapi, "ActivateAudioInterfaceAsync"))) : nullptr;
@@ -272,7 +455,8 @@ int wmain(int argc, wchar_t **argv) {
   IAudioClient *client = completion->client;
 
   // Process loopback has no mix format of its own: ask for float stereo at
-  // rate and let Windows convert.
+  // rate and let Windows convert, which resamples nothing at the device's
+  // mix rate.
   WAVEFORMATEX format = {};
   format.wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
   format.nChannels = 2;
@@ -346,5 +530,6 @@ int wmain(int argc, wchar_t **argv) {
       written = clock - lag;
     }
     if (!out.flush()) return 0;
+    if (source->changed) return 3;
   }
 }

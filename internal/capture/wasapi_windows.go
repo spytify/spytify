@@ -31,8 +31,9 @@ func WindowsBuild() uint32 {
 func LoopbackSupported(build uint32) bool { return build >= 19041 }
 
 // NewWindows prepares the Windows backend: spytify-tap.exe records the
-// player's process tree with WASAPI process loopback and exits with status
-// 3 when that process ends, so the next run finds the player again.
+// player's process tree with WASAPI process loopback, at the mix rate of the
+// device it plays to, and exits with status 3 when that process ends or
+// that device changes, so the next run finds the player and the rate again.
 func NewWindows(helperPath string, find func(target.Target) (target.Process, bool), logf func(format string, args ...any)) (*Helper, error) {
 	helper, err := FindTapHelper(helperPath)
 	if err != nil {
