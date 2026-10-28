@@ -158,9 +158,22 @@ type loudness struct {
 	I, TP float64
 }
 
-// truePeak is the true peak, in dBTP, that Normalize raises a track to at
+// TruePeak is the true peak, in dBTP, that Normalize raises a track to at
 // most.
-const truePeak = -1.5
+const TruePeak = -1.5
+
+// Shortfall is a track whose peaks kept Normalize from raising it to its
+// target: its loudness as measured, the gain it got and the target.
+type Shortfall struct {
+	InputLUFS, GainDB, TargetLUFS float64
+}
+
+// Under is how far under its target the track ends, in LU.
+func (s Shortfall) Under() float64 { return s.TargetLUFS - s.InputLUFS - s.GainDB }
+
+// reachedLU is how far under its target, in LU, a track still counts as
+// raised to it.
+const reachedLU = 0.1
 
 // fileRate is the rate a file of a source at rate is written at: the
 // source's, up to 48 kHz. Above it, as an output device set to 88.2 or
@@ -187,25 +200,31 @@ func resample(rate int) string {
 // then applies one gain to the whole of it (see loudness.gain), so it is
 // never compressed. The gain is not loudnorm's own: even with linear=true,
 // loudnorm compresses and limits a track whose loudness range is over its
-// LRA, or whose true peak the gain would take over its TP.
-func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
+// LRA, or whose true peak the gain would take over its TP. A track its
+// peaks keep under the target comes back as a Shortfall, nil otherwise.
+func (f *FFmpeg) Encode(ctx context.Context, j Job) (*Shortfall, error) {
 	p, ok := presets[j.Format]
 	if !ok {
-		return fmt.Errorf("encode: unknown format %q", j.Format)
+		return nil, fmt.Errorf("encode: unknown format %q", j.Format)
 	}
 	rate := fileRate(j.Source.Rate)
 	var filters []string
 	if t := j.trimFilter(); t != "" {
 		filters = append(filters, t)
 	}
+	var short *Shortfall
 	if j.Normalize {
 		ln, err := f.measure(ctx, j, filters)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if ln != nil {
-			if g := ln.gain(j.TargetLUFS); g != 0 {
+			g := ln.gain(j.TargetLUFS)
+			if g != 0 {
 				filters = append(filters, "volume="+num(g)+"dB")
+			}
+			if s := (Shortfall{InputLUFS: ln.I, GainDB: g, TargetLUFS: j.TargetLUFS}); s.Under() > reachedLU {
+				short = &s
 			}
 		}
 	}
@@ -237,11 +256,14 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
 		}
 	}
 	args = append(args, "-f", p.Muxer, j.Out)
-	return f.run(ctx, args)
+	if err := f.run(ctx, args); err != nil {
+		return nil, err
+	}
+	return short, nil
 }
 
 func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudness, error) {
-	af := append(append([]string{}, filters...), "loudnorm=I="+num(j.TargetLUFS)+":TP="+num(truePeak)+":LRA=11:print_format=json")
+	af := append(append([]string{}, filters...), "loudnorm=I="+num(j.TargetLUFS)+":TP="+num(TruePeak)+":LRA=11:print_format=json")
 	cmd := proc.CommandContext(ctx, f.Path, "-nostdin", "-hide_banner", "-i", j.In, "-af", strings.Join(af, ","), "-f", "null", "-")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -276,14 +298,14 @@ func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudnes
 // gain is the one gain, in dB, that Normalize applies to a track measured
 // as ln. A track louder than target is lowered to it, which lowers its
 // peaks too. A quieter one is raised to it as far as its true peak stays
-// at truePeak or under, and is never lowered for its peaks: a track whose
+// at TruePeak or under, and is never lowered for its peaks: a track whose
 // peaks are loud for its loudness stays below the target.
 func (ln loudness) gain(target float64) float64 {
 	g := target - ln.I
 	if g <= 0 {
 		return g
 	}
-	return max(0, min(g, truePeak-ln.TP))
+	return max(0, min(g, TruePeak-ln.TP))
 }
 
 func (f *FFmpeg) run(ctx context.Context, args []string) error {

@@ -69,7 +69,7 @@ func TestFLACIsLosslessAndTrimIsSampleAccurate(t *testing.T) {
 	in := writeWAV(t, dir, f, src)
 
 	out := filepath.Join(dir, "out.flac.part")
-	if err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f}); err != nil {
+	if _, err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f}); err != nil {
 		t.Fatal(err)
 	}
 	if got := decode(t, ff, out, f); !bytes.Equal(got, src) {
@@ -77,7 +77,7 @@ func TestFLACIsLosslessAndTrimIsSampleAccurate(t *testing.T) {
 	}
 
 	trimmed := filepath.Join(dir, "trim.wav.part")
-	if err := ff.Encode(context.Background(), Job{In: in, Out: trimmed, Format: "wav", Source: f, TrimStart: 1000, TrimEnd: 30000}); err != nil {
+	if _, err := ff.Encode(context.Background(), Job{In: in, Out: trimmed, Format: "wav", Source: f, TrimStart: 1000, TrimEnd: 30000}); err != nil {
 		t.Fatal(err)
 	}
 	fb := f.FrameBytes()
@@ -229,7 +229,7 @@ func TestNormalizeAppliesOneGainAndNeverCompresses(t *testing.T) {
 			t.Run(fmt.Sprintf("%s from %d Hz", format, rate), func(t *testing.T) {
 				encode := func(normalize bool) []float64 {
 					out := filepath.Join(t.TempDir(), "out."+presets[format].Extension+".part")
-					if err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: format, Source: f, Normalize: normalize, TargetLUFS: -14}); err != nil {
+					if _, err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: format, Source: f, Normalize: normalize, TargetLUFS: -14}); err != nil {
 						t.Fatal(err)
 					}
 					return samples(f, decode(t, ff, out, f))
@@ -255,7 +255,8 @@ func TestNormalizeAppliesOneGainAndNeverCompresses(t *testing.T) {
 // Normalize's gain, in every format: a track louder than the target is
 // lowered to it; a quieter one is raised to it when its true peak allows,
 // else until its true peak reaches -1.5 dBTP; one whose true peak is over
-// -1.5 dBTP already is not lowered.
+// -1.5 dBTP already is not lowered. Encode reports the gain of a track its
+// peaks keep under the target, and nothing for one that reaches it.
 func TestNormalizeLowersToTheTargetAndRaisesAsFarAsThePeaksAllow(t *testing.T) {
 	ff := ffmpegOrSkip(t)
 	f := pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE}
@@ -265,9 +266,11 @@ func TestNormalizeLowersToTheTargetAndRaisesAsFarAsThePeaksAllow(t *testing.T) {
 		name string
 		data []byte
 		// is says the source is what the case is about, from its loudness
-		// and true peak; want is the file's.
-		is   func(i, tp float64) bool
-		want func(i, tp float64) (float64, float64)
+		// and true peak; want is the file's; short, that the file ends
+		// under the target.
+		is    func(i, tp float64) bool
+		want  func(i, tp float64) (float64, float64)
+		short bool
 	}{{
 		name: "loud, lowered to the target",
 		data: pcm.Synth{Seed: 4, LevelDB: -2, FadeInMs: 1500}.Render(f, frames),
@@ -279,15 +282,17 @@ func TestNormalizeLowersToTheTargetAndRaisesAsFarAsThePeaksAllow(t *testing.T) {
 		is:   func(i, tp float64) bool { return i < target-2 && tp+target-i < limit-2 },
 		want: func(i, tp float64) (float64, float64) { return target, tp + target - i },
 	}, {
-		name: "quiet without headroom, raised to -1.5 dBTP",
-		data: spiky(f, frames, -16, -6),
-		is:   func(i, tp float64) bool { return tp < limit-2 && tp+target-i > limit+2 },
-		want: func(i, tp float64) (float64, float64) { return i + limit - tp, limit },
+		name:  "quiet without headroom, raised to -1.5 dBTP",
+		data:  spiky(f, frames, -16, -6),
+		is:    func(i, tp float64) bool { return tp < limit-2 && tp+target-i > limit+2 },
+		want:  func(i, tp float64) (float64, float64) { return i + limit - tp, limit },
+		short: true,
 	}, {
-		name: "peak over -1.5 dBTP, not lowered",
-		data: spiky(f, frames, -16, -1),
-		is:   func(i, tp float64) bool { return i < target-2 && tp > limit },
-		want: func(i, tp float64) (float64, float64) { return i, tp },
+		name:  "peak over -1.5 dBTP, not lowered",
+		data:  spiky(f, frames, -16, -1),
+		is:    func(i, tp float64) bool { return i < target-2 && tp > limit },
+		want:  func(i, tp float64) (float64, float64) { return i, tp },
+		short: true,
 	}} {
 		t.Run(c.name, func(t *testing.T) {
 			in := writeWAV(t, t.TempDir(), f, c.data)
@@ -305,8 +310,17 @@ func TestNormalizeLowersToTheTargetAndRaisesAsFarAsThePeaksAllow(t *testing.T) {
 					}
 					out := filepath.Join(t.TempDir(), "out."+p.Extension+".part")
 					j := Job{In: in, Out: out, Format: format, BitrateKbps: 320, Source: f, Normalize: true, TargetLUFS: target}
-					if err := ff.Encode(context.Background(), j); err != nil {
+					short, err := ff.Encode(context.Background(), j)
+					if err != nil {
 						t.Fatal(err)
+					}
+					switch {
+					case !c.short && short != nil:
+						t.Errorf("reported %+v, want nothing: the file reaches the target", *short)
+					case c.short && short == nil:
+						t.Errorf("reported nothing, want the gain of a file %.2f LU under the target", target-wantI)
+					case c.short && (math.Abs(short.InputLUFS-i) > 0.01 || math.Abs(short.GainDB-(wantI-i)) > 0.01 || short.TargetLUFS != target):
+						t.Errorf("reported %+v; want %.2f LUFS raised %+.2f dB toward %g LUFS", *short, i, wantI-i, target)
 					}
 					gotI, gotTP := loudnormOf(t, ff, out)
 					t.Logf("%.2f LUFS, %.2f dBTP", gotI, gotTP)
@@ -365,7 +379,7 @@ func TestNormalizeOffKeepsTheLoudnessAndOnReachesTheTarget(t *testing.T) {
 				// 320 kbps: at 160, LAME by itself makes a track about
 				// 0.5 dB quieter.
 				j := Job{In: in, Out: out, Format: format, BitrateKbps: 320, Source: f, Normalize: normalize, TargetLUFS: target}
-				if err := ff.Encode(context.Background(), j); err != nil {
+				if _, err := ff.Encode(context.Background(), j); err != nil {
 					t.Fatal(err)
 				}
 				if rate := rateOf(t, ff, out); rate != f.Rate {
@@ -408,7 +422,7 @@ func TestAFileAbove48kHzIsWrittenAtHalfOrAQuarterOfTheRate(t *testing.T) {
 				for _, normalize := range []bool{false, true} {
 					out := filepath.Join(t.TempDir(), "out."+p.Extension+".part")
 					j := Job{In: in, Out: out, Format: format, BitrateKbps: 320, Source: f, Normalize: normalize, TargetLUFS: -14}
-					if err := ff.Encode(context.Background(), j); err != nil {
+					if _, err := ff.Encode(context.Background(), j); err != nil {
 						t.Fatal(err)
 					}
 					if got := rateOf(t, ff, out); got != c.want {
@@ -513,7 +527,7 @@ func TestA96kHzSourceWrittenAt48kHzKeepsEverythingUpTo20kHz(t *testing.T) {
 	for _, normalize := range []bool{false, true} {
 		t.Run(map[bool]string{false: "as recorded", true: "normalized"}[normalize], func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out.flac.part")
-			if err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f, Normalize: normalize, TargetLUFS: -20}); err != nil {
+			if _, err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f, Normalize: normalize, TargetLUFS: -20}); err != nil {
 				t.Fatal(err)
 			}
 			if rate := rateOf(t, ff, out); rate != 48000 {
