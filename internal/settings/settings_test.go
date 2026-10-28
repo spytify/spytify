@@ -148,6 +148,50 @@ func TestEarlierKeysLoad(t *testing.T) {
 	}
 }
 
+// Normalize is off unless turned on. config.toml keeps only the settings
+// changed from their default, so a default changed later reaches whoever
+// never touched it. A file saved by 2.0.0-alpha.4 or earlier held every
+// setting, so its normalize = true was the default of the time and loads
+// off.
+func TestNormalizeIsOffUnlessTurnedOn(t *testing.T) {
+	s, path := openTemp(t)
+	if s.Values().Bool("recorder.normalize") {
+		t.Fatal("normalize on by default")
+	}
+	if _, _, _, err := s.Set(map[string]any{"encode.format": "mp3"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), `format = "mp3"`) || strings.Contains(string(b), "normalize") || strings.Contains(string(b), "theme") {
+		t.Errorf("config.toml keeps settings at their default:\n%s", b)
+	}
+
+	alpha := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(alpha, []byte("[app]\ntheme = \"system\"\n[encode]\nformat = \"mp3\"\n[recorder]\nnormalize = true\ntarget_lufs = -14.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old, err := Open(alpha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := old.Values(); v.Bool("recorder.normalize") || v.String("encode.format") != "mp3" || len(old.Warnings()) != 0 {
+		t.Errorf("alpha file: normalize %v, format %s, warnings %v", v.Bool("recorder.normalize"), v.String("encode.format"), old.Warnings())
+	}
+
+	if _, _, _, err := s.Set(map[string]any{"recorder.normalize": true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := s.Set(map[string]any{"encode.format": "flac"}); err != nil {
+		t.Fatal(err)
+	}
+	again, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.Values().Bool("recorder.normalize") {
+		t.Error("normalize turned on did not stay on")
+	}
+}
+
 func TestSetRejectsInvalidAndUnknown(t *testing.T) {
 	s, _ := openTemp(t)
 	cases := map[string]any{
