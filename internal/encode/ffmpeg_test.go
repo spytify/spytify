@@ -216,29 +216,39 @@ func oneGain(src, out []float64, channels int) (gainDB, restDB float64) {
 // With Normalize on, a track gets one gain and is never compressed, even a
 // quiet one whose bursts the gain to the target would take far past the
 // true-peak limit. Aligned on the source, the file is the source at one
-// gain, to 90 dB under the file or better.
+// gain, to 90 dB under the file or better. A 96 kHz source is written at
+// 48 kHz, so there the file is checked against the one Normalize off
+// writes: the gain and the resampling together.
 func TestNormalizeAppliesOneGainAndNeverCompresses(t *testing.T) {
 	ff := ffmpegOrSkip(t)
-	f := pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE}
-	src := spiky(f, 6*48000, -24, -6)
-	in := writeWAV(t, t.TempDir(), f, src)
-	i, tp := loudnormOf(t, ff, in)
-	t.Logf("source %.2f LUFS, %.2f dBTP", i, tp)
-	for _, format := range []string{"flac", "wav"} {
-		t.Run(format, func(t *testing.T) {
-			out := filepath.Join(t.TempDir(), "out."+presets[format].Extension+".part")
-			if err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: format, Source: f, Normalize: true, TargetLUFS: -14}); err != nil {
-				t.Fatal(err)
-			}
-			gain, rest := oneGain(samples(f, src), samples(f, decode(t, ff, out, f)), f.Channels)
-			t.Logf("gain %+.2f dB; what it leaves is %.1f dB under the file", gain, -rest)
-			if gain < 1 {
-				t.Errorf("gain %+.2f dB, want the track raised", gain)
-			}
-			if rest > -90 {
-				t.Errorf("what one gain leaves is only %.1f dB under the file, want 90 dB or more", -rest)
-			}
-		})
+	for _, rate := range []int{48000, 96000} {
+		f := pcm.Format{Rate: rate, Channels: 2, Sample: pcm.F32LE}
+		src := spiky(f, int64(6*rate), -24, -6)
+		in := writeWAV(t, t.TempDir(), f, src)
+		for _, format := range []string{"flac", "wav"} {
+			t.Run(fmt.Sprintf("%s from %d Hz", format, rate), func(t *testing.T) {
+				encode := func(normalize bool) []float64 {
+					out := filepath.Join(t.TempDir(), "out."+presets[format].Extension+".part")
+					if err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: format, Source: f, Normalize: normalize, TargetLUFS: -14}); err != nil {
+						t.Fatal(err)
+					}
+					return samples(f, decode(t, ff, out, f))
+				}
+				want := samples(f, src)
+				if fileRate(rate) != rate {
+					want = encode(false)
+				}
+				i, tp := loudnormOf(t, ff, in)
+				gain, rest := oneGain(want, encode(true), f.Channels)
+				t.Logf("source %.2f LUFS, %.2f dBTP; gain %+.2f dB; what it leaves is %.1f dB under the file", i, tp, gain, -rest)
+				if gain < 1 {
+					t.Errorf("gain %+.2f dB, want the track raised", gain)
+				}
+				if rest > -90 {
+					t.Errorf("what one gain leaves is only %.1f dB under the file, want 90 dB or more", -rest)
+				}
+			})
+		}
 	}
 }
 
