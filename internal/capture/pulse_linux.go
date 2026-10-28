@@ -67,6 +67,9 @@ func findSinkInput(doc []byte, t target.Target) (streamNode, bool, error) {
 	return best, found, nil
 }
 
+// record records the sink input. pipewire-pulse takes node.dont-reconnect
+// as pw-record does (see pipewireTools.record); PulseAudio ends a recording
+// whose sink input is gone.
 func (pulseTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.Cmd {
 	return proc.CommandContext(ctx, "parec",
 		"--monitor-stream="+n.key,
@@ -75,7 +78,8 @@ func (pulseTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.
 		"--rate="+strconv.Itoa(f.Rate),
 		"--channels="+strconv.Itoa(f.Channels),
 		"--latency-msec=100",
-		"--client-name=spytify-capture")
+		"--client-name=spytify-capture",
+		"--property=node.dont-reconnect=true")
 }
 
 func (pulseTools) silence(n streamNode) error {

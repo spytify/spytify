@@ -300,6 +300,12 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 	return best, found, nil
 }
 
+// record records the stream. When the stream goes away, the session manager
+// would move the recording to the default source, the output's monitor,
+// until the next poll: it would record whatever else plays there, and keep
+// the graph running at its rate, so that the player's next stream, at
+// another rate, would be converted to it. node.dont-reconnect leaves the
+// recording unlinked instead.
 func (pipewireTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.Cmd {
 	return proc.CommandContext(ctx, "pw-record",
 		"--target", n.key,
@@ -308,7 +314,7 @@ func (pipewireTools) record(ctx context.Context, n streamNode, f pcm.Format) *ex
 		"--channels", strconv.Itoa(f.Channels),
 		"--format", "f32",
 		"--latency", "100ms",
-		"-P", "{ node.name = spytify-capture node.description = \"Spytify capture\" }",
+		"-P", "{ node.name = spytify-capture node.description = \"Spytify capture\" node.dont-reconnect = true }",
 		"-")
 }
 
