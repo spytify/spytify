@@ -159,7 +159,7 @@ func TestPickingABitrateSendsItsNumber(t *testing.T) {
 	m.SetSettings(values)
 	a.render()
 	sel := s.fields["encode.bitrate_kbps"].input.(*widget.Select)
-	if sel.Selected != "160 kbps · about 1.2 MB per minute" {
+	if sel.Selected != "160 kbps · ~ 1.2 MB/min" {
 		t.Errorf("the bitrate shows %q", sel.Selected)
 	}
 	// The row is below the fold: scroll it into view, then open its list.
@@ -175,7 +175,7 @@ func TestPickingABitrateSendsItsNumber(t *testing.T) {
 	snapshot(t, a, "settings-bitrate")
 	var pick fyne.Tappable
 	for _, item := range list.Items {
-		if contains(texts(item), "256 kbps · about 1.9 MB per minute") {
+		if contains(texts(item), "256 kbps · ~ 1.9 MB/min") {
 			pick = item.(fyne.Tappable)
 		}
 	}

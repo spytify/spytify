@@ -56,10 +56,10 @@ func TestChoicesNameEveryValue(t *testing.T) {
 func TestBitrateChoicesSayTheSizePerMinute(t *testing.T) {
 	d, _ := Lookup("encode.bitrate_kbps")
 	want := []string{
-		"128 kbps · about 1.0 MB per minute",
-		"160 kbps · about 1.2 MB per minute",
-		"256 kbps · about 1.9 MB per minute",
-		"320 kbps · about 2.4 MB per minute",
+		"128 kbps · ~ 1.0 MB/min",
+		"160 kbps · ~ 1.2 MB/min",
+		"256 kbps · ~ 1.9 MB/min",
+		"320 kbps · ~ 2.4 MB/min",
 	}
 	if !slices.Equal(d.Choices, want) {
 		t.Errorf("choices %q, want %q", d.Choices, want)

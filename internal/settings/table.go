@@ -99,7 +99,7 @@ var bitrates = []int64{128, 160, 256, 320}
 func sizesPerMinute(kbps []int64) []string {
 	var out []string
 	for _, k := range kbps {
-		out = append(out, fmt.Sprintf("%d kbps · about %.1f MB per minute", k, float64(k)*60/8/1000))
+		out = append(out, fmt.Sprintf("%d kbps · ~ %.1f MB/min", k, float64(k)*60/8/1000))
 	}
 	return out
 }
