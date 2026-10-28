@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -147,19 +148,70 @@ func TestBitrateOnlyForLossyFormats(t *testing.T) {
 	}
 }
 
-// Normalize volume says under its label what it does to a track; the
-// settings whose note is not for the screen show none.
-func TestNormalizeVolumeShowsItsNote(t *testing.T) {
+// Every setting with a note shows it under its label, whole on one line at
+// the window's default width; the file name template lists its
+// placeholders there too.
+func TestEveryNoteShowsUnderItsLabel(t *testing.T) {
 	a, _, s := settingsApp(t)
-	all := texts(s.sections)
+	if w := a.win.Canvas().Size().Width; w != 920 {
+		t.Fatalf("window %v wide, the default is 920", w)
+	}
+	snapshot(t, a, "settings-notes")
+	for _, acc := range s.advanced {
+		acc.Open(0)
+	}
+	relayout(s.scroll)
+	drv := fyne.CurrentApp().Driver()
 	for _, d := range settings.Table {
-		if d.Note != "" && d.Kind != settings.KindTemplate && contains(all, d.Note) != d.ShowNote {
-			t.Errorf("%s: note shown %v, want %v", d.Key, !d.ShowNote, d.ShowNote)
+		if d.Note == "" {
+			continue
+		}
+		row := s.fields[d.Key].row
+		label, note := richText(row, d.Label), richText(row, d.Note)
+		if label == nil || note == nil {
+			t.Errorf("%s: no note under its label", d.Key)
+			continue
+		}
+		at, under := drv.AbsolutePositionForObject(label), drv.AbsolutePositionForObject(note)
+		if under.X != at.X || under.Y < at.Y+label.Size().Height {
+			t.Errorf("%s: note at %v, not under its label at %v", d.Key, under, at)
+		}
+		if got := shown(note); got != d.Note {
+			t.Errorf("%s: the note shows %q, cut at the default width", d.Key, got)
 		}
 	}
-	s.search.SetText("normalize")
-	a.render()
-	snapshot(t, a, "settings-normalize")
+	// The whole page, every note on it, at the default width.
+	a.win.Resize(fyne.NewSize(920, drv.AbsolutePositionForObject(s.scroll).Y+s.scroll.Content.MinSize().Height))
+	snapshot(t, a, "settings-notes-all")
+}
+
+// richText is the rich text in o's containers that says text.
+func richText(o fyne.CanvasObject, text string) *widget.RichText {
+	switch w := o.(type) {
+	case *widget.RichText:
+		if ts, ok := w.Segments[0].(*widget.TextSegment); ok && ts.Text == text {
+			return w
+		}
+	case *fyne.Container:
+		for _, c := range w.Objects {
+			if r := richText(c, text); r != nil {
+				return r
+			}
+		}
+	}
+	return nil
+}
+
+// shown is the text a rich text draws, an ellipsis included when it is
+// cut.
+func shown(r *widget.RichText) string {
+	var out []string
+	for _, o := range test.WidgetRenderer(r).Objects() {
+		if t, ok := o.(*canvas.Text); ok {
+			out = append(out, t.Text)
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 // Each bitrate in the list says what a minute of it takes; picking one

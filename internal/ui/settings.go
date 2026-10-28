@@ -353,7 +353,6 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 	default:
 		e := newApplyEntry(func(v string) { s.apply(key, v) })
 		if d.Kind == settings.KindTemplate {
-			e.SetPlaceHolder(d.Note)
 			s.example = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
 			s.example.Truncation = fyne.TextTruncateEllipsis
 			s.template = d
@@ -365,7 +364,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		f.input = e
 	}
-	if d.ShowNote {
+	if d.Note != "" {
 		note := widget.NewRichText(&widget.TextSegment{Text: d.Note, Style: widget.RichTextStyle{ColorName: colorSubtle, SizeName: theme.SizeNameCaptionText, Inline: true}})
 		note.Truncation = fyne.TextTruncateEllipsis
 		under = note
