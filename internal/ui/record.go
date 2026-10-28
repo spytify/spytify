@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -149,7 +150,7 @@ func newRecordScreen(a *App) *recordScreen {
 			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
 			return container.NewBorder(nil, nil, img, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)),
-				rowText())
+				trackText())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(r.rows) {
@@ -158,10 +159,10 @@ func newRecordScreen(a *App) *recordScreen {
 			row := r.rows[id]
 			// Border layout: center first, then the leading and trailing parts.
 			box := o.(*fyne.Container)
-			text := box.Objects[0].(*widget.RichText)
+			text := box.Objects[0].(*fyne.Container)
 			img := box.Objects[1].(*canvas.Image)
 			right := box.Objects[2].(*fyne.Container)
-			setRowText(text, row.Title, rowSubtitle(row))
+			setTrackText(text, row.Title, row.Artist, rowDetails(row))
 			setCover(img, a.covers.get(row.CoverURL).row)
 			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.RichText)
 			seg := chip.Segments[0].(*widget.TextSegment)
@@ -216,8 +217,72 @@ func newRecordScreen(a *App) *recordScreen {
 	return r
 }
 
-func rowSubtitle(r model.Row) string {
-	parts := []string{r.Artist}
+// trackText is a finished track's row text as one block: its title, its
+// artist after it in the details' style, and its details under them.
+func trackText() *fyne.Container {
+	rt := widget.NewRichText(
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameText, TextStyle: fyne.TextStyle{Bold: true}, Inline: true}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
+	)
+	// The layout shortens the texts to fit; clipping only keeps the row's
+	// minimum width small.
+	rt.Truncation = fyne.TextTruncateClip
+	return container.New(&trackLayout{}, rt)
+}
+
+// setTrackText shows a track's title and artist on one line, its details
+// under them.
+func setTrackText(c *fyne.Container, title, artist, details string) {
+	if l := c.Layout.(*trackLayout); *l != (trackLayout{title, artist, details}) {
+		*l = trackLayout{title, artist, details}
+		l.Layout(c.Objects, c.Size())
+	}
+}
+
+// trackLayout fits a track's text to its row, shortening the artist first,
+// then the title: Fyne draws the first text of a line in two styles whole,
+// past the row's edge, and cuts the second with no ellipsis.
+type trackLayout struct{ title, artist, details string }
+
+func (l *trackLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	rt := objs[0].(*widget.RichText)
+	th := rt.Theme()
+	width := func(seg int, text string) float32 {
+		style := rt.Segments[seg].(*widget.TextSegment).Style
+		return fyne.MeasureText(text, th.Size(style.SizeName), style.TextStyle).Width
+	}
+	// fit cuts text to room in the style of its segment, ending it with an
+	// ellipsis; it is "" when not even a letter fits.
+	fit := func(seg int, text string, room float32) string {
+		if width(seg, text) <= room {
+			return text
+		}
+		runes := []rune(text)
+		n := sort.Search(len(runes), func(n int) bool { return width(seg, string(runes[:n+1])+"…") > room })
+		if cut := strings.TrimRight(string(runes[:n]), " "); cut != "" {
+			return cut + "…"
+		}
+		return ""
+	}
+	line := size.Width - 2*th.Size(theme.SizeNameInnerPadding)
+	title, artist := fit(0, l.title, line), ""
+	if l.artist != "" {
+		// Two spaces set the artist off from the title.
+		artist = fit(1, "  "+l.artist, line-width(0, title))
+	}
+	setRowText(rt, title, artist, fit(2, l.details, line))
+	rt.Resize(size)
+}
+
+func (l *trackLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	return objs[0].MinSize()
+}
+
+// rowDetails is a finished track's length, format and size, without the
+// parts not known: "3:56 · FLAC · 29.6 MB".
+func rowDetails(r model.Row) string {
+	var parts []string
 	if r.DurationMs > 0 {
 		parts = append(parts, fmtDuration(r.DurationMs))
 	} else if r.LengthMs > 0 {

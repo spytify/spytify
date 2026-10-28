@@ -120,7 +120,8 @@ func rowText() *widget.RichText {
 }
 
 // setRowText shows the lines one under another, each in the style of its
-// segment; a line past the text's segments takes the style of the one above.
+// segment, except that the text after an inline segment stays on its line; a
+// line past the text's segments takes the style of the one above.
 func setRowText(rt *widget.RichText, lines ...string) {
 	changed := len(rt.Segments) != len(lines)
 	for i, text := range lines {
