@@ -75,9 +75,43 @@ func (f *fakeTools) records() []string {
 	return slices.Clone(f.recorded)
 }
 
+// fakeClock stands in for pw-top and pw-metadata: each driver runs at the
+// rate the test sets, and an unknown driver at no known rate.
+type fakeClock struct {
+	mu    sync.Mutex
+	rates map[int]int
+	s     clockSettings
+}
+
+func (c *fakeClock) set(driver, rate int) {
+	c.mu.Lock()
+	if c.rates == nil {
+		c.rates = map[int]int{}
+	}
+	c.rates[driver] = rate
+	c.mu.Unlock()
+}
+
+func (c *fakeClock) running(_ context.Context, driver int) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.rates[driver]
+}
+
+func (c *fakeClock) settings(context.Context) clockSettings {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.s
+}
+
 func openFake(t *testing.T, tools *fakeTools, mute bool) *PipeWire {
 	t.Helper()
-	p := &PipeWire{MuteOutput: mute, logf: t.Logf, backend: tools, frames: make(chan Chunk, 256), done: make(chan struct{})}
+	return openFakeClock(t, tools, &fakeClock{}, mute)
+}
+
+func openFakeClock(t *testing.T, tools *fakeTools, clock *fakeClock, mute bool) *PipeWire {
+	t.Helper()
+	p := &PipeWire{MuteOutput: mute, logf: t.Logf, backend: tools, clock: clock, frames: make(chan Chunk, 256), done: make(chan struct{})}
 	if _, err := p.Open(context.Background(), target.Target{ProcessNames: []string{"player"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -119,19 +153,72 @@ func TestTheCaptureFollowsANewStream(t *testing.T) {
 }
 
 // A stream the player keeps, moved to another output (a Bluetooth speaker
-// gone, the default output changed), is the same stream: no restart.
+// gone, the default output changed) whose graph runs at the same rate, is
+// the same stream: no restart.
 func TestTheSameStreamOnAnotherOutputIsNotRestarted(t *testing.T) {
-	tools := &fakeTools{}
-	tools.set(&streamNode{key: "55", rate: 48000, channels: 2, running: true})
-	p := openFake(t, tools, false)
+	tools, clock := &fakeTools{}, &fakeClock{}
+	clock.set(33, 48000)
+	clock.set(40, 48000)
+	tools.set(&streamNode{key: "55", driver: 33, rate: 48000, channels: 2, running: true})
+	p := openFakeClock(t, tools, clock, false)
 	waitFormat(t, p, pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE})
 	tools.set(&streamNode{key: "55", rate: 48000, channels: 2, running: false})
 	time.Sleep(4 * pollInterval)
-	tools.set(&streamNode{key: "55", rate: 48000, channels: 2, running: true})
-	time.Sleep(4 * pollInterval)
+	tools.set(&streamNode{key: "55", driver: 40, rate: 48000, channels: 2, running: true})
+	time.Sleep(rateInterval + 4*pollInterval)
 	if got := tools.records(); !slices.Equal(got, []string{"55"}) {
 		t.Fatalf("recorded streams %v, want one", got)
 	}
+}
+
+// PipeWire converts a 44.1 kHz stream to the 48 kHz its graph runs at:
+// the capture records 48 kHz, so it does not convert it back, and the
+// stream's own rate, which it gets a moment after it appears, starts no
+// restart.
+func TestTheCaptureRecordsAtTheRatePipeWireRunsAt(t *testing.T) {
+	tools, clock := &fakeTools{}, &fakeClock{}
+	clock.set(33, 48000)
+	tools.set(&streamNode{key: "55", driver: 33, channels: 2, running: true})
+	p := openFakeClock(t, tools, clock, false)
+	waitFormat(t, p, pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE})
+	tools.set(&streamNode{key: "55", driver: 33, rate: 44100, channels: 2, running: true})
+	time.Sleep(rateInterval + 4*pollInterval)
+	if got := tools.records(); !slices.Equal(got, []string{"55"}) {
+		t.Fatalf("recorded streams %v, want one", got)
+	}
+}
+
+// When the graph runs at another rate, as when the stream moves to a
+// Bluetooth headset in a call, the capture starts again at that rate.
+func TestTheCaptureFollowsTheRatePipeWireRunsAt(t *testing.T) {
+	tools, clock := &fakeTools{}, &fakeClock{}
+	clock.set(33, 48000)
+	tools.set(&streamNode{key: "55", driver: 33, rate: 44100, channels: 2, running: true})
+	p := openFakeClock(t, tools, clock, false)
+	waitFormat(t, p, pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE})
+	clock.set(33, 44100)
+	waitFormat(t, p, pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.F32LE})
+	clock.set(40, 16000)
+	tools.set(&streamNode{key: "55", driver: 40, rate: 44100, channels: 2, running: true})
+	waitFormat(t, p, pcm.Format{Rate: 16000, Channels: 2, Sample: pcm.F32LE})
+	if got := tools.records(); !slices.Equal(got, []string{"55", "55", "55"}) {
+		t.Fatalf("recorded streams %v", got)
+	}
+}
+
+// Without pw-top's rate, PipeWire's settings choose it; without them, the
+// stream's rate, which the capture then follows.
+func TestTheCaptureFallsBackOnPipeWiresSettings(t *testing.T) {
+	tools := &fakeTools{}
+	tools.set(&streamNode{key: "55", driver: 33, rate: 44100, channels: 2, running: true})
+	p := openFakeClock(t, tools, &fakeClock{s: clockSettings{allowed: []int{48000}}}, false)
+	waitFormat(t, p, pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE})
+	tools = &fakeTools{}
+	tools.set(&streamNode{key: "55", driver: 33, rate: 44100, channels: 2, running: true})
+	p = openFakeClock(t, tools, &fakeClock{s: clockSettings{allowed: []int{44100, 48000}}}, false)
+	waitFormat(t, p, pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.F32LE})
+	tools.set(&streamNode{key: "55", driver: 33, rate: 48000, channels: 2, running: true})
+	waitFormat(t, p, pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE})
 }
 
 // With no stream, the capture waits for one instead of ending.

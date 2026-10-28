@@ -353,9 +353,10 @@ jobs:
           . scripts/pipewire-session.sh
           xvfb-run -a -s "-screen 0 1280x800x24" go test -tags integration -v -timeout 20m ${{ matrix.shard.tests }} ./test/integration/
 
-  # Whether the capture keeps a 44.1 kHz stream bit for bit, under PipeWire's
-  # own rates (the graph at 48 kHz only, as on most computers) and under the
-  # gate's, which let the graph run at the stream's rate.
+  # Whether the capture adds no conversion to a 44.1 kHz stream: bit for bit
+  # under the gate's rates, which let the graph run at the stream's rate, and
+  # converted once, by PipeWire alone, under its own rates (the graph at
+  # 48 kHz only, as on most computers).
   pipewire-bitexact:
     name: pipewire-bitexact (${{ matrix.rates }})
     runs-on: ubuntu-24.04
@@ -370,13 +371,11 @@ jobs:
         run: |
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq pipewire pipewire-bin pipewire-pulse wireplumber dbus dbus-bin pulseaudio-utils procps python3
-      - name: Record a 44.1 kHz noise through each backend and find it bit for bit
-        # default: the known double conversion (44.1 → 48 → 44.1 kHz) that the next PR fixes.
-        continue-on-error: ${{ matrix.rates == 'default' }}
+      - name: Record a 44.1 kHz noise through each backend, bit for bit at a 44.1 kHz graph, converted once at 48 kHz
         env:
           SPYTIFY_PIPEWIRE_RATES: ${{ matrix.rates }}
         run: |
           . scripts/pipewire-session.sh
           pipewire-pulse >"$XDG_RUNTIME_DIR/pipewire-pulse.log" 2>&1 &
           for i in $(seq 50); do pactl info >/dev/null 2>&1 && break; sleep 0.1; done
-          go test -tags integration -v -count=1 -run TestTheCaptureKeepsA44100HzSourceBitForBit ./internal/capture/
+          go test -tags integration -v -count=1 -run TestTheCaptureAddsNoConversionToA44100HzSource ./internal/capture/
