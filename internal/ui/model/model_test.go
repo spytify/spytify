@@ -44,8 +44,11 @@ func TestSessionList(t *testing.T) {
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-001", Path: "/m/One.flac", DurationMs: 179000, Bytes: 20e6, Tagged: true, TaggedBy: "lastfm"}))
 	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-002", Reason: proto.SkipAd}))
 	s = m.Snapshot()
-	if s.Rows[0].Status != Tagged || s.Rows[0].Path != "/m/One.flac" {
+	if s.Rows[0].Status != Saved || s.Rows[0].Path != "/m/One.flac" {
 		t.Fatalf("finished row: %+v", s.Rows[0])
+	}
+	if got := s.Rows[0].StatusText(); got != "Saved" {
+		t.Fatalf("a track tagged online shows %q, want Saved", got)
 	}
 	if s.Current == nil || s.Current.StatusText() != "Skipped: ad" {
 		t.Fatalf("a skipped current track stays current: %+v", s.Current)
