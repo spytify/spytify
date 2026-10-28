@@ -10,10 +10,10 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// keeper holds the audio of the last take cut short, stopped or moved along
-// its track bar, so that whoever saw it skipped can save it after all with
-// track.keep. It lasts until the next track is saved, from one session to
-// the next.
+// keeper holds the audio of the last take cut short, stopped, moved along
+// its track bar or recorded in low quality, so that whoever saw it skipped
+// can save it after all with track.keep. It lasts until the next track is
+// saved, from one session to the next.
 type keeper struct {
 	emit func(method string, payload any)
 
@@ -21,13 +21,15 @@ type keeper struct {
 	take *finishJob
 }
 
-// hold keeps j's audio in place of the take held before; it tells whether
-// it did. A nil keeper holds nothing. A file cover is read now: the session
-// removes its covers as it ends, and the take may be kept after that.
-func (k *keeper) hold(j finishJob) bool {
+// hold keeps j's audio, skipped for why, in place of the take held before;
+// it tells whether it did. A nil keeper holds nothing. A file cover is read
+// now: the session removes its covers as it ends, and the take may be kept
+// after that.
+func (k *keeper) hold(j finishJob, why proto.SkipReason) bool {
 	if k == nil || j.played <= 0 {
 		return false
 	}
+	j.rejected = why
 	if strings.HasPrefix(j.info.ArtURL, "file://") {
 		j.cover, j.coverMIME, _ = tag.FetchCover(context.Background(), nil, j.info.ArtURL)
 	}

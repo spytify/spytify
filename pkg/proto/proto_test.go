@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -85,6 +86,21 @@ func TestTheContractListsEachMethodAndEventOnce(t *testing.T) {
 		EventLevel, EventSettingsChanged, EventTargetState, EventLog, EventError} {
 		if !seen[name] {
 			t.Errorf("event %s is missing from Events", name)
+		}
+	}
+}
+
+// track.skipped's doc, in the docs and the schema, names every reason.
+func TestTheContractNamesEachSkipReason(t *testing.T) {
+	var doc string
+	for _, e := range Events {
+		if e.Name == EventTrackSkipped {
+			doc = e.Doc
+		}
+	}
+	for _, r := range []SkipReason{SkipDuplicate, SkipTooShort, SkipAd, SkipIncomplete, SkipSeeked, SkipLowQuality} {
+		if !strings.Contains(doc, string(r)) {
+			t.Errorf("track.skipped's doc %q lacks %s", doc, r)
 		}
 	}
 }

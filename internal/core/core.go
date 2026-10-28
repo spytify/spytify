@@ -518,9 +518,11 @@ func (c *Core) newFinisher() *finisher {
 	return fin
 }
 
-// Keep saves the held take after all, as "<title> (partial)": the last
-// one cut short, stopped or moved along its track bar, until the next
-// track is saved. id names it; empty takes the one there is.
+// Keep saves the held take after all, as "<title> (partial)", or as
+// "<title> (low quality)" when that is why it was skipped: the last one
+// cut short, stopped, moved along its track bar or recorded in low
+// quality, until the next track is saved. id names it; empty takes the one
+// there is.
 func (c *Core) Keep(id string) error {
 	if c.ffErr != nil {
 		return proto.Errorf(proto.CodeFFmpegMissing, "%v", c.ffErr)
@@ -531,10 +533,14 @@ func (c *Core) Keep(id string) error {
 	defer c.mu.Unlock()
 	j, ok := c.keep.claim(id)
 	if !ok {
-		return proto.Errorf(proto.CodeNotAvailable, "this take can no longer be saved: only the last one cut short can, until the next track is saved")
+		return proto.Errorf(proto.CodeNotAvailable, "this take can no longer be saved: only the last one cut short or in low quality can, until the next track is saved")
+	}
+	suffix := " (partial)"
+	if j.rejected == proto.SkipLowQuality {
+		suffix = " (low quality)"
 	}
 	j.keep, j.partial, j.rejected = true, true, ""
-	j.info.Title += " (partial)"
+	j.info.Title += suffix
 	if c.fin != nil {
 		c.fin.enqueue(j)
 		return nil

@@ -70,6 +70,10 @@ const (
 	// SkipSeeked is a track whose position jumped while it played: the
 	// audio no longer matches the published track, whatever its length.
 	SkipSeeked SkipReason = "seeked"
+	// SkipLowQuality is a track recorded in a format too poor for music,
+	// under 44.1 kHz or in mono, as from a Bluetooth headset in a call. It
+	// can still be saved with track.keep.
+	SkipLowQuality SkipReason = "low_quality"
 )
 
 // Player transport commands accepted by player.control.
@@ -244,7 +248,8 @@ type TrackFinishedEvent struct {
 	TaggedBy   string `json:"tagged_by,omitempty"`
 	// Timings is how long saving the file took, step by step.
 	Timings *FinishTimings `json:"timings,omitempty"`
-	// Partial is a take saved with track.keep: only the part that played.
+	// Partial is a take saved with track.keep: only the part that played,
+	// or all of one recorded in low quality.
 	Partial bool `json:"partial,omitempty"`
 }
 
@@ -264,8 +269,9 @@ type TrackSkippedEvent struct {
 }
 
 // TrackKeepableEvent says whether a skipped take can still be saved with
-// track.keep. Only the last take cut short, stopped or moved along its
-// track bar can: its audio is let go once another track is saved.
+// track.keep. Only the last take cut short, stopped, moved along its track
+// bar or recorded in low quality can: its audio is let go once another
+// track is saved.
 type TrackKeepableEvent struct {
 	ID       string `json:"id"`
 	Keepable bool   `json:"keepable"`

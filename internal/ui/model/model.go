@@ -50,8 +50,8 @@ type Row struct {
 	DurationMs     int64
 	Bytes          int64
 	TaggedBy       string
-	// Keepable is a take cut short that can still be saved (track.keep);
-	// Partial is one that was.
+	// Keepable is a take cut short or in low quality that can still be
+	// saved (track.keep); Partial is one that was.
 	Keepable bool
 	Partial  bool
 }
@@ -62,6 +62,9 @@ func (r Row) StatusText() string {
 		return "Skipped: " + reasonText(r.Reason)
 	}
 	if r.Partial && (r.Status == Saved || r.Status == Tagged) {
+		if r.Reason == proto.SkipLowQuality {
+			return "Saved: low quality"
+		}
 		return "Saved: partial"
 	}
 	return string(r.Status)
@@ -75,6 +78,8 @@ func reasonText(r proto.SkipReason) string {
 		return "incomplete"
 	case proto.SkipSeeked:
 		return "track bar moved"
+	case proto.SkipLowQuality:
+		return "low quality"
 	}
 	return string(r)
 }
