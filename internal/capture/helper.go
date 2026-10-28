@@ -48,6 +48,10 @@ type Helper struct {
 	// running reports whether the target runs; while it does not, a helper
 	// that waits for it has nothing to say yet.
 	running func(target.Target) bool
+	// restore are the arguments of a helper run that puts back what the
+	// recording changed on the system. It runs when the capture closes, and
+	// when it opens, after a session that crashed.
+	restore []string
 	// headerTimeout and frameTimeout are the package's, read once.
 	headerTimeout, frameTimeout time.Duration
 
@@ -89,6 +93,7 @@ func FindTapHelper(path string) (string, error) {
 }
 
 func (c *Helper) Open(ctx context.Context, t target.Target) (pcm.Format, error) {
+	c.runOnce(ctx, c.restore)
 	rctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	go c.run(rctx, t)
@@ -103,9 +108,28 @@ func (c *Helper) Close() error {
 		if c.cancel != nil {
 			c.cancel()
 			<-c.done
+			c.runOnce(context.Background(), c.restore)
 		}
 	})
 	return nil
+}
+
+// runOnce runs the helper for a task that records nothing and waits for it.
+func (c *Helper) runOnce(ctx context.Context, args []string) {
+	if len(args) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := proc.CommandContext(ctx, c.helper, args...).CombinedOutput()
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			c.logf("capture: %s", strings.TrimPrefix(line, "spytify-tap: "))
+		}
+	}
+	if err != nil {
+		c.logf("capture: %s %s: %v", c.helper, strings.Join(args, " "), err)
+	}
 }
 
 func (c *Helper) run(ctx context.Context, t target.Target) {

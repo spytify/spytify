@@ -10,15 +10,22 @@
 // and spytifyd starts it again.
 //
 // Usage: spytify-tap [--bundle-id ID]... [--name NAME]... [--pid PID]...
-//                    [--mute] [--list] [--plan]
+//                    [--mute] [--rate HZ --state FILE] [--list] [--plan]
+//        spytify-tap --restore --state FILE
+//
+// --rate sets the device the recording runs at to the rate the player
+// streams at, when the device offers it, so the player does not resample.
+// FILE keeps each device's own rate; --restore puts it back and deletes FILE.
 //
 // --list prints every process Core Audio knows. --plan taps nothing: it
 // prints what a recording of the target would use, one tab-separated line
-// each, a device being "<uid> <nominal rate> <name>" or "-" for none:
+// each, a device being "<uid> <nominal rate> <name>" or "-" for none. With
+// --rate, it sets the rate first, as a recording would.
 //   process <pid> <outputting> <name>   each matching process
 //   playing <device>                    the device they play to
 //   default <device>                    the default output device
 //   clock <device>                      the device the recording runs at
+//   rates <rate>...                     the rates the clock device offers
 
 import AudioToolbox
 import CoreAudio
@@ -35,6 +42,9 @@ struct Options {
     var mute = false
     var list = false
     var plan = false
+    var rate: Float64 = 0
+    var state = ""
+    var restore = false
 }
 
 func parseOptions() -> Options {
@@ -48,10 +58,17 @@ func parseOptions() -> Options {
         case "--mute": o.mute = true
         case "--list": o.list = true
         case "--plan": o.plan = true
+        case "--rate": if let v = args.next(), let r = Float64(v) { o.rate = r }
+        case "--state": if let v = args.next() { o.state = v }
+        case "--restore": o.restore = true
         default:
             fputs("spytify-tap: unknown argument \(a)\n", stderr)
             exit(2)
         }
+    }
+    if (o.rate > 0 || o.restore) && o.state.isEmpty {
+        fputs("spytify-tap: --rate and --restore need --state\n", stderr)
+        exit(2)
     }
     return o
 }
@@ -183,8 +200,114 @@ func moved(playing: AudioObjectID?, clock: AudioObjectID?, defaultNow: AudioObje
 // A --plan device: uid, nominal rate and name, or "-".
 func describe(_ dev: AudioObjectID?) -> String {
     guard let dev, let uid = string(dev, kAudioDevicePropertyDeviceUID) else { return "-" }
-    let rate: Float64 = scalar(dev, kAudioDevicePropertyNominalSampleRate, Float64(0)) ?? 0
-    return "\(uid)\t\(Int(rate))\t\(string(dev, kAudioObjectPropertyName) ?? "")"
+    return "\(uid)\t\(Int(nominalRate(dev)))\t\(string(dev, kAudioObjectPropertyName) ?? "")"
+}
+
+// The --plan rates of a device, a range as "<min>-<max>".
+func describeRates(_ dev: AudioObjectID?) -> String {
+    guard let dev else { return "-" }
+    return offeredRates(dev).map { $0.mMinimum == $0.mMaximum ? "\(Int($0.mMinimum))" : "\(Int($0.mMinimum))-\(Int($0.mMaximum))" }.joined(separator: " ")
+}
+
+// MARK: - Device rate
+
+// The state file lists the devices a recording set to the player's rate.
+// The helper starts again during a session, so it sets a device once, and
+// leaves it for good when someone else changes its rate in between.
+struct RateChange: Codable {
+    let uid: String
+    let own: Float64 // the device's rate before
+    let set: Float64
+    var released: Bool // never put back: someone else changed it, or it refused the rate
+}
+
+func nominalRate(_ dev: AudioObjectID) -> Float64 {
+    scalar(dev, kAudioDevicePropertyNominalSampleRate, Float64(0)) ?? 0
+}
+
+func offeredRates(_ dev: AudioObjectID) -> [AudioValueRange] {
+    var addr = address(kAudioDevicePropertyAvailableNominalSampleRates)
+    var size: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(dev, &addr, 0, nil, &size) == noErr, size > 0 else { return [] }
+    var ranges = [AudioValueRange](repeating: AudioValueRange(), count: Int(size) / MemoryLayout<AudioValueRange>.size)
+    guard AudioObjectGetPropertyData(dev, &addr, 0, nil, &size, &ranges) == noErr else { return [] }
+    return ranges
+}
+
+// Sets the rate and waits until the device runs at it.
+func setRate(_ dev: AudioObjectID, _ rate: Float64) -> Bool {
+    var addr = address(kAudioDevicePropertyNominalSampleRate)
+    var r = rate
+    guard AudioObjectSetPropertyData(dev, &addr, 0, nil, UInt32(MemoryLayout<Float64>.size), &r) == noErr else { return false }
+    for _ in 0..<40 where nominalRate(dev) != rate { pause(0.05) }
+    return nominalRate(dev) == rate
+}
+
+func readChanges(_ path: String) -> [RateChange] {
+    guard let data = FileManager.default.contents(atPath: path) else { return [] }
+    return (try? JSONDecoder().decode([RateChange].self, from: data)) ?? []
+}
+
+func writeChanges(_ changes: [RateChange], _ path: String) -> Bool {
+    let url = URL(fileURLWithPath: path)
+    do {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(changes).write(to: url, options: .atomic)
+        return true
+    } catch {
+        log("cannot write \(path): \(error.localizedDescription)")
+        return false
+    }
+}
+
+// Sets dev to the player's rate, once a session. The change is written down
+// before it is made, so a crash leaves what --restore needs.
+func playAt(_ rate: Float64, on dev: AudioObjectID, state path: String) {
+    guard let uid = string(dev, kAudioDevicePropertyDeviceUID) else { return }
+    let name = string(dev, kAudioObjectPropertyName) ?? uid
+    let now = nominalRate(dev)
+    var changes = readChanges(path)
+    if let i = changes.firstIndex(where: { $0.uid == uid }) {
+        if !changes[i].released && now != changes[i].set {
+            changes[i].released = true
+            _ = writeChanges(changes, path)
+            log("\(name) was changed to \(Int(now)) Hz since; it stays so")
+        }
+        return
+    }
+    if now == rate { return }
+    if !offeredRates(dev).contains(where: { $0.mMinimum <= rate && rate <= $0.mMaximum }) {
+        log("\(name) does not offer \(Int(rate)) Hz; it stays at \(Int(now)) Hz")
+        return
+    }
+    changes.append(RateChange(uid: uid, own: now, set: rate, released: false))
+    guard writeChanges(changes, path) else { return }
+    if setRate(dev, rate) {
+        log("set \(name) from \(Int(now)) to \(Int(rate)) Hz, the player's rate")
+    } else {
+        changes[changes.count - 1].released = true
+        _ = writeChanges(changes, path)
+        log("could not set \(name) to \(Int(rate)) Hz; it stays at \(Int(nominalRate(dev))) Hz")
+    }
+}
+
+// Puts each device the session set back at its own rate, unless someone else
+// changed it since, and deletes the state file. A device gone is forgotten.
+func restoreRates(_ path: String) {
+    let devices = objectList(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDevices)
+    for c in readChanges(path) where !c.released {
+        guard let dev = devices.first(where: { string($0, kAudioDevicePropertyDeviceUID) == c.uid }) else { continue }
+        let name = string(dev, kAudioObjectPropertyName) ?? c.uid
+        let now = nominalRate(dev)
+        if now != c.set {
+            log("\(name) was changed to \(Int(now)) Hz since; it stays so")
+        } else if setRate(dev, c.own) {
+            log("put \(name) back at \(Int(c.own)) Hz")
+        } else {
+            log("could not put \(name) back at \(Int(c.own)) Hz")
+        }
+    }
+    try? FileManager.default.removeItem(atPath: path)
 }
 
 final class Recorder {
@@ -306,6 +429,10 @@ if options.list {
     }
     exit(0)
 }
+if options.restore {
+    restoreRates(options.state)
+    exit(0)
+}
 if options.bundleIDs.isEmpty && options.names.isEmpty && options.pids.isEmpty {
     log("give at least one --bundle-id, --name or --pid")
     exit(2)
@@ -313,10 +440,12 @@ if options.bundleIDs.isEmpty && options.names.isEmpty && options.pids.isEmpty {
 if options.plan {
     let found = targets(options)
     let objects = found.map(\.object)
+    if options.rate > 0, let dev = clockDevice(objects) { playAt(options.rate, on: dev, state: options.state) }
     for p in found { print("process\t\(p.pid)\t\(p.outputting)\t\(p.name)") }
     print("playing\t" + describe(playerOutputDevice(objects)))
     print("default\t" + describe(defaultOutputDevice()))
     print("clock\t" + describe(clockDevice(objects)))
+    print("rates\t" + describeRates(clockDevice(objects)))
     exit(0)
 }
 
@@ -342,6 +471,7 @@ while recorder == nil {
     let objects = found.map(\.object)
     current = Set(objects)
     device = clockDevice(objects)
+    if options.rate > 0, let dev = device { playAt(options.rate, on: dev, state: options.state) }
     do {
         let r = try Recorder(processes: Array(current), device: device, mute: options.mute)
         try r.start()

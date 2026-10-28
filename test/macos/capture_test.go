@@ -60,7 +60,7 @@ func TestTapRecordsAProcess(t *testing.T) {
 	w.Write(data)
 	w.Close()
 
-	c, err := capture.NewDarwin(helper, true, t.Logf)
+	c, err := capture.NewDarwin(helper, true, "", t.Logf)
 	if err != nil {
 		t.Fatal(err)
 	}

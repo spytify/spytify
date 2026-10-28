@@ -120,7 +120,7 @@ func run() int {
 		return 2
 	}
 	if backends == nil {
-		backends = platform.Backends{Logf: log.Infof, TapHelper: env.TapHelper, MuteOutput: func() bool { return store.Values().Bool("player.mute_output") }}
+		backends = platform.Backends{Logf: log.Infof, TapHelper: env.TapHelper, StateDir: env.StateDir, MuteOutput: func() bool { return store.Values().Bool("player.mute_output") }}
 	}
 
 	c := core.New(core.Options{Env: env, Store: store, Log: log, Crashed: crashed, Backends: backends, FindProcess: findProcess})

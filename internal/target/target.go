@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -28,6 +29,10 @@ type Target struct {
 	// DurationUnit is "ms", "s" or "" (guess) for the track length the
 	// player's AppleScript dictionary reports on macOS.
 	DurationUnit string
+	// Rate is the sample rate the player streams at, in Hz. On macOS a
+	// recording sets the device the player plays to to this rate, so the
+	// player does not resample; 0 leaves the device as it is.
+	Rate int
 }
 
 // AppSpecifier names the player for AppleScript: its bundle id when known,
@@ -146,6 +151,10 @@ func Load() Env {
 		BundleID:     strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_BUNDLE_ID")),
 		Launch:       strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_LAUNCH")),
 		DurationUnit: strings.ToLower(strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_DURATION_UNIT"))),
+		Rate:         DefaultRate,
+	}
+	if r, err := strconv.Atoi(strings.TrimSpace(os.Getenv("SPYTIFY_TARGET_RATE"))); err == nil && r >= 0 {
+		t.Rate = r
 	}
 	if _, set := os.LookupEnv("SPYTIFY_TARGET_PROCESS"); !set {
 		t = withDefaultPlayer(t)
@@ -244,6 +253,10 @@ func defaultStateDir() string {
 // daemon waits for a player to be chosen. One bare name serves every OS:
 // it matches "Name.app" on macOS and "Name.exe" on Windows.
 var DefaultProcess string
+
+// DefaultRate is the rate the default player streams at. A player that
+// streams at another rate sets SPYTIFY_TARGET_RATE.
+const DefaultRate = 44100
 
 func withDefaultPlayer(t Target) Target {
 	if DefaultProcess != "" {

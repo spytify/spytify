@@ -15,6 +15,9 @@ type Backends struct {
 	Logf func(format string, args ...any)
 	// TapHelper is the macOS capture helper path ("" = next to spytifyd).
 	TapHelper string
+	// StateDir is spytifyd's; the macOS capture keeps there the device
+	// rates it sets, to put them back.
+	StateDir string
 	// MuteOutput reads player.mute_output when a session starts.
 	MuteOutput func() bool
 }

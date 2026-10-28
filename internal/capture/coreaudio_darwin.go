@@ -5,6 +5,8 @@ package capture
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
 	"syscall"
 
 	"github.com/spytify/spytify/internal/target"
@@ -35,8 +37,9 @@ func TapSupported(version string) bool {
 // that uses a Core Audio process tap (macOS 14.2 and later) and exits when
 // the player's processes or the output format change. mute makes the
 // player inaudible on the speakers while it is recorded
-// (player.mute_output).
-func NewDarwin(helperPath string, mute bool, logf func(format string, args ...any)) (*Helper, error) {
+// (player.mute_output). stateDir keeps the rates the helper sets on the
+// player's device, to put them back.
+func NewDarwin(helperPath string, mute bool, stateDir string, logf func(format string, args ...any)) (*Helper, error) {
 	if v := MacOSVersion(); v != "" && !TapSupported(v) {
 		return nil, fmt.Errorf("macOS %s has no process taps; macOS 14.2 or later is needed", v)
 	}
@@ -44,15 +47,24 @@ func NewDarwin(helperPath string, mute bool, logf func(format string, args ...an
 	if err != nil {
 		return nil, err
 	}
+	state := ""
+	if stateDir != "" {
+		state = filepath.Join(stateDir, "device-rates.json")
+	}
 	// The helper finds the player's processes itself and waits for them.
-	args := func(t target.Target) ([]string, bool) { return TapArgs(t, mute), true }
+	args := func(t target.Target) ([]string, bool) { return TapArgs(t, mute, state), true }
 	h := newHelper(helper, args, logf)
 	h.running = func(t target.Target) bool { _, ok := target.FindProcess(t); return ok }
+	if state != "" {
+		h.restore = []string{"--restore", "--state", state}
+	}
 	return h, nil
 }
 
-// TapArgs are the spytify-tap arguments that select the target.
-func TapArgs(t target.Target, mute bool) []string {
+// TapArgs are the spytify-tap arguments that select the target. With a
+// state file, the helper also sets the player's device to the target's
+// rate for the session.
+func TapArgs(t target.Target, mute bool, state string) []string {
 	var args []string
 	if t.BundleID != "" {
 		args = append(args, "--bundle-id", t.BundleID)
@@ -62,6 +74,9 @@ func TapArgs(t target.Target, mute bool) []string {
 	}
 	if mute {
 		args = append(args, "--mute")
+	}
+	if t.Rate > 0 && state != "" {
+		args = append(args, "--rate", strconv.Itoa(t.Rate), "--state", state)
 	}
 	return args
 }

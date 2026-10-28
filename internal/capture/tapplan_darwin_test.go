@@ -4,9 +4,13 @@ package capture
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -47,7 +51,7 @@ func tapPlan(t *testing.T, helper string, args ...string) (map[string]string, st
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		f := strings.Split(line, "\t")
 		switch {
-		case f[0] == "process":
+		case f[0] == "process" || f[0] == "rates":
 		case len(f) == 4:
 			uids[f[0]] = f[1]
 		case len(f) == 2 && f[1] == "-":
@@ -125,5 +129,129 @@ func TestTapClocksOnThePlayersDevice(t *testing.T) {
 	t.Logf("spytify-tap --plan --pid %s:\n%s", pid, out)
 	if plan["clock"] != plan["playing"] || plan["clock"] != plan["default"] {
 		t.Fatal("the clock is not the default output afplay plays to")
+	}
+}
+
+// clockRates runs spytify-tap --plan for a process that plays nothing, so
+// the clock is the default output, and returns the clock's uid, its rate and
+// the rates it offers.
+func clockRates(t *testing.T, helper string, args ...string) (uid string, rate int, offers []int) {
+	t.Helper()
+	uids, out := tapPlan(t, helper, append([]string{"--pid", strconv.Itoa(os.Getpid())}, args...)...)
+	listed := false
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		f := strings.Split(line, "\t")
+		switch {
+		case f[0] == "clock" && len(f) == 4:
+			rate, _ = strconv.Atoi(f[2])
+		case f[0] == "rates" && len(f) == 2:
+			listed = true
+			for _, r := range strings.Fields(f[1]) {
+				if n, err := strconv.Atoi(r); err == nil {
+					offers = append(offers, n)
+				}
+			}
+		}
+	}
+	if !listed {
+		t.Fatalf("spytify-tap --plan lists no rates:\n%s", out)
+	}
+	return uids["clock"], rate, offers
+}
+
+type rateChange struct {
+	UID      string  `json:"uid"`
+	Own      float64 `json:"own"`
+	Set      float64 `json:"set"`
+	Released bool    `json:"released"`
+}
+
+func rateChanges(t *testing.T, state string) []rateChange {
+	t.Helper()
+	b, err := os.ReadFile(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c []rateChange
+	if err := json.Unmarshal(b, &c); err != nil {
+		t.Fatalf("%s: %v\n%s", state, err, b)
+	}
+	return c
+}
+
+func restoreRates(t *testing.T, helper, state string) {
+	t.Helper()
+	out, err := exec.Command(helper, "--restore", "--state", state).CombinedOutput()
+	t.Logf("spytify-tap --restore: %s", out)
+	if err != nil {
+		t.Fatalf("spytify-tap --restore: %v", err)
+	}
+	if _, err := os.Stat(state); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("--restore left %s (%v)", state, err)
+	}
+}
+
+// The player streams at one rate; on a device at another, it resamples
+// before the tap sees anything. So a recording sets the player's device to
+// the player's rate, and --restore puts the device's own rate back when the
+// session ends. The helper starts again during a session: it does not set
+// the device twice, and a rate someone else chose in between stays, then and
+// after the session. --plan makes no tap, so this needs no System Audio
+// Recording permission.
+func TestThePlayersDeviceRunsAtThePlayersRate(t *testing.T) {
+	if !TapSupported(MacOSVersion()) {
+		t.Skip("macOS older than 14.2")
+	}
+	helper := buildTap(t)
+	uid, own, offers := clockRates(t, helper)
+	if uid == "" {
+		t.Skip("this Mac has no default output device")
+	}
+	t.Logf("%s runs at %d Hz and offers %v", uid, own, offers)
+	// Under 44.1 kHz, a Bluetooth headset goes to call mode.
+	var others []int
+	for _, r := range offers {
+		if r >= 44100 && r != own {
+			others = append(others, r)
+		}
+	}
+	if len(others) == 0 {
+		t.Skipf("%s offers no other rate to set", uid)
+	}
+	rate, chosen := others[0], own
+	if len(others) > 1 {
+		chosen = others[1]
+	}
+	dir := t.TempDir()
+	t.Cleanup(func() {
+		clockRates(t, helper, "--rate", strconv.Itoa(own), "--state", filepath.Join(dir, "cleanup.json"))
+	})
+
+	state := filepath.Join(dir, "device-rates.json")
+	recording := []string{"--rate", strconv.Itoa(rate), "--state", state}
+	if _, now, _ := clockRates(t, helper, recording...); now != rate {
+		t.Fatalf("a recording at %d Hz left the device at %d Hz", rate, now)
+	}
+	if got, want := rateChanges(t, state), []rateChange{{UID: uid, Own: float64(own), Set: float64(rate)}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state %+v, want %+v", got, want)
+	}
+	restoreRates(t, helper, state)
+	if _, now, _ := clockRates(t, helper); now != own {
+		t.Fatalf("--restore left the device at %d Hz, not its own %d Hz", now, own)
+	}
+
+	// Another app, here the helper with a state file of its own, changes
+	// the rate during the next session.
+	clockRates(t, helper, recording...)
+	clockRates(t, helper, "--rate", strconv.Itoa(chosen), "--state", filepath.Join(dir, "other-app.json"))
+	if _, now, _ := clockRates(t, helper, recording...); now != chosen {
+		t.Fatalf("the helper started again set the device to %d Hz over the %d Hz chosen since", now, chosen)
+	}
+	if got := rateChanges(t, state); len(got) != 1 || !got[0].Released {
+		t.Fatalf("state %+v: the device is not released", got)
+	}
+	restoreRates(t, helper, state)
+	if _, now, _ := clockRates(t, helper); now != chosen {
+		t.Fatalf("--restore set the device to %d Hz over the %d Hz chosen since", now, chosen)
 	}
 }

@@ -14,7 +14,7 @@ import (
 // New returns Core Audio process-tap capture (through spytify-tap) and
 // AppleScript metadata.
 func (b Backends) New(t target.Target) (capture.Capture, meta.NowPlaying, error) {
-	c, err := capture.NewDarwin(b.TapHelper, b.mute(), b.logf)
+	c, err := capture.NewDarwin(b.TapHelper, b.mute(), b.StateDir, b.logf)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -26,6 +26,17 @@ func TestLoadSplitsProcessList(t *testing.T) {
 	}
 }
 
+// The target's rate is the default player's unless SPYTIFY_TARGET_RATE
+// gives another; 0 leaves the device alone.
+func TestTargetRate(t *testing.T) {
+	for env, want := range map[string]int{"": 44100, "nonsense": 44100, "96000": 96000, " 48000 ": 48000, "0": 0} {
+		t.Setenv("SPYTIFY_TARGET_RATE", env)
+		if got := Load().Target.Rate; got != want {
+			t.Errorf("SPYTIFY_TARGET_RATE=%q: Rate = %d, want %d", env, got, want)
+		}
+	}
+}
+
 func TestExplicitMPRISNameWins(t *testing.T) {
 	tg := Target{ProcessNames: []string{"Player.exe"}, MPRISName: "org.mpris.MediaPlayer2.custom"}
 	if got := tg.MPRISNames(); !reflect.DeepEqual(got, []string{"org.mpris.MediaPlayer2.custom"}) {
