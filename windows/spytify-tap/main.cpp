@@ -33,6 +33,8 @@
 #include <set>
 #include <vector>
 
+#include "placement.h"
+
 // From audioclientactivationparams.h of the Windows SDK, which MinGW lacks.
 enum AUDIOCLIENT_ACTIVATION_TYPE {
   AUDIOCLIENT_ACTIVATION_TYPE_DEFAULT = 0,
@@ -327,22 +329,14 @@ int wmain(int argc, wchar_t **argv) {
       UINT64 devicePos = 0, qpcPos = 0;
       hr = capture->GetBuffer(&data, &frames, &flags, &devicePos, &qpcPos);
       if (FAILED(hr)) return fail("IAudioCaptureClient::GetBuffer", hr);
-      uint64_t at = (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) ? written : frameAt(qpcPos);
-      if (at > written) {
-        out.zeros(at - written, frameBytes);
-        written = at;
+      Placement p = place(written, frameAt(qpcPos), frames, (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) != 0, rate);
+      out.zeros(p.zeros, frameBytes);
+      if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+        out.zeros(frames - p.skip, frameBytes);
+      } else {
+        out.bytes(data + p.skip * frameBytes, (uint64_t)(frames - p.skip) * frameBytes);
       }
-      // A packet that starts before what silence already covered loses
-      // its first frames.
-      uint64_t skip = written > at ? written - at : 0;
-      if (skip < frames) {
-        if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
-          out.zeros(frames - skip, frameBytes);
-        } else {
-          out.bytes(data + skip * frameBytes, (uint64_t)(frames - skip) * frameBytes);
-        }
-        written += frames - skip;
-      }
+      written += p.zeros + frames - p.skip;
       capture->ReleaseBuffer(frames);
     }
     QueryPerformanceCounter(&now);
