@@ -27,7 +27,7 @@ if ! dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedes
 fi
 
 # Let the graph run at the stream's rate, so 44.1 kHz audio is not
-# resampled to 48 kHz and back before it is recorded.
+# resampled to 48 kHz before it is recorded.
 # SPYTIFY_PIPEWIRE_RATES=default keeps PipeWire's own rates instead: the
 # graph at 48 kHz only, as on most computers.
 rates_conf="$XDG_RUNTIME_DIR/config/pipewire/pipewire.conf.d/10-spytify-rates.conf"
