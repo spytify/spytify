@@ -469,6 +469,128 @@ func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
 	snapshot(t, a, "history-rows-narrow")
 }
 
+// A Library row is a file's title over its artists, as the player lists a
+// track: as its tags say once read, as its name says until then and for a
+// file without tags. At the narrowest the window goes, a long line ends in an
+// ellipsis and leaves the buttons in the row.
+func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
+	ff, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra and the Choir, Second Night)"
+	longArtist := "M83 with The Hurry Up Orchestra, The Choir of the Night, The Second Night Strings, The Brass of the Rain and The Children's Voices"
+	tagged := func(name, title, artist string) string {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(ff, "-v", "error", "-nostdin", "-f", "lavfi", "-t", "0.5", "-i", "anullsrc", "-metadata", "title="+title, "-metadata", "artist="+artist, path)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("make %s: %v: %s", name, err, b)
+		}
+		return path
+	}
+	untagged := func(name, data string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	// Newest first: the Library's order.
+	files := []string{
+		tagged("Outro.flac", longTitle, longArtist),
+		tagged(filepath.Join("Hurry Up, We're Dreaming", "03 Reunion.flac"), "Reunion", "M83"),
+		untagged("Splendor.wav", "RIFF"),
+		untagged("M83 - Wait.mp3", ""),
+		untagged("Intermission.mp3", ""),
+	}
+	untagged("Splendor.wav.json", `{"title": "Splendor", "performers": ["M83", "The Hurry Up Orchestra"]}`)
+	for i, path := range files {
+		at := time.Now().Add(-time.Duration(i) * time.Minute)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	// Until the tags are read, the names say what they can. Taking the
+	// reads' slots holds them back.
+	for range cap(lib.tagged.slots) {
+		lib.tagged.slots <- struct{}{}
+	}
+	a.showTab(tabLibrary)
+	a.render()
+	all := drawnRows(t, lib.list)
+	for title, want := range map[string][]string{
+		"Outro":        {"Outro"},
+		"03 Reunion":   {"03 Reunion"},
+		"Splendor":     {"Splendor"},
+		"Wait":         {"Wait", "M83"},
+		"Intermission": {"Intermission"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("before the tags, %s row %q, want %q", title, got, want)
+		}
+	}
+
+	for range cap(lib.tagged.slots) {
+		<-lib.tagged.slots
+	}
+	eventually(t, "the tags are never read", func() bool {
+		lib.tagged.mu.Lock()
+		defer lib.tagged.mu.Unlock()
+		return len(lib.tagged.read) == len(files)
+	})
+	lib.list.Refresh()
+	all = drawnRows(t, lib.list)
+	for title, want := range map[string][]string{
+		"Reunion":      {"Reunion", "M83"},
+		"Splendor":     {"Splendor", "M83, The Hurry Up Orchestra"},
+		"Wait":         {"Wait", "M83"},
+		"Intermission": {"Intermission"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("%s row %q, want %q", title, got, want)
+		}
+	}
+	// The same look as the Record list's rows: the title in its style, the
+	// artists in the caption's, rows as tall, a lone title in the middle.
+	if lines := all["Reunion"].lines; len(lines) == 2 {
+		if title, artist := lines[0], lines[1]; !title.TextStyle.Bold || title.TextSize <= artist.TextSize || artist.TextStyle.Bold || artist.Color == title.Color {
+			t.Errorf("the artists are drawn like the title: %+v, %+v", title, artist)
+		}
+	}
+	for title, row := range all {
+		if h := all["Reunion"].row.Size().Height; row.row.Size().Height != h {
+			t.Errorf("%s row is %v tall, the others %v", title, row.row.Size().Height, h)
+		}
+	}
+	if full, short := all["Reunion"].text, all["Intermission"].text; full.Position().Y != 0 || short.Position().Y < (full.Size().Height-short.Size().Height)/2-0.5 {
+		t.Errorf("the row with no artist has its text at y %v, the others at %v", short.Position().Y, full.Position().Y)
+	}
+	// The pictures show a listener's folder, not this test's.
+	setCaption(lib.count, pluralFiles(len(files), len(files), "/Users/listener/Music/Spytify"))
+	snapshot(t, a, "library-rows")
+
+	a.win.Resize(a.win.Content().MinSize())
+	a.render()
+	all = drawnRows(t, lib.list)
+	if got := words(all[longTitle].lines); len(got) != 2 || !strings.HasPrefix(got[0], "Outro (Extended Mix, ") || !strings.HasSuffix(got[0], "…") ||
+		!strings.HasPrefix(got[1], "M83 with The") || !strings.HasSuffix(got[1], "…") {
+		t.Errorf("a long title and long artists do not end in an ellipsis: %q", got)
+	}
+	insideRows(t, all)
+	snapshot(t, a, "library-rows-narrow")
+}
+
 // The last take cut short offers Keep anyway on its row, and only it.
 func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
@@ -652,7 +774,7 @@ func TestLibraryRescansWhenShown(t *testing.T) {
 	}
 	a.showTab(tabLibrary)
 	a.render()
-	if len(lib.shown) != 1 || !contains(texts(a.win.Content()), "Artist - Title") {
+	if len(lib.shown) != 1 || !slices.Equal(words(drawnRows(t, lib.list)["Title"].lines), []string{"Title", "Artist"}) {
 		t.Errorf("library after coming back: %d files", len(lib.shown))
 	}
 }
