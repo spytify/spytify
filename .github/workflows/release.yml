@@ -142,8 +142,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install MinGW-w64
-        run: scripts/ci/apt-install.sh mingw-w64
+      - name: Install MinGW-w64 and 7-Zip
+        run: scripts/ci/apt-install.sh mingw-w64 7zip
       - name: Spytify.exe and the command-line tools
         run: |
           v="${{ needs.version.outputs.version }}"

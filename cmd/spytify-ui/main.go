@@ -27,6 +27,21 @@ func main() {
 	target.LoadDotEnv()
 	env := target.Load()
 
+	// Fyne draws with OpenGL. Without a graphics driver offering it, the
+	// app draws with Mesa's, in software, in a copy of itself started to
+	// load it first; without Mesa either, it says why it has no window.
+	software := opengl.Software()
+	var noGL error
+	if software {
+		noGL = opengl.UseSoftware()
+	}
+	if noGL == nil {
+		noGL = opengl.Check()
+	}
+	if noGL != nil && !software && opengl.StartSoftware() == nil {
+		return
+	}
+
 	// Opened again while it runs, Spytify shows the window it has, hidden
 	// to the tray or not, rather than starting a second app. Should the
 	// socket fail, the app runs all the same.
@@ -46,17 +61,17 @@ func main() {
 	// At quit, what is queued leaves within 2 s or is dropped.
 	defer tel.Close()
 	privacy := privacySettings(env.ConfigPath)
-	// Without OpenGL, Fyne would close the app without a word: say why
-	// instead, and leave the recorder alone.
-	if err := opengl.Check(); err != nil {
-		ui.NoWindow(fa, tel, privacy, err)
+	// Fyne would close the app without a word: say why instead, and leave
+	// the recorder alone.
+	if noGL != nil {
+		ui.NoWindow(fa, tel, privacy, noGL)
 		return
 	}
 	// With a player to record, the app starts spytifyd itself; with none,
 	// it asks for one first.
 	auto := len(env.Target.ProcessNames) > 0
 	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
-		Telemetry: tel, Privacy: privacy})
+		Telemetry: tel, Privacy: privacy, SoftwareOpenGL: software})
 	if inst != nil {
 		defer inst.Close()
 		go inst.Serve(w.Reopen)

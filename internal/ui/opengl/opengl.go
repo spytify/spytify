@@ -9,6 +9,11 @@ import "errors"
 // ErrNoDriver is what Check finds when no graphics driver offers OpenGL.
 var ErrNoDriver = errors.New("no graphics driver offers OpenGL")
 
+// SoftwareEnv set to "software" makes the app draw with Mesa's OpenGL, in
+// software. The app sets it for the copy of itself it starts when no
+// graphics driver offers OpenGL.
+const SoftwareEnv = "SPYTIFY_OPENGL"
+
 // PIXELFORMATDESCRIPTOR flags and pixel types, from wingdi.h.
 const (
 	pfdDoubleBuffer       = 0x00000001

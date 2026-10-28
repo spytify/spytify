@@ -1,6 +1,9 @@
 // Command checkexe checks that Windows executables carry what Explorer,
-// shortcuts and Task Manager read from them: an icon and version
-// information. scripts/build-windows.sh runs it on Spytify.exe:
+// shortcuts and Task Manager read from them, an icon and version
+// information, and that they do not link opengl32.dll: Spytify.exe loads
+// it itself, so that it can load Mesa's first when no graphics driver
+// offers OpenGL (internal/ui/opengl). scripts/build-windows.sh runs it on
+// Spytify.exe:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
 package main
@@ -12,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Resource types (RT_*).
@@ -32,12 +36,18 @@ func main() {
 		if err == nil && (counts[rtGroupIcon] == 0 || counts[rtIcon] == 0 || counts[rtVersion] == 0) {
 			err = fmt.Errorf("%d icon groups, %d icon images, %d version resources", counts[rtGroupIcon], counts[rtIcon], counts[rtVersion])
 		}
+		if err == nil {
+			var gl []string
+			if gl, err = linked(path, "opengl32.dll"); err == nil && len(gl) > 0 {
+				err = fmt.Errorf("links opengl32.dll for %s: build it with scripts/build-windows.sh's go-gl/gl", strings.Join(gl, ", "))
+			}
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "checkexe: %s: %v\n", path, err)
 			failed = true
 			continue
 		}
-		fmt.Printf("%s: an icon of %d images, version information\n", filepath.Base(path), counts[rtIcon])
+		fmt.Printf("%s: an icon of %d images, version information, opengl32.dll not linked\n", filepath.Base(path), counts[rtIcon])
 	}
 	if failed {
 		os.Exit(1)
@@ -125,4 +135,30 @@ func dirEntries(data []byte, off uint32) ([]dirEntry, error) {
 		entries[i] = dirEntry{id: binary.LittleEndian.Uint32(e), offset: target &^ (1 << 31), subdir: target&(1<<31) != 0}
 	}
 	return entries, nil
+}
+
+// linked lists the functions a PE file imports from dll, which Windows
+// loads with it before it runs.
+func linked(path, dll string) ([]string, error) {
+	f, err := pe.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	syms, err := f.ImportedSymbols()
+	if err != nil {
+		return nil, err
+	}
+	return importsFrom(syms, dll), nil
+}
+
+// importsFrom keeps the imports, given as "function:DLL", from dll.
+func importsFrom(syms []string, dll string) []string {
+	var out []string
+	for _, s := range syms {
+		if i := strings.LastIndexByte(s, ':'); i >= 0 && strings.EqualFold(s[i+1:], dll) {
+			out = append(out, s[:i])
+		}
+	}
+	return out
 }

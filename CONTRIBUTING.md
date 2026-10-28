@@ -28,13 +28,13 @@ Go 1.26 or later.
 go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli ./cmd/spytify-ui   # Linux
 scripts/build-linux.sh                                               # Linux packages: dist/*.tar.gz, .deb, .rpm
 scripts/build-macos.sh                                               # macOS: bin/Spytify.app and the command-line tools
-scripts/build-windows.sh                                             # Windows, cross-compiled: bin/windows/*.exe and ffmpeg.exe
+scripts/build-windows.sh                                             # Windows, cross-compiled: bin/windows/*.exe, ffmpeg.exe and Mesa's OpenGL
 ```
 
 - `spytifyd` and `spytify-cli` are pure Go (`CGO_ENABLED=0` works). The desktop app needs cgo:
   - Linux: `gcc`, `libgl1-mesa-dev`, `xorg-dev`, `libwayland-dev`, `libxkbcommon-dev`, `wayland-protocols` (Debian names).
   - macOS: the Xcode command line tools, which also build `spytify-tap`.
-  - Windows: MinGW-w64 (`x86_64-w64-mingw32-gcc`, `-g++` and `-windres`), from Linux or macOS; it also builds `spytify-tap.exe` and puts the icon and version information in `Spytify.exe` ([`windows/spytify.rc`](windows/spytify.rc)).
+  - Windows: MinGW-w64 (`x86_64-w64-mingw32-gcc`, `-g++` and `-windres`), from Linux or macOS; it also builds `spytify-tap.exe` and puts the icon and version information in `Spytify.exe` ([`windows/spytify.rc`](windows/spytify.rc)). 7-Zip (`7z` or `7zz`) unpacks Mesa into `opengl\`: with no graphics driver offering OpenGL, the app draws its window with Mesa's, in software. For that, `Spytify.exe` must not link `opengl32.dll`, which go-gl/gl does: the script builds it with a copy of go-gl/gl whose loader is [`windows/go-gl-procaddr.go.in`](windows/go-gl-procaddr.go.in), and `checkexe` fails the build otherwise. A plain `go build` of the app links it, and draws without Mesa.
 - What the app needs at run time (ffmpeg, PipeWire, the macOS permissions) is on the [Install](https://spytify.github.io/spytify/v2/install.html) page.
 - The macOS app is ad-hoc signed: macOS asks for its permissions again after every rebuild, and another Mac refuses it until it is signed and notarised.
 

@@ -3,8 +3,20 @@ package main
 import (
 	"encoding/binary"
 	"maps"
+	"slices"
 	"testing"
 )
+
+func TestImportsFrom(t *testing.T) {
+	// As debug/pe lists them: Spytify.exe before the go-gl/gl swap.
+	syms := []string{"BitBlt:GDI32.dll", "wglGetProcAddress:OPENGL32.dll", "LoadLibraryA:KERNEL32.dll", "glFinish:opengl32.dll"}
+	if got := importsFrom(syms, "opengl32.dll"); !slices.Equal(got, []string{"wglGetProcAddress", "glFinish"}) {
+		t.Errorf("from opengl32.dll: %v", got)
+	}
+	if got := importsFrom(syms[:1], "opengl32.dll"); len(got) != 0 {
+		t.Errorf("from opengl32.dll, with none: %v", got)
+	}
+}
 
 // table is an IMAGE_RESOURCE_DIRECTORY of numbered entries: each id points
 // to a subtable at its offset, or to a resource when the offset is 0.

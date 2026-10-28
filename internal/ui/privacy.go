@@ -145,10 +145,11 @@ func (a *App) launchReady(s model.State) {
 	a.tel.Step("ready")
 	a.tel.Breadcrumb("app", "recorder ready", nil)
 	a.tel.Log("launch", map[string]any{
-		"ready":        true,
-		"ms":           now.Sub(a.launch.start).Milliseconds(),
-		"auto_started": !a.launch.started.IsZero(),
-		"failing":      failingNames(s.Info.Checks),
+		"ready":           true,
+		"ms":              now.Sub(a.launch.start).Milliseconds(),
+		"auto_started":    !a.launch.started.IsZero(),
+		"failing":         failingNames(s.Info.Checks),
+		"software_opengl": a.opts.SoftwareOpenGL,
 	})
 	var spans []telemetry.Span
 	if !a.launch.started.IsZero() && a.launch.connected.After(a.launch.started) {
@@ -163,7 +164,7 @@ func (a *App) launchReady(s model.State) {
 // launchFailed reports a recorder that did not start.
 func (a *App) launchFailed(err error) {
 	kind := startErrorKind(err)
-	a.tel.Log("launch", map[string]any{"ready": false, "start_error": kind})
+	a.tel.Log("launch", map[string]any{"ready": false, "start_error": kind, "software_opengl": a.opts.SoftwareOpenGL})
 	a.tel.Problem("recorder_start", kind)
 }
 

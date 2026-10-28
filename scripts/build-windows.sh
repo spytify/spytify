@@ -7,9 +7,14 @@
 #   ffmpeg.exe        the encoder, so nothing has to be installed: an LGPL
 #                     build from BtbN/FFmpeg-Builds, pinned and checked
 #                     (SPYTIFY_NO_FFMPEG=1 leaves it out)
+#   opengl\           Mesa's OpenGL in software, which the app draws with
+#                     when no graphics driver offers OpenGL: a build from
+#                     pal1000/mesa-dist-win, pinned and checked
+#                     (SPYTIFY_NO_MESA=1 leaves it out)
 # Cross-compiles from Linux or macOS with Go and MinGW-w64
 # (x86_64-w64-mingw32-gcc, -g++ and -windres; Debian: apt install
-# mingw-w64). Spytify.exe carries the logo as its icon and its version.
+# mingw-w64), and unpacks Mesa with 7-Zip (7z or 7zz; Debian: apt install
+# 7zip). Spytify.exe carries the logo as its icon and its version.
 #
 # The player recorded when none is chosen comes from SPYTIFY_DEFAULT_PROCESS,
 # from the environment or an untracked build.env; without it the app asks
@@ -34,6 +39,26 @@ tmp=$(mktemp -d)
 # link a stale .syso.
 trap 'rm -rf "$tmp" cmd/spytify-ui/rsrc_windows_amd64.syso' EXIT
 
+sha256() { (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d' ' -f1; }
+
+# fetch downloads a pinned file into the cache once, checks it against its
+# checksum and prints its path.
+fetch() {
+  local cache="${XDG_CACHE_HOME:-$HOME/.cache}/spytify" file
+  file="$cache/$(basename "$1")"
+  mkdir -p "$cache"
+  if [ ! -f "$file" ]; then
+    curl -fsSL -o "$file.part" "$1"
+    mv "$file.part" "$file"
+  fi
+  if [ "$(sha256 "$file")" != "$2" ]; then
+    rm -f "$file"
+    echo "$(basename "$1") does not match its checksum" >&2
+    return 1
+  fi
+  echo "$file"
+}
+
 # The app's icon and version information: windres compiles
 # windows/spytify.rc into an object, which go build links from the
 # package's folder. The tools that make the icon and check the result run
@@ -48,12 +73,33 @@ x86_64-w64-mingw32-windres -O coff -I "$tmp" \
   -D "VERSION=\\\"$version\\\"" \
   -o cmd/spytify-ui/rsrc_windows_amd64.syso windows/spytify.rc
 
+# Spytify.exe loads opengl32.dll itself, when Fyne first draws, rather than
+# linking it, which would load Windows' before main: with no graphics
+# driver offering OpenGL, the app loads Mesa's first (internal/ui/opengl).
+# go-gl/gl links it for wglGetProcAddress alone. Its file doing so is
+# swapped for windows/go-gl-procaddr.go.in, in a copy of the module go.mod
+# pins, through a go.mod of the build's own. A new go-gl/gl needs the swap
+# redone from its procaddr.go, and this checksum updated.
+go mod download github.com/go-gl/gl
+gl="$(go list -m -f '{{.Dir}}' github.com/go-gl/gl)"
+if [ "$(sha256 "$gl/v2.1/gl/procaddr.go")" != 59ff0e5420ffab9704873974a71170df2f57db4e0fa035794160512790beecc5 ]; then
+  echo "go-gl/gl's v2.1/gl/procaddr.go changed: redo windows/go-gl-procaddr.go.in from it" >&2
+  exit 1
+fi
+mkdir "$tmp/go-gl"
+cp "$gl/go.mod" "$tmp/go-gl/"
+cp -R "$gl/v2.1" "$tmp/go-gl/"
+chmod -R u+w "$tmp/go-gl"
+cp windows/go-gl-procaddr.go.in "$tmp/go-gl/v2.1/gl/procaddr.go"
+cp go.mod go.sum "$tmp/"
+echo "replace github.com/go-gl/gl => $tmp/go-gl" >> "$tmp/go.mod"
+
 export GOOS=windows GOARCH=amd64
 for cmd in spytifyd spytify-cli; do
   CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$out/$cmd.exe" "./cmd/$cmd"
 done
 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
-  go build -trimpath -ldflags "$ldflags -H=windowsgui" -o "$out/Spytify.exe" ./cmd/spytify-ui
+  go build -modfile "$tmp/go.mod" -trimpath -ldflags "$ldflags -H=windowsgui" -o "$out/Spytify.exe" ./cmd/spytify-ui
 x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -std=c++17 -static -municode \
   -o "$out/spytify-tap.exe" windows/spytify-tap/main.cpp -lole32 -luuid
 "$tmp/checkexe" "$out/Spytify.exe"
@@ -62,19 +108,7 @@ x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -std=c++17 -static -municode \
 ffmpeg_url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-23-13-04/ffmpeg-n9.0.2-35-g9a9b70bb8c-win64-lgpl-9.0.zip"
 ffmpeg_sha256="c12c3e71f0055802c732b6b6fb1712c296b7a47461243a8f0454c2c5b25d50d1"
 if [ "${SPYTIFY_NO_FFMPEG:-}" != 1 ]; then
-  cache="${XDG_CACHE_HOME:-$HOME/.cache}/spytify"
-  zip="$cache/$(basename "$ffmpeg_url")"
-  mkdir -p "$cache"
-  if [ ! -f "$zip" ]; then
-    curl -fsSL -o "$zip.part" "$ffmpeg_url"
-    mv "$zip.part" "$zip"
-  fi
-  sum="$( (sha256sum "$zip" 2>/dev/null || shasum -a 256 "$zip") | cut -d' ' -f1)"
-  if [ "$sum" != "$ffmpeg_sha256" ]; then
-    rm -f "$zip"
-    echo "ffmpeg download does not match its checksum" >&2
-    exit 1
-  fi
+  zip="$(fetch "$ffmpeg_url" "$ffmpeg_sha256")"
   unzip -q -o -j "$zip" "*/bin/ffmpeg.exe" -d "$out"
   unzip -q -o -p "$zip" "*/LICENSE.txt" > "$out/ffmpeg-LICENSE.txt"
   cat > "$out/ffmpeg-README.txt" <<NOTE
@@ -86,4 +120,27 @@ Spytify runs it as a separate program to encode the recordings.
 NOTE
 fi
 
-echo "built v$version into $out/: Spytify.exe spytifyd.exe spytify-cli.exe spytify-tap.exe$( [ -f "$out/ffmpeg.exe" ] && echo " ffmpeg.exe")"
+# Mesa's OpenGL, x64: opengl32.dll and the llvmpipe renderer it loads,
+# libgallium_wgl.dll. Nothing loads them from opengl\ but Spytify.exe, and
+# only with no graphics driver offering OpenGL.
+mesa_url="https://github.com/pal1000/mesa-dist-win/releases/download/26.2.4/mesa3d-26.2.4-release-mingw.7z"
+mesa_sha256="36a30a04d8cab6e2bea2d3c747c326d15024d9711dd80f45ef97ac6f2c3c5086"
+if [ "${SPYTIFY_NO_MESA:-}" != 1 ]; then
+  sevenzip="$(command -v 7z || command -v 7zz)" || { echo "Mesa's archive needs 7-Zip: 7z or 7zz" >&2; exit 1; }
+  archive="$(fetch "$mesa_url" "$mesa_sha256")"
+  mkdir -p "$out/opengl"
+  "$sevenzip" e -y -bso0 -bsp0 -o"$out/opengl" "$archive" x64/opengl32.dll x64/libgallium_wgl.dll
+  cp windows/mesa-LICENSES.txt "$out/opengl/LICENSES.txt"
+  cat > "$out/opengl/README.txt" <<NOTE
+opengl32.dll and libgallium_wgl.dll are Mesa 26.2.4, x64, as built for
+Windows by pal1000/mesa-dist-win:
+  $mesa_url
+Their licenses are in LICENSES.txt. The source is at https://mesa3d.org
+(tag mesa-26.2.4) and the build scripts at
+https://github.com/pal1000/mesa-dist-win.
+Spytify.exe loads them only when no graphics driver on the computer offers
+OpenGL, and draws its window with them, in software (llvmpipe).
+NOTE
+fi
+
+echo "built v$version into $out/: Spytify.exe spytifyd.exe spytify-cli.exe spytify-tap.exe$( [ -f "$out/ffmpeg.exe" ] && echo " ffmpeg.exe")$( [ -d "$out/opengl" ] && echo " opengl\\")"

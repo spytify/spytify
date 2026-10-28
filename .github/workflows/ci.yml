@@ -127,9 +127,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install MinGW-w64
-        run: scripts/ci/apt-install.sh mingw-w64
-      - name: Spytify.exe, spytifyd.exe, spytify-cli.exe, spytify-tap.exe
+      - name: Install MinGW-w64 and 7-Zip
+        run: scripts/ci/apt-install.sh mingw-w64 7zip
+      - name: Spytify.exe, spytifyd.exe, spytify-cli.exe, spytify-tap.exe, Mesa
         run: scripts/build-windows.sh dist/windows
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
@@ -169,24 +169,50 @@ jobs:
           foreach ($f in "spytifyd.exe", "spytify-cli.exe", "spytify-tap.exe") {
             if ([Win32.Shell]::ExtractIconEx((Resolve-Path $f).Path, -1, $null, $null, 0) -ne 0) { throw "$f has an icon" }
           }
-      - name: Without OpenGL, the app says why instead of closing without a word
+      - name: Without an OpenGL driver, the app draws its window with Mesa's
         shell: pwsh
         run: |
           # The runner has no graphics card, so no driver offers OpenGL, as on
-          # a computer whose card is disabled. The app's message box waits for
-          # a click.
-          $p = Start-Process .\Spytify.exe -PassThru -RedirectStandardError ui-err.txt -RedirectStandardOutput ui-out.txt
-          # Keeps the exit code readable once the process is gone.
-          $null = $p.Handle
-          Start-Sleep -Seconds 10
-          $open = -not $p.HasExited
-          $recorder = [bool](Get-Process spytifyd -ErrorAction SilentlyContinue)
-          if ($open) { Stop-Process -Id $p.Id -Force; $p.WaitForExit() }
-          $said = Get-Content ui-err.txt -Raw
+          # a computer whose card is disabled. The app starts itself again
+          # with Mesa's, from opengl\.
+          Start-Process .\Spytify.exe -RedirectStandardError gl-err.txt -RedirectStandardOutput gl-out.txt
+          $window = $null
+          for ($i = 0; $i -lt 30 -and -not $window; $i++) {
+            Start-Sleep -Seconds 1
+            $window = Get-Process Spytify -ErrorAction SilentlyContinue | Where-Object MainWindowHandle -ne 0 | Select-Object -First 1
+          }
+          $gl = if ($window) { ($window.Modules | Where-Object ModuleName -eq 'opengl32.dll').FileName }
+          $title = if ($window) { $window.MainWindowTitle }
+          Get-Process Spytify, spytifyd -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 1
+          $said = Get-Content gl-err.txt -Raw
+          "window '$title', drawn with $gl"
           "Spytify.exe said: $said"
-          if (-not $open) { throw "Spytify.exe closed (exit $($p.ExitCode)) instead of showing why" }
-          if ($said -notmatch 'no graphics driver offers OpenGL') { throw "Spytify.exe did not say why" }
-          if ($recorder) { throw "Spytify.exe started the recorder" }
+          if (-not $window) { throw "no Spytify window within 30 s" }
+          if ($said -match 'no graphics driver offers OpenGL') { throw "Spytify.exe said why it has no window instead of drawing it with Mesa" }
+          if ($gl -ne (Join-Path (Resolve-Path opengl).Path 'opengl32.dll')) { throw "the window is drawn with $gl, not Mesa's" }
+      - name: Without an OpenGL driver or Mesa, the app says why instead of closing without a word
+        shell: pwsh
+        run: |
+          # As a build with SPYTIFY_NO_MESA=1. The app's message box waits for
+          # a click.
+          Rename-Item opengl opengl-off
+          try {
+            $p = Start-Process .\Spytify.exe -PassThru -RedirectStandardError ui-err.txt -RedirectStandardOutput ui-out.txt
+            # Keeps the exit code readable once the process is gone.
+            $null = $p.Handle
+            Start-Sleep -Seconds 10
+            $open = -not $p.HasExited
+            $recorder = [bool](Get-Process spytifyd -ErrorAction SilentlyContinue)
+            if ($open) { Stop-Process -Id $p.Id -Force; $p.WaitForExit() }
+            $said = Get-Content ui-err.txt -Raw
+            "Spytify.exe said: $said"
+            if (-not $open) { throw "Spytify.exe closed (exit $($p.ExitCode)) instead of showing why" }
+            if ($said -notmatch 'no graphics driver offers OpenGL') { throw "Spytify.exe did not say why" }
+            if ($recorder) { throw "Spytify.exe started the recorder" }
+          } finally {
+            Rename-Item opengl-off opengl
+          }
       - name: spytifyd finds the ffmpeg.exe shipped beside it
         run: |
           # No ffmpeg on this runner's PATH: only the bundled copy can pass.
