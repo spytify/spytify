@@ -498,8 +498,8 @@ func decoded(t *testing.T, path string) (pcm.Format, []byte) {
 
 // The bitrate setting is the bitrate of the file whatever the player
 // delivers (rate, channels, 16-bit or float), a take in low quality kept
-// after all included; the file keeps the source's rate where the format
-// allows it; and a higher bitrate is closer to the source once decoded.
+// after all included; the file keeps the source's rate up to 48 kHz; and a
+// higher bitrate is closer to the source once decoded.
 func TestBitrateWithEverySource(t *testing.T) {
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		t.Skip("ffprobe not installed")
@@ -548,7 +548,7 @@ func TestBitrateWithEverySource(t *testing.T) {
 				}
 				gotF, got := decoded(t, path)
 				wantRate := src.rate
-				if c.format == "mp3" && src.rate > 48000 {
+				if src.rate > 48000 {
 					wantRate = map[int]int{88200: 44100, 96000: 48000}[src.rate]
 				}
 				if gotF.Rate != wantRate || gotF.Channels != src.channels {
