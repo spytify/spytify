@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -139,9 +138,6 @@ func newRecordScreen(a *App) *recordScreen {
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
-			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
-			img.FillMode = canvas.ImageFillContain
-			img.SetMinSize(fyne.NewSquareSize(rowCover))
 			chip := caption("Skipped: duplicate")
 			keep := widget.NewButtonWithIcon("Keep anyway", theme.DocumentSaveIcon(), nil)
 			keep.Hide()
@@ -149,8 +145,8 @@ func newRecordScreen(a *App) *recordScreen {
 			reveal.Importance = widget.LowImportance
 			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
-			return container.NewBorder(nil, nil, img, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)),
-				trackText())
+			// The title, the artist, then the length, format and size.
+			return trackRow(3, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)))
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(r.rows) {
@@ -159,11 +155,8 @@ func newRecordScreen(a *App) *recordScreen {
 			row := r.rows[id]
 			// Border layout: center first, then the leading and trailing parts.
 			box := o.(*fyne.Container)
-			text := box.Objects[0].(*fyne.Container)
-			img := box.Objects[1].(*canvas.Image)
 			right := box.Objects[2].(*fyne.Container)
-			setTrackText(text, row.Title, row.Artist, rowDetails(row))
-			setCover(img, a.covers.get(row.CoverURL).row)
+			setTrackRow(box, a.covers.get(row.CoverURL).row, row.Title, row.Artist, rowDetails(row))
 			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.RichText)
 			seg := chip.Segments[0].(*widget.TextSegment)
 			if c := chipColor(row); seg.Text != row.StatusText() || seg.Style.ColorName != c {
@@ -215,68 +208,6 @@ func newRecordScreen(a *App) *recordScreen {
 		container.NewStack(inset(r.listCard), r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
 	return r
-}
-
-// trackText is a finished track's row text as one block: its title, its
-// artist after it in the details' style, and its details under them.
-func trackText() *fyne.Container {
-	rt := widget.NewRichText(
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameText, TextStyle: fyne.TextStyle{Bold: true}, Inline: true}},
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
-	)
-	// The layout shortens the texts to fit; clipping only keeps the row's
-	// minimum width small.
-	rt.Truncation = fyne.TextTruncateClip
-	return container.New(&trackLayout{}, rt)
-}
-
-// setTrackText shows a track's title and artist on one line, its details
-// under them.
-func setTrackText(c *fyne.Container, title, artist, details string) {
-	if l := c.Layout.(*trackLayout); *l != (trackLayout{title, artist, details}) {
-		*l = trackLayout{title, artist, details}
-		l.Layout(c.Objects, c.Size())
-	}
-}
-
-// trackLayout fits a track's text to its row, shortening the artist first,
-// then the title: Fyne draws the first text of a line in two styles whole,
-// past the row's edge, and cuts the second with no ellipsis.
-type trackLayout struct{ title, artist, details string }
-
-func (l *trackLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
-	rt := objs[0].(*widget.RichText)
-	th := rt.Theme()
-	width := func(seg int, text string) float32 {
-		style := rt.Segments[seg].(*widget.TextSegment).Style
-		return fyne.MeasureText(text, th.Size(style.SizeName), style.TextStyle).Width
-	}
-	// fit cuts text to room in the style of its segment, ending it with an
-	// ellipsis; it is "" when not even a letter fits.
-	fit := func(seg int, text string, room float32) string {
-		if width(seg, text) <= room {
-			return text
-		}
-		runes := []rune(text)
-		n := sort.Search(len(runes), func(n int) bool { return width(seg, string(runes[:n+1])+"…") > room })
-		if cut := strings.TrimRight(string(runes[:n]), " "); cut != "" {
-			return cut + "…"
-		}
-		return ""
-	}
-	line := size.Width - 2*th.Size(theme.SizeNameInnerPadding)
-	title, artist := fit(0, l.title, line), ""
-	if l.artist != "" {
-		// Two spaces set the artist off from the title.
-		artist = fit(1, "  "+l.artist, line-width(0, title))
-	}
-	setRowText(rt, title, artist, fit(2, l.details, line))
-	rt.Resize(size)
-}
-
-func (l *trackLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
-	return objs[0].MinSize()
 }
 
 // rowDetails is a finished track's length, format and size, without the

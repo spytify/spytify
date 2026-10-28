@@ -305,136 +305,167 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	snapshot(t, a, "record-96khz-narrow")
 }
 
-// A finished track's row has its title and artist on one line, their
-// baselines level, and its length, format and size on the next. At the
-// narrowest the window goes, a long line is shortened, the artist first, and
-// leaves the chip and the buttons in the row.
-func TestARowHasTheArtistBesideTheTitle(t *testing.T) {
+// drawnRow is a track's row in a list as drawn: the row, and its lines of
+// text top to bottom.
+type drawnRow struct {
+	row   *fyne.Container
+	text  *widget.RichText
+	lines []*canvas.Text
+}
+
+// drawnRows is the rows of a list of tracks as drawn, by their whole title.
+func drawnRows(t *testing.T, list fyne.CanvasObject) map[string]drawnRow {
+	t.Helper()
+	out := map[string]drawnRow{}
+	var walk func(fyne.CanvasObject)
+	walk = func(o fyne.CanvasObject) {
+		if !o.Visible() {
+			return
+		}
+		switch w := o.(type) {
+		case *fyne.Container:
+			// A track's row: its text, centred in the middle, then its
+			// cover and the parts after its text.
+			if len(w.Objects) == 3 {
+				if box, ok := w.Objects[0].(*fyne.Container); ok && len(box.Objects) == 3 {
+					if rt, ok := box.Objects[1].(*widget.RichText); ok {
+						row := drawnRow{row: w, text: rt}
+						y := float32(-1)
+						for _, o := range test.WidgetRenderer(rt).Objects() {
+							if txt, ok := o.(*canvas.Text); ok && txt.Text != "" {
+								if txt.Position().Y <= y {
+									t.Errorf("%q is not on a line of its own", txt.Text)
+								}
+								y = txt.Position().Y
+								row.lines = append(row.lines, txt)
+							}
+						}
+						out[rt.Segments[0].(*widget.TextSegment).Text] = row
+						return
+					}
+				}
+			}
+			for _, c := range w.Objects {
+				walk(c)
+			}
+		case fyne.Widget:
+			for _, c := range test.WidgetRenderer(w).Objects() {
+				walk(c)
+			}
+		}
+	}
+	walk(list)
+	return out
+}
+
+// words is a row's lines as text.
+func words(lines []*canvas.Text) []string {
+	var out []string
+	for _, txt := range lines {
+		out = append(out, txt.Text)
+	}
+	return out
+}
+
+// insideRows checks that every row's text stays in its box, and that the
+// parts after it stay after it, in the row.
+func insideRows(t *testing.T, rows map[string]drawnRow) {
+	t.Helper()
+	d := fyne.CurrentApp().Driver()
+	for title, row := range rows {
+		after := row.row.Objects[2]
+		box, end := d.AbsolutePositionForObject(row.text), d.AbsolutePositionForObject(row.row).X+row.row.Size().Width
+		right := box.X + row.text.Size().Width
+		for _, txt := range row.lines {
+			if x := box.X + txt.Position().X; x < box.X || x+fyne.MeasureText(txt.Text, txt.TextSize, txt.TextStyle).Width > right {
+				t.Errorf("%s row: %q is past its text's edges", title, txt.Text)
+			}
+		}
+		if x := d.AbsolutePositionForObject(after).X; x < right || x+after.Size().Width > end {
+			t.Errorf("%s row: the parts after the text at x %v to %v, the text ending at %v and the row at %v", title, x, x+after.Size().Width, right, end)
+		}
+	}
+}
+
+// A finished track's row has its title, its artist, then its length, format
+// and size, each on a line of its own and in a style of its own; a track with
+// no artist has two lines, centred in a row as tall as the others. At the
+// narrowest the window goes, a long line ends in an ellipsis and leaves the
+// chip and the buttons in the row.
+func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
-	longArtist, splendor := "M83 & The Hurry Up Orchestra and Choir of the Night", "Splendor (Live in the Rain, Second Night)"
-	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra)"
-	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-004", Path: "/Users/listener/Music/Spytify/M83/Midnight City.flac", DurationMs: 243000, Bytes: 31_400_000}))
-	for _, tr := range []proto.Track{{ID: "s-005", Artist: longArtist, Title: splendor, LengthMs: 313000}, {ID: "s-006", Artist: "M83", Title: longTitle, LengthMs: 247000}} {
-		m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: tr}))
-		m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: tr.ID, Path: "/Users/listener/Music/Spytify/M83/" + tr.Title + ".flac", DurationMs: tr.LengthMs, Bytes: 38_100_000}))
+	playing := proto.Track{ID: "s-004", Title: "Midnight City", LengthMs: 243000}
+	// play saves the track playing, then plays the tracks one after another,
+	// saving all but the last.
+	play := func(tracks ...proto.Track) {
+		for _, tr := range tracks {
+			m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: playing.ID, Path: "/Users/listener/Music/Spytify/" + playing.Title + ".flac", DurationMs: playing.LengthMs, Bytes: 38_100_000}))
+			m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: tr}))
+			playing = tr
+		}
+		a.render()
 	}
-	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-007", Artist: "M83", Title: "Raconte-moi une histoire", Album: "Hurry Up, We're Dreaming", LengthMs: 270000}}))
-	a.render()
+	play(proto.Track{ID: "s-005", Title: "Intermission", LengthMs: 62000},
+		proto.Track{ID: "s-006", Artist: "M83", Title: "Raconte-moi une histoire", Album: "Hurry Up, We're Dreaming", LengthMs: 270000})
 	r := a.screens[tabRecord].(*recordScreen)
-	d := fyne.CurrentApp().Driver()
-	type drawn struct {
-		row   *fyne.Container
-		lines [][]*canvas.Text
-	}
-	// rows is each row as drawn, by title: its text's lines top to bottom, a
-	// line being the texts on one baseline, left to right.
-	rows := func() map[string]drawn {
-		out := map[string]drawn{}
-		var walk func(o, parent fyne.CanvasObject)
-		walk = func(o, parent fyne.CanvasObject) {
-			if !o.Visible() {
-				return
-			}
-			switch w := o.(type) {
-			case *fyne.Container:
-				if text, ok := w.Layout.(*trackLayout); ok {
-					var lines [][]*canvas.Text
-					var base float32
-					for _, o := range test.WidgetRenderer(w.Objects[0].(*widget.RichText)).Objects() {
-						txt, ok := o.(*canvas.Text)
-						if !ok || txt.Text == "" {
-							continue
-						}
-						_, b := d.RenderedTextSize(txt.Text, txt.TextSize, txt.TextStyle, txt.FontSource)
-						if y := txt.Position().Y + b; len(lines) == 0 || y > base+0.5 {
-							lines, base = append(lines, nil), y
-						} else if y < base-0.5 {
-							t.Errorf("%q is off the baseline of its line", txt.Text)
-						}
-						lines[len(lines)-1] = append(lines[len(lines)-1], txt)
-					}
-					out[text.title] = drawn{parent.(*fyne.Container), lines}
-					return
-				}
-				for _, c := range w.Objects {
-					walk(c, w)
-				}
-			case fyne.Widget:
-				for _, c := range test.WidgetRenderer(w).Objects() {
-					walk(c, w)
-				}
-			}
-		}
-		walk(r.list, nil)
-		return out
-	}
-	// words is a row's lines as text.
-	words := func(lines [][]*canvas.Text) string {
-		var out [][]string
-		for _, line := range lines {
-			var texts []string
-			for _, txt := range line {
-				texts = append(texts, txt.Text)
-			}
-			out = append(out, texts)
-		}
-		return fmt.Sprintf("%q", out)
-	}
 
-	all := rows()
-	for title, want := range map[string]string{
-		"Reunion": `[["Reunion" "  M83"] ["3:56 · FLAC · 29.6 MB"]]`,
-		"Wait":    `[["Wait" "  M83"] ["2:54"]]`,
-		splendor:  fmt.Sprintf("%q", [][]string{{splendor, "  " + longArtist}, {"5:13 · FLAC · 36.3 MB"}}),
+	all := drawnRows(t, r.list)
+	for title, want := range map[string][]string{
+		"Reunion":      {"Reunion", "M83", "3:56 · FLAC · 29.6 MB"},
+		"Wait":         {"Wait", "M83", "2:54"},
+		"Intermission": {"Intermission", "1:02 · FLAC · 36.3 MB"},
 	} {
-		if got := words(all[title].lines); got != want {
-			t.Errorf("%s row %s, want %s", title, got, want)
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("%s row %q, want %q", title, got, want)
 		}
 	}
-	// The title keeps its style, and the artist takes the details'.
-	if lines := all["Reunion"].lines; len(lines) == 2 && len(lines[0]) == 2 {
-		title, artist, details := lines[0][0], lines[0][1], lines[1][0]
+	// The title keeps its style; the artist and the details share theirs.
+	if lines := all["Reunion"].lines; len(lines) == 3 {
+		title, artist, details := lines[0], lines[1], lines[2]
 		if !title.TextStyle.Bold || title.TextSize <= artist.TextSize || title.Color == artist.Color {
 			t.Errorf("the artist is drawn like the title: %+v, %+v", title, artist)
 		}
 		if artist.TextStyle != details.TextStyle || artist.TextSize != details.TextSize || artist.Color != details.Color {
 			t.Errorf("the artist is not in the details' style: %+v, %+v", artist, details)
 		}
-		if artist.Position().X < title.Position().X+fyne.MeasureText(title.Text, title.TextSize, title.TextStyle).Width {
-			t.Error("the artist is drawn over the title")
+	}
+	// Every row is as tall; the one with no artist has its two lines in the
+	// middle of it.
+	for title, row := range all {
+		if h := all["Reunion"].row.Size().Height; row.row.Size().Height != h {
+			t.Errorf("%s row is %v tall, the others %v", title, row.row.Size().Height, h)
 		}
-		if details.Position().Y < title.Position().Y+title.Size().Height {
-			t.Error("the details are drawn over the title")
-		}
+	}
+	if full, short := all["Reunion"].text, all["Intermission"].text; full.Position().Y != 0 || short.Position().Y < (full.Size().Height-short.Size().Height)/2-0.5 {
+		t.Errorf("the row with no artist has its text at y %v, the others at %v", short.Position().Y, full.Position().Y)
 	}
 	snapshot(t, a, "history-rows")
 
+	longArtist := "M83 with The Hurry Up Orchestra, The Choir of the Night, The Second Night Strings and The Brass of the Rain"
+	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra)"
+	play(proto.Track{ID: "s-007", Artist: longArtist, Title: "Splendor", LengthMs: 313000},
+		proto.Track{ID: "s-008", Artist: "M83", Title: longTitle, LengthMs: 247000},
+		proto.Track{ID: "s-009", Artist: "M83", Title: "Year One, One UFO", Album: "Hurry Up, We're Dreaming", LengthMs: 194000})
+	all = drawnRows(t, r.list)
+	for title, want := range map[string][]string{
+		"Splendor": {"Splendor", longArtist, "5:13 · FLAC · 36.3 MB"},
+		longTitle:  {longTitle, "M83", "4:07 · FLAC · 36.3 MB"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("%s row %q, want %q", title, got, want)
+		}
+	}
 	a.win.Resize(a.win.Content().MinSize())
 	a.render()
-	all = rows()
-	if got := words(all[splendor].lines); !strings.HasPrefix(got, `[["`+splendor+`" "  M83 & The `) || !strings.HasSuffix(got, `…"] ["5:13 · FLAC · 36.3 MB"]]`) {
-		t.Errorf("a long artist is not shortened first: %s", got)
+	all = drawnRows(t, r.list)
+	if got := words(all["Splendor"].lines); len(got) != 3 || got[0] != "Splendor" || !strings.HasPrefix(got[1], "M83 with The") || !strings.HasSuffix(got[1], "…") {
+		t.Errorf("a long artist does not end in an ellipsis: %q", got)
 	}
-	if got := words(all[longTitle].lines); !strings.HasPrefix(got, `[["Outro (Extended Mix, `) || !strings.HasSuffix(got, `…"] ["4:07 · FLAC · 36.3 MB"]]`) {
-		t.Errorf("a long title is not shortened, or keeps its artist: %s", got)
+	if got := words(all[longTitle].lines); len(got) != 3 || !strings.HasPrefix(got[0], "Outro (Extended Mix, ") || !strings.HasSuffix(got[0], "…") || got[1] != "M83" {
+		t.Errorf("a long title does not end in an ellipsis: %q", got)
 	}
-	// Every row's text stays in its box, the chip and the buttons after it,
-	// in the row.
-	for title, row := range all {
-		text, right := row.row.Objects[0], row.row.Objects[2]
-		box, end := d.AbsolutePositionForObject(text), d.AbsolutePositionForObject(row.row).X+row.row.Size().Width
-		for _, line := range row.lines {
-			for _, txt := range line {
-				if x := box.X + txt.Position().X; x < box.X || x+fyne.MeasureText(txt.Text, txt.TextSize, txt.TextStyle).Width > box.X+text.Size().Width {
-					t.Errorf("%s row: %q is past its text's edges", title, txt.Text)
-				}
-			}
-		}
-		if x := d.AbsolutePositionForObject(right).X; x < box.X+text.Size().Width || x+right.Size().Width > end {
-			t.Errorf("%s row: the chip and the buttons at x %v to %v, the text ending at %v and the row at %v", title, x, x+right.Size().Width, box.X+text.Size().Width, end)
-		}
-	}
+	insideRows(t, all)
 	snapshot(t, a, "history-rows-narrow")
 }
 
@@ -1122,16 +1153,19 @@ func TestSourceText(t *testing.T) {
 	}
 }
 
-// A finished track's row is its title and artist, then its length, format and
-// size without the parts not known; too long for the row, the artist is
-// shortened first, then the title.
+// A finished track's row is its title, its artist, then its length, format
+// and size without the parts not known; with no artist, its line is left out.
 func TestTrackText(t *testing.T) {
 	test.NewTempApp(t)
-	text := trackText()
-	text.Resize(fyne.NewSize(600, 60))
+	row := trackRow(3, nil)
+	// texts is the row's lines, checking that those under the title are in
+	// their style even after a row with the title alone.
 	texts := func() []string {
 		var out []string
-		for _, seg := range text.Objects[0].(*widget.RichText).Segments {
+		for i, seg := range row.Objects[0].(*fyne.Container).Objects[1].(*widget.RichText).Segments {
+			if i > 0 && seg.(*widget.TextSegment).Style != rowLine {
+				t.Errorf("%q is not in the style of the lines under the title", seg.Textual())
+			}
 			out = append(out, seg.Textual())
 		}
 		return out
@@ -1142,26 +1176,16 @@ func TestTrackText(t *testing.T) {
 		row  model.Row
 		want []string
 	}{
-		{"saved", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "  M83", "3:56 · FLAC · 29.6 MB"}},
-		{"skipped", model.Row{Title: "Wait", Artist: "M83", Status: model.Skipped, LengthMs: 174000}, []string{"Wait", "  M83", "2:54"}},
-		{"no artist", model.Row{Title: "Reunion", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "", "3:56 · FLAC · 29.6 MB"}},
-		{"no size", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000}, []string{"Reunion", "  M83", "3:56 · FLAC"}},
+		{"saved", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "M83", "3:56 · FLAC · 29.6 MB"}},
+		{"skipped", model.Row{Title: "Wait", Artist: "M83", Status: model.Skipped, LengthMs: 174000}, []string{"Wait", "M83", "2:54"}},
+		{"no artist", model.Row{Title: "Reunion", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "3:56 · FLAC · 29.6 MB"}},
+		{"title alone", model.Row{Title: "Intermission", Status: model.Skipped}, []string{"Intermission"}},
+		{"no size", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000}, []string{"Reunion", "M83", "3:56 · FLAC"}},
 	} {
-		setTrackText(text, c.row.Title, c.row.Artist, rowDetails(c.row))
+		setTrackRow(row, nil, c.row.Title, c.row.Artist, rowDetails(c.row))
 		if got := texts(); !slices.Equal(got, c.want) {
 			t.Errorf("%s row %q, want %q", c.name, got, c.want)
 		}
-	}
-
-	setTrackText(text, "Midnight City", "M83 & The Hurry Up Orchestra", "4:03")
-	title := fyne.MeasureText("Midnight City", theme.TextSize(), fyne.TextStyle{Bold: true}).Width + 2*theme.InnerPadding()
-	text.Resize(fyne.NewSize(title+60, 60))
-	if got := texts(); got[0] != "Midnight City" || !strings.HasPrefix(got[1], "  M83") || !strings.HasSuffix(got[1], "…") {
-		t.Errorf("the artist is not shortened first: %q", got)
-	}
-	text.Resize(fyne.NewSize(title-10, 60))
-	if got := texts(); !strings.HasPrefix(got[0], "Midnight") || !strings.HasSuffix(got[0], "…") || got[1] != "" {
-		t.Errorf("the title is not shortened once the artist is gone: %q", got)
 	}
 }
 
