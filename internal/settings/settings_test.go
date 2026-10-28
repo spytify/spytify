@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -40,9 +41,49 @@ func TestEveryDefaultIsValid(t *testing.T) {
 // A choice list names every value of its setting, in order.
 func TestChoicesNameEveryValue(t *testing.T) {
 	for _, d := range Table {
-		if d.Choices != nil && len(d.Choices) != len(d.Enum) {
-			t.Errorf("%s: %d choices for %d values", d.Key, len(d.Choices), len(d.Enum))
+		values := len(d.Enum)
+		if d.Kind == KindIntEnum {
+			values = len(d.Ints)
 		}
+		if d.Choices != nil && len(d.Choices) != values {
+			t.Errorf("%s: %d choices for %d values", d.Key, len(d.Choices), values)
+		}
+	}
+}
+
+// Each bitrate says what a minute of it takes, in decimal megabytes; the
+// setting keeps the number.
+func TestBitrateChoicesSayTheSizePerMinute(t *testing.T) {
+	d, _ := Lookup("encode.bitrate_kbps")
+	want := []string{
+		"128 kbps · about 1.0 MB per minute",
+		"160 kbps · about 1.2 MB per minute",
+		"256 kbps · about 1.9 MB per minute",
+		"320 kbps · about 2.4 MB per minute",
+	}
+	if !slices.Equal(d.Choices, want) {
+		t.Errorf("choices %q, want %q", d.Choices, want)
+	}
+	if !slices.Equal(d.Ints, []int64{128, 160, 256, 320}) || d.Default != int64(160) {
+		t.Errorf("values %v, default %v", d.Ints, d.Default)
+	}
+	// A config file keeps the number, before and after a pick from the list.
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[encode]\nbitrate_kbps = 320\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := s.Values().Int("encode.bitrate_kbps"); n != 320 || len(s.Warnings()) != 0 {
+		t.Errorf("bitrate %d, warnings %v", n, s.Warnings())
+	}
+	if _, rejected, _, err := s.Set(map[string]any{"encode.bitrate_kbps": "256"}); err != nil || len(rejected) != 0 {
+		t.Fatalf("set: %v %v", rejected, err)
+	}
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "bitrate_kbps = 256") {
+		t.Errorf("config.toml:\n%s", b)
 	}
 }
 

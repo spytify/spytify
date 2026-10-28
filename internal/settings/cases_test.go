@@ -26,7 +26,7 @@ var cases = map[string][]string{
 	"output.counter_next":              {"internal/core:TestEachFileSaysItsCounter"},
 	"output.counter_width":             {"internal/core:TestTheRecordingStopsWhenTheCounterIsFull"},
 	"encode.format":                    {"internal/core:TestEncodingSettingsReachTheFiles"},
-	"encode.bitrate_kbps":              {"internal/core:TestEncodingSettingsReachTheFiles"},
+	"encode.bitrate_kbps":              {"internal/core:TestEncodingSettingsReachTheFiles", "internal/ui:TestPickingABitrateSendsItsNumber"},
 	"tags.cover":                       {"internal/core:TestEncodingSettingsReachTheFiles"},
 	"tags.cover_size":                  {"internal/core:TestEncodingSettingsReachTheFiles"},
 	"tags.extra_to_subtitle":           {"internal/core:TestEncodingSettingsReachTheFiles", "internal/core:TestOutputPathsOfTheSettingsTimeline"},

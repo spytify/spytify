@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -143,6 +144,61 @@ func TestBitrateOnlyForLossyFormats(t *testing.T) {
 		if sel.Disabled() == enabled {
 			t.Errorf("%s: bitrate enabled %v, want %v", format, !sel.Disabled(), enabled)
 		}
+	}
+}
+
+// Each bitrate in the list says what a minute of it takes; picking one
+// sends its number, the value config.toml keeps.
+func TestPickingABitrateSendsItsNumber(t *testing.T) {
+	a, m, core := connectedApp(t)
+	a.showTab(tabSettings)
+	a.render()
+	s := a.screens[tabSettings].(*settingsScreen)
+	values := defaults()
+	values["encode.format"] = "mp3"
+	m.SetSettings(values)
+	a.render()
+	sel := s.fields["encode.bitrate_kbps"].input.(*widget.Select)
+	if sel.Selected != "160 kbps · about 1.2 MB per minute" {
+		t.Errorf("the bitrate shows %q", sel.Selected)
+	}
+	// The row is below the fold: scroll it into view, then open its list.
+	drv := fyne.CurrentApp().Driver()
+	s.scroll.ScrollToOffset(fyne.NewPos(0, drv.AbsolutePositionForObject(sel).Y-drv.AbsolutePositionForObject(s.scroll).Y-200))
+	test.Tap(sel)
+	top := a.win.Canvas().Overlays().Top()
+	if top == nil {
+		t.Fatal("the bitrate list did not open")
+	}
+	// The overlay is Fyne's internal container: its Content is the list.
+	list := reflect.ValueOf(top).Elem().FieldByName("Content").Interface().(*widget.PopUpMenu)
+	snapshot(t, a, "settings-bitrate")
+	var pick fyne.Tappable
+	for _, item := range list.Items {
+		if contains(texts(item), "256 kbps · about 1.9 MB per minute") {
+			pick = item.(fyne.Tappable)
+		}
+	}
+	if pick == nil {
+		t.Fatalf("no 256 kbps in the list: %v", texts(list.Menu))
+	}
+	test.Tap(pick)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		core.mu.Lock()
+		sets := slices.Clone(core.sets)
+		core.mu.Unlock()
+		if len(sets) > 0 {
+			d, _ := settings.Lookup("encode.bitrate_kbps")
+			if n, err := d.Coerce(sets[0]["encode.bitrate_kbps"]); err != nil || n != int64(256) {
+				t.Fatalf("picking 256 kbps sent %v", sets)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("picking a bitrate sent nothing")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

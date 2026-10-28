@@ -2,6 +2,8 @@
 // and saves config.toml.
 package settings
 
+import "fmt"
+
 // Kind is the type of a setting's value.
 type Kind int
 
@@ -30,7 +32,8 @@ type Def struct {
 	Kind    Kind
 	Default any
 	Enum    []string
-	// Choices name Enum's values on the settings screen, in its order.
+	// Choices name Enum's or Ints' values on the settings screen, in their
+	// order.
 	Choices []string
 	Ints    []int64
 	Min     float64
@@ -64,7 +67,7 @@ var Table = []Def{
 	{Key: "output.counter_width", Tab: "Recorder", Group: "Output", Label: "Counter digits", Kind: KindInt, Default: int64(3), Min: 1, Max: 9, Ranged: true, Advanced: true, Note: "3 makes 001; past 999 the recording stops"},
 
 	{Key: "encode.format", Tab: "Recorder", Group: "Encoding", Label: "Output format", Kind: KindEnum, Enum: []string{"mp3", "aac", "flac", "wav"}, Default: "flac"},
-	{Key: "encode.bitrate_kbps", Tab: "Recorder", Group: "Encoding", Label: "Bitrate", Kind: KindIntEnum, Ints: []int64{128, 160, 256, 320}, Default: int64(160), Note: "ignored for flac and wav"},
+	{Key: "encode.bitrate_kbps", Tab: "Recorder", Group: "Encoding", Label: "Bitrate", Kind: KindIntEnum, Ints: bitrates, Choices: sizesPerMinute(bitrates), Default: int64(160), Note: "ignored for flac and wav"},
 	{Key: "tags.cover", Tab: "Tags", Group: "Encoding", Label: "Embed album cover", Kind: KindBool, Default: true, Advanced: true},
 	{Key: "tags.cover_size", Tab: "Tags", Group: "Encoding", Label: "Cover size", Kind: KindEnum, Enum: []string{"small", "medium", "large"}, Choices: []string{"Small (300 px)", "Medium (640 px)", "Large (as it comes)"}, Default: "medium", Advanced: true, Note: "a cover is shrunk to fit, never enlarged"},
 	{Key: "tags.extra_to_subtitle", Tab: "Tags", Group: "Encoding", Label: "Move parenthesised extra title to subtitle", Kind: KindBool, Default: false, Advanced: true},
@@ -86,6 +89,19 @@ var Table = []Def{
 	{Key: "recorder.skip_short_untitled", Tab: "Advanced", Group: "Ads", Label: "Treat items shorter than N seconds with no album as ads (0 = off)", Kind: KindInt, Default: int64(60), Min: 0, Max: 600, Ranged: true, Advanced: true, Note: "podcast episodes record either way; 0 also records short clips with no album"},
 
 	{Key: "privacy.bug_tracker", Tab: "App", Group: "Privacy", Label: "Sentry bug tracker: send crashes, errors, traces and recording counts", Kind: KindBool, Default: true, Note: "sends crashes, errors, traces and recording counts to help the developers fix issues"},
+}
+
+// bitrates are the MP3 and AAC bitrates, in kbps.
+var bitrates = []int64{128, 160, 256, 320}
+
+// sizesPerMinute names each bitrate with what a minute of it takes on disk,
+// in decimal megabytes, so an hour's cost shows before picking one.
+func sizesPerMinute(kbps []int64) []string {
+	var out []string
+	for _, k := range kbps {
+		out = append(out, fmt.Sprintf("%d kbps · about %.1f MB per minute", k, float64(k)*60/8/1000))
+	}
+	return out
 }
 
 var byKey = func() map[string]*Def {
