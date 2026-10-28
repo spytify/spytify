@@ -88,6 +88,9 @@ type Options struct {
 	// Privacy are the privacy.* settings read at launch, used until the
 	// recorder answers.
 	Privacy map[string]any
+	// SoftwareOpenGL says the window is drawn with Mesa's OpenGL, no
+	// graphics driver offering any (package opengl).
+	SoftwareOpenGL bool
 }
 
 type screen interface {

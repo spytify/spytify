@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +49,31 @@ func TestNoWindowIsReportedOnceTheChoiceWasShown(t *testing.T) {
 			if detail, _ := problem["detail"].(string); !strings.Contains(detail, "12 pixel formats") {
 				t.Errorf("detail %q, want what the check found", detail)
 			}
+		})
+	}
+}
+
+func TestTheLaunchSaysWhetherTheWindowIsDrawnInSoftware(t *testing.T) {
+	for _, software := range []bool{false, true} {
+		t.Run(strconv.FormatBool(software), func(t *testing.T) {
+			srv := fakesentry.New(t)
+			a, m := privacyApp(t, srv, true)
+			a.opts.SoftwareOpenGL = software
+			connect(t, a, m, true)
+			a.tel.Flush(2 * time.Second)
+			deadline := time.Now().Add(5 * time.Second)
+			for time.Now().Before(deadline) {
+				for _, l := range srv.Logs() {
+					if l.Body == "launch" {
+						if got := l.Attrs["software_opengl"]; got != strconv.FormatBool(software) {
+							t.Errorf("software_opengl %q, want %v", got, software)
+						}
+						return
+					}
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			t.Fatal("no launch log")
 		})
 	}
 }
