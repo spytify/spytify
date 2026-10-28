@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"math/cmplx"
+	"math/rand/v2"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -171,10 +173,165 @@ func TestNormalizeOffKeepsTheLoudnessAndOnReachesTheTarget(t *testing.T) {
 	}
 }
 
-func TestMP3RatesStayInWhatMP3Allows(t *testing.T) {
-	for in, want := range map[int]int{22050: 22050, 44100: 44100, 48000: 48000, 88200: 44100, 96000: 48000, 176400: 44100, 192000: 48000} {
-		if got := mp3Rate(in); got != want {
-			t.Errorf("mp3Rate(%d) = %d, want %d", in, got, want)
+// Up to 48 kHz, the file keeps the source's rate; above, it is written at
+// the rate the source's divides into. In every format, normalized or not.
+func TestAFileAbove48kHzIsWrittenAtHalfOrAQuarterOfTheRate(t *testing.T) {
+	ff := ffmpegOrSkip(t)
+	for _, format := range slices.Sorted(maps.Keys(presets)) {
+		p := presets[format]
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			if p.Encoder != "" && !ff.HasEncoder(p.Encoder) {
+				t.Skipf("ffmpeg has no %s", p.Encoder)
+			}
+			for _, c := range []struct{ source, want int }{{44100, 44100}, {48000, 48000}, {88200, 44100}, {96000, 48000}, {176400, 44100}, {192000, 48000}} {
+				f := pcm.Format{Rate: c.source, Channels: 2, Sample: pcm.F32LE}
+				in := writeWAV(t, t.TempDir(), f, pcm.Synth{Seed: 2}.Render(f, int64(c.source/2)))
+				for _, normalize := range []bool{false, true} {
+					out := filepath.Join(t.TempDir(), "out."+p.Extension+".part")
+					j := Job{In: in, Out: out, Format: format, BitrateKbps: 320, Source: f, Normalize: normalize, TargetLUFS: -14}
+					if err := ff.Encode(context.Background(), j); err != nil {
+						t.Fatal(err)
+					}
+					if got := rateOf(t, ff, out); got != c.want {
+						t.Errorf("source at %d Hz, normalize %v: file at %d Hz, want %d", c.source, normalize, got, c.want)
+					}
+				}
+			}
+		})
+	}
+}
+
+// fft transforms x in place; its length is a power of two. The inverse is
+// left unscaled.
+func fft(x []complex128, inverse bool) {
+	n := len(x)
+	for i, j := 1, 0; i < n; i++ {
+		bit := n >> 1
+		for ; j&bit != 0; bit >>= 1 {
+			j ^= bit
 		}
+		j ^= bit
+		if i < j {
+			x[i], x[j] = x[j], x[i]
+		}
+	}
+	sign := -1.0
+	if inverse {
+		sign = 1
+	}
+	for size := 2; size <= n; size <<= 1 {
+		step := cmplx.Rect(1, sign*2*math.Pi/float64(size))
+		for start := 0; start < n; start += size {
+			w := complex(1, 0)
+			for k := start; k < start+size/2; k++ {
+				u, v := x[k], x[k+size/2]*w
+				x[k], x[k+size/2] = u+v, u-v
+				w *= step
+			}
+		}
+	}
+}
+
+// bandNoise is frames of interleaved stereo noise at rate, flat up to
+// 20 kHz and empty above, at -20 dBFS RMS. frames is a power of two.
+func bandNoise(rate, frames int) []float64 {
+	rng := rand.New(rand.NewPCG(1, 2))
+	// Left in the real part and right in the imaginary one: zeroing the
+	// same bins on both sides of the spectrum filters each alike.
+	x := make([]complex128, frames)
+	for i := range x {
+		x[i] = complex(rng.NormFloat64(), rng.NormFloat64())
+	}
+	fft(x, false)
+	for k := range x {
+		if float64(min(k, frames-k))*float64(rate)/float64(frames) > 20000 {
+			x[k] = 0
+		}
+	}
+	fft(x, true)
+	var sum float64
+	for _, v := range x {
+		sum += real(v)*real(v) + imag(v)*imag(v)
+	}
+	gain := 0.1 / math.Sqrt(sum/float64(2*frames))
+	out := make([]float64, 0, 2*frames)
+	for _, v := range x {
+		out = append(out, real(v)*gain, imag(v)*gain)
+	}
+	return out
+}
+
+// decodeAt is path's samples, interleaved, brought to rate by resample.
+func decodeAt(t *testing.T, ff *FFmpeg, path string, rate int) []float64 {
+	t.Helper()
+	out, err := exec.Command(ff.Path, "-nostdin", "-loglevel", "error", "-i", path, "-af", resample(rate), "-c:a", "pcm_f32le", "-f", "wav", "-").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, data, err := pcm.DecodeWAV(bytes.NewReader(out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := make([]float64, len(data)/4)
+	for i := range x {
+		x[i] = f.SampleAt(data, i)
+	}
+	return x
+}
+
+// A 96 kHz source written at 48 kHz loses nothing up to 20 kHz: brought
+// back to 96 kHz, the file differs from the source by 100 dB under it, or
+// more. With ffmpeg's default resampler, it is only about 67 dB.
+func TestA96kHzSourceWrittenAt48kHzKeepsEverythingUpTo20kHz(t *testing.T) {
+	ff := ffmpegOrSkip(t)
+	f := pcm.Format{Rate: 96000, Channels: 2, Sample: pcm.F32LE}
+	want := bandNoise(f.Rate, 1<<19)
+	// The fade-in gives the track a loudness range: without one, loudnorm
+	// leaves its linear mode for its dynamic one.
+	fade := int(f.FramesFromMs(1500))
+	for i := range 2 * fade {
+		want[i] *= float64(i/2) / float64(fade)
+	}
+	src := make([]byte, len(want)*4)
+	for i, v := range want {
+		f.PutSample(src, i, v)
+	}
+	in := writeWAV(t, t.TempDir(), f, src)
+	for _, normalize := range []bool{false, true} {
+		t.Run(map[bool]string{false: "as recorded", true: "normalized"}[normalize], func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out.flac.part")
+			if err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f, Normalize: normalize, TargetLUFS: -20}); err != nil {
+				t.Fatal(err)
+			}
+			if rate := rateOf(t, ff, out); rate != 48000 {
+				t.Fatalf("file at %d Hz, want 48000", rate)
+			}
+			got := decodeAt(t, ff, out, f.Rate)
+			// The resampler rings at the edges: 2% of each end is left out.
+			n := min(len(want), len(got))
+			a, b := want[n/50:n-n/50], got[n/50:n-n/50]
+			// Normalized, the file is the source at another gain.
+			gain := 1.0
+			if normalize {
+				var ab, bb float64
+				for i := range a {
+					ab += a[i] * b[i]
+					bb += b[i] * b[i]
+				}
+				gain = ab / bb
+			}
+			var diff, signal float64
+			for i := range a {
+				d := a[i] - gain*b[i]
+				diff += d * d
+				signal += a[i] * a[i]
+			}
+			db := 10 * math.Log10(diff/signal)
+			t.Logf("difference %.1f dB under the source, gain %+.1f dB", -db, -20*math.Log10(gain))
+			if db > -100 {
+				t.Errorf("difference only %.1f dB under the source, want 100 or more", -db)
+			}
+		})
 	}
 }
