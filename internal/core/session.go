@@ -187,6 +187,8 @@ type Session struct {
 	started   time.Time
 	lastChunk time.Time
 	stalled   bool
+	// lowFormat is set while the capture's format is too poor for music.
+	lowFormat bool
 	peak, sum float64
 	count     int64
 	// diskFull is set when the output disk had no room for a track.
@@ -376,6 +378,23 @@ func stallHint(goos string) string {
 	return "No audio from the player for 10 s. Check that PipeWire runs: systemctl --user restart pipewire."
 }
 
+// lowQualityHint is what to change when the capture is too poor for
+// music, as from a Bluetooth headset in a call.
+func lowQualityHint(goos string, f pcm.Format) string {
+	what := fmt.Sprintf("%g kHz", float64(f.Rate)/1000)
+	if f.Channels < 2 {
+		what += " mono"
+	}
+	lead := "The player's output device runs at " + what + ", not fit for recording: tracks will sound like a phone call. "
+	switch goos {
+	case "darwin":
+		return lead + "A Bluetooth headset switches to call mode when an app opens its microphone. In System Settings > Sound > Input, choose another microphone, such as the built-in one, or play to another output."
+	case "windows":
+		return lead + "A Bluetooth headset does this while an app uses its microphone. Choose another output in Settings > System > Sound, or end what uses the headset's microphone."
+	}
+	return lead + "A Bluetooth headset does this while an app uses its microphone. Choose another output device, or end what uses the headset's microphone."
+}
+
 func (s *Session) onTick() {
 	last := s.lastChunk
 	if last.IsZero() {
@@ -401,6 +420,9 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	if s.stalled {
 		s.stalled = false
 		s.deps.log.Infof("audio from the capture again")
+	}
+	if s.ring == nil || ch.Format != s.ring.Format() {
+		s.checkQuality(ch.Format)
 	}
 	switch {
 	case s.ring == nil:
@@ -433,6 +455,22 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	}
 	s.meter(peak, rms, len(ch.Data)/ch.Format.Sample.Bytes())
 	s.progress()
+}
+
+// checkQuality runs on the capture's first format and on each change: a
+// format too poor for music is reported each time, and the report is
+// withdrawn, the same code with no message, once the format is fit again.
+func (s *Session) checkQuality(f pcm.Format) {
+	low := f.Rate < 44100 || f.Channels < 2
+	switch {
+	case low:
+		s.deps.log.Errorf("the capture is %s: tracks will sound like a phone call", f)
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: lowQualityHint(runtime.GOOS, f)})
+	case s.lowFormat:
+		s.deps.log.Infof("the capture is %s, fit for music again", f)
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"})
+	}
+	s.lowFormat = low
 }
 
 func (s *Session) meter(peak, rms float64, samples int) {

@@ -481,6 +481,25 @@ func TestReportsLeaveTheOutputFolderOut(t *testing.T) {
 	}
 }
 
+// An output device too poor to record from, a Bluetooth headset in a
+// call, is the user's to change, not a bug: it leaves no report.
+func TestALowQualityDeviceLeavesNoReport(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: "The player plays to a device at 16 kHz mono"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "No audio from the player for 10 s"}))
+	srv.Wait(t, "event", 1)
+	quiet(a, srv)
+	for _, item := range srv.Items("event") {
+		if ev := item.JSON(); ev["message"] != "blocked: capture_stalled" {
+			t.Errorf("reported %v", ev["message"])
+		}
+	}
+}
+
 // labels are the visible labels under o with this text.
 func labels(o fyne.CanvasObject, text string) []*widget.Label {
 	var out []*widget.Label

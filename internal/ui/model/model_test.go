@@ -244,6 +244,27 @@ func TestAudioBackClearsTheNoAudioWarning(t *testing.T) {
 	}
 }
 
+// The warning of a capture too poor to record from holds while audio
+// flows, and goes when the core withdraws it: the same code, no message.
+func TestAGoodCaptureAgainClearsTheLowQualityWarning(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: "16 kHz mono"}))
+	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{}))
+	if e := m.Snapshot().LastError; e == nil || e.Code != "capture_low_quality" {
+		t.Fatalf("warning %+v", e)
+	}
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
+	if e := m.Snapshot().LastError; e != nil {
+		t.Fatalf("warning kept with the capture fit again: %+v", e)
+	}
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
+	if e := m.Snapshot().LastError; e == nil || e.Code != "disk_full" || e.Msg != "only 10 MB free" {
+		t.Fatalf("other errors must stay: %+v", e)
+	}
+}
+
 func TestTrackStartedKeepsTheSourceFormat(t *testing.T) {
 	m := New()
 	m.Apply(ev(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-001", Title: "A"}, Source: &proto.AudioSource{SampleRate: 44100, Channels: 2}}))

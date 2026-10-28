@@ -678,6 +678,84 @@ func TestAPlayerThatQuitIsNotAStalledCapture(t *testing.T) {
 	}
 }
 
+// lowQuality is every capture_low_quality event, in order.
+func lowQuality(events []proto.Event) []proto.ErrorEvent {
+	var out []proto.ErrorEvent
+	for _, ev := range events {
+		var e proto.ErrorEvent
+		if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == "capture_low_quality" {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// A capture under 44.1 kHz or in mono, as from a Bluetooth headset in a
+// call, is reported once a session, not once a chunk or a track; one fit
+// for music is not reported.
+func TestALowQualityCaptureIsReportedOnce(t *testing.T) {
+	for _, c := range []struct {
+		rate, channels int
+		want           string
+	}{
+		{16000, 2, "16 kHz"},
+		{44100, 1, "44.1 kHz mono"},
+		{44100, 2, ""},
+		{48000, 2, ""},
+	} {
+		tl := loadTimeline(t, "basic")
+		tl.Rate, tl.Channels = c.rate, c.channels
+		s := newScenario(t, tl, nil)
+		s.run(t, tl)
+		if saved, _ := outcome(t, s); len(saved) != len(tl.Items) {
+			t.Errorf("%d Hz, %d channels: saved %v", c.rate, c.channels, saved)
+		}
+		got := lowQuality(s.events.all())
+		if c.want == "" {
+			if len(got) != 0 {
+				t.Errorf("%d Hz, %d channels: warned %+v", c.rate, c.channels, got)
+			}
+			continue
+		}
+		if len(got) != 1 || got[0].Fatal || !strings.Contains(got[0].Msg, c.want) || !strings.Contains(got[0].Msg, "phone call") ||
+			strings.Contains(got[0].Msg, "mono") != (c.channels == 1) {
+			t.Errorf("%d Hz, %d channels: warnings %+v, want one saying %q", c.rate, c.channels, got, c.want)
+		}
+	}
+}
+
+// Another microphone picked mid-track brings a headset in call mode back
+// to 44.1 kHz stereo: the warning is withdrawn, the same code with no
+// message, and raised again when a call takes the headset back.
+func TestTheLowQualityWarningFollowsTheCapture(t *testing.T) {
+	s, rec, _ := directSession(t)
+	frames := make(chan capture.Chunk)
+	events := make(chan meta.Event)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.Run(ctx, frames, events)
+	}()
+	events <- meta.Event{Kind: meta.TrackChanged, Track: meta.TrackInfo{ID: "/x/track/a", Title: "A", LengthMs: 60000}, PositionMs: 0}
+	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: 0}
+	call := pcm.Format{Rate: 16000, Channels: 1, Sample: pcm.S16LE}
+	music := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
+	for i, f := range []pcm.Format{call, music, call} {
+		data := pcm.Synth{Seed: int64(i + 1)}.Render(f, f.FramesFromMs(1000))
+		step := f.FramesFromMs(10) * int64(f.FrameBytes())
+		for j := int64(0); j < int64(len(data)); j += step {
+			frames <- capture.Chunk{Data: data[j:min(j+step, int64(len(data)))], Format: f}
+		}
+	}
+	cancel()
+	<-done
+	got := lowQuality(rec.all())
+	if len(got) != 3 || !strings.Contains(got[0].Msg, "16 kHz mono") || got[1].Msg != "" || got[2].Msg != got[0].Msg {
+		t.Fatalf("warnings %+v, want raised, withdrawn, raised", got)
+	}
+}
+
 func TestSessionStartedMidTrackWaitsForNextTrack(t *testing.T) {
 	s, rec, out := directSession(t)
 	f := pcm.Format{Rate: 8000, Channels: 1, Sample: pcm.S16LE}
