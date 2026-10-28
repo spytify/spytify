@@ -162,11 +162,12 @@ type loudness struct {
 
 const truePeak = "-1.5"
 
-// mp3Rate is the rate an MP3 of a source at rate is written at: the
-// source's, unless MP3 has no such rate. Above 48 kHz, as a Mac whose
-// output runs at 88.2 or 96 kHz delivers, it is the rate the source's
-// divides into.
-func mp3Rate(rate int) int {
+// fileRate is the rate a file of a source at rate is written at: the
+// source's, up to 48 kHz. Above it, as an output device set to 88.2 or
+// 96 kHz delivers, it is the rate the source's divides into: the music
+// holds nothing above 22 kHz, MP3 has no higher rate, and the file is
+// smaller.
+func fileRate(rate int) int {
 	switch {
 	case rate <= 48000:
 		return rate
@@ -176,6 +177,12 @@ func mp3Rate(rate int) int {
 	return 48000
 }
 
+// resample converts to rate with a longer filter than ffmpeg's default,
+// which rolls off from 20 kHz: this one stays flat up to 22 kHz.
+func resample(rate int) string {
+	return "aresample=" + strconv.Itoa(rate) + ":filter_size=256:phase_shift=20:cutoff=0.99"
+}
+
 // Encode runs the job. Normalisation is ffmpeg's two-pass linear loudnorm,
 // so it applies one gain to the whole track instead of compressing it.
 func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
@@ -183,25 +190,26 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) error {
 	if !ok {
 		return fmt.Errorf("encode: unknown format %q", j.Format)
 	}
-	rate := j.Source.Rate
-	if p.Format == "mp3" {
-		rate = mp3Rate(rate)
-	}
+	rate := fileRate(j.Source.Rate)
 	var filters []string
 	if t := j.trimFilter(); t != "" {
 		filters = append(filters, t)
 	}
+	var ln *loudness
 	if j.Normalize {
-		ln, err := f.measure(ctx, j, filters)
-		if err != nil {
+		var err error
+		if ln, err = f.measure(ctx, j, filters); err != nil {
 			return err
 		}
 		if ln != nil {
 			filters = append(filters, fmt.Sprintf(
 				"loudnorm=I=%s:TP=%s:LRA=11:measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s:linear=true",
 				num(j.TargetLUFS), truePeak, ln.InputI, ln.InputTP, ln.InputLRA, ln.InputThresh, ln.Offset))
-			filters = append(filters, "aresample="+strconv.Itoa(rate))
 		}
+	}
+	// loudnorm outputs 192 kHz when it cannot stay linear.
+	if rate != j.Source.Rate || ln != nil {
+		filters = append(filters, resample(rate))
 	}
 
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", j.In, "-map_metadata", "-1", "-vn"}
