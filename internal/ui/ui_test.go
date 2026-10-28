@@ -236,6 +236,22 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	}
 }
 
+// A device above 48 kHz is written at a lower rate, and the card says so.
+func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-004", Path: "/Users/listener/Music/Spytify/M83/Midnight City.flac", DurationMs: 243000, Bytes: 31_400_000, Tagged: true, TaggedBy: "lastfm"}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000},
+		Source: &proto.AudioSource{SampleRate: 96000, Channels: 2}}))
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	want := "M83 · Hurry Up, We're Dreaming · 96 kHz stereo, 48 kHz file"
+	if got := r.subtitle.Segments[0].(*widget.TextSegment).Text; got != want {
+		t.Errorf("card subtitle %q, want %q", got, want)
+	}
+	snapshot(t, a, "record-96khz")
+}
+
 // The last take cut short offers Keep anyway on its row, and only it.
 func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
@@ -912,7 +928,8 @@ func TestSourceText(t *testing.T) {
 	for _, c := range []struct {
 		rate, ch int
 		want     string
-	}{{44100, 2, "44.1 kHz stereo"}, {48000, 1, "48 kHz mono"}, {96000, 6, "96 kHz 6 channels"}, {0, 2, ""}} {
+	}{{44100, 2, "44.1 kHz stereo"}, {48000, 2, "48 kHz stereo"}, {48000, 1, "48 kHz mono"}, {96000, 2, "96 kHz stereo, 48 kHz file"},
+		{88200, 2, "88.2 kHz stereo, 44.1 kHz file"}, {96000, 6, "96 kHz 6 channels, 48 kHz file"}, {0, 2, ""}} {
 		if got := sourceText(c.rate, c.ch); got != c.want {
 			t.Errorf("sourceText(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
 		}

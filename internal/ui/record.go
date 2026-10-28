@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -398,19 +399,28 @@ func stateText(st proto.SessionState, c *model.Row) string {
 	return "● RECORDING"
 }
 
-// sourceText is the captured stream: "44.1 kHz stereo".
+// sourceText is the captured stream, "44.1 kHz stereo", and the file's rate
+// when the encoder writes it at a lower one: "96 kHz stereo, 48 kHz file".
 func sourceText(rate, channels int) string {
 	if rate <= 0 {
 		return ""
 	}
-	khz := strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64) + " kHz"
+	khz := func(rate int) string { return strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64) + " kHz" }
+	text := khz(rate)
 	switch channels {
 	case 1:
-		return khz + " mono"
+		text += " mono"
 	case 2:
-		return khz + " stereo"
+		text += " stereo"
+	default:
+		text = fmt.Sprintf("%s %d channels", text, channels)
 	}
-	return fmt.Sprintf("%s %d channels", khz, channels)
+	// Not an arrow: the app's font has none, and the symbol font Fyne
+	// falls back to draws the space after it far too wide.
+	if file := encode.FileRate(rate); file != rate {
+		text += ", " + khz(file) + " file"
+	}
+	return text
 }
 
 func waitingText(st proto.SessionState) string {
