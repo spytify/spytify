@@ -316,9 +316,10 @@ jobs:
             dist/*.deb
             dist/*.rpm
 
-  # The .deb on the Debian and Ubuntu releases the player's own .deb installs
-  # on (it needs libc6 2.39 or later), each in a clean container: it installs
-  # with its dependencies, and the app opens its window drawn by Mesa on the
+  # The .deb on the supported Debian and Ubuntu releases the player runs on
+  # (its Snap from Ubuntu 22.04 and Debian 12, its own .deb from Ubuntu 24.04
+  # and Debian 13), each in a clean container: it installs with its
+  # dependencies, and the app opens its window drawn by Mesa on the
   # processor, as on a computer without a graphics card. The interim Ubuntu
   # releases are left out: their archive goes away nine months after.
   linux-install:
@@ -329,7 +330,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ["ubuntu:24.04", "ubuntu:26.04", "debian:13"]
+        image: ["ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04", "debian:12", "debian:13"]
     steps:
       - uses: actions/download-artifact@v4
         with:
