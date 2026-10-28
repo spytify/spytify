@@ -315,6 +315,45 @@ jobs:
             dist/*.deb
             dist/*.rpm
 
+  # The .deb on the Debian and Ubuntu releases the player's own .deb installs
+  # on (it needs libc6 2.39 or later), each in a clean container: it installs
+  # with its dependencies, and the app opens its window drawn by Mesa on the
+  # processor, as on a computer without a graphics card. The interim Ubuntu
+  # releases are left out: their archive goes away nine months after.
+  linux-install:
+    name: linux-install (${{ matrix.image }})
+    needs: linux-build
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["ubuntu:24.04", "ubuntu:26.04", "debian:13"]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spytify-linux
+      - name: The .deb installs, and the command-line tools start
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ./spytify_*_amd64.deb
+          if ldd /usr/bin/spytify-ui | grep 'not found'; then exit 1; fi
+          spytifyd -version
+          spytify-cli --help > /dev/null
+      - name: The app opens its window with Mesa's software renderer
+        run: |
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb xdotool mesa-utils
+          Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &
+          export DISPLAY=:99 XDG_RUNTIME_DIR=/tmp/xdg
+          mkdir -m 700 "$XDG_RUNTIME_DIR"
+          for i in $(seq 50); do xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
+          glxinfo -B | grep -F 'OpenGL renderer string: llvmpipe'
+          spytify-ui > ui.log 2>&1 &
+          for i in $(seq 60); do xdotool search --onlyvisible --name '^Spytify$' > window.txt && break; sleep 1; done
+          cat ui.log
+          test -s window.txt || { echo "no Spytify window within 60 s"; exit 1; }
+          xdotool getwindowgeometry "$(head -n 1 window.txt)"
+
   # Gate 1 of M1: the fake player recorded through PipeWire and MPRIS, every
   # file matched sample by sample against its source.
   # The timelines play in real time, so the tests run in three jobs at once,
