@@ -9,9 +9,8 @@ import (
 	"github.com/spytify/spytify/internal/telemetry"
 )
 
-const noWindowText = "Spytify can't open its window. It draws it with OpenGL, and no graphics driver on this computer offers it.\n\n" +
-	"This happens when the graphics card is disabled or has no driver (Windows then uses its basic display driver), and in some virtual machines. " +
-	"Turn the card back on in Device Manager, or install its driver, then open Spytify again."
+// noWindowText is followed by noWindowHelp, what to do on this system.
+const noWindowText = "Spytify can't open its window. It draws it with OpenGL, and no graphics driver on this computer offers it."
 
 // NoWindow says why the app cannot open its window, err being what
 // opengl.Check found, and reports it. With no window, the bug tracker
@@ -21,6 +20,8 @@ func NoWindow(fa fyne.App, tel *telemetry.Client, privacy map[string]any, err er
 	on, _ := privacy[trackerKey].(bool)
 	tel.SetEnabled(on && fa.Preferences().Bool(privacySeenKey))
 	tel.Problem("no_opengl", err.Error())
+	text := noWindowText + "\n\n" + noWindowHelp
 	fmt.Fprintln(os.Stderr, "spytify:", err)
-	tell("Spytify", noWindowText+"\n\n("+err.Error()+")")
+	fmt.Fprintln(os.Stderr, text)
+	tell(fa, "Spytify", text+"\n\n("+err.Error()+")")
 }
