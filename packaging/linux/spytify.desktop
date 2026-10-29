@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Spytify
-Comment=Record an application's audio, one file per track
-Exec=spytify-ui
-Icon=spytify
-Terminal=false
-Categories=AudioVideo;Audio;Recorder;
-Keywords=record;audio;tracks;
