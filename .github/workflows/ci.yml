@@ -242,12 +242,14 @@ jobs:
         run: |
           # A process playing, by its Windows PID (bash's $! is not one).
           pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
-          # Until it plays: a fixed wait lost the race on a slow runner.
+          # Until Windows plays it, which tone.ps1 reads on its audio
+          # session's meter: a fixed wait lost the race on a slow runner.
           ready="$(cygpath -u "$RUNNER_TEMP")/tone.wav.playing"
           for i in $(seq 60); do [ -f "$ready" ] && break; sleep 1; done
           test -f "$ready" || { echo "the tone did not play within 60 s"; exit 1; }
-          sleep 1
-          set +e; timeout 3 ./spytify-tap.exe --pid "$pid" > tap.raw 2> tap.err; code=$?; set -e
+          # A slow runner can spend over a second starting the helper, so
+          # it records 5 s, of which at least 2 s must be the tone.
+          set +e; timeout 5 ./spytify-tap.exe --pid "$pid" > tap.raw 2> tap.err; code=$?; set -e
           echo "spytify-tap exit $code (124: stopped by timeout)"
           cat tap.err
           python src/scripts/ci/tap-level.py tap.raw 2 -20
