@@ -13,6 +13,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,6 +102,25 @@ func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	return a, m, l
 }
 
+// generatedCover is testdata/covers/cover-NN.jpg, drawn by gencovers, as the
+// file URL the fake player hands out, so the pictures carry art as a real
+// player's tracks do.
+func generatedCover(t *testing.T, n int) string {
+	t.Helper()
+	path, err := filepath.Abs(filepath.Join("..", "..", "testdata", "covers", fmt.Sprintf("cover-%02d.jpg", n)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
+}
+
 func feedSession(t *testing.T, m *model.Model) {
 	m.SetConn(model.Connected, "")
 	m.SetInfo(info())
@@ -109,7 +129,7 @@ func feedSession(t *testing.T, m *model.Model) {
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 4242}))
 	for i, title := range []string{"Intro", "Reunion", "Wait"} {
 		id := "s-00" + string(rune('1'+i))
-		m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: id, Artist: "M83", Title: title, Album: "Hurry Up, We're Dreaming", LengthMs: 134000 + int64(i)*20000}}))
+		m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: id, Artist: "M83", Title: title, Album: "Hurry Up, We're Dreaming", LengthMs: 134000 + int64(i)*20000, CoverURL: generatedCover(t, i+1)}}))
 		switch i {
 		case 2:
 			m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: id, Reason: proto.SkipDuplicate}))
@@ -117,16 +137,39 @@ func feedSession(t *testing.T, m *model.Model) {
 			m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: id, Path: "/Users/listener/Music/Spytify/M83/" + title + ".flac", DurationMs: 134000 + int64(i)*102000, Bytes: 18_200_000 + int64(i)*12_800_000, Tagged: true, TaggedBy: "lastfm"}))
 		}
 	}
-	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-004", Artist: "M83", Title: "Midnight City", Album: "Hurry Up, We're Dreaming", LengthMs: 243000}}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-004", Artist: "M83", Title: "Midnight City", Album: "Hurry Up, We're Dreaming", LengthMs: 243000, CoverURL: generatedCover(t, 4)}}))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -3, RMSDBFS: -14}))
 	m.Apply(event(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: "session 20261023-120000 started", TS: time.Now().Format(time.RFC3339Nano)}))
 	m.Apply(event(t, proto.EventLog, proto.LogEvent{Level: "error", Msg: "\"Wait\": already recorded", TS: time.Now().Format(time.RFC3339Nano)}))
 }
 
-// snapshot saves the window as PNG when SPYTIFY_UI_SNAPSHOTS names a folder.
+// coversIn draws again until the covers the window asked for are in: they
+// load off the UI thread, and the tests draw by hand.
+func coversIn(t *testing.T, a *App) {
+	t.Helper()
+	state := func() (asked, loading bool) {
+		a.covers.mu.Lock()
+		defer a.covers.mu.Unlock()
+		return a.covers.done > 0 || len(a.covers.pending) > 0, len(a.covers.pending) > 0
+	}
+	if asked, _ := state(); !asked {
+		return
+	}
+	for {
+		eventually(t, "the covers never loaded", func() bool { _, loading := state(); return !loading })
+		a.render()
+		if _, loading := state(); !loading {
+			return
+		}
+	}
+}
+
+// snapshot saves the window as PNG when SPYTIFY_UI_SNAPSHOTS names a folder,
+// once the covers it shows are in.
 func snapshot(t *testing.T, a *App, name string) {
 	t.Helper()
+	coversIn(t, a)
 	dir := os.Getenv("SPYTIFY_UI_SNAPSHOTS")
 	if dir == "" {
 		return
@@ -225,6 +268,11 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 		t.Errorf("app bar action %q", a.action.Text)
 	}
 	snapshot(t, a, "record")
+	// The picture carries art: the card's cover and one on every row.
+	pictures := slices.DeleteFunc(images(a.win.Content()), func(s string) bool { return !strings.HasPrefix(s, "picture ") })
+	if len(pictures) != 4 {
+		t.Errorf("%d covers on the Record screen, want the card's and three rows': %v", len(pictures), images(a.win.Content()))
+	}
 
 	test.Tap(r.clear)
 	a.render()
@@ -236,11 +284,80 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	}
 }
 
+// A device above 48 kHz is written at a lower rate, and the card says so on
+// a line of its own, under the artist and album.
+func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	// lines is the card's text, one entry per line as drawn, top to bottom.
+	lines := func() []string {
+		var out []string
+		y := float32(-1)
+		for _, o := range test.WidgetRenderer(r.track).Objects() {
+			if txt, ok := o.(*canvas.Text); ok && txt.Text != "" {
+				if txt.Position().Y <= y {
+					t.Errorf("%q is not on a line of its own", txt.Text)
+				}
+				y = txt.Position().Y
+				out = append(out, txt.Text)
+			}
+		}
+		return out
+	}
+	// No format known, no line for it.
+	if got, want := lines(), []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming"}; !slices.Equal(got, want) {
+		t.Errorf("card lines %q, want %q", got, want)
+	}
+
+	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-004", Path: "/Users/listener/Music/Spytify/M83/Midnight City.flac", DurationMs: 243000, Bytes: 31_400_000, Tagged: true, TaggedBy: "lastfm"}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000},
+		Source: &proto.AudioSource{SampleRate: 96000, Channels: 2}}))
+	a.render()
+	if got, want := lines(), []string{"● RECORDING", "Outro", "M83 · Hurry Up, We're Dreaming", "96 kHz stereo, 48 kHz file"}; !slices.Equal(got, want) {
+		t.Errorf("card lines %q, want %q", got, want)
+	}
+	if all := texts(r.card); !contains(all, "Length") || !contains(all, "Level") || !contains(all, "0:00 / 4:07") {
+		t.Errorf("no Length and Level rows on the card: %q", all)
+	}
+	snapshot(t, a, "record-96khz-layout")
+
+	// At the narrowest the window goes, everything on the card stays on it.
+	a.win.Resize(a.win.Content().MinSize())
+	a.render()
+	panel := r.card.Objects[0]
+	d := fyne.CurrentApp().Driver()
+	box := d.AbsolutePositionForObject(panel)
+	var inside func(fyne.CanvasObject)
+	inside = func(o fyne.CanvasObject) {
+		if !o.Visible() {
+			return
+		}
+		p, s := d.AbsolutePositionForObject(o), o.Size()
+		if p.X < box.X || p.X+s.Width > box.X+panel.Size().Width {
+			t.Errorf("%T at x %v to %v, out of the card's %v to %v", o, p.X, p.X+s.Width, box.X, box.X+panel.Size().Width)
+		}
+		switch w := o.(type) {
+		case *fyne.Container:
+			for _, c := range w.Objects {
+				inside(c)
+			}
+		case fyne.Widget:
+			for _, c := range test.WidgetRenderer(w).Objects() {
+				inside(c)
+			}
+		}
+	}
+	inside(panel)
+	snapshot(t, a, "record-96khz-narrow")
+}
+
 // The last take cut short offers Keep anyway on its row, and only it.
 func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
-	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-004", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000}}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-004", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000, CoverURL: generatedCover(t, 5)}}))
 	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipIncomplete}))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
 	m.Apply(event(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "s-004", Keepable: true}))
@@ -912,7 +1029,8 @@ func TestSourceText(t *testing.T) {
 	for _, c := range []struct {
 		rate, ch int
 		want     string
-	}{{44100, 2, "44.1 kHz stereo"}, {48000, 1, "48 kHz mono"}, {96000, 6, "96 kHz 6 channels"}, {0, 2, ""}} {
+	}{{44100, 2, "44.1 kHz stereo"}, {48000, 2, "48 kHz stereo"}, {48000, 1, "48 kHz mono"}, {96000, 2, "96 kHz stereo, 48 kHz file"},
+		{88200, 2, "88.2 kHz stereo, 44.1 kHz file"}, {96000, 6, "96 kHz 6 channels, 48 kHz file"}, {0, 2, ""}} {
 		if got := sourceText(c.rate, c.ch); got != c.want {
 			t.Errorf("sourceText(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
 		}
@@ -1138,7 +1256,7 @@ func TestRecordIsOffWithoutAnOutputFolder(t *testing.T) {
 	a.showTab(tabRecord)
 	m.SetInfo(info())
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
-	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-1", Artist: "Neon Harbor", Title: "Midnight Ferry", LengthMs: 200000}}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-1", Artist: "Neon Harbor", Title: "Midnight Ferry", LengthMs: 200000, CoverURL: generatedCover(t, 6)}}))
 	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-1", Path: "/x.flac"}))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
 	m.SetInfo(outputGone())

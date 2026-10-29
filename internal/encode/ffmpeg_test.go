@@ -235,7 +235,7 @@ func TestNormalizeAppliesOneGainAndNeverCompresses(t *testing.T) {
 					return samples(f, decode(t, ff, out, f))
 				}
 				want := samples(f, src)
-				if fileRate(rate) != rate {
+				if FileRate(rate) != rate {
 					want = encode(false)
 				}
 				i, tp := loudnormOf(t, ff, in)

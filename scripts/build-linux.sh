@@ -31,6 +31,16 @@ for cmd in spytifyd spytify-cli; do
 done
 CGO_ENABLED=1 go build -trimpath -ldflags "$ldflags" -o "$dist/spytify-ui" ./cmd/spytify-ui
 cp README.md LICENSE "$dist/"
+# The desktop entry and the icon at the sizes docks and menus draw it, laid
+# out as under /usr/share, where the packages install them from here.
+share="$dist/share"
+mkdir -p "$share/applications" "$share/icons/hicolor"/{48x48,64x64,128x128,256x256}/apps
+cp packaging/linux/org.spytify.ui.desktop "$share/applications/"
+cp assets/logo.png "$share/icons/hicolor/128x128/apps/spytify.png"
+cp assets/logo256px.png "$share/icons/hicolor/256x256/apps/spytify.png"
+for size in 48 64; do
+  go run ./internal/tools/genico -size "$size" -o "$share/icons/hicolor/${size}x$size/apps/spytify.png" assets/logo256px.png
+done
 tar -C "$out" -czf "$dist.tar.gz" "$(basename "$dist")"
 
 # nfpm does not expand variables in file paths: fill the config in here.

@@ -20,10 +20,17 @@ contents:
     dst: /usr/bin/spytify-cli
   - src: ${DIST}/spytify-ui
     dst: /usr/bin/spytify-ui
-  - src: packaging/linux/spytify.desktop
-    dst: /usr/share/applications/spytify.desktop
-  - src: assets/logo.png
+  # The desktop entry and the icons, from the tarball's share folder.
+  - src: ${DIST}/share/applications/org.spytify.ui.desktop
+    dst: /usr/share/applications/org.spytify.ui.desktop
+  - src: ${DIST}/share/icons/hicolor/48x48/apps/spytify.png
+    dst: /usr/share/icons/hicolor/48x48/apps/spytify.png
+  - src: ${DIST}/share/icons/hicolor/64x64/apps/spytify.png
+    dst: /usr/share/icons/hicolor/64x64/apps/spytify.png
+  - src: ${DIST}/share/icons/hicolor/128x128/apps/spytify.png
     dst: /usr/share/icons/hicolor/128x128/apps/spytify.png
+  - src: ${DIST}/share/icons/hicolor/256x256/apps/spytify.png
+    dst: /usr/share/icons/hicolor/256x256/apps/spytify.png
   - src: packaging/linux/spytifyd.service
     dst: /usr/lib/systemd/user/spytifyd.service
 overrides:
