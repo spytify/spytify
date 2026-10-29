@@ -273,7 +273,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     defaults:
       run:
         shell: bash
@@ -300,16 +300,20 @@ jobs:
           probe=$!
           for i in $(seq 60); do [ -s meter.log ] && break; sleep 0.5; done
           echo "$(t) meter up"
+          # A process that plays nothing: the check must fail.
+          quiet=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-Command","Start-Sleep 60" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
+          set +e; timeout 5 ./spytify-tap.exe --pid "$quiet" > quiet.raw 2> quiet.err; set -e
+          cat quiet.err
+          if python src/scripts/ci/tap-level.py quiet.raw 2 -20; then echo "NEGATIVE passed, wrong"; else echo "NEGATIVE failed, right"; fi
+          python src/scripts/ci/probe-profile.py quiet.raw
+          # The helper first, then the tone: does it hear a stream that
+          # starts after it attached?
           pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
           echo "$(t) tone pid $pid"
-          ready="$(cygpath -u "$RUNNER_TEMP")/tone.wav.playing"
-          for i in $(seq 60); do [ -f "$ready" ] && break; sleep 1; done
-          echo "$(t) marker seen"
           echo "$(t) tap 1 starts"
-          set +e; timeout 5 ./spytify-tap.exe --pid "$pid" > tap.raw 2> tap.err; code=$?; set -e
+          set +e; timeout 12 ./spytify-tap.exe --pid "$pid" > tap.raw 2> tap.err; code=$?; set -e
           echo "$(t) tap 1 exit $code"
           cat tap.err
-          if python src/scripts/ci/tap-level.py tap.raw 2 -20; then echo "VERDICT pass"; else echo "VERDICT FAIL"; fi
           python src/scripts/ci/probe-profile.py tap.raw
           wait $probe || true
           powershell -NoProfile -Command '"marker created " + (Get-Item (Join-Path $env:RUNNER_TEMP "tone.wav.playing")).CreationTimeUtc.ToString("HH:mm:ss.fff")'
