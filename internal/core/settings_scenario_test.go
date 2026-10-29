@@ -14,9 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spytify/spytify/internal/core/naming"
 	"github.com/spytify/spytify/internal/fake"
+	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/openfiles"
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/tag"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -171,9 +174,9 @@ func TestOutputPathsOfTheSettingsTimeline(t *testing.T) {
 			feat:    "004_Quiet_Start_-_Song_(feat._Someone).wav",
 		}},
 		{map[string]any{"output.group_by": "artist", "output.prefix": "album_track", "tags.extra_to_subtitle": true}, map[string]string{
-			accents: "Zoë Ångström/07 Zoë Ångström - Ça plane - Live.wav",
+			accents: "Zoë Ångström/07 Zoë Ångström - Ça plane (Live).wav",
 			slash:   "ACDC/01 ACDC - Back - Remastered 2011.wav",
-			feat:    "Quiet Start/03 Quiet Start - Song - feat. Someone.wav",
+			feat:    "Quiet Start/03 Quiet Start - Song (feat. Someone).wav",
 		}},
 		{map[string]any{"output.group_by": "none", "output.template": "{track} {title} ({year})"}, map[string]string{
 			accents: "07 Ça plane (Live) (1977).wav",
@@ -192,6 +195,22 @@ func TestOutputPathsOfTheSettingsTimeline(t *testing.T) {
 		long, _ := filepath.Rel(s.out, saved[loadTimeline(t, "settings").Items[longItem].Title])
 		if len(filepath.Base(long)) > 255 {
 			t.Errorf("%v: the long title made a %d-byte name", c.settings, len(filepath.Base(long)))
+		}
+	}
+}
+
+// Moving the extra title to the subtitle tag changes the tags only: the
+// file is named as with the option off, parentheses or dash.
+func TestTheSubtitleOptionKeepsTheFileName(t *testing.T) {
+	o := naming.Options{GroupBy: "none", Template: "{artist} - {title}"}
+	for _, title := range []string{"Song (Remastered 2024)", "Song - Remastered 2024", "Song (Live) - Remastered 2011"} {
+		info := meta.TrackInfo{Title: title, Artists: []string{"Neon Harbor"}}
+		names := map[bool]string{}
+		for _, on := range []bool{false, true} {
+			names[on] = naming.Build(namingTrack(tag.FromLocal(info, tag.Options{ExtraToSubtitle: on}), info), o).Base
+		}
+		if want := "Neon Harbor - " + title; names[false] != want || names[true] != want {
+			t.Errorf("%q: named %q with the option off, %q with it on; want %q", title, names[false], names[true], want)
 		}
 	}
 }

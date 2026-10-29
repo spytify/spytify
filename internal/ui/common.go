@@ -108,23 +108,77 @@ func setLabel(l *widget.Label, text string) {
 	}
 }
 
+// rowLine is the style of a list row's lines under its title.
+var rowLine = widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}
+
 // rowText is a list row's title over its details as one block: two stacked
 // widgets would each add their padding between the lines.
 func rowText() *widget.RichText {
 	rt := widget.NewRichText(
 		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameText, TextStyle: fyne.TextStyle{Bold: true}}},
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
+		&widget.TextSegment{Style: rowLine},
 	)
 	rt.Truncation = fyne.TextTruncateEllipsis
 	return rt
 }
 
-func setRowText(rt *widget.RichText, title, details string) {
-	t, d := rt.Segments[0].(*widget.TextSegment), rt.Segments[1].(*widget.TextSegment)
-	if t.Text != title || d.Text != details {
-		t.Text, d.Text = title, details
+// setRowText shows the lines one under another, each in the style of its
+// segment; a line past the text's segments takes the style of the one above.
+func setRowText(rt *widget.RichText, lines ...string) {
+	changed := len(rt.Segments) != len(lines)
+	for i, text := range lines {
+		if i == len(rt.Segments) {
+			rt.Segments = append(rt.Segments, &widget.TextSegment{Style: rt.Segments[i-1].(*widget.TextSegment).Style})
+		}
+		if seg := rt.Segments[i].(*widget.TextSegment); seg.Text != text {
+			seg.Text, changed = text, true
+		}
+	}
+	if changed {
+		rt.Segments = rt.Segments[:len(lines)]
 		rt.Refresh()
 	}
+}
+
+// trackRow is a list row for a track: its cover, its text, then the parts
+// after it. The row is as tall as lines lines of text, the first one the
+// title's; a track showing fewer has them centred in that height, every row
+// of a list being as tall as the others.
+func trackRow(lines int, after fyne.CanvasObject) *fyne.Container {
+	img := canvas.NewImageFromResource(theme.MediaMusicIcon())
+	img.FillMode = canvas.ImageFillContain
+	img.SetMinSize(fyne.NewSquareSize(rowCover))
+	text := rowText()
+	setRowText(text, make([]string, lines)...)
+	return container.NewBorder(nil, nil, img, after, container.NewVBox(layout.NewSpacer(), text, layout.NewSpacer()))
+}
+
+// setTrackRow shows a track's cover, and its title over the lines after it,
+// one style each so that each line is shortened on its own. An empty line is
+// left out.
+func setTrackRow(row *fyne.Container, cover image.Image, title string, lines ...string) {
+	shown := []string{title}
+	for _, line := range lines {
+		if line != "" {
+			shown = append(shown, line)
+		}
+	}
+	// Border layout: center first, then the leading and trailing parts.
+	text := row.Objects[0].(*fyne.Container).Objects[1].(*widget.RichText)
+	// A line that the track shown before left out comes back in the style of
+	// the lines under the title, not in the title's.
+	for len(text.Segments) < len(shown) {
+		text.Segments = append(text.Segments, &widget.TextSegment{Style: rowLine})
+	}
+	setRowText(text, shown...)
+	setCover(row.Objects[1].(*canvas.Image), cover)
+}
+
+// tight takes a caption's padding off above and below it, so that rows of
+// captions sit as close as the lines of a paragraph.
+func tight(o fyne.CanvasObject) *fyne.Container {
+	p := -theme.InnerPadding()
+	return container.New(layout.NewCustomPaddedLayout(p, p, 0, 0), o)
 }
 
 // wrapped is a caption that breaks into lines.

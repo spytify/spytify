@@ -29,7 +29,7 @@ var cases = map[string][]string{
 	"encode.bitrate_kbps":              {"internal/core:TestEncodingSettingsReachTheFiles", "internal/ui:TestPickingABitrateSendsItsNumber"},
 	"tags.cover":                       {"internal/core:TestEncodingSettingsReachTheFiles"},
 	"tags.cover_size":                  {"internal/core:TestEncodingSettingsReachTheFiles"},
-	"tags.extra_to_subtitle":           {"internal/core:TestEncodingSettingsReachTheFiles", "internal/core:TestOutputPathsOfTheSettingsTimeline"},
+	"tags.extra_to_subtitle":           {"internal/core:TestEncodingSettingsReachTheFiles", "internal/core:TestOutputPathsOfTheSettingsTimeline", "internal/core:TestTheSubtitleOptionKeepsTheFileName"},
 	"tags.artist_separator":            {"internal/core:TestEncodingSettingsReachTheFiles"},
 	"recorder.duplicates":              {"internal/core:TestScenarios", "internal/core:TestOutputLayoutForEverySetting"},
 	"recorder.skip_duplicates_forward": {"internal/core:TestSkipDuplicateForward"},

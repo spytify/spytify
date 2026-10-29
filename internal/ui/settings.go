@@ -43,9 +43,10 @@ type settingsScreen struct {
 	// file a sample track gets with the output settings as they are.
 	example  *widget.RichText
 	template *settings.Def
-	// trayNote is Minimize to tray's note while closing quits with it on
-	// (App.trayNote).
+	// trayNote is Minimize to tray's note, which says why instead while
+	// closing quits with it on (App.trayNote).
 	trayNote *widget.RichText
+	tray     *settings.Def
 	player   *playerCard
 	// advanced remembers which Advanced parts the user opened.
 	advanced  map[string]*widget.Accordion
@@ -259,7 +260,7 @@ func (rowLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 }
 
 func (s *settingsScreen) resetKeys(keys []string) {
-	go func() {
+	s.app.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		for _, k := range keys {
@@ -268,7 +269,7 @@ func (s *settingsScreen) resetKeys(keys []string) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // apply sends one value; a rejection is shown and the field goes back to
@@ -277,7 +278,7 @@ func (s *settingsScreen) apply(key string, v any) {
 	if s.rendering {
 		return
 	}
-	go func() {
+	s.app.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		var res proto.SettingsSetResult
@@ -291,7 +292,7 @@ func (s *settingsScreen) apply(key string, v any) {
 				s.render(s.app.m.Snapshot())
 			})
 		}
-	}()
+	})
 }
 
 func (s *settingsScreen) newField(d *settings.Def) *field {
@@ -356,7 +357,6 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 	default:
 		e := newApplyEntry(func(v string) { s.apply(key, v) })
 		if d.Kind == settings.KindTemplate {
-			e.SetPlaceHolder(d.Note)
 			s.example = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
 			s.example.Truncation = fyne.TextTruncateEllipsis
 			s.template = d
@@ -368,12 +368,11 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		f.input = e
 	}
-	if d.ShowNote {
+	if d.Note != "" {
 		under = settingNote(d.Note)
 	}
 	if key == "app.minimize_to_tray" {
-		s.trayNote = settingNote("")
-		s.trayNote.Hide()
+		s.tray, s.trayNote = d, settingNote(d.Note)
 		under = s.trayNote
 	}
 	f.row = settingRow(d.Label, f.input, under)
@@ -450,11 +449,10 @@ func (s *settingsScreen) render(st model.State) {
 	s.enable("output.counter_next", prefix == "counter")
 	s.enable("output.counter_width", prefix == "counter")
 	note := s.app.trayNote(st)
-	setCaption(s.trayNote, note)
-	if s.trayNote.Visible() != (note != "") {
-		show(s.trayNote, note != "")
-		relayout(s.scroll)
+	if note == "" {
+		note = s.tray.Note
 	}
+	setCaption(s.trayNote, note)
 	s.player.render(st)
 }
 
@@ -607,7 +605,7 @@ func (p *playerCard) save() {
 func (p *playerCard) restart() {
 	p.app.noteAction("restart spytifyd for the player")
 	restart := func() {
-		go func() {
+		p.app.calls.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			if p.app.link.Do(ctx, proto.MethodCoreShutdown, nil, nil) == nil {
@@ -623,7 +621,7 @@ func (p *playerCard) restart() {
 				p.pending = false
 				p.showNotice(false)
 			})
-		}()
+		})
 	}
 	if p.app.last.Recording() {
 		dialog.ShowConfirm("Restart spytifyd?", "A session is recording; restarting stops it now.", func(ok bool) {

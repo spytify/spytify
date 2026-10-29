@@ -28,8 +28,9 @@ func main() {
 	env := target.Load()
 
 	// Fyne draws with OpenGL. Without a graphics driver offering it, the
-	// app draws with Mesa's, in software, in a copy of itself started to
-	// load it first; without Mesa either, it says why it has no window.
+	// app on Windows draws with Mesa's, in software, in a copy of itself
+	// started to load it first; elsewhere, or without Mesa either, it says
+	// why it has no window.
 	software := opengl.Software()
 	var noGL error
 	if software {
@@ -62,8 +63,8 @@ func main() {
 	defer tel.Close()
 	saved := savedSettings(env.ConfigPath)
 	privacy := map[string]any{"privacy.bug_tracker": saved.Bool("privacy.bug_tracker")}
-	// Fyne would close the app without a word: say why instead, and leave
-	// the recorder alone.
+	// Fyne would close the app, or keep it running with no window, without
+	// a word: say why instead, and leave the recorder alone.
 	if noGL != nil {
 		ui.NoWindow(fa, tel, privacy, noGL)
 		return

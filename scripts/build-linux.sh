@@ -30,12 +30,26 @@ for cmd in spytifyd spytify-cli; do
   CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$dist/$cmd" "./cmd/$cmd"
 done
 CGO_ENABLED=1 go build -trimpath -ldflags "$ldflags" -o "$dist/spytify-ui" ./cmd/spytify-ui
+# The app needs the newest glibc symbol it links, which comes from this
+# machine's glibc.
+glibc="$(objdump -T "$dist/spytify-ui" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"
+glibc="${glibc#GLIBC_}"
 cp README.md LICENSE "$dist/"
+# The desktop entry and the icon at the sizes docks and menus draw it, laid
+# out as under /usr/share, where the packages install them from here.
+share="$dist/share"
+mkdir -p "$share/applications" "$share/icons/hicolor"/{48x48,64x64,128x128,256x256}/apps
+cp packaging/linux/org.spytify.ui.desktop "$share/applications/"
+cp assets/logo.png "$share/icons/hicolor/128x128/apps/spytify.png"
+cp assets/logo256px.png "$share/icons/hicolor/256x256/apps/spytify.png"
+for size in 48 64; do
+  go run ./internal/tools/genico -size "$size" -o "$share/icons/hicolor/${size}x$size/apps/spytify.png" assets/logo256px.png
+done
 tar -C "$out" -czf "$dist.tar.gz" "$(basename "$dist")"
 
 # nfpm does not expand variables in file paths: fill the config in here.
 config="$out/nfpm.yaml"
-sed -e "s|\${VERSION}|$version|g" -e "s|\${ARCH}|$arch|g" -e "s|\${DIST}|$dist|g" packaging/nfpm.yaml > "$config"
+sed -e "s|\${VERSION}|$version|g" -e "s|\${ARCH}|$arch|g" -e "s|\${DIST}|$dist|g" -e "s|\${GLIBC}|$glibc|g" packaging/nfpm.yaml > "$config"
 for pkg in deb rpm; do
   go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0 package --config "$config" --packager "$pkg" --target "$out/"
 done

@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -35,11 +36,11 @@ type recordScreen struct {
 	diagnose   *widget.Button
 	session    *fyne.Container
 
-	card     *fyne.Container
-	cover    *canvas.Image
-	state    *widget.Label
-	title    *widget.Label
-	subtitle *widget.RichText
+	card  *fyne.Container
+	cover *canvas.Image
+	// track is the state, the title, the artist and album, then the
+	// format, one line each.
+	track    *widget.RichText
 	progress *bar
 	elapsed  *widget.RichText
 	level    *bar
@@ -94,13 +95,14 @@ func newRecordScreen(a *App) *recordScreen {
 	r.cover = canvas.NewImageFromResource(theme.MediaMusicIcon())
 	r.cover.FillMode = canvas.ImageFillContain
 	r.cover.SetMinSize(fyne.NewSquareSize(liveCover))
-	r.state = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	r.state.SizeName = theme.SizeNameCaptionText
-	r.state.Importance = widget.DangerImportance
-	r.title = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	r.title.SizeName = theme.SizeNameSubHeadingText
-	r.title.Truncation = fyne.TextTruncateEllipsis
-	r.subtitle = clipped("")
+	// One block, as a list row's: stacked widgets would each add their
+	// padding between the lines.
+	r.track = widget.NewRichText(
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameError, SizeName: theme.SizeNameCaptionText, TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameSubHeadingText, TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
+	)
+	r.track.Truncation = fyne.TextTruncateEllipsis
 	r.progress = newBar(theme.ColorNamePrimary)
 	r.elapsed = caption("0:00 / 0:00")
 	r.level = newBar(theme.ColorNameSuccess)
@@ -108,9 +110,12 @@ func newRecordScreen(a *App) *recordScreen {
 		a.noteAction("skip")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdNext}, nil)
 	})
-	info := container.NewVBox(r.state, r.title, r.subtitle,
-		container.NewBorder(nil, nil, nil, r.elapsed, r.progress),
-		container.NewBorder(nil, nil, caption("Level"), nil, r.level))
+	// Length and Level are a pair of rows as close as two lines of text,
+	// their bars starting and ending at one x.
+	meters := container.NewBorder(nil, nil, nil, tight(r.elapsed), container.New(layout.NewFormLayout(),
+		tight(caption("Length")), r.progress,
+		tight(caption("Level")), r.level))
+	info := container.NewVBox(r.track, meters)
 	// The track being recorded is on a card of its own colour, apart from
 	// the list.
 	pad := theme.Padding()
@@ -133,9 +138,6 @@ func newRecordScreen(a *App) *recordScreen {
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
-			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
-			img.FillMode = canvas.ImageFillContain
-			img.SetMinSize(fyne.NewSquareSize(rowCover))
 			chip := caption("Skipped: duplicate")
 			keep := widget.NewButtonWithIcon("Keep anyway", theme.DocumentSaveIcon(), nil)
 			keep.Hide()
@@ -143,8 +145,8 @@ func newRecordScreen(a *App) *recordScreen {
 			reveal.Importance = widget.LowImportance
 			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
-			return container.NewBorder(nil, nil, img, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)),
-				rowText())
+			// The title, the artist, then the length, format and size.
+			return trackRow(3, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)))
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(r.rows) {
@@ -153,11 +155,8 @@ func newRecordScreen(a *App) *recordScreen {
 			row := r.rows[id]
 			// Border layout: center first, then the leading and trailing parts.
 			box := o.(*fyne.Container)
-			text := box.Objects[0].(*widget.RichText)
-			img := box.Objects[1].(*canvas.Image)
 			right := box.Objects[2].(*fyne.Container)
-			setRowText(text, row.Title, rowSubtitle(row))
-			setCover(img, a.covers.get(row.CoverURL).row)
+			setTrackRow(box, a.covers.get(row.CoverURL).row, row.Title, row.Artist, rowDetails(row))
 			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.RichText)
 			seg := chip.Segments[0].(*widget.TextSegment)
 			if c := chipColor(row); seg.Text != row.StatusText() || seg.Style.ColorName != c {
@@ -211,8 +210,10 @@ func newRecordScreen(a *App) *recordScreen {
 	return r
 }
 
-func rowSubtitle(r model.Row) string {
-	parts := []string{r.Artist}
+// rowDetails is a finished track's length, format and size, without the
+// parts not known: "3:56 · FLAC · 29.6 MB".
+func rowDetails(r model.Row) string {
+	var parts []string
 	if r.DurationMs > 0 {
 		parts = append(parts, fmtDuration(r.DurationMs))
 	} else if r.LengthMs > 0 {
@@ -244,7 +245,7 @@ func chipColor(r model.Row) fyne.ThemeColorName {
 func (a *App) keep(id string) {
 	a.noteAction("keep anyway")
 	a.m.Keeping(id, true)
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := a.link.Do(ctx, proto.MethodTrackKeep, proto.TrackKeepParams{ID: id}, nil); err != nil {
@@ -253,7 +254,7 @@ func (a *App) keep(id string) {
 				a.showError(err)
 			})
 		}
-	}()
+	})
 }
 
 func (r *recordScreen) content() fyne.CanvasObject { return r.root }
@@ -302,16 +303,15 @@ func (r *recordScreen) render(s model.State) {
 	if c := s.Current; c != nil {
 		r.card.Show()
 		r.waitRow.Hide()
-		setLabel(r.state, stateText(s.Session, c))
-		setLabel(r.title, c.Title)
 		sub := c.Artist
 		if c.Album != "" {
 			sub += " · " + c.Album
 		}
+		lines := []string{stateText(s.Session, c), c.Title, sub}
 		if src := sourceText(c.SourceRate, c.SourceChannels); src != "" {
-			sub += " · " + src
+			lines = append(lines, src)
 		}
-		setCaption(r.subtitle, sub)
+		setRowText(r.track, lines...)
 		setCover(r.cover, r.app.covers.get(c.CoverURL).live)
 	} else {
 		r.card.Hide()
@@ -368,7 +368,7 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 
 // relayout lays the screen out again when a part appeared or went away.
 func (r *recordScreen) relayout() {
-	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), r.waitRow.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
+	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), len(r.track.Segments), r.waitRow.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()
@@ -398,19 +398,28 @@ func stateText(st proto.SessionState, c *model.Row) string {
 	return "● RECORDING"
 }
 
-// sourceText is the captured stream: "44.1 kHz stereo".
+// sourceText is the captured stream, "44.1 kHz stereo", and the file's rate
+// when the encoder writes it at a lower one: "96 kHz stereo, 48 kHz file".
 func sourceText(rate, channels int) string {
 	if rate <= 0 {
 		return ""
 	}
-	khz := strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64) + " kHz"
+	khz := func(rate int) string { return strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64) + " kHz" }
+	text := khz(rate)
 	switch channels {
 	case 1:
-		return khz + " mono"
+		text += " mono"
 	case 2:
-		return khz + " stereo"
+		text += " stereo"
+	default:
+		text = fmt.Sprintf("%s %d channels", text, channels)
 	}
-	return fmt.Sprintf("%s %d channels", khz, channels)
+	// Not an arrow: the app's font has none, and the symbol font Fyne
+	// falls back to draws the space after it far too wide.
+	if file := encode.FileRate(rate); file != rate {
+		text += ", " + khz(file) + " file"
+	}
+	return text
 }
 
 func waitingText(st proto.SessionState) string {
