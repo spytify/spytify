@@ -88,6 +88,10 @@ type Options struct {
 	// Privacy are the privacy.* settings read at launch, used until the
 	// recorder answers.
 	Privacy map[string]any
+	// MinimizeToTray is app.minimize_to_tray read at launch: its tray is
+	// set up before the toolkit's loop runs, the only time Linux starts
+	// one.
+	MinimizeToTray bool
 	// SoftwareOpenGL says the window is drawn with Mesa's OpenGL, no
 	// graphics driver offering any (package opengl).
 	SoftwareOpenGL bool
@@ -139,9 +143,15 @@ type App struct {
 	// replaced is set once a recorder of another build was restarted.
 	replaced bool
 	// tray says the platform has a system tray (menu bar on macOS);
-	// quitApp quits, replaced by tests.
-	tray    bool
-	quitApp func()
+	// noTrayHost, that this Linux desktop draws no tray icons
+	// (watchTrayHost); trayLate, that the tray was set up once the
+	// toolkit's loop ran, which Linux never shows (lateTrayShows);
+	// running, that the loop runs. quitApp quits, replaced by tests.
+	tray       bool
+	noTrayHost bool
+	trayLate   bool
+	running    bool
+	quitApp    func()
 	// trayMenu is the tray's menu, whose trayAction is the app bar's
 	// Record or Stop.
 	trayMenu   *fyne.Menu
@@ -265,6 +275,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		onReopen(a.Reopen)
 	}
 	_, a.tray = fa.(desktop.App)
+	if a.tray && !opts.ManualRender {
+		watchTrayHost(func(present bool) { fyne.Do(func() { a.setTrayHost(present) }) })
+	}
+	if a.tray && opts.MinimizeToTray {
+		a.setupTray()
+	}
 	a.quitApp = fa.Quit
 	a.win.SetCloseIntercept(a.closeWindow)
 	// Every way out (this window, the tray's Quit, Cmd+Q) ends here.
@@ -290,6 +306,7 @@ func (a *App) ShowAndRun() {
 		a.tel.Breadcrumb("app", "launched", nil)
 		a.checkCrashes()
 	})
+	a.running = true
 	a.fa.Run()
 }
 
@@ -344,11 +361,38 @@ func (a *App) quit() {
 // and a tray to go to, the window hides there and the recording goes on;
 // otherwise the app quits, which stops the recorder too.
 func (a *App) closeWindow() {
-	if a.tray && a.last.Settings["app.minimize_to_tray"] == true {
+	if a.hasTray() && a.last.Settings["app.minimize_to_tray"] == true {
 		a.hideToTray()
 		return
 	}
 	a.quit()
+}
+
+// hasTray says whether the tray icon shows, or would: the platform has a
+// tray and, on Linux, the desktop draws it and the toolkit started it.
+func (a *App) hasTray() bool { return a.tray && !a.noTrayHost && !a.trayLate }
+
+// trayNote is what Minimize to tray says under its label: why closing
+// quits even with it on.
+func (a *App) trayNote(s model.State) string {
+	switch {
+	case a.noTrayHost:
+		return noTrayNote
+	case a.trayLate && s.Settings["app.minimize_to_tray"] == true:
+		return lateTrayNote
+	}
+	return ""
+}
+
+// setTrayHost takes watchTrayHost's word: with a tray host, closing hides
+// to the tray, whose icon registers with it by itself; with none, closing
+// quits and Settings says why.
+func (a *App) setTrayHost(present bool) {
+	if a.noTrayHost == !present {
+		return
+	}
+	a.noTrayHost = !present
+	a.render()
 }
 
 // stopDaemon shuts spytifyd down as the app quits, unless it runs as a
@@ -465,8 +509,9 @@ func (a *App) render() {
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	}
 	// The tray icon comes with Minimize to tray; the toolkit cannot take
-	// it away, so turned off, it goes when Spytify restarts.
-	if a.tray && a.trayMenu == nil && s.Settings["app.minimize_to_tray"] == true {
+	// it away, so turned off, it goes when Spytify restarts. On Linux,
+	// turned on, it comes then too: see setupTray.
+	if a.hasTray() && a.trayMenu == nil && s.Settings["app.minimize_to_tray"] == true {
 		a.setupTray()
 	}
 	a.syncTray()
@@ -779,6 +824,9 @@ func (a *App) setupTray() {
 	if !ok {
 		return
 	}
+	// The toolkit starts Linux's tray with its loop: one set up later
+	// never shows, and closing quits until Spytify restarts.
+	a.trayLate = a.running && !lateTrayShows
 	desk.SetSystemTrayIcon(Logo)
 	// The tray's action is the app bar's, which render copies there:
 	// Record, Stop, or Stop now while the last track is being saved.
