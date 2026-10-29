@@ -80,5 +80,40 @@ func TestEncodeRefusesALogoItWouldStretch(t *testing.T) {
 		if _, err := encode(image.NewNRGBA(r), sizes); err == nil {
 			t.Errorf("a %dx%d logo was accepted", r.Dx(), r.Dy())
 		}
+		if _, err := encodePNG(image.NewNRGBA(r), 256); err == nil {
+			t.Errorf("a %dx%d logo was accepted for a 256 px PNG", r.Dx(), r.Dy())
+		}
+	}
+}
+
+// The Linux icons: one PNG per size, the logo's own at its size.
+func TestAPNGHasTheSizeAsked(t *testing.T) {
+	raw, err := os.ReadFile("../../../assets/logo256px.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logo, err := png.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, size := range []int{48, 64, 256} {
+		data, err := encodePNG(logo, size)
+		if err != nil {
+			t.Fatalf("%d px: %v", size, err)
+		}
+		img, err := png.Decode(bytes.NewReader(data))
+		if err != nil {
+			t.Fatalf("%d px: %v", size, err)
+		}
+		if b := img.Bounds(); b.Dx() != size || b.Dy() != size {
+			t.Errorf("%d px: the PNG is %dx%d", size, b.Dx(), b.Dy())
+		}
+		if _, _, _, a := img.At(0, 0).RGBA(); a > 0x4000 {
+			t.Errorf("%d px: corner alpha %#x, want transparent", size, a)
+		}
+		// The disc's middle stays opaque.
+		if _, _, _, a := img.At(size/2, size/2).RGBA(); a < 0xc000 {
+			t.Errorf("%d px: centre alpha %#x, want opaque", size, a)
+		}
 	}
 }

@@ -1,8 +1,13 @@
-// Command genico makes the icon of the Windows app from the logo: an .ico
-// with a PNG of each size Windows draws it at, which
-// scripts/build-windows.sh puts in Spytify.exe:
+// Command genico makes the app's icons from the logo. By default, the icon
+// of the Windows app: an .ico with a PNG of each size Windows draws it at,
+// which scripts/build-windows.sh puts in Spytify.exe:
 //
 //	go run ./internal/tools/genico -o spytify.ico assets/logo256px.png
+//
+// With -size, one PNG that many pixels a side, which
+// scripts/build-linux.sh puts where Linux desktops look for the icon:
+//
+//	go run ./internal/tools/genico -size 48 -o spytify.png assets/logo256px.png
 package main
 
 import (
@@ -14,7 +19,6 @@ import (
 	"image"
 	"image/png"
 	"os"
-	"slices"
 
 	"golang.org/x/image/draw"
 )
@@ -33,9 +37,10 @@ type dirEntry struct {
 
 func main() {
 	out := flag.String("o", "spytify.ico", "output file")
+	size := flag.Int("size", 0, "make one PNG this many pixels a side instead of the .ico")
 	flag.Parse()
 	if flag.NArg() != 1 {
-		fail(errors.New("usage: genico -o spytify.ico logo.png"))
+		fail(errors.New("usage: genico [-size pixels] -o spytify.ico logo.png"))
 	}
 	f, err := os.Open(flag.Arg(0))
 	if err != nil {
@@ -46,37 +51,29 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	ico, err := encode(src, sizes)
+	var data []byte
+	if *size > 0 {
+		data, err = encodePNG(src, *size)
+	} else {
+		data, err = encode(src, sizes)
+	}
 	if err != nil {
 		fail(err)
 	}
-	if err := os.WriteFile(*out, ico, 0o644); err != nil {
+	if err := os.WriteFile(*out, data, 0o644); err != nil {
 		fail(err)
 	}
 }
 
 // encode makes an .ico of src at each size, every image a PNG, which
-// Windows reads since Vista. src is square and at least the largest size:
-// it is only ever shrunk.
+// Windows reads since Vista.
 func encode(src image.Image, sizes []int) ([]byte, error) {
-	b := src.Bounds()
-	if b.Dx() != b.Dy() || b.Dx() < slices.Max(sizes) {
-		return nil, fmt.Errorf("the logo is %dx%d: it must be square and at least %d pixels wide", b.Dx(), b.Dy(), slices.Max(sizes))
-	}
-	enc := png.Encoder{CompressionLevel: png.BestCompression}
 	images := make([][]byte, len(sizes))
 	for i, size := range sizes {
-		img := src
-		if size != b.Dx() {
-			dst := image.NewRGBA(image.Rect(0, 0, size, size))
-			draw.CatmullRom.Scale(dst, dst.Bounds(), src, b, draw.Src, nil)
-			img = dst
-		}
-		var buf bytes.Buffer
-		if err := enc.Encode(&buf, img); err != nil {
+		var err error
+		if images[i], err = encodePNG(src, size); err != nil {
 			return nil, err
 		}
-		images[i] = buf.Bytes()
 	}
 
 	// The ICONDIR (reserved, 1 for an icon, the count), an entry per
@@ -96,6 +93,27 @@ func encode(src image.Image, sizes []int) ([]byte, error) {
 		ico.Write(img)
 	}
 	return ico.Bytes(), nil
+}
+
+// encodePNG makes a PNG of src, size pixels a side. src is square and at
+// least that size: it is only ever shrunk.
+func encodePNG(src image.Image, size int) ([]byte, error) {
+	b := src.Bounds()
+	if b.Dx() != b.Dy() || b.Dx() < size {
+		return nil, fmt.Errorf("the logo is %dx%d: it must be square and at least %d pixels wide", b.Dx(), b.Dy(), size)
+	}
+	img := src
+	if size != b.Dx() {
+		dst := image.NewRGBA(image.Rect(0, 0, size, size))
+		draw.CatmullRom.Scale(dst, dst.Bounds(), src, b, draw.Src, nil)
+		img = dst
+	}
+	var buf bytes.Buffer
+	enc := png.Encoder{CompressionLevel: png.BestCompression}
+	if err := enc.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func fail(err error) {
