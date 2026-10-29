@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/tag"
 	"github.com/spytify/spytify/internal/ui/model"
 )
 
@@ -48,18 +48,21 @@ type libraryScreen struct {
 	shown  []libraryFile
 
 	covers *covers
+	tagged *tagCache
 	ffOnce sync.Once
 	ff     *encode.FFmpeg
 }
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
-	l.covers = newCovers(func() {
+	loaded := func() {
 		// Tests draw by hand: see Options.ManualRender.
 		if !a.opts.ManualRender {
 			fyne.Do(l.list.Refresh)
 		}
-	})
+	}
+	l.covers = newCovers(loaded)
+	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 	l.search = widget.NewEntry()
 	l.search.SetPlaceHolder("Search artist, title or album")
 	l.search.OnChanged = func(string) { l.filter() }
@@ -74,13 +77,10 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.list = widget.NewList(
 		func() int { return len(l.shown) },
 		func() fyne.CanvasObject {
-			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
-			img.FillMode = canvas.ImageFillContain
-			img.SetMinSize(fyne.NewSquareSize(rowCover))
-			return container.NewBorder(nil, nil, img, container.NewHBox(
+			// The title and the artists, as the player lists a track.
+			return trackRow(2, container.NewHBox(
 				&widget.Button{Icon: theme.SearchIcon(), Importance: widget.LowImportance},
-				&widget.Button{Icon: theme.MediaPlayIcon(), Importance: widget.LowImportance}),
-				rowText())
+				&widget.Button{Icon: theme.MediaPlayIcon(), Importance: widget.LowImportance}))
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.shown) {
@@ -89,18 +89,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 			f := l.shown[id]
 			box := o.(*fyne.Container)
 			// Border layout: center first, then the leading and trailing parts.
-			text := box.Objects[0].(*widget.RichText)
-			img := box.Objects[1].(*canvas.Image)
 			buttons := box.Objects[2].(*fyne.Container)
-			setCover(img, l.cover(f).row)
-			folder := filepath.Dir(f.rel)
-			if folder == "." {
-				folder = ""
-			} else {
-				folder += " · "
-			}
-			setRowText(text, strings.TrimSuffix(filepath.Base(f.rel), filepath.Ext(f.rel)),
-				folder+strings.ToUpper(strings.TrimPrefix(filepath.Ext(f.rel), "."))+" · "+fmtBytes(f.size)+" · "+f.modTime.Format("2006-01-02 15:04"))
+			title, artist := l.tags(f)
+			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
 			buttons.Objects[0].(*widget.Button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
 			buttons.Objects[1].(*widget.Button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
@@ -129,6 +120,16 @@ func (l *libraryScreen) cover(f libraryFile) thumbs {
 		}
 		return thumbs{}
 	}
+	ff := l.ffmpeg()
+	if ff == nil {
+		return thumbs{}
+	}
+	path := f.path
+	return l.covers.load(f.key(), func(ctx context.Context) ([]byte, error) { return ff.Cover(ctx, path) })
+}
+
+// ffmpeg reads the files' covers and tags; nil without one.
+func (l *libraryScreen) ffmpeg() *encode.FFmpeg {
 	l.ffOnce.Do(func() {
 		name := os.Getenv("SPYTIFY_FFMPEG")
 		if name == "" {
@@ -136,12 +137,89 @@ func (l *libraryScreen) cover(f libraryFile) thumbs {
 		}
 		l.ff, _ = encode.Find(name)
 	})
-	if l.ff == nil {
-		return thumbs{}
-	}
-	key := fmt.Sprintf("%s\x00%d\x00%d", f.path, f.size, f.modTime.UnixNano())
+	return l.ff
+}
+
+// key tells a file's versions apart: one written again has another.
+func (f libraryFile) key() string {
+	return fmt.Sprintf("%s\x00%d\x00%d", f.path, f.size, f.modTime.UnixNano())
+}
+
+// tags is a file's title and artists, as its tags say once they are read,
+// or for WAV, which has no tags, the .json beside it. Until then, and for a
+// file without them, they are its name's, "Artist - Title" as the naming
+// template writes it by default.
+func (l *libraryScreen) tags(f libraryFile) (title, artist string) {
 	path := f.path
-	return l.covers.load(key, func(ctx context.Context) ([]byte, error) { return l.ff.Cover(ctx, path) })
+	if t := l.tagged.get(f.key(), func(ctx context.Context) trackTags { return l.readTags(ctx, path) }); t.title != "" {
+		return t.title, t.artist
+	}
+	name := strings.TrimSuffix(filepath.Base(f.rel), filepath.Ext(f.rel))
+	if artist, title, ok := tag.SplitArtistTitle(name); ok {
+		return title, artist
+	}
+	return name, ""
+}
+
+func (l *libraryScreen) readTags(ctx context.Context, path string) trackTags {
+	if strings.EqualFold(filepath.Ext(path), ".wav") {
+		var side tag.Track
+		if b, err := os.ReadFile(path + ".json"); err == nil && json.Unmarshal(b, &side) == nil {
+			return trackTags{side.Title, strings.Join(side.Performers, ", ")}
+		}
+		return trackTags{}
+	}
+	ff := l.ffmpeg()
+	if ff == nil {
+		return trackTags{}
+	}
+	tags, err := ff.Tags(ctx, path)
+	if err != nil {
+		return trackTags{}
+	}
+	return trackTags{tags["title"], tags["artist"]}
+}
+
+// trackTags is a file's title and artists; none for a file without tags.
+type trackTags struct{ title, artist string }
+
+// tagCache reads each file's tags once, off the toolkit's goroutine and two
+// at a time: a library holds thousands of files, and only the rows in view
+// ask for theirs.
+type tagCache struct {
+	mu      sync.Mutex
+	read    map[string]trackTags
+	pending map[string]bool
+	loaded  func()
+	slots   chan struct{}
+}
+
+// get returns the tags read under key, or starts read and returns none until
+// it is done; loaded runs then, so the screen can draw them.
+func (c *tagCache) get(key string, read func(context.Context) trackTags) trackTags {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if t, ok := c.read[key]; ok {
+		return t
+	}
+	if !c.pending[key] {
+		c.pending[key] = true
+		go func() {
+			c.slots <- struct{}{}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			t := read(ctx)
+			cancel()
+			<-c.slots
+			c.mu.Lock()
+			delete(c.pending, key)
+			c.read[key] = t
+			c.mu.Unlock()
+			if c.loaded != nil {
+				c.loaded()
+			}
+		}()
+	}
+	return trackTags{}
 }
 
 func (l *libraryScreen) content() fyne.CanvasObject { return l.root }

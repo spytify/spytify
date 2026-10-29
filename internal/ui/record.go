@@ -138,9 +138,6 @@ func newRecordScreen(a *App) *recordScreen {
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
-			img := canvas.NewImageFromResource(theme.MediaMusicIcon())
-			img.FillMode = canvas.ImageFillContain
-			img.SetMinSize(fyne.NewSquareSize(rowCover))
 			chip := caption("Skipped: duplicate")
 			keep := widget.NewButtonWithIcon("Keep anyway", theme.DocumentSaveIcon(), nil)
 			keep.Hide()
@@ -148,8 +145,8 @@ func newRecordScreen(a *App) *recordScreen {
 			reveal.Importance = widget.LowImportance
 			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
-			return container.NewBorder(nil, nil, img, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)),
-				rowText())
+			// The title, the artist, then the length, format and size.
+			return trackRow(3, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)))
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(r.rows) {
@@ -158,11 +155,8 @@ func newRecordScreen(a *App) *recordScreen {
 			row := r.rows[id]
 			// Border layout: center first, then the leading and trailing parts.
 			box := o.(*fyne.Container)
-			text := box.Objects[0].(*widget.RichText)
-			img := box.Objects[1].(*canvas.Image)
 			right := box.Objects[2].(*fyne.Container)
-			setRowText(text, row.Title, rowSubtitle(row))
-			setCover(img, a.covers.get(row.CoverURL).row)
+			setTrackRow(box, a.covers.get(row.CoverURL).row, row.Title, row.Artist, rowDetails(row))
 			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.RichText)
 			seg := chip.Segments[0].(*widget.TextSegment)
 			if c := chipColor(row); seg.Text != row.StatusText() || seg.Style.ColorName != c {
@@ -216,8 +210,10 @@ func newRecordScreen(a *App) *recordScreen {
 	return r
 }
 
-func rowSubtitle(r model.Row) string {
-	parts := []string{r.Artist}
+// rowDetails is a finished track's length, format and size, without the
+// parts not known: "3:56 · FLAC · 29.6 MB".
+func rowDetails(r model.Row) string {
+	var parts []string
 	if r.DurationMs > 0 {
 		parts = append(parts, fmtDuration(r.DurationMs))
 	} else if r.LengthMs > 0 {
