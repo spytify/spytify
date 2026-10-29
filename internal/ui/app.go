@@ -142,6 +142,8 @@ type App struct {
 	// quitApp quits, replaced by tests.
 	tray    bool
 	quitApp func()
+	// fyneStop is Fyne's stop hook, which ShowAndRun runs (see New).
+	fyneStop func()
 	// trayMenu is the tray's menu, whose trayAction is the app bar's
 	// Record or Stop.
 	trayMenu   *fyne.Menu
@@ -267,8 +269,14 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	_, a.tray = fa.(desktop.App)
 	a.quitApp = fa.Quit
 	a.win.SetCloseIntercept(a.closeWindow)
-	// Every way out (this window, the tray's Quit, Cmd+Q) ends here.
-	fa.Lifecycle().SetOnStopped(a.stopDaemon)
+	// Fyne 2.8.2 sends its stop hook, which saves the preferences, through
+	// a queue it closes at the same moment: at quit, the hook can be skipped,
+	// hang the app or panic (fyne-io/fyne#6634). ShowAndRun runs it once
+	// the loop has returned.
+	if hook, ok := fa.Lifecycle().(fyneStopHook); ok {
+		a.fyneStop = hook.OnStopped()
+		hook.SetOnStoppedHookExecuted(nil)
+	}
 	m.OnChange(a.scheduleRender)
 	m.OnLevel(a.scheduleLevel)
 	m.OnEvent(a.onEvent)
@@ -291,6 +299,18 @@ func (a *App) ShowAndRun() {
 		a.checkCrashes()
 	})
 	a.fa.Run()
+	// Every way out (this window, the tray's Quit, Cmd+Q, a signal) ends
+	// here.
+	a.stopDaemon()
+	if a.fyneStop != nil {
+		a.fyneStop()
+	}
+}
+
+// fyneStopHook is the part of Fyne's lifecycle that holds its own stop hook.
+type fyneStopHook interface {
+	OnStopped() func()
+	SetOnStoppedHookExecuted(func())
 }
 
 // showTab switches to a tab, from a button elsewhere in the window.
