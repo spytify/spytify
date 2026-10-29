@@ -177,7 +177,13 @@ func tagOptions(v settings.Values) tag.Options {
 }
 
 func namingTrack(t tag.Track, info meta.TrackInfo) naming.Track {
-	title := tag.JoinTitle(t.Title, t.Subtitle, tag.SepDash)
+	// The subtitle option moves the extra title in the tags only: the file
+	// name puts it back the way the title had it.
+	sep := t.SubtitleSep
+	if sep == tag.SepNone {
+		sep = tag.SepDash
+	}
+	title := tag.JoinTitle(t.Title, t.Subtitle, sep)
 	artists := t.Performers
 	if len(artists) == 0 {
 		artists = info.Artists
