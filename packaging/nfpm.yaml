@@ -1,5 +1,5 @@
 # .deb and .rpm of the Linux build; scripts/build-linux.sh fills in VERSION,
-# ARCH and DIST.
+# ARCH, DIST and GLIBC.
 name: spytify
 arch: ${ARCH}
 platform: linux
@@ -33,16 +33,52 @@ contents:
     dst: /usr/share/icons/hicolor/256x256/apps/spytify.png
   - src: packaging/linux/spytifyd.service
     dst: /usr/lib/systemd/user/spytifyd.service
+# spytify-ui links libGL, libwayland-client and glibc; GLFW loads the X11
+# or Wayland libraries when it opens the window. Mesa's drivers draw it
+# with the graphics card, or with the processor (llvmpipe) without one.
 overrides:
   deb:
     depends:
       - ffmpeg
+      - libc6 (>= ${GLIBC})
+      - libgl1
+      - libglx-mesa0
+      - libgl1-mesa-dri
+      - libegl1
+      - libegl-mesa0
+      - libwayland-client0
+      - libwayland-cursor0
+      - libwayland-egl1
+      - libxkbcommon0
+      - libx11-6
+      - libxcursor1
+      - libxi6
+      - libxinerama1
+      - libxrandr2
     recommends:
       - pipewire-bin
       - wireplumber
     suggests:
       - pulseaudio-utils
+  # By library, as Fedora and openSUSE name their packages differently.
+  # Mesa's GLX library brings its drivers: mesa-dri-drivers on Fedora,
+  # Mesa-dri on openSUSE.
   rpm:
+    depends:
+      - libc.so.6(GLIBC_${GLIBC})(64bit)
+      - libGL.so.1()(64bit)
+      - libGLX_mesa.so.0()(64bit)
+      - libEGL.so.1()(64bit)
+      - libEGL_mesa.so.0()(64bit)
+      - libwayland-client.so.0()(64bit)
+      - libwayland-cursor.so.0()(64bit)
+      - libwayland-egl.so.1()(64bit)
+      - libxkbcommon.so.0()(64bit)
+      - libX11.so.6()(64bit)
+      - libXcursor.so.1()(64bit)
+      - libXi.so.6()(64bit)
+      - libXinerama.so.1()(64bit)
+      - libXrandr.so.2()(64bit)
     recommends:
       - ffmpeg
       - pipewire-utils
