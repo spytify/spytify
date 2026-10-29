@@ -1,7 +1,6 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package opengl
 
-// Check has nothing to look for: macOS always has OpenGL, and Linux's
-// comes with the Mesa library the app needs to start at all.
+// Check has nothing to look for: macOS always has OpenGL.
 func Check() error { return nil }

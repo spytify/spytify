@@ -14,7 +14,7 @@ import (
 // with the setting on and off, as "package folder:TestName".
 var cases = map[string][]string{
 	"app.theme":                        {"internal/ui:TestThemeFollowsTheSetting"},
-	"app.minimize_to_tray":             {"internal/ui:TestClosingTheWindowQuitsUnlessMinimizedToTray", "internal/ui:TestClosingToTheTrayKeepsSpytifyThere"},
+	"app.minimize_to_tray":             {"internal/ui:TestClosingTheWindowQuitsUnlessMinimizedToTray", "internal/ui:TestClosingToTheTrayKeepsSpytifyThere", "internal/ui:TestClosingQuitsWhereTheDesktopDrawsNoTray", "internal/ui:TestTheTrayIconComesAtLaunchOrOnLinuxAtTheNext"},
 	"app.autostart_recording":          {"test/e2e:TestAutostartRecordsOnLaunch"},
 	"app.check_updates":                {"internal/ui:TestTheUpdateCheckFollowsTheSetting"},
 	"output.dir":                       {"internal/core:TestOutputFolderGoneStopsTheRecording", "internal/core:TestNoRecordingStartsWithoutAnOutputFolder"},
@@ -29,7 +29,7 @@ var cases = map[string][]string{
 	"encode.bitrate_kbps":              {"internal/core:TestEncodingSettingsReachTheFiles", "internal/ui:TestPickingABitrateSendsItsNumber"},
 	"tags.cover":                       {"internal/core:TestEncodingSettingsReachTheFiles"},
 	"tags.cover_size":                  {"internal/core:TestEncodingSettingsReachTheFiles"},
-	"tags.extra_to_subtitle":           {"internal/core:TestEncodingSettingsReachTheFiles", "internal/core:TestOutputPathsOfTheSettingsTimeline"},
+	"tags.extra_to_subtitle":           {"internal/core:TestEncodingSettingsReachTheFiles", "internal/core:TestOutputPathsOfTheSettingsTimeline", "internal/core:TestTheSubtitleOptionKeepsTheFileName"},
 	"tags.artist_separator":            {"internal/core:TestEncodingSettingsReachTheFiles"},
 	"recorder.duplicates":              {"internal/core:TestScenarios", "internal/core:TestOutputLayoutForEverySetting"},
 	"recorder.skip_duplicates_forward": {"internal/core:TestSkipDuplicateForward"},

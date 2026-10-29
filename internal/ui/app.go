@@ -88,6 +88,10 @@ type Options struct {
 	// Privacy are the privacy.* settings read at launch, used until the
 	// recorder answers.
 	Privacy map[string]any
+	// MinimizeToTray is app.minimize_to_tray read at launch: its tray is
+	// set up before the toolkit's loop runs, the only time Linux starts
+	// one.
+	MinimizeToTray bool
 	// SoftwareOpenGL says the window is drawn with Mesa's OpenGL, no
 	// graphics driver offering any (package opengl).
 	SoftwareOpenGL bool
@@ -139,9 +143,17 @@ type App struct {
 	// replaced is set once a recorder of another build was restarted.
 	replaced bool
 	// tray says the platform has a system tray (menu bar on macOS);
-	// quitApp quits, replaced by tests.
-	tray    bool
-	quitApp func()
+	// noTrayHost, that this Linux desktop draws no tray icons
+	// (watchTrayHost); trayLate, that the tray was set up once the
+	// toolkit's loop ran, which Linux never shows (lateTrayShows);
+	// running, that the loop runs. quitApp quits, replaced by tests.
+	tray       bool
+	noTrayHost bool
+	trayLate   bool
+	running    bool
+	quitApp    func()
+	// fyneStop is Fyne's stop hook, which ShowAndRun runs (see New).
+	fyneStop func()
 	// trayMenu is the tray's menu, whose trayAction is the app bar's
 	// Record or Stop.
 	trayMenu   *fyne.Menu
@@ -160,10 +172,11 @@ type App struct {
 	wasConnected bool
 	checksNoted  string
 	diagNoted    bool
-	// reports are the reports on their way to the bug tracker, which
-	// tests wait for: one still going must not touch the next test's
-	// window.
+	// reports are the reports on their way to the bug tracker, and calls
+	// the requests on their way to the recorder, which tests wait for:
+	// one still going must not touch the next test's window.
 	reports sync.WaitGroup
+	calls   sync.WaitGroup
 	// heard and incomplete are the link goroutine's: the first sound, and
 	// the incomplete tracks in a row.
 	heard      bool
@@ -264,10 +277,22 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		onReopen(a.Reopen)
 	}
 	_, a.tray = fa.(desktop.App)
+	if a.tray && !opts.ManualRender {
+		watchTrayHost(func(present bool) { fyne.Do(func() { a.setTrayHost(present) }) })
+	}
+	if a.tray && opts.MinimizeToTray {
+		a.setupTray()
+	}
 	a.quitApp = fa.Quit
 	a.win.SetCloseIntercept(a.closeWindow)
-	// Every way out (this window, the tray's Quit, Cmd+Q) ends here.
-	fa.Lifecycle().SetOnStopped(a.stopDaemon)
+	// Fyne 2.8.2 sends its stop hook, which saves the preferences, through
+	// a queue it closes at the same moment: at quit, the hook can be skipped,
+	// hang the app or panic (fyne-io/fyne#6634). ShowAndRun runs it once
+	// the loop has returned.
+	if hook, ok := fa.Lifecycle().(fyneStopHook); ok {
+		a.fyneStop = hook.OnStopped()
+		hook.SetOnStoppedHookExecuted(nil)
+	}
 	m.OnChange(a.scheduleRender)
 	m.OnLevel(a.scheduleLevel)
 	m.OnEvent(a.onEvent)
@@ -289,7 +314,20 @@ func (a *App) ShowAndRun() {
 		a.tel.Breadcrumb("app", "launched", nil)
 		a.checkCrashes()
 	})
+	a.running = true
 	a.fa.Run()
+	// Every way out (this window, the tray's Quit, Cmd+Q, a signal) ends
+	// here.
+	a.stopDaemon()
+	if a.fyneStop != nil {
+		a.fyneStop()
+	}
+}
+
+// fyneStopHook is the part of Fyne's lifecycle that holds its own stop hook.
+type fyneStopHook interface {
+	OnStopped() func()
+	SetOnStoppedHookExecuted(func())
 }
 
 // showTab switches to a tab, from a button elsewhere in the window.
@@ -313,7 +351,7 @@ func (a *App) replaceOtherBuild(s model.State) {
 		return
 	}
 	a.replaced = true
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil) == nil {
@@ -322,7 +360,7 @@ func (a *App) replaceOtherBuild(s model.State) {
 		if err := a.link.StartDaemon(); err != nil {
 			fyne.Do(func() { a.showError(err) })
 		}
-	}()
+	})
 }
 
 // quit closes Spytify, the recorder included; a recording in progress is
@@ -343,11 +381,38 @@ func (a *App) quit() {
 // and a tray to go to, the window hides there and the recording goes on;
 // otherwise the app quits, which stops the recorder too.
 func (a *App) closeWindow() {
-	if a.tray && a.last.Settings["app.minimize_to_tray"] == true {
+	if a.hasTray() && a.last.Settings["app.minimize_to_tray"] == true {
 		a.hideToTray()
 		return
 	}
 	a.quit()
+}
+
+// hasTray says whether the tray icon shows, or would: the platform has a
+// tray and, on Linux, the desktop draws it and the toolkit started it.
+func (a *App) hasTray() bool { return a.tray && !a.noTrayHost && !a.trayLate }
+
+// trayNote is what Minimize to tray says under its label: why closing
+// quits even with it on.
+func (a *App) trayNote(s model.State) string {
+	switch {
+	case a.noTrayHost:
+		return noTrayNote
+	case a.trayLate && s.Settings["app.minimize_to_tray"] == true:
+		return lateTrayNote
+	}
+	return ""
+}
+
+// setTrayHost takes watchTrayHost's word: with a tray host, closing hides
+// to the tray, whose icon registers with it by itself; with none, closing
+// quits and Settings says why.
+func (a *App) setTrayHost(present bool) {
+	if a.noTrayHost == !present {
+		return
+	}
+	a.noTrayHost = !present
+	a.render()
 }
 
 // stopDaemon shuts spytifyd down as the app quits, unless it runs as a
@@ -464,8 +529,9 @@ func (a *App) render() {
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	}
 	// The tray icon comes with Minimize to tray; the toolkit cannot take
-	// it away, so turned off, it goes when Spytify restarts.
-	if a.tray && a.trayMenu == nil && s.Settings["app.minimize_to_tray"] == true {
+	// it away, so turned off, it goes when Spytify restarts. On Linux,
+	// turned on, it comes then too: see setupTray.
+	if a.hasTray() && a.trayMenu == nil && s.Settings["app.minimize_to_tray"] == true {
 		a.setupTray()
 	}
 	a.syncTray()
@@ -657,7 +723,7 @@ func upper(s string) string {
 
 func (a *App) toggleRecording() {
 	s := a.last
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		var err error
@@ -683,7 +749,7 @@ func (a *App) toggleRecording() {
 		if err != nil {
 			fyne.Do(func() { a.showError(err) })
 		}
-	}()
+	})
 }
 
 // refreshChecks runs the recorder's checks again.
@@ -719,7 +785,7 @@ func (a *App) recheck(ev proto.Event) {
 
 // do runs an action off the toolkit's goroutine and reports a failure.
 func (a *App) do(method string, params any, then func()) {
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := a.link.Do(ctx, method, params, nil); err != nil {
@@ -729,7 +795,7 @@ func (a *App) do(method string, params any, then func()) {
 		if then != nil {
 			fyne.Do(then)
 		}
-	}()
+	})
 }
 
 func (a *App) showError(err error) {
@@ -778,6 +844,9 @@ func (a *App) setupTray() {
 	if !ok {
 		return
 	}
+	// The toolkit starts Linux's tray with its loop: one set up later
+	// never shows, and closing quits until Spytify restarts.
+	a.trayLate = a.running && !lateTrayShows
 	desk.SetSystemTrayIcon(Logo)
 	// The tray's action is the app bar's, which render copies there:
 	// Record, Stop, or Stop now while the last track is being saved.

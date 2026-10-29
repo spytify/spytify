@@ -1,7 +1,8 @@
 // Package opengl tells, before the desktop app opens its window, whether
 // the system can draw it. Fyne draws with OpenGL, which Windows offers
 // only through a graphics driver; without one, Fyne closes the app
-// without a word.
+// without a word. Linux offers it through Mesa or a graphics card's own
+// driver; without either, Fyne keeps running with no window.
 package opengl
 
 import "errors"

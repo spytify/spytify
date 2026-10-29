@@ -45,11 +45,14 @@ jobs:
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
+  # On Ubuntu 22.04, the oldest Ubuntu still supported, where the player runs
+  # from its Snap. The packages need the glibc of the machine that builds
+  # them, so they install on Ubuntu 22.04, Debian 12 and newer.
   linux:
     needs: version
     strategy:
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        runner: [ubuntu-22.04, ubuntu-22.04-arm]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

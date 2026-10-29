@@ -1,6 +1,11 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package ui
 
-// tell is Windows only: elsewhere opengl.Check finds nothing to tell.
-func tell(title, text string) {}
+import "fyne.io/fyne/v2"
+
+// noWindowHelp and tell are for Windows and Linux: on macOS opengl.Check
+// finds nothing to tell.
+const noWindowHelp = ""
+
+func tell(fyne.App, string, string) {}

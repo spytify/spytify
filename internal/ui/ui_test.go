@@ -98,6 +98,7 @@ func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	m := model.New()
 	l := link.New(addr, m)
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), Socket: addr, ManualRender: true, NoUpdateCheck: true})
+	t.Cleanup(a.calls.Wait)
 	a.win.Resize(fyne.NewSize(920, 620))
 	return a, m, l
 }
@@ -353,6 +354,292 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	snapshot(t, a, "record-96khz-narrow")
 }
 
+// drawnRow is a track's row in a list as drawn: the row, and its lines of
+// text top to bottom.
+type drawnRow struct {
+	row   *fyne.Container
+	text  *widget.RichText
+	lines []*canvas.Text
+}
+
+// drawnRows is the rows of a list of tracks as drawn, by their whole title.
+func drawnRows(t *testing.T, list fyne.CanvasObject) map[string]drawnRow {
+	t.Helper()
+	out := map[string]drawnRow{}
+	var walk func(fyne.CanvasObject)
+	walk = func(o fyne.CanvasObject) {
+		if !o.Visible() {
+			return
+		}
+		switch w := o.(type) {
+		case *fyne.Container:
+			// A track's row: its text, centred in the middle, then its
+			// cover and the parts after its text.
+			if len(w.Objects) == 3 {
+				if box, ok := w.Objects[0].(*fyne.Container); ok && len(box.Objects) == 3 {
+					if rt, ok := box.Objects[1].(*widget.RichText); ok {
+						row := drawnRow{row: w, text: rt}
+						y := float32(-1)
+						for _, o := range test.WidgetRenderer(rt).Objects() {
+							if txt, ok := o.(*canvas.Text); ok && txt.Text != "" {
+								if txt.Position().Y <= y {
+									t.Errorf("%q is not on a line of its own", txt.Text)
+								}
+								y = txt.Position().Y
+								row.lines = append(row.lines, txt)
+							}
+						}
+						out[rt.Segments[0].(*widget.TextSegment).Text] = row
+						return
+					}
+				}
+			}
+			for _, c := range w.Objects {
+				walk(c)
+			}
+		case fyne.Widget:
+			for _, c := range test.WidgetRenderer(w).Objects() {
+				walk(c)
+			}
+		}
+	}
+	walk(list)
+	return out
+}
+
+// words is a row's lines as text.
+func words(lines []*canvas.Text) []string {
+	var out []string
+	for _, txt := range lines {
+		out = append(out, txt.Text)
+	}
+	return out
+}
+
+// insideRows checks that every row's text stays in its box, and that the
+// parts after it stay after it, in the row.
+func insideRows(t *testing.T, rows map[string]drawnRow) {
+	t.Helper()
+	d := fyne.CurrentApp().Driver()
+	for title, row := range rows {
+		after := row.row.Objects[2]
+		box, end := d.AbsolutePositionForObject(row.text), d.AbsolutePositionForObject(row.row).X+row.row.Size().Width
+		right := box.X + row.text.Size().Width
+		for _, txt := range row.lines {
+			if x := box.X + txt.Position().X; x < box.X || x+fyne.MeasureText(txt.Text, txt.TextSize, txt.TextStyle).Width > right {
+				t.Errorf("%s row: %q is past its text's edges", title, txt.Text)
+			}
+		}
+		if x := d.AbsolutePositionForObject(after).X; x < right || x+after.Size().Width > end {
+			t.Errorf("%s row: the parts after the text at x %v to %v, the text ending at %v and the row at %v", title, x, x+after.Size().Width, right, end)
+		}
+	}
+}
+
+// A finished track's row has its title, its artist, then its length, format
+// and size, each on a line of its own and in a style of its own; a track with
+// no artist has two lines, centred in a row as tall as the others. At the
+// narrowest the window goes, a long line ends in an ellipsis and leaves the
+// chip and the buttons in the row.
+func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	playing := proto.Track{ID: "s-004", Title: "Midnight City", LengthMs: 243000}
+	// play saves the track playing, then plays the tracks one after another,
+	// saving all but the last.
+	play := func(tracks ...proto.Track) {
+		for _, tr := range tracks {
+			m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: playing.ID, Path: "/Users/listener/Music/Spytify/" + playing.Title + ".flac", DurationMs: playing.LengthMs, Bytes: 38_100_000}))
+			m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: tr}))
+			playing = tr
+		}
+		a.render()
+	}
+	play(proto.Track{ID: "s-005", Title: "Intermission", LengthMs: 62000},
+		proto.Track{ID: "s-006", Artist: "M83", Title: "Raconte-moi une histoire", Album: "Hurry Up, We're Dreaming", LengthMs: 270000})
+	r := a.screens[tabRecord].(*recordScreen)
+
+	all := drawnRows(t, r.list)
+	for title, want := range map[string][]string{
+		"Reunion":      {"Reunion", "M83", "3:56 · FLAC · 29.6 MB"},
+		"Wait":         {"Wait", "M83", "2:54"},
+		"Intermission": {"Intermission", "1:02 · FLAC · 36.3 MB"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("%s row %q, want %q", title, got, want)
+		}
+	}
+	// The title keeps its style; the artist and the details share theirs.
+	if lines := all["Reunion"].lines; len(lines) == 3 {
+		title, artist, details := lines[0], lines[1], lines[2]
+		if !title.TextStyle.Bold || title.TextSize <= artist.TextSize || title.Color == artist.Color {
+			t.Errorf("the artist is drawn like the title: %+v, %+v", title, artist)
+		}
+		if artist.TextStyle != details.TextStyle || artist.TextSize != details.TextSize || artist.Color != details.Color {
+			t.Errorf("the artist is not in the details' style: %+v, %+v", artist, details)
+		}
+	}
+	// Every row is as tall; the one with no artist has its two lines in the
+	// middle of it.
+	for title, row := range all {
+		if h := all["Reunion"].row.Size().Height; row.row.Size().Height != h {
+			t.Errorf("%s row is %v tall, the others %v", title, row.row.Size().Height, h)
+		}
+	}
+	if full, short := all["Reunion"].text, all["Intermission"].text; full.Position().Y != 0 || short.Position().Y < (full.Size().Height-short.Size().Height)/2-0.5 {
+		t.Errorf("the row with no artist has its text at y %v, the others at %v", short.Position().Y, full.Position().Y)
+	}
+	snapshot(t, a, "history-rows")
+
+	longArtist := "M83 with The Hurry Up Orchestra, The Choir of the Night, The Second Night Strings and The Brass of the Rain"
+	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra)"
+	play(proto.Track{ID: "s-007", Artist: longArtist, Title: "Splendor", LengthMs: 313000},
+		proto.Track{ID: "s-008", Artist: "M83", Title: longTitle, LengthMs: 247000},
+		proto.Track{ID: "s-009", Artist: "M83", Title: "Year One, One UFO", Album: "Hurry Up, We're Dreaming", LengthMs: 194000})
+	all = drawnRows(t, r.list)
+	for title, want := range map[string][]string{
+		"Splendor": {"Splendor", longArtist, "5:13 · FLAC · 36.3 MB"},
+		longTitle:  {longTitle, "M83", "4:07 · FLAC · 36.3 MB"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("%s row %q, want %q", title, got, want)
+		}
+	}
+	a.win.Resize(a.win.Content().MinSize())
+	a.render()
+	all = drawnRows(t, r.list)
+	if got := words(all["Splendor"].lines); len(got) != 3 || got[0] != "Splendor" || !strings.HasPrefix(got[1], "M83 with The") || !strings.HasSuffix(got[1], "…") {
+		t.Errorf("a long artist does not end in an ellipsis: %q", got)
+	}
+	if got := words(all[longTitle].lines); len(got) != 3 || !strings.HasPrefix(got[0], "Outro (Extended Mix, ") || !strings.HasSuffix(got[0], "…") || got[1] != "M83" {
+		t.Errorf("a long title does not end in an ellipsis: %q", got)
+	}
+	insideRows(t, all)
+	snapshot(t, a, "history-rows-narrow")
+}
+
+// A Library row is a file's title over its artists, as the player lists a
+// track: as its tags say once read, as its name says until then and for a
+// file without tags. At the narrowest the window goes, a long line ends in an
+// ellipsis and leaves the buttons in the row.
+func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
+	ff, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra and the Choir, Second Night)"
+	longArtist := "M83 with The Hurry Up Orchestra, The Choir of the Night, The Second Night Strings, The Brass of the Rain and The Children's Voices"
+	tagged := func(name, title, artist string) string {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(ff, "-v", "error", "-nostdin", "-f", "lavfi", "-t", "0.5", "-i", "anullsrc", "-metadata", "title="+title, "-metadata", "artist="+artist, path)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("make %s: %v: %s", name, err, b)
+		}
+		return path
+	}
+	untagged := func(name, data string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	// Newest first: the Library's order.
+	files := []string{
+		tagged("Outro.flac", longTitle, longArtist),
+		tagged(filepath.Join("Hurry Up, We're Dreaming", "03 Reunion.flac"), "Reunion", "M83"),
+		untagged("Splendor.wav", "RIFF"),
+		untagged("M83 - Wait.mp3", ""),
+		untagged("Intermission.mp3", ""),
+	}
+	untagged("Splendor.wav.json", `{"title": "Splendor", "performers": ["M83", "The Hurry Up Orchestra"]}`)
+	for i, path := range files {
+		at := time.Now().Add(-time.Duration(i) * time.Minute)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	// Until the tags are read, the names say what they can. Taking the
+	// reads' slots holds them back.
+	for range cap(lib.tagged.slots) {
+		lib.tagged.slots <- struct{}{}
+	}
+	a.showTab(tabLibrary)
+	a.render()
+	all := drawnRows(t, lib.list)
+	for title, want := range map[string][]string{
+		"Outro":        {"Outro"},
+		"03 Reunion":   {"03 Reunion"},
+		"Splendor":     {"Splendor"},
+		"Wait":         {"Wait", "M83"},
+		"Intermission": {"Intermission"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("before the tags, %s row %q, want %q", title, got, want)
+		}
+	}
+
+	for range cap(lib.tagged.slots) {
+		<-lib.tagged.slots
+	}
+	eventually(t, "the tags are never read", func() bool {
+		lib.tagged.mu.Lock()
+		defer lib.tagged.mu.Unlock()
+		return len(lib.tagged.read) == len(files)
+	})
+	lib.list.Refresh()
+	all = drawnRows(t, lib.list)
+	for title, want := range map[string][]string{
+		"Reunion":      {"Reunion", "M83"},
+		"Splendor":     {"Splendor", "M83, The Hurry Up Orchestra"},
+		"Wait":         {"Wait", "M83"},
+		"Intermission": {"Intermission"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("%s row %q, want %q", title, got, want)
+		}
+	}
+	// The same look as the Record list's rows: the title in its style, the
+	// artists in the caption's, rows as tall, a lone title in the middle.
+	if lines := all["Reunion"].lines; len(lines) == 2 {
+		if title, artist := lines[0], lines[1]; !title.TextStyle.Bold || title.TextSize <= artist.TextSize || artist.TextStyle.Bold || artist.Color == title.Color {
+			t.Errorf("the artists are drawn like the title: %+v, %+v", title, artist)
+		}
+	}
+	for title, row := range all {
+		if h := all["Reunion"].row.Size().Height; row.row.Size().Height != h {
+			t.Errorf("%s row is %v tall, the others %v", title, row.row.Size().Height, h)
+		}
+	}
+	if full, short := all["Reunion"].text, all["Intermission"].text; full.Position().Y != 0 || short.Position().Y < (full.Size().Height-short.Size().Height)/2-0.5 {
+		t.Errorf("the row with no artist has its text at y %v, the others at %v", short.Position().Y, full.Position().Y)
+	}
+	// The pictures show a listener's folder, not this test's.
+	setCaption(lib.count, pluralFiles(len(files), len(files), "/Users/listener/Music/Spytify"))
+	snapshot(t, a, "library-rows")
+
+	a.win.Resize(a.win.Content().MinSize())
+	a.render()
+	all = drawnRows(t, lib.list)
+	if got := words(all[longTitle].lines); len(got) != 2 || !strings.HasPrefix(got[0], "Outro (Extended Mix, ") || !strings.HasSuffix(got[0], "…") ||
+		!strings.HasPrefix(got[1], "M83 with The") || !strings.HasSuffix(got[1], "…") {
+		t.Errorf("a long title and long artists do not end in an ellipsis: %q", got)
+	}
+	insideRows(t, all)
+	snapshot(t, a, "library-rows-narrow")
+}
+
 // The last take cut short offers Keep anyway on its row, and only it.
 func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
@@ -536,7 +823,7 @@ func TestLibraryRescansWhenShown(t *testing.T) {
 	}
 	a.showTab(tabLibrary)
 	a.render()
-	if len(lib.shown) != 1 || !contains(texts(a.win.Content()), "Artist - Title") {
+	if len(lib.shown) != 1 || !slices.Equal(words(drawnRows(t, lib.list)["Title"].lines), []string{"Title", "Artist"}) {
 		t.Errorf("library after coming back: %d files", len(lib.shown))
 	}
 }
@@ -739,6 +1026,54 @@ func TestButtonsSendActions(t *testing.T) {
 	// Quitting the app stops the recorder too.
 	a.stopDaemon()
 	waitCall(t, core, proto.MethodCoreShutdown)
+}
+
+// Fyne 2.8.2 can skip its stop hook at quit, hang or panic
+// (fyne-io/fyne#6634): the app runs it, and stops the recorder, once the
+// loop has returned.
+func TestQuittingStopsTheRecorderOnceTheLoopHasReturned(t *testing.T) {
+	dir, err := os.MkdirTemp("", "spyui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	core := &recordingCore{}
+	srv := bus.NewServer(core.handle, nil)
+	sock := filepath.Join(dir, "s.sock")
+	if err := srv.ListenUnix(sock); err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	fa := test.NewTempApp(t)
+	fa.Preferences().SetBool(firstRunKey, true)
+	hook := fa.Lifecycle().(fyneStopHook)
+	saved := 0
+	hook.SetOnStoppedHookExecuted(func() { saved++ })
+	m := model.New()
+	l := link.New(sock, m)
+	a := New(fa, l, m, Options{StateDir: t.TempDir(), Socket: sock, ManualRender: true, NoUpdateCheck: true})
+	t.Cleanup(a.calls.Wait)
+	if hook.OnStopped() != nil {
+		t.Fatal("Fyne is left a stop hook to run at quit")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go l.Run(ctx)
+	deadline := time.Now().Add(5 * time.Second)
+	for m.Snapshot().Conn != model.Connected {
+		if time.Now().After(deadline) {
+			t.Fatal("UI did not connect")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// The test driver's loop returns at once, as Fyne's does at quit.
+	a.ShowAndRun()
+	waitCall(t, core, proto.MethodCoreShutdown)
+	if saved != 1 {
+		t.Errorf("Fyne's stop hook ran %d times, want once", saved)
+	}
 }
 
 func TestQuitWhileRecordingAsksFirst(t *testing.T) {
@@ -1037,6 +1372,42 @@ func TestSourceText(t *testing.T) {
 	}
 }
 
+// A finished track's row is its title, its artist, then its length, format
+// and size without the parts not known; with no artist, its line is left out.
+func TestTrackText(t *testing.T) {
+	test.NewTempApp(t)
+	row := trackRow(3, nil)
+	// texts is the row's lines, checking that those under the title are in
+	// their style even after a row with the title alone.
+	texts := func() []string {
+		var out []string
+		for i, seg := range row.Objects[0].(*fyne.Container).Objects[1].(*widget.RichText).Segments {
+			if i > 0 && seg.(*widget.TextSegment).Style != rowLine {
+				t.Errorf("%q is not in the style of the lines under the title", seg.Textual())
+			}
+			out = append(out, seg.Textual())
+		}
+		return out
+	}
+	flac := "/Users/listener/Music/Spytify/M83/Reunion.flac"
+	for _, c := range []struct {
+		name string
+		row  model.Row
+		want []string
+	}{
+		{"saved", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "M83", "3:56 · FLAC · 29.6 MB"}},
+		{"skipped", model.Row{Title: "Wait", Artist: "M83", Status: model.Skipped, LengthMs: 174000}, []string{"Wait", "M83", "2:54"}},
+		{"no artist", model.Row{Title: "Reunion", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "3:56 · FLAC · 29.6 MB"}},
+		{"title alone", model.Row{Title: "Intermission", Status: model.Skipped}, []string{"Intermission"}},
+		{"no size", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000}, []string{"Reunion", "M83", "3:56 · FLAC"}},
+	} {
+		setTrackRow(row, nil, c.row.Title, c.row.Artist, rowDetails(c.row))
+		if got := texts(); !slices.Equal(got, c.want) {
+			t.Errorf("%s row %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestAFailedCheckReadsAsWhatIsWrong(t *testing.T) {
 	for name, want := range map[string]string{
 		"ffmpeg found": "ffmpeg not found", "player running": "player not running",
@@ -1074,16 +1445,18 @@ func TestTheMeterWaitsUnderADialog(t *testing.T) {
 }
 
 // QA found closing the window on macOS left the app running with Minimize
-// to tray off. Closing quits unless the setting is on and there is a tray.
+// to tray off. Closing quits unless the setting is on and there is a tray,
+// which a Linux desktop with no tray host does not draw.
 func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
 	for _, c := range []struct {
-		name       string
-		tray, mini bool
-		quits      bool
+		name               string
+		tray, noHost, mini bool
+		quits              bool
 	}{
-		{"setting on, tray", true, true, false},
-		{"setting off, tray", true, false, true},
-		{"setting on, no tray", false, true, true},
+		{"setting on, tray", true, false, true, false},
+		{"setting off, tray", true, false, false, true},
+		{"setting on, no tray", false, false, true, true},
+		{"setting on, tray with no host", true, true, true, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
@@ -1093,7 +1466,7 @@ func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
 			m.SetSettings(values)
 			a.render()
 			quits := 0
-			a.tray, a.quitApp = c.tray, func() { quits++ }
+			a.tray, a.noTrayHost, a.quitApp = c.tray, c.noHost, func() { quits++ }
 			a.closeWindow()
 			if (quits == 1) != c.quits {
 				t.Fatalf("quit %d times, want quitting %v", quits, c.quits)
