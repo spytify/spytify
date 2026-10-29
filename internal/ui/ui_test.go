@@ -1028,6 +1028,54 @@ func TestButtonsSendActions(t *testing.T) {
 	waitCall(t, core, proto.MethodCoreShutdown)
 }
 
+// Fyne 2.8.2 can skip its stop hook at quit, hang or panic
+// (fyne-io/fyne#6634): the app runs it, and stops the recorder, once the
+// loop has returned.
+func TestQuittingStopsTheRecorderOnceTheLoopHasReturned(t *testing.T) {
+	dir, err := os.MkdirTemp("", "spyui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	core := &recordingCore{}
+	srv := bus.NewServer(core.handle, nil)
+	sock := filepath.Join(dir, "s.sock")
+	if err := srv.ListenUnix(sock); err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	fa := test.NewTempApp(t)
+	fa.Preferences().SetBool(firstRunKey, true)
+	hook := fa.Lifecycle().(fyneStopHook)
+	saved := 0
+	hook.SetOnStoppedHookExecuted(func() { saved++ })
+	m := model.New()
+	l := link.New(sock, m)
+	a := New(fa, l, m, Options{StateDir: t.TempDir(), Socket: sock, ManualRender: true, NoUpdateCheck: true})
+	t.Cleanup(a.calls.Wait)
+	if hook.OnStopped() != nil {
+		t.Fatal("Fyne is left a stop hook to run at quit")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go l.Run(ctx)
+	deadline := time.Now().Add(5 * time.Second)
+	for m.Snapshot().Conn != model.Connected {
+		if time.Now().After(deadline) {
+			t.Fatal("UI did not connect")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// The test driver's loop returns at once, as Fyne's does at quit.
+	a.ShowAndRun()
+	waitCall(t, core, proto.MethodCoreShutdown)
+	if saved != 1 {
+		t.Errorf("Fyne's stop hook ran %d times, want once", saved)
+	}
+}
+
 func TestQuitWhileRecordingAsksFirst(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
