@@ -67,7 +67,7 @@ var Table = []Def{
 	{Key: "output.counter_next", Tab: "Recorder", Group: "Output", Label: "Next counter number", Kind: KindInt, Default: int64(1), Min: 0, Max: 999999999, Ranged: true, Advanced: true, Note: "It carries on from one recording to the next: set it back to 1 for a new CD."},
 	{Key: "output.counter_width", Tab: "Recorder", Group: "Output", Label: "Counter digits", Kind: KindInt, Default: int64(3), Min: 1, Max: 9, Ranged: true, Advanced: true, Note: "3 makes 001. Past 999, the recording stops."},
 
-	{Key: "encode.format", Tab: "Recorder", Group: "Encoding", Label: "Output format", Kind: KindEnum, Enum: []string{"mp3", "aac", "flac", "wav"}, Default: "flac"},
+	{Key: "encode.format", Tab: "Recorder", Group: "Encoding", Label: "Output format", Kind: KindEnum, Enum: []string{"mp3", "aac", "flac", "wav"}, Default: "mp3"},
 	{Key: "encode.bitrate_kbps", Tab: "Recorder", Group: "Encoding", Label: "Bitrate", Kind: KindIntEnum, Ints: bitrates, Choices: sizesPerMinute(bitrates), Default: int64(160), Note: "Not used by FLAC and WAV."},
 	{Key: "tags.cover", Tab: "Tags", Group: "Encoding", Label: "Embed album cover", Kind: KindBool, Default: true, Advanced: true},
 	{Key: "tags.cover_size", Tab: "Tags", Group: "Encoding", Label: "Cover size", Kind: KindEnum, Enum: []string{"small", "medium", "large"}, Choices: []string{"Small (300 px)", "Medium (640 px)", "Large (as it comes)"}, Default: "medium", Advanced: true, Note: "A cover is shrunk to fit, never enlarged."},

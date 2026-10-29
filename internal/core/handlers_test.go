@@ -117,7 +117,7 @@ func TestSettingsActions(t *testing.T) {
 	if err := call(t, c, proto.MethodSettingsReset, proto.SettingsResetParams{Prefix: "encode"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := call(t, c, proto.MethodSettingsGet, proto.SettingsGetParams{Keys: []string{"encode.format"}}, &got); err != nil || got.Values["encode.format"] != "flac" {
+	if err := call(t, c, proto.MethodSettingsGet, proto.SettingsGetParams{Keys: []string{"encode.format"}}, &got); err != nil || got.Values["encode.format"] != "mp3" {
 		t.Fatalf("after reset: %+v %v", got.Values, err)
 	}
 }
