@@ -1,0 +1,13 @@
+# Docks find this entry for the app's window by its name, the app ID the
+# window has on Wayland (app.NewWithID in cmd/spytify-ui), or by
+# StartupWMClass, its X11 class, which GLFW takes from the window's title.
+[Desktop Entry]
+Type=Application
+Name=Spytify
+Comment=Record an application's audio, one file per track
+Exec=spytify-ui
+Icon=spytify
+Terminal=false
+Categories=AudioVideo;Audio;Recorder;
+Keywords=record;audio;tracks;
+StartupWMClass=Spytify
