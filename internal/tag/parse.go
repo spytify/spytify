@@ -26,7 +26,10 @@ func SplitArtistTitle(s string) (artist, title string, ok bool) {
 }
 
 // SplitTitle separates an extended title: "Song - Live" or "Song (Live)".
-// A dash wins over a parenthesis, as in v1.
+// A dash wins over a parenthesis, as in v1. Every parenthesised group that
+// ends the title is part of the extension: "Song (feat. A) (Live)" gives
+// "Song" and "feat. A · Live". A group followed by more words, as in
+// "Song (Part 1) Reprise", stays in the title.
 func SplitTitle(title string) (base, extended string, sep Separator) {
 	if strings.TrimSpace(title) == "" {
 		return "", "", SepNone
@@ -34,13 +37,54 @@ func SplitTitle(title string) (base, extended string, sep Separator) {
 	if byDash := splitNonEmpty(title, " - ", 2); len(byDash) > 1 {
 		return byDash[0], byDash[1], SepDash
 	}
-	if byParen := splitNonEmpty(title, " (", 2); len(byParen) > 1 {
-		return byParen[0], strings.ReplaceAll(byParen[1], ")", ""), SepParenthesis
+	if base, groups := trailingGroups(title); len(groups) > 0 {
+		return base, strings.Join(groups, groupJoin), SepParenthesis
 	}
 	return title, "", SepNone
 }
 
-// JoinTitle is v1's ToTitleString: the title with its extension.
+// groupJoin joins the parenthesised groups of one extended title.
+const groupJoin = " · "
+
+// trailingGroups peels the parenthesised groups, each after a space, off the
+// end of a title: "Song (feat. A) (Live)" gives "Song" and [feat. A, Live].
+// A group may hold parentheses of its own.
+func trailingGroups(title string) (base string, groups []string) {
+	base = strings.TrimRight(title, " ")
+	for strings.HasSuffix(base, ")") {
+		open := openingParen(base)
+		if open < 1 || base[open-1] != ' ' {
+			break
+		}
+		inner := strings.TrimSpace(base[open+1 : len(base)-1])
+		rest := strings.TrimRight(base[:open], " ")
+		if inner == "" || rest == "" {
+			break
+		}
+		groups = append([]string{inner}, groups...)
+		base = rest
+	}
+	return base, groups
+}
+
+// openingParen returns the index of the "(" that s's final ")" closes, or -1.
+func openingParen(s string) int {
+	depth := 0
+	for i := len(s) - 1; i >= 0; i-- {
+		switch s[i] {
+		case ')':
+			depth++
+		case '(':
+			if depth--; depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// JoinTitle is v1's ToTitleString: the title with its extension. Each group
+// of a parenthesised extension gets its own parentheses back.
 func JoinTitle(title, extended string, sep Separator) string {
 	if title == "" || extended == "" {
 		return title
@@ -49,7 +93,7 @@ func JoinTitle(title, extended string, sep Separator) string {
 	case SepDash:
 		return title + " - " + extended
 	case SepParenthesis:
-		return title + " (" + extended + ")"
+		return title + " (" + strings.ReplaceAll(extended, groupJoin, ") (") + ")"
 	}
 	return title
 }
