@@ -55,7 +55,7 @@ type Def struct {
 // providers' settings are gone, and the UI is English only.
 var Table = []Def{
 	{Key: "app.theme", Tab: "App", Group: "App", Label: "Theme", Kind: KindEnum, Enum: []string{"system", "light", "dark"}, Default: "system"},
-	{Key: "app.minimize_to_tray", Tab: "App", Group: "App", Label: "Minimize to tray", Kind: KindBool, Default: false, Note: "closing the window keeps Spytify in the tray, whose icon shows while this is on; turned off, the icon goes when Spytify restarts"},
+	{Key: "app.minimize_to_tray", Tab: "App", Group: "App", Label: "Minimize to tray", Kind: KindBool, Default: false, Note: "closing the window keeps Spytify in the tray, whose icon shows while this is on; turned off, the icon goes when Spytify restarts, and on Linux, turned on, it comes then. On a Linux desktop that draws no tray icons (GNOME without the AppIndicator extension), closing quits; Settings says why"},
 	{Key: "app.autostart_recording", Tab: "App", Group: "App", Label: "Start recording on launch", Kind: KindBool, Default: false},
 	{Key: "app.check_updates", Tab: "App", Group: "App", Label: "Check for updates", Kind: KindBool, Default: true},
 

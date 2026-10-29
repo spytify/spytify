@@ -43,6 +43,9 @@ type settingsScreen struct {
 	// file a sample track gets with the output settings as they are.
 	example  *widget.RichText
 	template *settings.Def
+	// trayNote is Minimize to tray's note while closing quits with it on
+	// (App.trayNote).
+	trayNote *widget.RichText
 	player   *playerCard
 	// advanced remembers which Advanced parts the user opened.
 	advanced  map[string]*widget.Accordion
@@ -366,12 +369,22 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		f.input = e
 	}
 	if d.ShowNote {
-		note := widget.NewRichText(&widget.TextSegment{Text: d.Note, Style: widget.RichTextStyle{ColorName: colorSubtle, SizeName: theme.SizeNameCaptionText, Inline: true}})
-		note.Truncation = fyne.TextTruncateEllipsis
-		under = note
+		under = settingNote(d.Note)
+	}
+	if key == "app.minimize_to_tray" {
+		s.trayNote = settingNote("")
+		s.trayNote.Hide()
+		under = s.trayNote
 	}
 	f.row = settingRow(d.Label, f.input, under)
 	return f
+}
+
+// settingNote is a line under a setting's label.
+func settingNote(text string) *widget.RichText {
+	note := widget.NewRichText(&widget.TextSegment{Text: text, Style: widget.RichTextStyle{ColorName: colorSubtle, SizeName: theme.SizeNameCaptionText, Inline: true}})
+	note.Truncation = fyne.TextTruncateEllipsis
+	return note
 }
 
 // applyEntry sends its text on Enter or when it loses focus, if it changed.
@@ -436,6 +449,12 @@ func (s *settingsScreen) render(st model.State) {
 	prefix, _ := st.Settings["output.prefix"].(string)
 	s.enable("output.counter_next", prefix == "counter")
 	s.enable("output.counter_width", prefix == "counter")
+	note := s.app.trayNote(st)
+	setCaption(s.trayNote, note)
+	if s.trayNote.Visible() != (note != "") {
+		show(s.trayNote, note != "")
+		relayout(s.scroll)
+	}
 	s.player.render(st)
 }
 

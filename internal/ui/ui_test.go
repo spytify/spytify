@@ -956,16 +956,18 @@ func TestTheMeterWaitsUnderADialog(t *testing.T) {
 }
 
 // QA found closing the window on macOS left the app running with Minimize
-// to tray off. Closing quits unless the setting is on and there is a tray.
+// to tray off. Closing quits unless the setting is on and there is a tray,
+// which a Linux desktop with no tray host does not draw.
 func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
 	for _, c := range []struct {
-		name       string
-		tray, mini bool
-		quits      bool
+		name               string
+		tray, noHost, mini bool
+		quits              bool
 	}{
-		{"setting on, tray", true, true, false},
-		{"setting off, tray", true, false, true},
-		{"setting on, no tray", false, true, true},
+		{"setting on, tray", true, false, true, false},
+		{"setting off, tray", true, false, false, true},
+		{"setting on, no tray", false, false, true, true},
+		{"setting on, tray with no host", true, true, true, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
@@ -975,7 +977,7 @@ func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
 			m.SetSettings(values)
 			a.render()
 			quits := 0
-			a.tray, a.quitApp = c.tray, func() { quits++ }
+			a.tray, a.noTrayHost, a.quitApp = c.tray, c.noHost, func() { quits++ }
 			a.closeWindow()
 			if (quits == 1) != c.quits {
 				t.Fatalf("quit %d times, want quitting %v", quits, c.quits)

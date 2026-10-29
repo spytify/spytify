@@ -60,7 +60,8 @@ func main() {
 	tel := telemetry.New(telemetry.Options{Prefs: fa.Preferences()})
 	// At quit, what is queued leaves within 2 s or is dropped.
 	defer tel.Close()
-	privacy := privacySettings(env.ConfigPath)
+	saved := savedSettings(env.ConfigPath)
+	privacy := map[string]any{"privacy.bug_tracker": saved.Bool("privacy.bug_tracker")}
 	// Fyne would close the app without a word: say why instead, and leave
 	// the recorder alone.
 	if noGL != nil {
@@ -71,7 +72,7 @@ func main() {
 	// it asks for one first.
 	auto := len(env.Target.ProcessNames) > 0
 	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
-		Telemetry: tel, Privacy: privacy, SoftwareOpenGL: software})
+		Telemetry: tel, Privacy: privacy, MinimizeToTray: saved.Bool("app.minimize_to_tray"), SoftwareOpenGL: software})
 	if inst != nil {
 		defer inst.Close()
 		go inst.Serve(w.Reopen)
@@ -90,12 +91,11 @@ func main() {
 	w.ShowAndRun()
 }
 
-// privacySettings are the privacy settings of config.toml, which the app
-// needs before the recorder answers, or when it does not.
-func privacySettings(path string) map[string]any {
-	v := settings.Defaults()
+// savedSettings are the settings of config.toml, which the app needs
+// before the recorder answers, or when it does not.
+func savedSettings(path string) settings.Values {
 	if store, err := settings.Open(path); err == nil {
-		v = store.Values()
+		return store.Values()
 	}
-	return map[string]any{"privacy.bug_tracker": v.Bool("privacy.bug_tracker")}
+	return settings.Defaults()
 }
