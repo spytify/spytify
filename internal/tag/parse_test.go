@@ -40,6 +40,10 @@ func TestSplitTitle(t *testing.T) {
 		{"Song Title - Live", "Song Title", "Live", SepDash},
 		{"Title (Featuring Other)", "Title", "Featuring Other", SepParenthesis},
 		{"Title (Featuring Other) - Remastered", "Title (Featuring Other)", "Remastered", SepDash},
+		{"Song (feat. Lumen) (Live)", "Song", "feat. Lumen · Live", SepParenthesis},
+		{"Song (Live (2011))", "Song", "Live (2011)", SepParenthesis},
+		{"Song (Part 1) Reprise", "Song (Part 1) Reprise", "", SepNone},
+		{"(Not) Alone", "(Not) Alone", "", SepNone},
 		{"", "", "", SepNone},
 	}
 	for _, c := range cases {
@@ -60,6 +64,7 @@ func TestJoinTitle(t *testing.T) {
 		{"Title", "Must Not Return", SepNone, "Title"},
 		{"Title", "Remastered", SepDash, "Title - Remastered"},
 		{"Title", "Featuring Other", SepParenthesis, "Title (Featuring Other)"},
+		{"Song", "feat. Lumen · Live", SepParenthesis, "Song (feat. Lumen) (Live)"},
 		{"Title (Featuring Other)", "Remastered", SepDash, "Title (Featuring Other) - Remastered"},
 	}
 	for _, c := range cases {

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -360,6 +361,70 @@ func TestLoudnessSettings(t *testing.T) {
 		if got := loudness(t, saved[slash]); math.Abs(got-target) > 1 {
 			t.Errorf("normalize to %.0f: %.1f LUFS (source %.1f)", target, got, source)
 		}
+	}
+}
+
+// With Normalize on, the Logs tab says once, in an info line, how far
+// under the target a track ends when its peaks keep it there: raised as
+// far as they allow, or left at its level when they already reach
+// -1.5 dBTP. It says nothing of a track that reaches the target or is
+// lowered to it.
+func TestNormalizeSaysWhenItLeavesATrackUnderTheTarget(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	// The last track peaks at -0.5 dBFS, some 7 dB over its loudness.
+	f, last := tl.Format(), &tl.Items[len(tl.Items)-1]
+	last.WAV = filepath.Join(t.TempDir(), "peaks.wav")
+	w, err := pcm.CreateWAV(last.WAV, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(pcm.Synth{LevelDB: -0.5, FadeInMs: 30, FadeOut: 30}.Render(f, f.FramesFromMs(last.LengthMs))); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	line := regexp.MustCompile(`^"(.+)": (normalized \+\d+\.\d dB; its peaks kept it|left at its level; its peaks already reach -1\.5 dBTP,) \d+\.\d dB under (-\d+) LUFS$`)
+	for _, c := range []struct {
+		target float64
+		// want is the lines of each track, by title, each by its first
+		// word after the title.
+		want map[string][]string
+	}{
+		{-5, map[string][]string{tl.Items[0].Title: {"normalized"}, tl.Items[1].Title: {"normalized"}, last.Title: {"left"}}},
+		{-14, nil},
+		{-30, nil},
+	} {
+		t.Run(fmt.Sprintf("%g LUFS", c.target), func(t *testing.T) {
+			s := newScenario(t, tl, map[string]any{"recorder.normalize": true, "recorder.target_lufs": c.target})
+			s.run(t, tl)
+			got := map[string][]string{}
+			for _, ev := range s.events.all() {
+				var l proto.LogEvent
+				switch {
+				case ev.Method == proto.EventError:
+					t.Errorf("error event %s", ev.Params)
+				case ev.Method != proto.EventLog || ev.Decode(&l) != nil:
+				case strings.Contains(l.Msg, " LUFS"):
+					t.Logf("%s %s", l.Level, l.Msg)
+					m := line.FindStringSubmatch(l.Msg)
+					if m == nil || l.Level != "info" || m[3] != fmt.Sprint(c.target) {
+						t.Errorf("%s line %q", l.Level, l.Msg)
+						continue
+					}
+					got[m[1]] = append(got[m[1]], strings.Fields(m[2])[0])
+				}
+			}
+			saved, _ := s.results()
+			for _, it := range tl.Items {
+				if saved[it.Title] == "" {
+					t.Errorf("%q not saved; log:\n%s", it.Title, s.logs)
+				}
+				if !slices.Equal(got[it.Title], c.want[it.Title]) {
+					t.Errorf("%q: lines %v, want %v", it.Title, got[it.Title], c.want[it.Title])
+				}
+			}
+		})
 	}
 }
 

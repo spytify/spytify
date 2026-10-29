@@ -3,6 +3,7 @@ package encode
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
@@ -68,7 +69,7 @@ func TestFLACIsLosslessAndTrimIsSampleAccurate(t *testing.T) {
 	in := writeWAV(t, dir, f, src)
 
 	out := filepath.Join(dir, "out.flac.part")
-	if err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f}); err != nil {
+	if _, err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f}); err != nil {
 		t.Fatal(err)
 	}
 	if got := decode(t, ff, out, f); !bytes.Equal(got, src) {
@@ -76,7 +77,7 @@ func TestFLACIsLosslessAndTrimIsSampleAccurate(t *testing.T) {
 	}
 
 	trimmed := filepath.Join(dir, "trim.wav.part")
-	if err := ff.Encode(context.Background(), Job{In: in, Out: trimmed, Format: "wav", Source: f, TrimStart: 1000, TrimEnd: 30000}); err != nil {
+	if _, err := ff.Encode(context.Background(), Job{In: in, Out: trimmed, Format: "wav", Source: f, TrimStart: 1000, TrimEnd: 30000}); err != nil {
 		t.Fatal(err)
 	}
 	fb := f.FrameBytes()
@@ -124,14 +125,245 @@ func loudnessOf(t *testing.T, ff *FFmpeg, path string) float64 {
 	return 0
 }
 
+// loudnormOf is path's integrated loudness in LUFS and true peak in dBTP,
+// to two decimals, from loudnorm's meter: the one Normalize's gain comes
+// from. On these short synths it reads 0.2 LU louder than ebur128.
+func loudnormOf(t *testing.T, ff *FFmpeg, path string) (lufs, dbtp float64) {
+	t.Helper()
+	out, err := exec.Command(ff.Path, "-nostdin", "-hide_banner", "-i", path, "-af", "loudnorm=print_format=json", "-f", "null", "-").CombinedOutput()
+	if err != nil {
+		t.Fatalf("loudnorm: %v: %s", err, tail(string(out)))
+	}
+	s := string(out)
+	var report struct {
+		I  string `json:"input_i"`
+		TP string `json:"input_tp"`
+	}
+	if start, end := strings.LastIndex(s, "{"), strings.LastIndex(s, "}"); start < 0 || end < start {
+		t.Fatalf("no loudnorm report: %s", tail(s))
+	} else if err := json.Unmarshal([]byte(s[start:end+1]), &report); err != nil {
+		t.Fatal(err)
+	}
+	if lufs, err = strconv.ParseFloat(report.I, 64); err != nil {
+		t.Fatal(err)
+	}
+	if dbtp, err = strconv.ParseFloat(report.TP, 64); err != nil {
+		t.Fatal(err)
+	}
+	return lufs, dbtp
+}
+
+// spiky is a quiet synth with a 10 ms burst every half second: a track
+// whose peaks are loud for its loudness. bodyDB is the synth's peak level
+// and burstDB the bursts', in dBFS.
+func spiky(f pcm.Format, frames int64, bodyDB, burstDB float64) []byte {
+	b := pcm.Synth{Seed: 4, LevelDB: bodyDB, FadeInMs: 1500}.Render(f, frames)
+	amp := math.Pow(10, burstDB/20)
+	n := int(f.FramesFromMs(10))
+	for start := f.Rate / 4; start+n <= int(frames); start += f.Rate / 2 {
+		for i := range n {
+			v := amp * (0.5 - 0.5*math.Cos(2*math.Pi*float64(i)/float64(n))) * math.Sin(2*math.Pi*1000*float64(i)/float64(f.Rate))
+			for c := range f.Channels {
+				k := (start+i)*f.Channels + c
+				f.PutSample(b, k, f.SampleAt(b, k)+v)
+			}
+		}
+	}
+	return b
+}
+
+// samples are data's samples, interleaved.
+func samples(f pcm.Format, data []byte) []float64 {
+	x := make([]float64, len(data)/f.Sample.Bytes())
+	for i := range x {
+		x[i] = f.SampleAt(data, i)
+	}
+	return x
+}
+
+// oneGain fits the one gain, in dB, that best takes src to out, and says
+// how far under out what that gain leaves unexplained is, in dB. out is
+// first aligned on src, up to 32 frames either way, and 1% of each end is
+// left out.
+func oneGain(src, out []float64, channels int) (gainDB, restDB float64) {
+	n := min(len(src), len(out))
+	edge := n / 100
+	sums := func(lag int) (so, ss, oo float64) {
+		for i := edge; i < n-edge; i++ {
+			s, o := src[i], out[i+lag*channels]
+			so += s * o
+			ss += s * s
+			oo += o * o
+		}
+		return so, ss, oo
+	}
+	lag, best := 0, math.Inf(-1)
+	for l := -32; l <= 32; l++ {
+		if so, ss, oo := sums(l); so/math.Sqrt(ss*oo) > best {
+			lag, best = l, so/math.Sqrt(ss*oo)
+		}
+	}
+	so, ss, oo := sums(lag)
+	g := so / ss
+	var rest float64
+	for i := edge; i < n-edge; i++ {
+		d := out[i+lag*channels] - g*src[i]
+		rest += d * d
+	}
+	return 20 * math.Log10(g), 10 * math.Log10(rest/oo)
+}
+
+// With Normalize on, a track gets one gain and is never compressed, even a
+// quiet one whose bursts the gain to the target would take far past the
+// true-peak limit. Aligned on the source, the file is the source at one
+// gain, to 90 dB under the file or better. A 96 kHz source is written at
+// 48 kHz, so there the file is checked against the one Normalize off
+// writes: the gain and the resampling together.
+func TestNormalizeAppliesOneGainAndNeverCompresses(t *testing.T) {
+	ff := ffmpegOrSkip(t)
+	for _, rate := range []int{48000, 96000} {
+		f := pcm.Format{Rate: rate, Channels: 2, Sample: pcm.F32LE}
+		src := spiky(f, int64(6*rate), -24, -6)
+		in := writeWAV(t, t.TempDir(), f, src)
+		for _, format := range []string{"flac", "wav"} {
+			t.Run(fmt.Sprintf("%s from %d Hz", format, rate), func(t *testing.T) {
+				encode := func(normalize bool) []float64 {
+					out := filepath.Join(t.TempDir(), "out."+presets[format].Extension+".part")
+					if _, err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: format, Source: f, Normalize: normalize, TargetLUFS: -14}); err != nil {
+						t.Fatal(err)
+					}
+					return samples(f, decode(t, ff, out, f))
+				}
+				want := samples(f, src)
+				if fileRate(rate) != rate {
+					want = encode(false)
+				}
+				i, tp := loudnormOf(t, ff, in)
+				gain, rest := oneGain(want, encode(true), f.Channels)
+				t.Logf("source %.2f LUFS, %.2f dBTP; gain %+.2f dB; what it leaves is %.1f dB under the file", i, tp, gain, -rest)
+				if gain < 1 {
+					t.Errorf("gain %+.2f dB, want the track raised", gain)
+				}
+				if rest > -90 {
+					t.Errorf("what one gain leaves is only %.1f dB under the file, want 90 dB or more", -rest)
+				}
+			})
+		}
+	}
+}
+
+// Normalize's gain, in every format: a track louder than the target is
+// lowered to it; a quieter one is raised to it when its true peak allows,
+// else until its true peak reaches -1.5 dBTP; one whose true peak is over
+// -1.5 dBTP already is not lowered. Encode reports the gain of a track its
+// peaks keep under the target, and nothing for one that reaches it.
+func TestNormalizeLowersToTheTargetAndRaisesAsFarAsThePeaksAllow(t *testing.T) {
+	ff := ffmpegOrSkip(t)
+	f := pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE}
+	const target, limit = -14.0, -1.5
+	frames := int64(5 * f.Rate)
+	for _, c := range []struct {
+		name string
+		data []byte
+		// is says the source is what the case is about, from its loudness
+		// and true peak; want is the file's; short, that the file ends
+		// under the target.
+		is    func(i, tp float64) bool
+		want  func(i, tp float64) (float64, float64)
+		short bool
+	}{{
+		name: "loud, lowered to the target",
+		data: pcm.Synth{Seed: 4, LevelDB: -2, FadeInMs: 1500}.Render(f, frames),
+		is:   func(i, tp float64) bool { return i > target+2 },
+		want: func(i, tp float64) (float64, float64) { return target, tp + target - i },
+	}, {
+		name: "quiet with headroom, raised to the target",
+		data: pcm.Synth{Seed: 4, LevelDB: -16, FadeInMs: 1500}.Render(f, frames),
+		is:   func(i, tp float64) bool { return i < target-2 && tp+target-i < limit-2 },
+		want: func(i, tp float64) (float64, float64) { return target, tp + target - i },
+	}, {
+		name:  "quiet without headroom, raised to -1.5 dBTP",
+		data:  spiky(f, frames, -16, -6),
+		is:    func(i, tp float64) bool { return tp < limit-2 && tp+target-i > limit+2 },
+		want:  func(i, tp float64) (float64, float64) { return i + limit - tp, limit },
+		short: true,
+	}, {
+		name:  "peak over -1.5 dBTP, not lowered",
+		data:  spiky(f, frames, -16, -1),
+		is:    func(i, tp float64) bool { return i < target-2 && tp > limit },
+		want:  func(i, tp float64) (float64, float64) { return i, tp },
+		short: true,
+	}} {
+		t.Run(c.name, func(t *testing.T) {
+			in := writeWAV(t, t.TempDir(), f, c.data)
+			i, tp := loudnormOf(t, ff, in)
+			wantI, wantTP := c.want(i, tp)
+			t.Logf("source %.2f LUFS, %.2f dBTP; want %.2f LUFS, %.2f dBTP", i, tp, wantI, wantTP)
+			if !c.is(i, tp) {
+				t.Fatal("the source is not what the case is about")
+			}
+			for _, format := range slices.Sorted(maps.Keys(presets)) {
+				p := presets[format]
+				t.Run(format, func(t *testing.T) {
+					if p.Encoder != "" && !ff.HasEncoder(p.Encoder) {
+						t.Skipf("ffmpeg has no %s", p.Encoder)
+					}
+					out := filepath.Join(t.TempDir(), "out."+p.Extension+".part")
+					j := Job{In: in, Out: out, Format: format, BitrateKbps: 320, Source: f, Normalize: true, TargetLUFS: target}
+					short, err := ff.Encode(context.Background(), j)
+					if err != nil {
+						t.Fatal(err)
+					}
+					switch {
+					case !c.short && short != nil:
+						t.Errorf("reported %+v, want nothing: the file reaches the target", *short)
+					case c.short && short == nil:
+						t.Errorf("reported nothing, want the gain of a file %.2f LU under the target", target-wantI)
+					case c.short && (math.Abs(short.InputLUFS-i) > 0.01 || math.Abs(short.GainDB-(wantI-i)) > 0.01 || short.TargetLUFS != target):
+						t.Errorf("reported %+v; want %.2f LUFS raised %+.2f dB toward %g LUFS", *short, i, wantI-i, target)
+					}
+					gotI, gotTP := loudnormOf(t, ff, out)
+					t.Logf("%.2f LUFS, %.2f dBTP", gotI, gotTP)
+					// A lossy codec moves the peaks a little.
+					tolI, tolTP := 0.05, 0.05
+					if p.Lossy {
+						tolI, tolTP = 0.2, 0.5
+					}
+					if math.Abs(gotI-wantI) > tolI || math.Abs(gotTP-wantTP) > tolTP {
+						t.Errorf("%.2f LUFS, %.2f dBTP; want %.2f LUFS within %g, %.2f dBTP within %g", gotI, gotTP, wantI, tolI, wantTP, tolTP)
+					}
+				})
+			}
+		})
+	}
+}
+
+// The gain rule itself, for a -14 LUFS target.
+func TestNormalizeGain(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		i, tp, db float64
+	}{
+		{"louder: lowered to the target", -9, -0.5, -5},
+		{"louder, peak over 0 dBTP: lowered to the target", -9, 1, -5},
+		{"quieter with headroom: raised to the target", -20, -10, 6},
+		{"quieter without headroom: raised to -1.5 dBTP", -20, -5, 3.5},
+		{"quieter, peak at -1.5 dBTP: left as is", -20, -1.5, 0},
+		{"quieter, peak over -1.5 dBTP: not lowered", -20, -0.5, 0},
+		{"at the target: left as is", -14, -3, 0},
+	} {
+		if got := (loudness{I: c.i, TP: c.tp}).gain(-14); math.Abs(got-c.db) > 1e-9 {
+			t.Errorf("%s: %g LUFS, %g dBTP gets %+g dB, want %+g", c.name, c.i, c.tp, got, c.db)
+		}
+	}
+}
+
 // Normalize off keeps a track as loud as it was recorded, in every format;
 // on brings it to the target, up to -14 or down to -20 from the source's
 // -17.5 LUFS.
 func TestNormalizeOffKeepsTheLoudnessAndOnReachesTheTarget(t *testing.T) {
 	ff := ffmpegOrSkip(t)
 	f := pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE}
-	// The fade-in gives the track a loudness range: without one, loudnorm
-	// leaves its linear mode for its dynamic one.
 	in := writeWAV(t, t.TempDir(), f, pcm.Synth{Seed: 4, LevelDB: -10, FadeInMs: 1500}.Render(f, 5*48000))
 	source := loudnessOf(t, ff, in)
 	t.Logf("source %.1f LUFS", source)
@@ -147,7 +379,7 @@ func TestNormalizeOffKeepsTheLoudnessAndOnReachesTheTarget(t *testing.T) {
 				// 320 kbps: at 160, LAME by itself makes a track about
 				// 0.5 dB quieter.
 				j := Job{In: in, Out: out, Format: format, BitrateKbps: 320, Source: f, Normalize: normalize, TargetLUFS: target}
-				if err := ff.Encode(context.Background(), j); err != nil {
+				if _, err := ff.Encode(context.Background(), j); err != nil {
 					t.Fatal(err)
 				}
 				if rate := rateOf(t, ff, out); rate != f.Rate {
@@ -190,7 +422,7 @@ func TestAFileAbove48kHzIsWrittenAtHalfOrAQuarterOfTheRate(t *testing.T) {
 				for _, normalize := range []bool{false, true} {
 					out := filepath.Join(t.TempDir(), "out."+p.Extension+".part")
 					j := Job{In: in, Out: out, Format: format, BitrateKbps: 320, Source: f, Normalize: normalize, TargetLUFS: -14}
-					if err := ff.Encode(context.Background(), j); err != nil {
+					if _, err := ff.Encode(context.Background(), j); err != nil {
 						t.Fatal(err)
 					}
 					if got := rateOf(t, ff, out); got != c.want {
@@ -287,12 +519,6 @@ func TestA96kHzSourceWrittenAt48kHzKeepsEverythingUpTo20kHz(t *testing.T) {
 	ff := ffmpegOrSkip(t)
 	f := pcm.Format{Rate: 96000, Channels: 2, Sample: pcm.F32LE}
 	want := bandNoise(f.Rate, 1<<19)
-	// The fade-in gives the track a loudness range: without one, loudnorm
-	// leaves its linear mode for its dynamic one.
-	fade := int(f.FramesFromMs(1500))
-	for i := range 2 * fade {
-		want[i] *= float64(i/2) / float64(fade)
-	}
 	src := make([]byte, len(want)*4)
 	for i, v := range want {
 		f.PutSample(src, i, v)
@@ -301,7 +527,7 @@ func TestA96kHzSourceWrittenAt48kHzKeepsEverythingUpTo20kHz(t *testing.T) {
 	for _, normalize := range []bool{false, true} {
 		t.Run(map[bool]string{false: "as recorded", true: "normalized"}[normalize], func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out.flac.part")
-			if err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f, Normalize: normalize, TargetLUFS: -20}); err != nil {
+			if _, err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f, Normalize: normalize, TargetLUFS: -20}); err != nil {
 				t.Fatal(err)
 			}
 			if rate := rateOf(t, ff, out); rate != 48000 {

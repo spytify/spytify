@@ -174,7 +174,7 @@ func newRecordScreen(a *App) *recordScreen {
 			} else {
 				keepBtn.Hide()
 			}
-			if row.Path != "" && (row.Status == model.Saved || row.Status == model.Tagged) {
+			if row.Path != "" && row.Status == model.Saved {
 				path := row.Path
 				revealBtn.OnTapped = func() { a.noteAction("show a track in its folder"); _ = reveal(path) }
 				playBtn.OnTapped = func() { a.noteAction("play a track"); _ = openPath(path) }
@@ -230,7 +230,7 @@ func rowSubtitle(r model.Row) string {
 // chipColor is the status in a soft tone: the row's title is what matters.
 func chipColor(r model.Row) fyne.ThemeColorName {
 	switch r.Status {
-	case model.Tagged, model.Saved:
+	case model.Saved:
 		return colorSaved
 	case model.Skipped:
 		return colorSkipped

@@ -28,7 +28,6 @@ const (
 	Recording RowStatus = "Recording"
 	Saving    RowStatus = "Saving"
 	Saved     RowStatus = "Saved"
-	Tagged    RowStatus = "Tagged"
 	Skipped   RowStatus = "Skipped"
 )
 
@@ -56,12 +55,12 @@ type Row struct {
 	Partial  bool
 }
 
-// StatusText is the chip label: "Tagged", "Skipped: duplicate".
+// StatusText is the chip label: "Saved", "Skipped: duplicate".
 func (r Row) StatusText() string {
 	if r.Status == Skipped && r.Reason != "" {
 		return "Skipped: " + reasonText(r.Reason)
 	}
-	if r.Partial && (r.Status == Saved || r.Status == Tagged) {
+	if r.Partial && r.Status == Saved {
 		if r.Reason == proto.SkipLowQuality {
 			return "Saved: low quality"
 		}
@@ -127,7 +126,7 @@ func (s State) Totals() Totals {
 	}
 	for _, r := range rows {
 		switch {
-		case r.Status == Saved || r.Status == Tagged:
+		case r.Status == Saved:
 			t.Saved++
 			t.Bytes += r.Bytes
 		case r.Status == Skipped && r.Reason == proto.SkipAd:
@@ -389,9 +388,6 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		m.edit(s, e.ID, func(r *Row) {
 			r.Status, r.Path, r.DurationMs, r.Bytes, r.TaggedBy = Saved, e.Path, e.DurationMs, e.Bytes, e.TaggedBy
 			r.Partial, r.Keepable = e.Partial, false
-			if e.Tagged && e.TaggedBy != "" && e.TaggedBy != "local" {
-				r.Status = Tagged
-			}
 		})
 	case proto.EventTrackSkipped:
 		var e proto.TrackSkippedEvent

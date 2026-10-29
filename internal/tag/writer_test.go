@@ -12,6 +12,7 @@ func TestAACKeepsTheExtraInItsTitle(t *testing.T) {
 		title, aac, base, subtitle string
 	}{
 		{"Song (Live)", "Song (Live)", "Song", "Live"},
+		{"Song (feat. Lumen) (Live)", "Song (feat. Lumen) (Live)", "Song", "feat. Lumen · Live"},
 		{"Song - Remastered 2011", "Song - Remastered 2011", "Song", "Remastered 2011"},
 		{"Song", "Song", "Song", ""},
 	} {

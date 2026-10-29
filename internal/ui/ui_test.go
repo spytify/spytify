@@ -200,11 +200,15 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	feedSession(t, m)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Tagged", "Skipped: duplicate",
+	for _, want := range []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Saved", "Skipped: duplicate",
 		"2 saved · 1 skipped · 0 ads", "Stop", "Player is running", "FLAC", "Skip"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
 		}
+	}
+	// The rows' tags were found online: their chips still say Saved.
+	if contains(all, "Tagged") {
+		t.Error("a saved track's chip says Tagged")
 	}
 	// The app bar's Donate is a heart, as in v1; About has the worded one.
 	if contains(all, "♥ Donate") || !a.donate.Visible() || a.donate.Icon != heartIcon || a.donate.ToolTip() != "Donate" {

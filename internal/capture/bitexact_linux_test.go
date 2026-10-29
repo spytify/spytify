@@ -4,10 +4,10 @@ package capture
 
 import (
 	"context"
-	"encoding/json"
 	"math"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,14 +28,21 @@ const (
 )
 
 // A 44.1 kHz stream played by pw-play, recorded the way spytifyd records
-// the player, must come out bit for bit. The graph's rates decide whether it
-// can: with PipeWire's own (SPYTIFY_PIPEWIRE_RATES=default in
-// scripts/pipewire-session.sh) the graph runs at 48 kHz only. It needs a
-// running PipeWire session, and pipewire-pulse for the PulseAudio backend.
-func TestTheCaptureKeepsA44100HzSourceBitForBit(t *testing.T) {
+// the player, must not be converted by the capture. PipeWire converts it to
+// the rate its graph runs at, and the graph's rates decide that: allowed to
+// run at 44.1 kHz, as the gate's session lets it, the stream must come out
+// bit for bit. With PipeWire's own rates (SPYTIFY_PIPEWIRE_RATES=default in
+// scripts/pipewire-session.sh) the graph runs at 48 kHz only, and Spytify
+// never changes the user's rates: the capture must then record at 48 kHz,
+// one conversion, not convert back to 44.1 kHz. It needs a running PipeWire
+// session, and pipewire-pulse for the PulseAudio backend.
+func TestTheCaptureAddsNoConversionToA44100HzSource(t *testing.T) {
 	if err := exec.Command("pw-cli", "info", "0").Run(); err != nil {
 		t.Skip("no PipeWire session; source scripts/pipewire-session.sh first")
 	}
+	s := pipewireClock{}.settings(context.Background())
+	exact := s.force == noiseFormat.Rate || (s.force == 0 && slices.Contains(s.allowed, noiseFormat.Rate))
+	t.Logf("PipeWire's clock: force-rate %d, allowed rates %v", s.force, s.allowed)
 	src := noise()
 	wav := filepath.Join(t.TempDir(), "noise.wav")
 	writeNoise(t, wav, src)
@@ -62,14 +69,17 @@ func TestTheCaptureKeepsA44100HzSourceBitForBit(t *testing.T) {
 			r := compare(got, f, src)
 			t.Logf("graph at %d Hz, capture asked for %d Hz: %.2f %% of samples on the 16-bit grid, %.2f %% of the source's frames found, %d offset change(s), %d overrun(s)",
 				graph, f.Rate, r.grid, r.found, r.offsets, p.Overruns())
-			if !r.exact() {
-				conversions := 0
-				for _, changed := range []bool{graph != noiseFormat.Rate, f.Rate != graph} {
-					if changed {
-						conversions++
-					}
+			conversions := 0
+			for _, changed := range []bool{graph != noiseFormat.Rate, f.Rate != graph} {
+				if changed {
+					conversions++
 				}
+			}
+			switch {
+			case exact && !r.exact():
 				t.Errorf("not bit-exact: %d Hz source, %d Hz graph, %d Hz capture, so %d conversion(s)", noiseFormat.Rate, graph, f.Rate, conversions)
+			case conversions > 1:
+				t.Errorf("converted back: %d Hz source, %d Hz graph, %d Hz capture, so %d conversions; PipeWire's alone is one", noiseFormat.Rate, graph, f.Rate, conversions)
 			}
 		})
 	}
@@ -143,16 +153,7 @@ func graphRate(t *testing.T, tg target.Target) int {
 	if err != nil || !ok {
 		t.Fatalf("no stream in pw-dump: %v", err)
 	}
-	var objs []pwObject
-	if err := json.Unmarshal(out, &objs); err != nil {
-		t.Fatal(err)
-	}
-	driver := ""
-	for _, o := range objs {
-		if o.ID == stream.id {
-			driver = strconv.Itoa(num(o.Info.Props["node.driver-id"]))
-		}
-	}
+	driver := strconv.Itoa(stream.driver)
 	top, err := exec.Command("pw-top", "--batch-mode", "--iterations", "2").Output()
 	if err != nil {
 		t.Fatalf("pw-top: %v", err)
