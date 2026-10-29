@@ -175,12 +175,12 @@ func (s Shortfall) Under() float64 { return s.TargetLUFS - s.InputLUFS - s.GainD
 // raised to it.
 const reachedLU = 0.1
 
-// fileRate is the rate a file of a source at rate is written at: the
+// FileRate is the rate a file of a source at rate is written at: the
 // source's, up to 48 kHz. Above it, as an output device set to 88.2 or
 // 96 kHz delivers, it is the rate the source's divides into: the music
 // holds nothing above 22 kHz, MP3 has no higher rate, and the file is
 // smaller.
-func fileRate(rate int) int {
+func FileRate(rate int) int {
 	switch {
 	case rate <= 48000:
 		return rate
@@ -207,7 +207,7 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) (*Shortfall, error) {
 	if !ok {
 		return nil, fmt.Errorf("encode: unknown format %q", j.Format)
 	}
-	rate := fileRate(j.Source.Rate)
+	rate := FileRate(j.Source.Rate)
 	var filters []string
 	if t := j.trimFilter(); t != "" {
 		filters = append(filters, t)
