@@ -43,9 +43,11 @@ func connectedApp(t *testing.T) (*App, *model.Model, *recordingCore) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { srv.Close() })
-	a, m, l := newTestApp(t, sock)
+	// Cancelled once newTestApp waited for the app's requests: they end
+	// with the core's answer, not with the link going away.
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	a, m, l := newTestApp(t, sock)
 	go l.Run(ctx)
 	deadline := time.Now().Add(5 * time.Second)
 	for m.Snapshot().Conn != model.Connected {

@@ -256,7 +256,7 @@ func (rowLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 }
 
 func (s *settingsScreen) resetKeys(keys []string) {
-	go func() {
+	s.app.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		for _, k := range keys {
@@ -265,7 +265,7 @@ func (s *settingsScreen) resetKeys(keys []string) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // apply sends one value; a rejection is shown and the field goes back to
@@ -274,7 +274,7 @@ func (s *settingsScreen) apply(key string, v any) {
 	if s.rendering {
 		return
 	}
-	go func() {
+	s.app.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		var res proto.SettingsSetResult
@@ -288,7 +288,7 @@ func (s *settingsScreen) apply(key string, v any) {
 				s.render(s.app.m.Snapshot())
 			})
 		}
-	}()
+	})
 }
 
 func (s *settingsScreen) newField(d *settings.Def) *field {
@@ -588,7 +588,7 @@ func (p *playerCard) save() {
 func (p *playerCard) restart() {
 	p.app.noteAction("restart spytifyd for the player")
 	restart := func() {
-		go func() {
+		p.app.calls.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			if p.app.link.Do(ctx, proto.MethodCoreShutdown, nil, nil) == nil {
@@ -604,7 +604,7 @@ func (p *playerCard) restart() {
 				p.pending = false
 				p.showNotice(false)
 			})
-		}()
+		})
 	}
 	if p.app.last.Recording() {
 		dialog.ShowConfirm("Restart spytifyd?", "A session is recording; restarting stops it now.", func(ok bool) {

@@ -198,22 +198,20 @@ func TestPickingABitrateSendsItsNumber(t *testing.T) {
 		t.Fatalf("no 256 kbps in the list: %v", texts(list.Menu))
 	}
 	test.Tap(pick)
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		core.mu.Lock()
-		sets := slices.Clone(core.sets)
-		core.mu.Unlock()
-		if len(sets) > 0 {
-			d, _ := settings.Lookup("encode.bitrate_kbps")
-			if n, err := d.Coerce(sets[0]["encode.bitrate_kbps"]); err != nil || n != int64(256) {
-				t.Fatalf("picking 256 kbps sent %v", sets)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("picking a bitrate sent nothing")
-		}
-		time.Sleep(20 * time.Millisecond)
+	// Once the core answered, it has the number and no error shows.
+	a.calls.Wait()
+	core.mu.Lock()
+	sets := slices.Clone(core.sets)
+	core.mu.Unlock()
+	if len(sets) == 0 {
+		t.Fatal("picking a bitrate sent nothing")
+	}
+	d, _ := settings.Lookup("encode.bitrate_kbps")
+	if n, err := d.Coerce(sets[0]["encode.bitrate_kbps"]); err != nil || n != int64(256) {
+		t.Fatalf("picking 256 kbps sent %v", sets)
+	}
+	if top := a.win.Canvas().Overlays().Top(); top != nil {
+		t.Errorf("picking a bitrate showed %v", texts(top))
 	}
 }
 

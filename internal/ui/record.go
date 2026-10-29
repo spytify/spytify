@@ -244,7 +244,7 @@ func chipColor(r model.Row) fyne.ThemeColorName {
 func (a *App) keep(id string) {
 	a.noteAction("keep anyway")
 	a.m.Keeping(id, true)
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := a.link.Do(ctx, proto.MethodTrackKeep, proto.TrackKeepParams{ID: id}, nil); err != nil {
@@ -253,7 +253,7 @@ func (a *App) keep(id string) {
 				a.showError(err)
 			})
 		}
-	}()
+	})
 }
 
 func (r *recordScreen) content() fyne.CanvasObject { return r.root }

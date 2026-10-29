@@ -97,6 +97,7 @@ func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	m := model.New()
 	l := link.New(addr, m)
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), Socket: addr, ManualRender: true, NoUpdateCheck: true})
+	t.Cleanup(a.calls.Wait)
 	a.win.Resize(fyne.NewSize(920, 620))
 	return a, m, l
 }
