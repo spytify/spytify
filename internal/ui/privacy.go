@@ -86,7 +86,7 @@ func (a *App) flushPrivacy() {
 	if len(p) == 0 {
 		return
 	}
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if a.link.Do(ctx, proto.MethodSettingsSet, proto.SettingsSetParams{Values: p}, nil) == nil {
@@ -102,7 +102,7 @@ func (a *App) flushPrivacy() {
 				a.fa.Preferences().SetString(pendingKey, string(b))
 			})
 		}
-	}()
+	})
 }
 
 // renderPrivacy follows the connection and the settings: the bug tracker

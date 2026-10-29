@@ -160,10 +160,11 @@ type App struct {
 	wasConnected bool
 	checksNoted  string
 	diagNoted    bool
-	// reports are the reports on their way to the bug tracker, which
-	// tests wait for: one still going must not touch the next test's
-	// window.
+	// reports are the reports on their way to the bug tracker, and calls
+	// the requests on their way to the recorder, which tests wait for:
+	// one still going must not touch the next test's window.
 	reports sync.WaitGroup
+	calls   sync.WaitGroup
 	// heard and incomplete are the link goroutine's: the first sound, and
 	// the incomplete tracks in a row.
 	heard      bool
@@ -313,7 +314,7 @@ func (a *App) replaceOtherBuild(s model.State) {
 		return
 	}
 	a.replaced = true
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil) == nil {
@@ -322,7 +323,7 @@ func (a *App) replaceOtherBuild(s model.State) {
 		if err := a.link.StartDaemon(); err != nil {
 			fyne.Do(func() { a.showError(err) })
 		}
-	}()
+	})
 }
 
 // quit closes Spytify, the recorder included; a recording in progress is
@@ -657,7 +658,7 @@ func upper(s string) string {
 
 func (a *App) toggleRecording() {
 	s := a.last
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		var err error
@@ -683,7 +684,7 @@ func (a *App) toggleRecording() {
 		if err != nil {
 			fyne.Do(func() { a.showError(err) })
 		}
-	}()
+	})
 }
 
 // refreshChecks runs the recorder's checks again.
@@ -719,7 +720,7 @@ func (a *App) recheck(ev proto.Event) {
 
 // do runs an action off the toolkit's goroutine and reports a failure.
 func (a *App) do(method string, params any, then func()) {
-	go func() {
+	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := a.link.Do(ctx, method, params, nil); err != nil {
@@ -729,7 +730,7 @@ func (a *App) do(method string, params any, then func()) {
 		if then != nil {
 			fyne.Do(then)
 		}
-	}()
+	})
 }
 
 func (a *App) showError(err error) {
