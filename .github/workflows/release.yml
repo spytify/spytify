@@ -183,6 +183,11 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: files
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: scripts/release-notes.sh
+          sparse-checkout-cone-mode: false
       - name: Release with every file
         env:
           GH_TOKEN: ${{ github.token }}
@@ -196,11 +201,10 @@ jobs:
           draft="--draft"
           [ "$PUBLISH" = true ] && draft=""
           (cd files && sha256sum * > SHA256SUMS)
-          notes=""
-          [ "$NOTARIZED" = true ] || notes="The macOS app is not notarised: the first time, allow it in System Settings > Privacy & Security > Open Anyway. "
-          [ "$SIGNED" = true ] || notes="${notes}The Windows files are not signed, so SmartScreen warns before the first run. "
           # --target makes the tag on this commit when a manual run asks for a
           # version that has none yet.
           gh release create "$TAG" files/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" $draft $pre \
-            --title "Spytify $TAG" --generate-notes \
-            --notes "${notes}The Windows build is a first draft."
+            --title "Spytify $TAG" --generate-notes
+          # The notes link the files by the names GitHub gave them.
+          src/scripts/release-notes.sh "$TAG" > notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
