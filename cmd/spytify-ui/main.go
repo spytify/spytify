@@ -51,8 +51,11 @@ func main() {
 		return
 	}
 
-	// A crash of the app leaves its trace for the next launch to send.
-	crash.Keep(filepath.Join(env.StateDir, "spytify-ui.crash.log"))
+	// A crash of the app leaves its trace for the next launch to send,
+	// with the lines the runtime prints to stderr only.
+	crashLog := filepath.Join(env.StateDir, "spytify-ui.crash.log")
+	crash.Keep(crashLog)
+	crash.CaptureStderr(crashLog)
 
 	fa := app.NewWithID("org.spytify.ui")
 	fa.SetIcon(ui.Logo)
