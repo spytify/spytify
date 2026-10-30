@@ -500,6 +500,36 @@ func TestALowQualityDeviceLeavesNoReport(t *testing.T) {
 	}
 }
 
+// Three incomplete tracks in a row leave a report only when they could be
+// the recorder's doing: the session's first take, joined mid-track, and
+// tracks the listener skips before half of them played are not.
+func TestOnlyTracksPlayedThroughCountAsIncomplete(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	take := func(id string, lengthMs int64, kind string, played time.Duration) {
+		m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: id, Artist: "Neon Harbor", Title: "Midnight Ferry", LengthMs: lengthMs},
+			Cut: &proto.TrackCut{Kind: kind, By: "notice"}}))
+		time.Sleep(played)
+		m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: id, Reason: proto.SkipIncomplete}))
+	}
+	take("s-1", 164000, "first", 0)
+	take("s-2", 151000, "interrupt", 0)
+	take("s-3", 145000, "interrupt", 0)
+	quiet(a, srv)
+	if n := len(srv.Items("event")); n != 0 {
+		t.Fatalf("%d reports for a joined take and two skipped ones", n)
+	}
+	for _, id := range []string{"s-4", "s-5", "s-6"} {
+		take(id, 100, "boundary", 60*time.Millisecond)
+	}
+	ev := srv.Wait(t, "event", 1)[0].JSON()
+	if ev["message"] != "blocked: incomplete_tracks" {
+		t.Errorf("reported %v", ev["message"])
+	}
+}
+
 // labels are the visible labels under o with this text.
 func labels(o fyne.CanvasObject, text string) []*widget.Label {
 	var out []*widget.Label

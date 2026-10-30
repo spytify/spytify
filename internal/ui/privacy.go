@@ -200,6 +200,27 @@ var problemCodes = map[string]bool{
 	"output_dir": true, "read": true, "encode": true, "rename": true,
 }
 
+// take is a track's take, as the link goroutine saw it start.
+type take struct {
+	at       time.Time
+	lengthMs int64
+	// first is the session's first take, which joins a track already
+	// playing when Record is pressed mid-track.
+	first bool
+}
+
+// mayBeABug says whether a take skipped as incomplete can tell of the
+// recorder missing a track's start or end, for the incomplete tracks in a
+// row: not the session's first, cut short by design, nor one the listener
+// moved on from before half its track played. A take not seen starting
+// counts.
+func (t take) mayBeABug(now time.Time) bool {
+	if t.first {
+		return false
+	}
+	return t.lengthMs <= 0 || now.Sub(t.at) >= time.Duration(t.lengthMs/2)*time.Millisecond
+}
+
 // onEvent turns the recorder's events into breadcrumbs, steps and problem
 // reports. It runs on the link's goroutine.
 func (a *App) onEvent(ev proto.Event) {
@@ -230,6 +251,10 @@ func (a *App) onEvent(ev proto.Event) {
 			return
 		}
 		a.tel.Breadcrumb("track", "started", map[string]any{"length_s": e.LengthMs / 1000})
+		if a.takes == nil {
+			a.takes = map[string]take{}
+		}
+		a.takes[e.ID] = take{at: time.Now(), lengthMs: e.LengthMs, first: e.Cut != nil && e.Cut.Kind == "first"}
 		if e.Cut != nil {
 			a.tel.Distribution("cut.offset", float64(e.Cut.OffsetMs), "millisecond", map[string]string{"kind": e.Cut.Kind, "by": e.Cut.By})
 		}
@@ -238,6 +263,7 @@ func (a *App) onEvent(ev proto.Event) {
 		if ev.Decode(&e) != nil {
 			return
 		}
+		delete(a.takes, e.ID)
 		data := map[string]any{"tagged": e.Tagged}
 		counted := map[string]string{}
 		if e.Timings != nil {
@@ -265,7 +291,9 @@ func (a *App) onEvent(ev proto.Event) {
 		}
 		a.tel.Breadcrumb("track", "skipped", map[string]any{"reason": string(e.Reason)})
 		a.tel.Count("track.skipped", 1, map[string]string{"reason": string(e.Reason)})
-		if e.Reason == proto.SkipIncomplete {
+		t := a.takes[e.ID]
+		delete(a.takes, e.ID)
+		if e.Reason == proto.SkipIncomplete && t.mayBeABug(time.Now()) {
 			if a.incomplete++; a.incomplete == 3 {
 				a.tel.Problem("incomplete_tracks", "three incomplete tracks in a row")
 			}
