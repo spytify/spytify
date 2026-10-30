@@ -54,16 +54,19 @@ while IFS=$'\t' read -r name bytes; do
   fi
 done <<<"$assets"
 
-windows="The Windows build is a first draft."
-[ "${SIGNED:-}" = true ] || windows="The Windows files are not signed, so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\". $windows"
-
-echo "> [!NOTE]"
-if [ "${NOTARIZED:-}" != true ]; then
-  echo "> The macOS app is not notarised: the first time, allow it in System Settings > Privacy & Security > Open Anyway."
-  echo ">"
+# What the files lack, a paragraph each: nothing once they are signed and
+# notarised.
+lacks=()
+[ "${NOTARIZED:-}" = true ] || lacks+=("The macOS app is not notarised: the first time, allow it in System Settings > Privacy & Security > Open Anyway.")
+[ "${SIGNED:-}" = true ] || lacks+=("The Windows files are not signed, so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\".")
+if [ ${#lacks[@]} -gt 0 ]; then
+  echo "> [!NOTE]"
+  for i in "${!lacks[@]}"; do
+    [ "$i" -eq 0 ] || echo ">"
+    echo "> ${lacks[$i]}"
+  done
+  echo
 fi
-echo "> $windows"
-echo
 echo "## Downloads"
 echo
 echo "| System | File | Size |"
