@@ -25,7 +25,11 @@ Some applications play your own music files in place of a streamed track when th
 
 ### [Keep a track that was cut short](#keep-anyway)
 
-The last track cut short (skipped, stopped with **Stop now**, or moved along its track bar) shows **Keep anyway** in the Record list until the next track is saved. It saves the part that played as "*title* (partial)", which never counts as the whole track: when it plays in full, it is recorded as usual.
+The last track cut short (skipped, stopped with **Stop now**, or moved along its track bar) shows **Keep anyway** in the Record list until the next track is saved. It saves the part that played as "*title* (partial)", which never counts as the whole track: when it plays in full, it is recorded as usual. A track skipped as low quality is kept the same way, as "*title* (low quality)".
+
+### [Tracks are skipped as low quality](#low-quality)
+
+The application's output device runs below 44.1 kHz or in mono, so the tracks would sound like a phone call. A Bluetooth headset does this while an app uses its microphone. The warning says what to change: another output, or another microphone than the headset's.
 
 ### [Short items are skipped as ads](#ads)
 
@@ -37,7 +41,11 @@ Set **File name prefix** to `counter` in Settings > Output > Advanced: each file
 
 ### [Is FLAC better than MP3?](#quality)
 
-FLAC and WAV avoid a second lossy pass, but streaming services already send compressed audio: a FLAC file is larger and sounds the same as the stream.
+MP3 at 160 kbps is the default. FLAC and WAV avoid a second lossy pass, but streaming services already send compressed audio: a FLAC file is larger and sounds the same as the stream.
+
+### [Spytify does not open its window](#no-window)
+
+Spytify draws its window with OpenGL. On Windows, without a graphics driver offering it, Spytify draws with the copy of Mesa in its `opengl` folder, in software. On Linux, the packages bring Mesa's drivers; without them, the app says what to install.
 
 ### [macOS does not let Spytify record](#macos-permissions)
 

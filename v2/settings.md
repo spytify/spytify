@@ -22,13 +22,13 @@ Every setting is in `config.toml`, which the recorder validates. Change them in 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
 | Output folder | `output.dir` | a folder: absolute, or starting with ~/ | `~/Music/Spytify` |
-| Group by folders | `output.group_by` | none, artist, artist/album | `artist/album` |
+| Group by folders | `output.group_by` | none, artist, artist/album, artists, artists/album | `artist/album` |
 
 Advanced:
 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
-| File name template | `output.template` | placeholders {artist}, {title}, {album}, {track}, {year} | `{artist} - {title}` |
+| File name template | `output.template` | Placeholders: {artist}, {title}, {album}, {track}, {year} | `{artist} - {title}` |
 | Underscores instead of spaces | `output.underscores` | on, off | off |
 | Remove diacritics from file names | `output.ascii_filenames` | on, off | off |
 | File name prefix | `output.prefix` | none, counter, album_track | `none` |
@@ -39,7 +39,7 @@ Advanced:
 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
-| Output format | `encode.format` | mp3, aac, flac, wav | `flac` |
+| Output format | `encode.format` | mp3, aac, flac, wav | `mp3` |
 | Bitrate | `encode.bitrate_kbps` | 128, 160, 256, 320 | 160 |
 
 Advanced:
@@ -58,7 +58,7 @@ Advanced:
 | Already recorded tracks | `recorder.duplicates` | skip, suffix, overwrite | `skip` |
 | Skip to the next track when already recorded | `recorder.skip_duplicates_forward` | on, off | off |
 | Record a single track then stop | `recorder.single_track` | on, off | off |
-| Normalize volume | `recorder.normalize` | on, off | on |
+| Normalize volume | `recorder.normalize` | on, off | off |
 
 Advanced:
 
