@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 
+	"github.com/spytify/spytify/internal/crash"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -160,16 +162,24 @@ func crashEvent(cr Crash) *sentry.Event {
 	return ev
 }
 
-// parseTrace reads the first line of a Go crash trace and the frames of
-// the goroutine that crashed, oldest first as Sentry wants them.
+// parseTrace reads the headline of a Go crash trace (crash.Headline) and
+// the frames of the stack that crashed, oldest first as Sentry wants them.
 func parseTrace(trace string) (summary string, frames []sentry.Frame) {
-	lines := strings.Split(strings.ReplaceAll(trace, "\r\n", "\n"), "\n")
-	summary = strings.TrimSpace(lines[0])
+	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(trace), "\r\n", "\n"), "\n")
+	summary = crash.Headline(trace)
 	start := -1
 	for i, l := range lines {
 		if strings.HasPrefix(l, "goroutine ") && strings.HasSuffix(strings.TrimSpace(l), ":") {
 			start = i + 1
 			break
+		}
+	}
+	// A thread that runs only the runtime, as the one that preempts the
+	// others, gave up on its own stack: the goroutine after it may have
+	// nothing to do with the crash.
+	if strings.TrimSpace(lines[0]) == "runtime stack:" {
+		if end := slices.Index(lines, ""); end > 1 && strings.HasPrefix(strings.TrimSpace(lines[end-2]), "runtime.mstart(") {
+			start = 1
 		}
 	}
 	if start < 0 {
