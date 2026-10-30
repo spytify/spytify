@@ -191,7 +191,7 @@ func TestProblemsAreCountedAndSampled(t *testing.T) {
 	c.Problem("capture_stalled", "No audio from the player for 10 s")
 	c.Problem("capture_stalled", "again")
 	roll = 0.5
-	c.Problem("incomplete_tracks", "")
+	c.Problem("encode", "")
 	c.Flush(5 * time.Second)
 
 	events := srv.Wait(t, "event", 1)
