@@ -71,7 +71,7 @@ func FindCrashes(stateDir string, prefs Prefs, now time.Time) (found []Crash) {
 			if contains(handled, key) || containsKey(out, key) {
 				continue
 			}
-			out = append(out, Crash{Program: p, Trace: trace, Time: st.ModTime(), key: key})
+			out = append(out, Crash{Program: p, Trace: crash.WithLost(path, trace), Time: st.ModTime(), key: key})
 		}
 	}
 	return out
@@ -153,6 +153,13 @@ func crashEvent(cr Crash) *sentry.Event {
 	ev.Platform = "go"
 	ev.Timestamp = cr.Time
 	ev.Tags["program"] = cr.Program
+	// The lines printed along with the message, such as an errno or where
+	// a signal hit, follow it.
+	for _, l := range crash.Header(cr.Trace) {
+		if l != summary {
+			value += "\n" + l
+		}
+	}
 	ex := sentry.Exception{
 		Type:       typ,
 		Value:      value,
@@ -181,7 +188,7 @@ func parseTrace(trace string) (summary string, stacks []stack) {
 		head := strings.TrimSpace(lines[i])
 		var s stack
 		switch {
-		case i == 0 && head == "runtime stack:":
+		case head == "runtime stack:" && len(stacks) == 0:
 			s = stack{id: "runtime", name: "runtime stack"}
 		case strings.HasPrefix(lines[i], "goroutine ") && strings.HasSuffix(head, ":"):
 			s = goroutine(head)
