@@ -259,10 +259,14 @@ main.main()
 `
 
 func TestParseTrace(t *testing.T) {
-	summary, frames := parseTrace(trace)
+	summary, stacks := parseTrace(trace)
 	if summary != "panic: runtime error: index out of range [3] with length 3" {
 		t.Fatalf("summary %q", summary)
 	}
+	if len(stacks) != 2 || stacks[0].id != "21" || stacks[0].name != "goroutine 21 [running]" || stacks[1].name != "goroutine 1 [select]" || len(stacks[1].frames) != 1 {
+		t.Fatalf("stacks %+v", stacks)
+	}
+	frames := stacks[0].frames
 	if len(frames) != 3 {
 		t.Fatalf("%d frames: %+v", len(frames), frames)
 	}
