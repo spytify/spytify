@@ -4,17 +4,18 @@
 #   spytifyd.exe      the recorder, which the app starts
 #   spytify-cli.exe   the command line
 #   spytify-tap.exe   the capture helper (WASAPI process loopback)
-#   ffmpeg.exe        the encoder, so nothing has to be installed: an LGPL
-#                     build from BtbN/FFmpeg-Builds, pinned and checked
-#                     (SPYTIFY_NO_FFMPEG=1 leaves it out)
+#   ffmpeg.exe        the encoder, so nothing has to be installed: FFmpeg
+#                     and LAME built from their sources with only what
+#                     Spytify runs (scripts/build-ffmpeg.sh; SPYTIFY_NO_FFMPEG=1
+#                     leaves it out)
 #   opengl\           Mesa's OpenGL in software, which the app draws with
 #                     when no graphics driver offers OpenGL: a build from
 #                     pal1000/mesa-dist-win, pinned and checked
 #                     (SPYTIFY_NO_MESA=1 leaves it out)
 # Cross-compiles from Linux or macOS with Go and MinGW-w64
 # (x86_64-w64-mingw32-gcc, -g++ and -windres; Debian: apt install
-# mingw-w64), and unpacks Mesa with 7-Zip (7z or 7zz; Debian: apt install
-# 7zip). Spytify.exe carries the logo as its icon and its version.
+# mingw-w64), builds ffmpeg with make and nasm, and unpacks Mesa with 7-Zip
+# (7z or 7zz; Debian: apt install 7zip). Spytify.exe carries the logo as its icon and its version.
 #
 # The player recorded when none is chosen comes from SPYTIFY_DEFAULT_PROCESS,
 # from the environment or an untracked build.env; without it the app asks
@@ -39,25 +40,8 @@ tmp=$(mktemp -d)
 # link a stale .syso.
 trap 'rm -rf "$tmp" cmd/spytify-ui/rsrc_windows_amd64.syso' EXIT
 
-sha256() { (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d' ' -f1; }
-
-# fetch downloads a pinned file into the cache once, checks it against its
-# checksum and prints its path.
-fetch() {
-  local cache="${XDG_CACHE_HOME:-$HOME/.cache}/spytify" file
-  file="$cache/$(basename "$1")"
-  mkdir -p "$cache"
-  if [ ! -f "$file" ]; then
-    curl -fsSL -o "$file.part" "$1"
-    mv "$file.part" "$file"
-  fi
-  if [ "$(sha256 "$file")" != "$2" ]; then
-    rm -f "$file"
-    echo "$(basename "$1") does not match its checksum" >&2
-    return 1
-  fi
-  echo "$file"
-}
+# shellcheck source=scripts/fetch.sh
+. scripts/fetch.sh
 
 # The app's icon and version information: windres compiles
 # windows/spytify.rc into an object, which go build links from the
@@ -105,19 +89,8 @@ x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -std=c++17 -static -municode \
 "$tmp/checkexe" "$out/Spytify.exe"
 
 # ffmpeg, beside spytifyd.exe, which looks there first after PATH.
-ffmpeg_url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-23-13-04/ffmpeg-n9.0.2-35-g9a9b70bb8c-win64-lgpl-9.0.zip"
-ffmpeg_sha256="c12c3e71f0055802c732b6b6fb1712c296b7a47461243a8f0454c2c5b25d50d1"
 if [ "${SPYTIFY_NO_FFMPEG:-}" != 1 ]; then
-  zip="$(fetch "$ffmpeg_url" "$ffmpeg_sha256")"
-  unzip -q -o -j "$zip" "*/bin/ffmpeg.exe" -d "$out"
-  unzip -q -o -p "$zip" "*/LICENSE.txt" > "$out/ffmpeg-LICENSE.txt"
-  cat > "$out/ffmpeg-README.txt" <<NOTE
-ffmpeg.exe is FFmpeg n9.0.2, an LGPL build by BtbN/FFmpeg-Builds:
-  $ffmpeg_url
-Its license is in ffmpeg-LICENSE.txt. The source is at https://ffmpeg.org
-(tag n9.0.2) and the build scripts at https://github.com/BtbN/FFmpeg-Builds.
-Spytify runs it as a separate program to encode the recordings.
-NOTE
+  scripts/build-ffmpeg.sh "$out" x86_64-w64-mingw32
 fi
 
 # Mesa's OpenGL, x64: opengl32.dll and the llvmpipe renderer it loads,
