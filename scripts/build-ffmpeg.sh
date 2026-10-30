@@ -31,9 +31,16 @@ zlib_version=1.3.2
 zlib_url="https://github.com/madler/zlib/releases/download/v$zlib_version/zlib-$zlib_version.tar.gz"
 zlib_sha256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 
-# What Spytify runs ffmpeg for, and nothing else. CI's windows job runs the
-# tests with this build: one missing fails them. configure takes lists with
-# commas.
+# What Spytify runs ffmpeg for, and nothing else: an encoder, a filter or a
+# format left out here is missing from the Windows zip's ffmpeg.exe. Code
+# that runs ffmpeg for something new adds it here, with a test that runs it,
+# and checks the build:
+#
+#   scripts/build-ffmpeg.sh /tmp/ffmpeg && PATH=/tmp/ffmpeg:$PATH go test ./...
+#
+# CI's windows job runs the tests with the Windows build: a component
+# missing fails them, but only where a test runs it. configure takes lists
+# with commas.
 # shellcheck disable=SC2054
 components=(
   # internal/encode: a take's WAV, trimmed, its volume set, resampled and
