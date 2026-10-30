@@ -251,7 +251,6 @@ func (a *App) onEvent(ev proto.Event) {
 			a.tel.Count("track.kept", 1, counted)
 			return
 		}
-		a.incomplete = 0
 		if e.Timings != nil {
 			a.measureFinish(*e.Timings)
 		}
@@ -265,11 +264,6 @@ func (a *App) onEvent(ev proto.Event) {
 		}
 		a.tel.Breadcrumb("track", "skipped", map[string]any{"reason": string(e.Reason)})
 		a.tel.Count("track.skipped", 1, map[string]string{"reason": string(e.Reason)})
-		if e.Reason == proto.SkipIncomplete {
-			if a.incomplete++; a.incomplete == 3 {
-				a.tel.Problem("incomplete_tracks", "three incomplete tracks in a row")
-			}
-		}
 	case proto.EventError:
 		var e proto.ErrorEvent
 		if ev.Decode(&e) != nil {
