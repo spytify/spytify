@@ -145,8 +145,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install MinGW-w64 and 7-Zip
-        run: scripts/ci/apt-install.sh mingw-w64 7zip
+      - name: Install MinGW-w64, nasm and 7-Zip
+        run: scripts/ci/apt-install.sh mingw-w64 nasm 7zip
+      # ffmpeg takes minutes to build: it is built again when its script
+      # changes.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/spytify/ffmpeg-*
+          key: ffmpeg-windows-${{ hashFiles('scripts/build-ffmpeg.sh') }}
       - name: Spytify.exe and the command-line tools
         run: |
           v="${{ needs.version.outputs.version }}"
