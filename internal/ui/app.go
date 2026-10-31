@@ -295,6 +295,9 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	m.OnLevel(a.scheduleLevel)
 	m.OnEvent(a.onEvent)
 	m.OnEvent(a.recheck)
+	if !opts.ManualRender {
+		go a.clockAds()
+	}
 	a.render()
 	return a
 }
@@ -641,6 +644,16 @@ func (a *App) renderLevel() {
 		return
 	}
 	a.screens[tabRecord].(*recordScreen).renderLive(a.m.Live())
+}
+
+// clockAds moves the progress once a second while an ad plays: the
+// recorder sends level events, which move it, only while it records.
+func (a *App) clockAds() {
+	for range time.Tick(time.Second) {
+		if c, session, _ := a.m.Live(); c != nil && session == proto.StateAd {
+			a.scheduleLevel()
+		}
+	}
 }
 
 func (a *App) checkUpdate() {
