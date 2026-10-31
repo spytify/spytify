@@ -16,6 +16,8 @@ permissions:
 # source names none (Settings > Secrets and variables > Actions > Variables).
 env:
   SPYTIFY_DEFAULT_PROCESS: ${{ vars.SPYTIFY_DEFAULT_PROCESS }}
+  # staticcheck 2026.2.2, which works with Go 1.26 and 1.27.
+  STATICCHECK: honnef.co/go/tools/cmd/staticcheck@v0.8.2
 
 jobs:
   unit:
@@ -36,6 +38,10 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - name: go vet
         run: go vet ./...
+      # Natively, so that cgo type-checks the desktop UI too;
+      # windows-staticcheck covers Windows.
+      - name: staticcheck
+        run: go run "$STATICCHECK" ./...
       - name: Schema is generated
         run: go generate ./pkg/proto && git diff --exit-code pkg/proto/schema.json
       - name: Build FakePlayer, the scriptable test player (macOS)
@@ -129,6 +135,23 @@ jobs:
           cygpath -w "$RUNNER_TEMP/ffmpeg" >> "$GITHUB_PATH"
       - name: Unit tests (all but the desktop UI, which windows-build cross-compiles)
         run: CGO_ENABLED=0 go test $(go list ./... | grep -v -e /internal/ui$ -e /cmd/spytify-ui)
+
+  # staticcheck for Windows, from Linux with MinGW-w64, as windows-build
+  # compiles: the desktop UI needs cgo, which the windows job goes without.
+  windows-staticcheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install MinGW-w64
+        run: scripts/ci/apt-install.sh mingw-w64
+      - name: staticcheck
+        run: |
+          # Built for Linux, where it runs, then pointed at Windows.
+          GOBIN="$RUNNER_TEMP" go install "$STATICCHECK"
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc "$RUNNER_TEMP/staticcheck" ./...
 
   windows-build:
     runs-on: ubuntu-24.04
