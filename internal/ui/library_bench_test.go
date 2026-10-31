@@ -37,6 +37,20 @@ func BenchmarkScanAudio(b *testing.B) {
 	}
 }
 
+// The Album view's grouping, from the folders alone: the tags of thousands
+// of files take minutes to read.
+func BenchmarkGroupByAlbum(b *testing.B) {
+	files := scanAudio(library(b))
+	sort.Slice(files, func(i, j int) bool { return strings.ToLower(files[i].rel) < strings.ToLower(files[j].rel) })
+	l := &libraryScreen{tagged: &tagCache{read: map[string]trackTags{}}}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if rows, _ := l.albums(files); len(rows) != 10500 {
+			b.Fatalf("%d rows", len(rows))
+		}
+	}
+}
+
 func BenchmarkSearchAndSort(b *testing.B) {
 	files := scanAudio(library(b))
 	b.ResetTimer()
