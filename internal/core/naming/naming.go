@@ -33,6 +33,7 @@ type Track struct {
 	AlbumArtists  []string
 	Title         string
 	Album         string
+	Disc          int
 	TrackNumber   int
 	Year          int
 	Unknown       bool // no title: podcasts and untitled items go to the root
@@ -143,7 +144,7 @@ func Example(o Options, counter int64) string {
 	// Its accents show what removing diacritics does, its guest what all
 	// artists folders do.
 	t := Track{Artists: []string{"Neon Harbor", "Lumen"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Café Lumière",
-		Album: "Harbor Lights", TrackNumber: 4, Year: 2024}
+		Album: "Harbor Lights", Disc: 1, TrackNumber: 4, Year: 2024}
 	p := Build(t, o)
 	return filepath.Join(p.Dir, FileName(p, o, counter, t.TrackNumber))
 }
@@ -195,7 +196,7 @@ func Recorded(root string, p Plan, o Options) bool {
 	return false
 }
 
-var placeholder = regexp.MustCompile(`\{([a-z]+)\}`)
+var placeholder = regexp.MustCompile(`\{([a-z_]+)\}`)
 
 func expand(tmpl string, t Track, artistSep string) string {
 	if tmpl == "" {
@@ -205,6 +206,8 @@ func expand(tmpl string, t Track, artistSep string) string {
 		switch m {
 		case "{artist}":
 			return artistsOf(t, artistSep)
+		case "{album_artist}":
+			return albumArtistsOf(t, artistSep)
 		case "{title}":
 			return t.Title
 		case "{album}":
@@ -212,6 +215,11 @@ func expand(tmpl string, t Track, artistSep string) string {
 				return untitledAlbum
 			}
 			return t.Album
+		case "{disc}":
+			if t.Disc > 0 {
+				return strconv.Itoa(t.Disc)
+			}
+			return ""
 		case "{track}":
 			if t.TrackNumber > 0 {
 				return fmt.Sprintf("%02d", t.TrackNumber)
@@ -239,6 +247,15 @@ func artistsOf(t Track, sep string) string {
 		return strings.Join(t.AlbumArtists, sep)
 	}
 	return strings.Join(unique(t.Artists), sep)
+}
+
+// albumArtistsOf is the album artists; when the player names none, the
+// track's first artist, as the album artist tag falls back.
+func albumArtistsOf(t Track, sep string) string {
+	if names := unique(t.AlbumArtists); len(names) > 0 {
+		return strings.Join(names, sep)
+	}
+	return mainArtist(t)
 }
 
 // mainArtist names a main artist folder: the album's first artist, else
