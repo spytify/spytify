@@ -672,6 +672,73 @@ func TestWaitingOffersToRestartTheTrack(t *testing.T) {
 	snapshot(t, a, "waiting")
 }
 
+// The Record screen says to start the player even with tracks in the list:
+// it offers to open the player while it is not running, then to play while
+// a session waits on it paused, one action at a time.
+func TestWaitingSaysToStartThePlayer(t *testing.T) {
+	a, m, core := connectedApp(t)
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-001", Artist: "M83", Title: "Midnight City", Album: "Hurry Up, We're Dreaming", LengthMs: 243000, CoverURL: generatedCover(t, 4)}}))
+	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-001", Path: "/Users/listener/Music/Spytify/M83/Midnight City.flac", DurationMs: 243000, Bytes: 31_400_000, Tagged: true}))
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
+	r := a.screens[tabRecord].(*recordScreen)
+	// offers is the wait row's text and the one button it shows.
+	offers := func(text string, button *widget.Button) {
+		t.Helper()
+		a.render()
+		if !r.waitRow.Visible() || r.waiting.Text != text {
+			t.Errorf("the wait row says %q, want %q", r.waiting.Text, text)
+		}
+		for _, b := range []*widget.Button{r.launch, r.play, r.restart, r.blocked} {
+			if b.Visible() != (b == button) {
+				t.Errorf("%q shown %v", b.Text, b.Visible())
+			}
+		}
+	}
+
+	// The player was closed since: Record is off, the list stays, and the
+	// row offers to open the player.
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
+	offers("Nothing is recorded while Player is not running.", r.launch)
+	if r.launch.Text != "Open Player" || !a.action.Disabled() || len(r.rows) != 1 {
+		t.Errorf("the button reads %q, Record disabled %v, %d rows", r.launch.Text, a.action.Disabled(), len(r.rows))
+	}
+	snapshot(t, a, "waiting-player-closed")
+	test.Tap(r.launch)
+	waitCall(t, core, proto.MethodPlayerLaunch)
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 4242}))
+	offers("Session ended.", nil)
+
+	// It quits during a session.
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
+	offers("Nothing is recorded while Player is not running.", r.launch)
+
+	// It opens again, paused.
+	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 4243}))
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StatePaused}))
+	offers("Nothing is recorded while Player is paused: press play there.", r.play)
+	snapshot(t, a, "waiting-player-paused")
+	test.Tap(r.play)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		core.mu.Lock()
+		controls := slices.Clone(core.controls)
+		core.mu.Unlock()
+		if slices.Equal(controls, []string{proto.CmdPlay}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("player.control sent %q, want play", controls)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// It plays the track it was on, which started before the session.
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
+	offers("Waiting for the next track to start.", r.restart)
+}
+
 func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	m.SetConn(model.Connected, "")
@@ -885,6 +952,8 @@ type recordingCore struct {
 	calls []string
 	sets  []map[string]any
 	stops []proto.SessionStopParams
+	// controls are the player.control commands, in order.
+	controls []string
 	// noOutput is an output folder that cannot be written to: its check
 	// fails and no session starts.
 	noOutput bool
@@ -908,6 +977,11 @@ func (c *recordingCore) handle(ctx context.Context, method string, params json.R
 		var p proto.SessionStopParams
 		_ = json.Unmarshal(params, &p)
 		c.stops = append(c.stops, p)
+	}
+	if method == proto.MethodPlayerControl {
+		var p proto.PlayerControlParams
+		_ = json.Unmarshal(params, &p)
+		c.controls = append(c.controls, p.Cmd)
 	}
 	noOutput := c.noOutput
 	c.mu.Unlock()
