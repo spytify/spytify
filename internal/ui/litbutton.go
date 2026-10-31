@@ -14,9 +14,10 @@ import (
 // light theme, in either theme: the light grey under a tint of its colour,
 // light enough for dark text. Fyne blends its focus colour, a translucent
 // green, over the fill instead, which turned the red brown and hardly
-// changed the green; the dark theme's green is already a light one.
+// changed the green; the dark theme's green is already a light one. It
+// takes a tooltip, as tipButton does.
 type litButton struct {
-	button
+	tipButton
 	focused bool
 	// lit is the button in the theme that lights it up: the layouts hold
 	// it, and it shows and hides with the button.
@@ -34,7 +35,7 @@ func newLitButton(text string, icon fyne.Resource, imp widget.Importance, tapped
 // TypedKey is button's, for the lit button: Fyne finds the window of the
 // widget it holds, not of the button inside.
 func (b *litButton) TypedKey(e *fyne.KeyEvent) {
-	pressOnSpace(&b.Button, e)
+	pressOnSpace(&b.Button.Button, e)
 	escapeFrom(b, e)
 }
 

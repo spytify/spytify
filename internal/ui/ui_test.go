@@ -1271,7 +1271,7 @@ func asButton(o fyne.CanvasObject) (*widget.Button, bool) {
 	case *tipButton:
 		return &b.Button.Button, true
 	case *litButton:
-		return &b.Button, true
+		return &b.Button.Button, true
 	}
 	return nil, false
 }

@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -200,5 +202,157 @@ func TestNoTabShortcutsOffline(t *testing.T) {
 	press(t, a, fyne.Key2)
 	if a.tabs.SelectedIndex() != tabRecord {
 		t.Fatalf("offline, the shortcut chose tab %d", a.tabs.SelectedIndex())
+	}
+}
+
+// The tooltips write the keys as each system does: the Mac's symbols, or
+// the modifiers' names elsewhere.
+func TestKeyLabels(t *testing.T) {
+	for _, c := range []struct {
+		mac  bool
+		mod  fyne.KeyModifier
+		key  fyne.KeyName
+		want string
+	}{
+		{true, fyne.KeyModifierSuper, fyne.KeyR, "⌘R"},
+		{true, fyne.KeyModifierSuper, fyne.Key2, "⌘2"},
+		{true, fyne.KeyModifierControl | fyne.KeyModifierShift | fyne.KeyModifierSuper, fyne.KeyR, "⌃⇧⌘R"},
+		{false, fyne.KeyModifierControl, fyne.KeyR, "Ctrl+R"},
+		{false, fyne.KeyModifierControl, fyne.Key2, "Ctrl+2"},
+		{false, fyne.KeyModifierControl | fyne.KeyModifierAlt, fyne.KeyR, "Ctrl+Alt+R"},
+	} {
+		if got := keyLabel(c.mac, &desktop.CustomShortcut{KeyName: c.key, Modifier: c.mod}); got != c.want {
+			t.Errorf("mac %v, modifiers %d with %s: %q, want %q", c.mac, c.mod, c.key, got, c.want)
+		}
+	}
+	// The tooltip writes the key the shortcut is bound with.
+	want := "Library (Ctrl+2)"
+	if runtime.GOOS == "darwin" {
+		want = "Library (⌘2)"
+	}
+	if got := shortcutTip("Library", fyne.Key2); got != want {
+		t.Errorf("tooltip %q, want %q", got, want)
+	}
+}
+
+// Record/Stop's tooltip follows its name.
+func TestTheActionTipNamesItsKey(t *testing.T) {
+	a, m := connectedTestApp(t)
+	if got, want := a.action.ToolTip(), shortcutTip("Record", actionKey); got != want {
+		t.Errorf("tooltip %q, want %q", got, want)
+	}
+	for _, step := range []struct {
+		state proto.SessionState
+		name  string
+	}{{proto.StateRecording, "Stop"}, {proto.StateStopping, "Stop now"}, {proto.StateIdle, "Record"}} {
+		m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: step.state}))
+		a.render()
+		if got, want := a.action.ToolTip(), shortcutTip(step.name, actionKey); a.action.Text != step.name || got != want {
+			t.Errorf("%s: button %q, tooltip %q, want %q", step.state, a.action.Text, got, want)
+		}
+	}
+}
+
+// hovered is what the test window's mouse is over, as the pointer the
+// window keeps.
+func hovered(t *testing.T, c fyne.Canvas) uintptr {
+	t.Helper()
+	h := reflect.ValueOf(c).Elem().FieldByName("hovered")
+	if !h.IsValid() {
+		t.Fatal("the test window keeps no hover")
+	}
+	if h.IsNil() {
+		return 0
+	}
+	return h.Elem().Pointer()
+}
+
+// lit is whether a tab's button draws its hover.
+func lit(b fyne.CanvasObject) bool {
+	return reflect.ValueOf(b).Elem().FieldByName("hovered").Bool()
+}
+
+// Each tab's tooltip lies over the tab and names its key. The mouse's hover
+// goes to the tooltip, and the tab still lights up; a click goes through
+// to the tab.
+func TestTabTipsLieOverTheirTabs(t *testing.T) {
+	a, _ := connectedTestApp(t)
+	c := a.win.Canvas()
+	tips := a.tabsView.Objects[3:]
+	if len(tips) != len(a.tabs.Items) {
+		t.Fatalf("%d tooltips for %d tabs", len(tips), len(a.tabs.Items))
+	}
+	away := a.fa.Driver().AbsolutePositionForObject(a.tabsView).AddXY(a.tabsView.Size().Width-10, 10)
+	for _, i := range []int{tabLibrary, tabSettings, tabLogs, tabAbout, tabRecord} {
+		item, tip := a.tabs.Items[i], tips[i].(*tabTip)
+		b := tabButton(item)
+		if b == nil {
+			t.Fatalf("%s: no button found on the tab", item.Text)
+		}
+		if !tip.Visible() || tip.Position() != b.Position() || tip.Size() != b.Size() {
+			t.Fatalf("%s: tooltip at %v %v (shown %v), tab at %v %v", item.Text, tip.Position(), tip.Size(), tip.Visible(), b.Position(), b.Size())
+		}
+		if got, want := tip.ToolTip(), shortcutTip(item.Text, tabDigits[i]); got != want {
+			t.Errorf("%s: tooltip %q, want %q", item.Text, got, want)
+		}
+		at := a.fa.Driver().AbsolutePositionForObject(tip).AddXY(tip.Size().Width/2, tip.Size().Height/2)
+		// Away at once: the tooltip shows from a timer of its own, which
+		// races the test.
+		test.MoveMouse(c, at)
+		over, on := hovered(t, c) == reflect.ValueOf(tip).Pointer(), lit(b)
+		test.MoveMouse(c, away)
+		if !over || !on {
+			t.Errorf("%s: hover on the tooltip %v, tab lit %v", item.Text, over, on)
+		}
+		if lit(b) {
+			t.Errorf("%s: the tab stays lit once the mouse is away", item.Text)
+		}
+		test.TapCanvas(c, at)
+		if a.tabs.SelectedIndex() != i {
+			t.Errorf("a click on %s showed tab %d", item.Text, a.tabs.SelectedIndex())
+		}
+	}
+	// A window too narrow for the tabs puts some in a menu: no tooltip
+	// then lies where they were.
+	a.win.Resize(fyne.NewSize(300, 620))
+	for _, tip := range tips {
+		if tip.Visible() {
+			t.Fatal("a tooltip shows while the tabs do not fit")
+		}
+	}
+	a.win.Resize(fyne.NewSize(920, 620))
+	for _, tip := range tips {
+		if !tip.Visible() {
+			t.Fatal("a tooltip stays hidden once the tabs fit")
+		}
+	}
+}
+
+// The tooltips as pictures, with the Mac's keys and the others': made only
+// for them, as a tooltip shows from its own timer.
+func TestShortcutTipSnapshots(t *testing.T) {
+	if os.Getenv("SPYTIFY_UI_SNAPSHOTS") == "" {
+		t.Skip("only for the pictures")
+	}
+	a, _ := connectedTestApp(t)
+	c := a.win.Canvas()
+	away := a.fa.Driver().AbsolutePositionForObject(a.tabsView).AddXY(a.tabsView.Size().Width/2, 300)
+	tip := a.tabsView.Objects[3+tabLibrary].(*tabTip)
+	for _, sys := range []struct {
+		name string
+		mac  bool
+		mod  fyne.KeyModifier
+	}{{"mac", true, fyne.KeyModifierSuper}, {"ctrl", false, fyne.KeyModifierControl}} {
+		label := func(name string, key fyne.KeyName) string {
+			return name + " (" + keyLabel(sys.mac, &desktop.CustomShortcut{KeyName: key, Modifier: sys.mod}) + ")"
+		}
+		a.action.SetToolTip(label(a.action.Text, actionKey))
+		tip.SetToolTip(label("Library", tabDigits[tabLibrary]))
+		for name, o := range map[string]fyne.CanvasObject{"record": a.action, "library": tip} {
+			test.MoveMouse(c, a.fa.Driver().AbsolutePositionForObject(o).AddXY(o.Size().Width/2, o.Size().Height/2))
+			time.Sleep(time.Second)
+			snapshot(t, a, "shortcut-tip-"+name+"-"+sys.name)
+			test.MoveMouse(c, away)
+		}
 	}
 }

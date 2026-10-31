@@ -191,6 +191,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.donate.Importance = widget.LowImportance
 	a.donate.SetToolTip("Donate")
 	a.action = newLitButton("Record", theme.MediaRecordIcon(), widget.HighImportance, a.toggleRecording)
+	a.action.SetToolTip(shortcutTip("Record", actionKey))
 	// The wordmark: the logo with the name in its green.
 	mark := canvas.NewImageFromResource(Wordmark)
 	mark.FillMode = canvas.ImageFillContain
@@ -475,6 +476,7 @@ func (a *App) setAction(text string, icon fyne.Resource, imp widget.Importance) 
 		return
 	}
 	a.action.SetText(text)
+	a.action.SetToolTip(shortcutTip(text, actionKey))
 	a.action.SetIcon(icon)
 	a.action.Importance = imp
 	a.action.Refresh()
