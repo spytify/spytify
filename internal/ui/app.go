@@ -163,6 +163,9 @@ type App struct {
 	starting   bool
 	startErr   string
 	offlineErr *widget.Label
+	// actionKeyAt is when the Record/Stop shortcut last came: see
+	// pressAction.
+	actionKeyAt time.Time
 
 	// tel is the Sentry bug tracker; launch times the way to a recorder
 	// that answers; checksNoted are the checks last left as a breadcrumb.
@@ -272,6 +275,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	body := container.NewBorder(top, nil, nil, nil, a.center)
 	a.win.SetPadded(false)
 	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
+	a.addShortcuts()
 
 	if !opts.ManualRender {
 		onReopen(a.Reopen)
