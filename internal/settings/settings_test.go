@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 func openTemp(t *testing.T) (*Store, string) {
@@ -47,6 +49,24 @@ func TestChoicesNameEveryValue(t *testing.T) {
 		}
 		if d.Choices != nil && len(d.Choices) != values {
 			t.Errorf("%s: %d choices for %d values", d.Key, len(d.Choices), values)
+		}
+	}
+}
+
+// A list shows words, never the values config.toml keeps: every choice
+// starts with a capital.
+func TestEveryListShowsCapitalizedChoices(t *testing.T) {
+	for _, d := range Table {
+		if d.Kind != KindEnum && d.Kind != KindIntEnum {
+			continue
+		}
+		if d.Choices == nil {
+			t.Errorf("%s: no choices, the list shows its values", d.Key)
+		}
+		for _, c := range d.Choices {
+			if r, _ := utf8.DecodeRuneInString(c); unicode.IsLower(r) {
+				t.Errorf("%s: choice %q starts lowercase", d.Key, c)
+			}
 		}
 	}
 }
