@@ -25,9 +25,11 @@ var (
 	// ErrInArchive is the app started from inside its download: the file
 	// manager unpacked it alone into a temporary folder, without the
 	// recorder.
+	//lint:ignore ST1005 the app shows it to the user as written
 	ErrInArchive = errors.New("Spytify runs from inside the downloaded archive, without the recorder next to it. Extract the whole archive to a folder, then start Spytify from there.")
 	// ErrNoDaemon is the recorder found neither next to the app nor on
 	// PATH.
+	//lint:ignore ST1005 the app shows it to the user as written
 	ErrNoDaemon = errors.New("spytifyd" + exeSuffix + ", the recorder, is not next to Spytify. Extract the whole download again and start Spytify from there; if it is still missing, an antivirus may have removed it.")
 )
 
