@@ -13,7 +13,7 @@ tmp="$(cygpath -u "$RUNNER_TEMP")"
 # not one).
 tone() {
   rm -f "$tmp/tone-$1.wav.playing"
-  powershell -NoProfile -Command "(Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','src/scripts/ci/tone.ps1','-Path','$RUNNER_TEMP\\tone-$1.wav','-Seconds','$2' -WindowStyle Hidden -PassThru).Id" | tr -d '\r'
+  powershell -NoProfile -Command "(Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','src/scripts/ci/tone.ps1','-Path','$RUNNER_TEMP\\tone-$1.wav','-PlayFor','$2' -WindowStyle Hidden -PassThru).Id" | tr -d '\r'
 }
 
 # heard waits for tone <name> to show on its session's meter.

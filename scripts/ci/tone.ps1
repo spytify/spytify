@@ -5,8 +5,9 @@
 # slow runner, and Windows starts the tone up to a second or more after
 # PlayLooping returns: <Path>.playing appears once Windows meters the tone
 # in this process's audio session (with -Smtc, once MediaPlayer is asked
-# to play), to wait on. Without -Smtc it exits by itself after -Seconds.
-param([string]$Path = (Join-Path $env:RUNNER_TEMP "tone.wav"), [switch]$Smtc, [int]$Seconds = 120)
+# to play), to wait on. Without -Smtc it exits by itself -PlayFor seconds
+# after that.
+param([string]$Path = (Join-Path $env:RUNNER_TEMP "tone.wav"), [switch]$Smtc, [int]$PlayFor = 120)
 $ready = "$Path.playing"
 Remove-Item -ErrorAction Ignore $ready
 $rate = 48000; $seconds = 5; $frames = $rate * $seconds
@@ -123,7 +124,7 @@ public static class Heard {
   # as windows-smoke waits.
   for ($i = 0; $i -lt 600 -and [Heard]::Peak($PID) -lt 0.1; $i++) { Start-Sleep -Milliseconds 100 }
   if ($i -lt 600) { New-Item -ItemType File -Force $ready | Out-Null }
-  Start-Sleep -Seconds $Seconds
+  Start-Sleep -Seconds $PlayFor
   exit
 }
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
