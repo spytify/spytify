@@ -46,7 +46,7 @@ type recordScreen struct {
 	level    *bar
 
 	waitRow *fyne.Container
-	waiting *widget.Label
+	waiting *widget.RichText
 	// launch and play are what a waiting session needs from the player:
 	// to run, then to play.
 	launch  *litButton
@@ -126,7 +126,7 @@ func newRecordScreen(a *App) *recordScreen {
 	// square.
 	r.card = inset(newPanel(colorLive, colorCardLine, 16, fyne.NewSize(pad*2, pad*2), live))
 
-	r.waiting = widget.NewLabel("")
+	r.waiting = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorInfoText, Inline: true}})
 	r.launch = newLitButton("Open the player", theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
 	r.play = newLitButton("Play", theme.MediaPlayIcon(), widget.HighImportance, func() {
 		a.noteAction("play in the player")
@@ -139,7 +139,13 @@ func newRecordScreen(a *App) *recordScreen {
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
 	r.blocked = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
-	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.launch.lit, r.play.lit, r.restart, r.blocked.lit))
+	// What the session waits for is an outlined info alert, as MUI draws
+	// one: a blue outline and icon around blue text, the page showing
+	// through, the next step on the right.
+	infoIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.InfoIcon(), colorInfo)))
+	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch.lit, r.play.lit, r.restart, r.blocked.lit),
+		container.NewVBox(layout.NewSpacer(), r.waiting, layout.NewSpacer()))
+	r.waitRow = inset(newPanel("", colorInfo, 8, fyne.NewSize(pad*2, pad*1.5), alert))
 
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
@@ -342,7 +348,7 @@ func (r *recordScreen) render(s model.State) {
 		case paused:
 			text = fmt.Sprintf("Nothing is recorded while %s is paused: press play there.", player)
 		}
-		setLabel(r.waiting, text)
+		setCaption(r.waiting, text)
 		r.launch.SetText("Open " + player)
 		show(r.launch, down)
 		show(r.play, paused)

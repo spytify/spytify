@@ -686,8 +686,8 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	offers := func(text string, want fyne.CanvasObject) {
 		t.Helper()
 		a.render()
-		if !r.waitRow.Visible() || r.waiting.Text != text {
-			t.Errorf("the wait row says %q, want %q", r.waiting.Text, text)
+		if !r.waitRow.Visible() || r.waiting.String() != text {
+			t.Errorf("the wait row says %q, want %q", r.waiting.String(), text)
 		}
 		for _, o := range []fyne.CanvasObject{r.launch, r.play, r.restart, r.blocked} {
 			if b, _ := asButton(o); o.Visible() != (o == want) {
