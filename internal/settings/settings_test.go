@@ -223,6 +223,9 @@ func TestTemplatePlaceholders(t *testing.T) {
 	if _, err := d.Coerce("{track} {artist} - {title} ({year})"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := d.Coerce("{disc}-{track} {album_artist} - {album} - {title}"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := d.Coerce("{artist} - {genre}"); err == nil {
 		t.Fatal("unknown placeholder accepted")
 	}

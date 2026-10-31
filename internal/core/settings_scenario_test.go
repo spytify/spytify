@@ -215,6 +215,20 @@ func TestTheSubtitleOptionKeepsTheFileName(t *testing.T) {
 	}
 }
 
+// The player's disc number reaches {disc}; with no album artist from the
+// player, {album_artist} is the first artist, as in the tags.
+func TestTheTemplateNamesTheDiscAndAlbumArtist(t *testing.T) {
+	o := naming.Options{GroupBy: "none", Template: "{disc}-{track} {album_artist} - {title}"}
+	info := meta.TrackInfo{Title: "Song", Artists: []string{"Neon Harbor", "Lumen"}, DiscNumber: 2, TrackNumber: 5}
+	if got := naming.Build(namingTrack(tag.FromLocal(info, tag.Options{}), info), o).Base; got != "2-05 Neon Harbor - Song" {
+		t.Errorf("named %q", got)
+	}
+	info.AlbumArtists = []string{"Various Artists"}
+	if got := naming.Build(namingTrack(tag.FromLocal(info, tag.Options{}), info), o).Base; got != "2-05 Various Artists - Song" {
+		t.Errorf("with an album artist, named %q", got)
+	}
+}
+
 type probed struct {
 	Streams []struct {
 		CodecName string `json:"codec_name"`
