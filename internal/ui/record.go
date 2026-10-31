@@ -47,6 +47,10 @@ type recordScreen struct {
 
 	waitRow *fyne.Container
 	waiting *widget.Label
+	// launch and play are what a waiting session needs from the player:
+	// to run, then to play.
+	launch  *widget.Button
+	play    *widget.Button
 	restart *widget.Button
 	// blocked leads to the diagnostics once a session ended for want of
 	// an output folder.
@@ -125,6 +129,13 @@ func newRecordScreen(a *App) *recordScreen {
 	r.card = inset(newPanel(colorLive, colorCardLine, 16, fyne.NewSize(pad*2, pad*2), live))
 
 	r.waiting = widget.NewLabel("")
+	r.launch = widget.NewButtonWithIcon("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
+	r.launch.Importance = widget.HighImportance
+	r.play = widget.NewButtonWithIcon("Play", theme.MediaPlayIcon(), func() {
+		a.noteAction("play in the player")
+		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdPlay}, nil)
+	})
+	r.play.Importance = widget.HighImportance
 	// A track already playing when the session starts is not recorded;
 	// playing it again from 0:00 makes it the next track.
 	r.restart = widget.NewButtonWithIcon("Record this track from the start", theme.MediaReplayIcon(), func() {
@@ -133,7 +144,7 @@ func newRecordScreen(a *App) *recordScreen {
 	})
 	r.blocked = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
 	r.blocked.Importance = widget.WarningImportance
-	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.restart, r.blocked))
+	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.launch, r.play, r.restart, r.blocked))
 
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
@@ -263,6 +274,10 @@ func (r *recordScreen) render(s model.State) {
 	r.folder, _ = s.Settings["output.dir"].(string)
 	r.folder = settings.ExpandHome(r.folder)
 	defer r.relayout()
+	player := s.Info.Target.Process
+	if player == "" {
+		player = "your player"
+	}
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
 		// Until the recorder answers it is starting, with nothing to offer.
 		starting := !s.HaveInfo
@@ -273,10 +288,6 @@ func (r *recordScreen) render(s model.State) {
 			r.idle.Show()
 			r.session.Hide()
 			return
-		}
-		player := s.Info.Target.Process
-		if player == "" {
-			player = "your player"
 		}
 		title, text := "Ready to record", fmt.Sprintf("Press Record, then play music in %s. Each track becomes its own file in %s.", player, r.folder)
 		blocked := checkFails(s.Info.Checks, proto.CheckOutputWritable)
@@ -318,12 +329,29 @@ func (r *recordScreen) render(s model.State) {
 		// A session the output folder ended, its drive unplugged: Record
 		// stays off until the folder is back or another one is chosen.
 		blocked := s.Session == proto.StateIdle && checkFails(s.Info.Checks, proto.CheckOutputWritable)
+		// Nothing is recorded until the player plays, whatever the list
+		// holds: between sessions or while one waits, the row says so and
+		// offers the one next step, to open the player or to play. Waiting
+		// with the player running is also a track that started before the
+		// session, which only a restart records; the session does not tell
+		// it from a stopped player.
+		waits := s.Session == proto.StateIdle || s.Session == proto.StateWaiting || s.Session == proto.StatePaused
+		down := waits && !blocked && !playerRunning(s)
+		paused := s.Session == proto.StatePaused && !down
 		text := waitingText(s.Session)
-		if blocked {
+		switch {
+		case blocked:
 			text = "Session ended: Spytify cannot write to the output folder, so Record is off."
+		case down:
+			text = fmt.Sprintf("Nothing is recorded while %s is not running.", player)
+		case paused:
+			text = fmt.Sprintf("Nothing is recorded while %s is paused: press play there.", player)
 		}
 		setLabel(r.waiting, text)
-		show(r.restart, s.Session == proto.StateWaiting)
+		r.launch.SetText("Open " + player)
+		show(r.launch, down)
+		show(r.play, paused)
+		show(r.restart, s.Session == proto.StateWaiting && !down)
 		show(r.blocked, blocked)
 		r.waitRow.Show()
 	}
@@ -368,7 +396,7 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 
 // relayout lays the screen out again when a part appeared or went away.
 func (r *recordScreen) relayout() {
-	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), len(r.track.Segments), r.waitRow.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
+	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), len(r.track.Segments), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()
@@ -424,8 +452,6 @@ func sourceText(rate, channels int) string {
 
 func waitingText(st proto.SessionState) string {
 	switch st {
-	case proto.StatePaused:
-		return "Paused."
 	case proto.StateIdle:
 		return "Session ended."
 	case proto.StateStopping:
