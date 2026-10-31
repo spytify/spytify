@@ -101,7 +101,6 @@ func metadataPairs(t Track, format, sep string) []string {
 	add("artist", strings.Join(t.Performers, sep))
 	add("album_artist", strings.Join(t.AlbumArtists, sep))
 	add("album", t.Album)
-	add("genre", strings.Join(t.Genres, "; "))
 	if t.Track > 0 {
 		add("track", strconv.Itoa(t.Track))
 	}
