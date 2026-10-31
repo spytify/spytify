@@ -76,7 +76,7 @@ func TestBitrateChoicesSayTheSizePerMinute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := s.Values().Int("encode.bitrate_kbps"); n != 320 || len(s.Warnings()) != 0 {
+	if n := s.Values().Int(EncodeBitrateKbps); n != 320 || len(s.Warnings()) != 0 {
 		t.Errorf("bitrate %d, warnings %v", n, s.Warnings())
 	}
 	if _, rejected, _, err := s.Set(map[string]any{"encode.bitrate_kbps": "256"}); err != nil || len(rejected) != 0 {
@@ -118,11 +118,11 @@ func TestSetPersistsAndReloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := again.Values()
-	if v.String("encode.format") != "flac" || v.Int("recorder.boundary_window_ms") != 450 || v.Float("recorder.silence_db") != -55 {
-		t.Fatalf("reloaded values wrong: %v %v %v", v.String("encode.format"), v.Int("recorder.boundary_window_ms"), v.Float("recorder.silence_db"))
+	if v.String(EncodeFormat) != "flac" || v.Int(RecorderBoundaryWindowMs) != 450 || v.Float(RecorderSilenceDb) != -55 {
+		t.Fatalf("reloaded values wrong: %v %v %v", v.String(EncodeFormat), v.Int(RecorderBoundaryWindowMs), v.Float(RecorderSilenceDb))
 	}
-	if !strings.HasSuffix(v.Path("output.dir"), filepath.Join("Music", "Rec")) || strings.HasPrefix(v.Path("output.dir"), "~") {
-		t.Fatalf("Path(output.dir) = %q", v.Path("output.dir"))
+	if !strings.HasSuffix(v.Path(OutputDir), filepath.Join("Music", "Rec")) || strings.HasPrefix(v.Path(OutputDir), "~") {
+		t.Fatalf("Path(output.dir) = %q", v.Path(OutputDir))
 	}
 	if len(again.Warnings()) != 0 {
 		t.Fatalf("warnings = %v", again.Warnings())
@@ -140,7 +140,7 @@ func TestEarlierKeysLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := s.Values().Int("output.counter_next"); n != 42 {
+	if n := s.Values().Int(OutputCounterNext); n != 42 {
 		t.Errorf("output.counter_next %d, want 42 from counter_start", n)
 	}
 	if w := s.Warnings(); len(w) != 0 {
@@ -155,7 +155,7 @@ func TestEarlierKeysLoad(t *testing.T) {
 // off.
 func TestNormalizeIsOffUnlessTurnedOn(t *testing.T) {
 	s, path := openTemp(t)
-	if s.Values().Bool("recorder.normalize") {
+	if s.Values().Bool(RecorderNormalize) {
 		t.Fatal("normalize on by default")
 	}
 	if _, _, _, err := s.Set(map[string]any{"encode.format": "flac"}); err != nil {
@@ -173,8 +173,8 @@ func TestNormalizeIsOffUnlessTurnedOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := old.Values(); v.Bool("recorder.normalize") || v.String("encode.format") != "mp3" || len(old.Warnings()) != 0 {
-		t.Errorf("alpha file: normalize %v, format %s, warnings %v", v.Bool("recorder.normalize"), v.String("encode.format"), old.Warnings())
+	if v := old.Values(); v.Bool(RecorderNormalize) || v.String(EncodeFormat) != "mp3" || len(old.Warnings()) != 0 {
+		t.Errorf("alpha file: normalize %v, format %s, warnings %v", v.Bool(RecorderNormalize), v.String(EncodeFormat), old.Warnings())
 	}
 
 	if _, _, _, err := s.Set(map[string]any{"recorder.normalize": true}); err != nil {
@@ -187,7 +187,7 @@ func TestNormalizeIsOffUnlessTurnedOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !again.Values().Bool("recorder.normalize") {
+	if !again.Values().Bool(RecorderNormalize) {
 		t.Error("normalize turned on did not stay on")
 	}
 }
@@ -244,7 +244,7 @@ func TestResetPrefix(t *testing.T) {
 		t.Fatalf("changed = %v", changed)
 	}
 	v := s.Values()
-	if v.Bool("output.underscores") || v.String("encode.format") != "wav" {
+	if v.Bool(OutputUnderscores) || v.String(EncodeFormat) != "wav" {
 		t.Fatal("reset touched the wrong keys")
 	}
 }
@@ -254,7 +254,7 @@ func TestOverrideIsNotPersisted(t *testing.T) {
 	if rej := s.Override(map[string]any{"encode.format": "wav", "recorder.boundary_window_ms": "100"}); len(rej) != 0 {
 		t.Fatal(rej)
 	}
-	if s.Values().String("encode.format") != "wav" {
+	if s.Values().String(EncodeFormat) != "wav" {
 		t.Fatal("override not applied")
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -275,7 +275,7 @@ func TestLoadWarnsAndKeepsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Values().String("encode.format") != "mp3" || s.Values().Path("output.dir") != music {
+	if s.Values().String(EncodeFormat) != "mp3" || s.Values().Path(OutputDir) != music {
 		t.Fatal("bad load")
 	}
 	if len(s.Warnings()) != 2 {
@@ -284,11 +284,11 @@ func TestLoadWarnsAndKeepsDefaults(t *testing.T) {
 }
 
 func TestDuration(t *testing.T) {
-	v := Defaults().With("recorder.session_timer", "90m")
-	if v.Duration("recorder.session_timer") != 90*time.Minute {
-		t.Fatal(v.Duration("recorder.session_timer"))
+	v := Defaults().With(RecorderSessionTimer, "90m")
+	if v.Duration(RecorderSessionTimer) != 90*time.Minute {
+		t.Fatal(v.Duration(RecorderSessionTimer))
 	}
-	if Defaults().Duration("recorder.session_timer") != 0 {
+	if Defaults().Duration(RecorderSessionTimer) != 0 {
 		t.Fatal("default timer not off")
 	}
 }

@@ -38,6 +38,8 @@ jobs:
         run: go vet ./...
       - name: Schema is generated
         run: go generate ./pkg/proto && git diff --exit-code pkg/proto/schema.json
+      - name: Setting keys are generated
+        run: go generate ./internal/settings && git diff --exit-code internal/settings/keys_gen.go
       - name: Build FakePlayer, the scriptable test player (macOS)
         if: runner.os == 'macOS'
         run: |

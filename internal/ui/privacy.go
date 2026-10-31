@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
@@ -28,8 +29,9 @@ import (
 // and how they were cut, and, on a click, the checks that fail. Off, it
 // sends nothing and asks nothing.
 
+var trackerKey = settings.PrivacyBugTracker.String()
+
 const (
-	trackerKey = "privacy.bug_tracker"
 	// pendingKey holds privacy choices made before the recorder answered,
 	// sent to it once it does.
 	pendingKey = "privacy-pending"

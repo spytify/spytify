@@ -260,7 +260,7 @@ func (a *App) keep(id string) {
 func (r *recordScreen) content() fyne.CanvasObject { return r.root }
 
 func (r *recordScreen) render(s model.State) {
-	r.folder, _ = s.Settings["output.dir"].(string)
+	r.folder, _ = s.Settings[settings.OutputDir.String()].(string)
 	r.folder = settings.ExpandHome(r.folder)
 	defer r.relayout()
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {

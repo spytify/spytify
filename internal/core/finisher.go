@@ -84,7 +84,7 @@ func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(str
 		log:    log,
 		jobs:   make(chan finishJob, 256),
 		claims: map[string]bool{},
-		index:  openIndex(filepath.Join(v.Path("output.dir"), ".spytify", "recorded.jsonl")),
+		index:  openIndex(filepath.Join(v.Path(settings.OutputDir), ".spytify", "recorded.jsonl")),
 	}
 	go func() {
 		for j := range f.jobs {
@@ -146,7 +146,7 @@ func (f *finisher) recorded(info meta.TrackInfo, v settings.Values) bool {
 	}
 	o := namingOptions(v)
 	local := tag.FromLocal(info, tagOptions(v))
-	return naming.Recorded(v.Path("output.dir"), naming.Build(namingTrack(local, info), o), o)
+	return naming.Recorded(v.Path(settings.OutputDir), naming.Build(namingTrack(local, info), o), o)
 }
 
 func trackKey(artist, title string) string {
@@ -154,25 +154,25 @@ func trackKey(artist, title string) string {
 }
 
 func namingOptions(v settings.Values) naming.Options {
-	p, _ := encode.PresetFor(v.String("encode.format"))
+	p, _ := encode.PresetFor(v.String(settings.EncodeFormat))
 	return naming.Options{
-		GroupBy:         v.String("output.group_by"),
-		Prefix:          v.String("output.prefix"),
-		Underscores:     v.Bool("output.underscores"),
-		Template:        v.String("output.template"),
-		CounterWidth:    int(v.Int("output.counter_width")),
-		ASCII:           v.Bool("output.ascii_filenames"),
-		ArtistSeparator: v.String("tags.artist_separator"),
+		GroupBy:         v.String(settings.OutputGroupBy),
+		Prefix:          v.String(settings.OutputPrefix),
+		Underscores:     v.Bool(settings.OutputUnderscores),
+		Template:        v.String(settings.OutputTemplate),
+		CounterWidth:    int(v.Int(settings.OutputCounterWidth)),
+		ASCII:           v.Bool(settings.OutputAsciiFilenames),
+		ArtistSeparator: v.String(settings.TagsArtistSeparator),
 		Extension:       p.Extension,
 	}
 }
 
 func tagOptions(v settings.Values) tag.Options {
 	return tag.Options{
-		ExtraToSubtitle: v.Bool("tags.extra_to_subtitle"),
-		ArtistSeparator: v.String("tags.artist_separator"),
-		CoverSize:       v.String("tags.cover_size"),
-		Cover:           v.Bool("tags.cover"),
+		ExtraToSubtitle: v.Bool(settings.TagsExtraToSubtitle),
+		ArtistSeparator: v.String(settings.TagsArtistSeparator),
+		CoverSize:       v.String(settings.TagsCoverSize),
+		Cover:           v.Bool(settings.TagsCover),
 	}
 }
 
@@ -242,10 +242,10 @@ func (f *finisher) process(j finishJob) {
 
 	var trimStart, trimEnd int64
 	keptFrames := j.played
-	timings := &proto.FinishTimings{Format: v.String("encode.format")}
-	if v.Bool("recorder.trim_silence") {
+	timings := &proto.FinishTimings{Format: v.String(settings.EncodeFormat)}
+	if v.Bool(settings.RecorderTrimSilence) {
 		step := time.Now()
-		s, e, ok, err := scanTrim(j.tmp, v.Float("recorder.silence_db"))
+		s, e, ok, err := scanTrim(j.tmp, v.Float(settings.RecorderSilenceDb))
 		timings.TrimMs = since(step)
 		if err != nil {
 			f.fail(j, "read", err)
@@ -296,7 +296,7 @@ func (f *finisher) process(j finishJob) {
 	// recording stops, as v1's did.
 	var counter int64
 	if o.Prefix == "counter" {
-		counter = v.Int("output.counter_next")
+		counter = v.Int(settings.OutputCounterNext)
 		if limit := naming.CounterLimit(o.CounterWidth); counter > limit {
 			f.fail(j, "counter_full", fmt.Errorf("the counter is past %d, the last number of %d digits: raise Counter digits or set Next counter number back", limit, o.CounterWidth))
 			if f.full != nil {
@@ -306,7 +306,7 @@ func (f *finisher) process(j finishJob) {
 		}
 	}
 	plan := naming.Build(namingTrack(tags, j.info), o)
-	root := v.Path("output.dir")
+	root := v.Path(settings.OutputDir)
 	dir := filepath.Join(root, plan.Dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		f.fail(j, "output_dir", err)
@@ -314,7 +314,7 @@ func (f *finisher) process(j finishJob) {
 	}
 	name := naming.FileName(plan, o, counter, tags.Track)
 	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
-	duplicates := v.String("recorder.duplicates")
+	duplicates := v.String(settings.RecorderDuplicates)
 	if j.keep {
 		// A partial file never replaces a file, nor is it skipped.
 		duplicates = "suffix"
@@ -336,12 +336,12 @@ func (f *finisher) process(j finishJob) {
 		In:          j.tmp,
 		Out:         part,
 		Format:      format,
-		BitrateKbps: int(v.Int("encode.bitrate_kbps")),
+		BitrateKbps: int(v.Int(settings.EncodeBitrateKbps)),
 		Source:      j.format,
 		TrimStart:   trimStart,
 		TrimEnd:     trimEnd,
-		Normalize:   v.Bool("recorder.normalize"),
-		TargetLUFS:  v.Float("recorder.target_lufs"),
+		Normalize:   v.Bool(settings.RecorderNormalize),
+		TargetLUFS:  v.Float(settings.RecorderTargetLufs),
 	})
 	timings.EncodeMs = since(step)
 	if err != nil {
@@ -413,7 +413,7 @@ func (f *finisher) fail(j finishJob, code string, err error) {
 	// Only once a file failed is the output folder looked at: gone with
 	// its drive, nothing more can be saved, and the recording stops.
 	lost := false
-	if _, gone := os.Stat(f.values().Path("output.dir")); gone != nil {
+	if _, gone := os.Stat(f.values().Path(settings.OutputDir)); gone != nil {
 		code, msg, lost = "output_dir", "the output folder cannot be reached, so the recording stopped: "+msg, true
 	}
 	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg})

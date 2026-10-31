@@ -225,7 +225,7 @@ func (c *tagCache) get(key string, read func(context.Context) trackTags) trackTa
 func (l *libraryScreen) content() fyne.CanvasObject { return l.root }
 
 func (l *libraryScreen) render(s model.State) {
-	dir, _ := s.Settings["output.dir"].(string)
+	dir, _ := s.Settings[settings.OutputDir.String()].(string)
 	dir = settings.ExpandHome(dir)
 	if dir != l.folder {
 		l.folder = dir

@@ -371,7 +371,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 	if d.Note != "" {
 		under = settingNote(d.Note)
 	}
-	if key == "app.minimize_to_tray" {
+	if key == settings.AppMinimizeToTray.String() {
 		s.tray, s.trayNote = d, settingNote(d.Note)
 		under = s.trayNote
 	}
@@ -434,8 +434,8 @@ func (s *settingsScreen) render(st model.State) {
 		}
 	}
 	// FLAC and WAV are lossless: a bitrate means nothing for them.
-	if sel, ok := s.fields["encode.bitrate_kbps"].input.(*widget.Select); ok {
-		if format, _ := st.Settings["encode.format"].(string); format == "flac" || format == "wav" {
+	if sel, ok := s.fields[settings.EncodeBitrateKbps.String()].input.(*widget.Select); ok {
+		if format, _ := st.Settings[settings.EncodeFormat.String()].(string); format == "flac" || format == "wav" {
 			sel.Disable()
 		} else {
 			sel.Enable()
@@ -445,9 +445,9 @@ func (s *settingsScreen) render(st model.State) {
 		setCaption(s.example, "e.g. "+exampleName(st.Settings))
 	}
 	// The counter's settings mean something only with the counter prefix.
-	prefix, _ := st.Settings["output.prefix"].(string)
-	s.enable("output.counter_next", prefix == "counter")
-	s.enable("output.counter_width", prefix == "counter")
+	prefix, _ := st.Settings[settings.OutputPrefix.String()].(string)
+	s.enable(settings.OutputCounterNext, prefix == "counter")
+	s.enable(settings.OutputCounterWidth, prefix == "counter")
 	note := s.app.trayNote(st)
 	if note == "" {
 		note = s.tray.Note
@@ -457,8 +457,8 @@ func (s *settingsScreen) render(st model.State) {
 }
 
 // enable turns a setting's input on or off.
-func (s *settingsScreen) enable(key string, on bool) {
-	f, ok := s.fields[key]
+func (s *settingsScreen) enable(key settings.Key, on bool) {
+	f, ok := s.fields[key.String()]
 	if !ok {
 		return
 	}
@@ -474,29 +474,29 @@ func (s *settingsScreen) enable(key string, on bool) {
 // exampleName is the path a sample track gets with the output settings in
 // v, a default standing in for any missing.
 func exampleName(v map[string]any) string {
-	get := func(key string) any {
-		if x, ok := v[key]; ok {
+	get := func(key settings.Key) any {
+		if x, ok := v[key.String()]; ok {
 			return number(x)
 		}
-		if d, ok := settings.Lookup(key); ok {
+		if d, ok := settings.Lookup(key.String()); ok {
 			return d.Default
 		}
 		return nil
 	}
-	str := func(key string) string { s, _ := get(key).(string); return s }
-	on := func(key string) bool { b, _ := get(key).(bool); return b }
-	whole := func(key string) int64 { n, _ := get(key).(int64); return n }
-	p, _ := encode.PresetFor(str("encode.format"))
+	str := func(key settings.Key) string { s, _ := get(key).(string); return s }
+	on := func(key settings.Key) bool { b, _ := get(key).(bool); return b }
+	whole := func(key settings.Key) int64 { n, _ := get(key).(int64); return n }
+	p, _ := encode.PresetFor(str(settings.EncodeFormat))
 	return naming.Example(naming.Options{
-		GroupBy:         str("output.group_by"),
-		Prefix:          str("output.prefix"),
-		Underscores:     on("output.underscores"),
-		Template:        str("output.template"),
-		CounterWidth:    int(whole("output.counter_width")),
-		ASCII:           on("output.ascii_filenames"),
-		ArtistSeparator: str("tags.artist_separator"),
+		GroupBy:         str(settings.OutputGroupBy),
+		Prefix:          str(settings.OutputPrefix),
+		Underscores:     on(settings.OutputUnderscores),
+		Template:        str(settings.OutputTemplate),
+		CounterWidth:    int(whole(settings.OutputCounterWidth)),
+		ASCII:           on(settings.OutputAsciiFilenames),
+		ArtistSeparator: str(settings.TagsArtistSeparator),
 		Extension:       p.Extension,
-	}, whole("output.counter_next"))
+	}, whole(settings.OutputCounterNext))
 }
 
 // focused reports whether the user is typing in o; render leaves it alone.
