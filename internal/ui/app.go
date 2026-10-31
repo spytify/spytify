@@ -295,7 +295,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	}
 	m.OnChange(a.scheduleRender)
 	m.OnLevel(a.scheduleLevel)
-	m.OnEvent(a.onEvent)
+	m.OnEvent(a.feedTracker)
 	m.OnEvent(a.recheck)
 	a.render()
 	return a
