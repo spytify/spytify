@@ -48,7 +48,8 @@ type libraryScreen struct {
 	count  *widget.RichText
 	empty  fyne.CanvasObject
 	hint   *widget.Label
-	takes  *widget.Select
+	takes  map[string]*widget.Check // the filter's box for each kind of file
+	kinds  *checkSelect             // the filter: those boxes, in a dropdown
 
 	folder string
 	all    []libraryFile
@@ -75,15 +76,17 @@ type libraryRow struct {
 	note    string // the album's artist and how many files it has
 }
 
-// The Album sort, the filter's choices, and the heading of the files with
-// no album.
+// The Album sort, the kinds of file the filter ticks, and the heading of
+// the files with no album.
 const (
-	byAlbum     = "Album"
-	allFiles    = "All files"
-	hidePartial = "Hide partial takes"
-	onlyPartial = "Partial takes only"
-	noAlbum     = "No album"
+	byAlbum        = "Album"
+	takeComplete   = "Complete"
+	takePartial    = "Partial"
+	takeLowQuality = "Low quality"
+	noAlbum        = "No album"
 )
+
+var takeKinds = []string{takeComplete, takePartial, takeLowQuality}
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
@@ -103,20 +106,28 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.search.OnChanged = func(string) { l.filter() }
 	l.sortBy = widget.NewSelect([]string{"Newest", "Name", byAlbum}, func(string) { l.filter() })
 	// Keep anyway saves a take cut short or in low quality: the filter hides
-	// those files, or shows them alone to clean them up. It starts on All
-	// files without its callback, which needs the list: the sort's, below,
-	// draws the list first.
-	l.takes = widget.NewSelect([]string{allFiles, hidePartial, onlyPartial}, func(string) { l.filter() })
-	l.takes.Selected = allFiles
+	// those files, or shows them alone to clean them up, a box per kind of
+	// file in its dropdown. They start ticked without their callback, which
+	// needs the list: the sort's, below, draws the list first.
+	l.takes = map[string]*widget.Check{}
+	boxes := container.NewVBox()
+	for _, kind := range takeKinds {
+		box := widget.NewCheck(kind, func(bool) { l.filter() })
+		box.Checked = true
+		l.takes[kind] = box
+		boxes.Add(box)
+	}
+	l.kinds = newCheckSelect(boxes)
+	l.kinds.Selected = l.takesLabel()
 	// A select is as wide as its placeholder, which a choice made never
-	// shows: the longest choice fits.
-	l.takes.PlaceHolder = hidePartial
+	// shows: the longest label fits.
+	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality
 	rescan := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
 	})
 	// What follows the sort: the filter, then the rescan.
-	refresh := container.NewHBox(l.takes, rescan)
+	refresh := container.NewHBox(l.kinds, rescan)
 	l.count = caption("")
 	l.hint = widget.NewLabel("")
 	l.empty = emptyState("No recordings yet", l.hint)
@@ -124,8 +135,12 @@ func newLibraryScreen(a *App) *libraryScreen {
 		func() int { return len(l.rows) },
 		func() fyne.CanvasObject {
 			// The title and the artists, as the player lists a track; or in
-			// the Album view, an album's heading.
+			// the Album view, an album's heading. A take Keep anyway saved
+			// says which in a chip, as the Record screen's rows say theirs.
+			chip := caption("")
+			chip.Segments[0].(*widget.TextSegment).Style.ColorName = colorSkipped
 			return container.NewStack(trackRow(2, container.NewHBox(
+				container.NewCenter(chip),
 				&widget.Button{Icon: theme.SearchIcon(), Importance: widget.LowImportance},
 				&widget.Button{Icon: theme.MediaPlayIcon(), Importance: widget.LowImportance})), albumHeading())
 		},
@@ -144,12 +159,22 @@ func newLibraryScreen(a *App) *libraryScreen {
 			}
 			f := r.file
 			// Border layout: center first, then the leading and trailing parts.
-			buttons := box.Objects[2].(*fyne.Container)
+			after := box.Objects[2].(*fyne.Container)
 			title, artist := l.tags(f)
+			kind, chipBox := takeKind(f.rel), after.Objects[0].(*fyne.Container)
+			show(chipBox, kind != takeComplete)
+			if kind != takeComplete {
+				title = takeMarker.ReplaceAllString(title, "")
+				chip := chipBox.Objects[0].(*widget.RichText)
+				if seg := chip.Segments[0].(*widget.TextSegment); seg.Text != kind {
+					seg.Text = kind
+					chip.Refresh()
+				}
+			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
-			buttons.Objects[0].(*widget.Button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
-			buttons.Objects[1].(*widget.Button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
+			after.Objects[1].(*widget.Button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
+			after.Objects[2].(*widget.Button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
 			box.Refresh()
 		},
 	)
@@ -374,17 +399,24 @@ func (l *libraryScreen) filter() {
 		}
 	}
 	l.shown, l.rows, l.unread = shown, rows, unread
+	if label := l.takesLabel(); l.kinds.Selected != label {
+		l.kinds.Selected = label
+		l.kinds.Refresh()
+	}
 	setCaption(l.count, pluralFiles(len(shown), len(l.all), l.folder))
 	l.card.Refresh()
 	switch {
 	case len(l.all) == 0:
 		l.hint.SetText("Recorded tracks land in " + l.folder + ".")
 		l.empty.Show()
-	case len(shown) == 0 && q == "" && l.takes.Selected == onlyPartial:
-		l.hint.SetText("No partial takes: Keep anyway saves one from a track cut short or in low quality.")
+	case len(shown) == 0 && q == "" && !slices.ContainsFunc(takeKinds, func(k string) bool { return l.takes[k].Checked }):
+		l.hint.SetText("Tick a kind of file to show.")
+		l.empty.Show()
+	case len(shown) == 0 && q == "" && !l.takes[takeComplete].Checked:
+		l.hint.SetText("None yet: Keep anyway saves a take cut short or in low quality.")
 		l.empty.Show()
 	case len(shown) == 0 && q == "":
-		l.hint.SetText("Every file here is a partial take.")
+		l.hint.SetText("Every file here is a take cut short or in low quality.")
 		l.empty.Show()
 	case len(shown) == 0:
 		l.hint.SetText("Nothing matches \"" + l.search.Text + "\".")
@@ -395,26 +427,90 @@ func (l *libraryScreen) filter() {
 	show(l.card, !l.empty.Visible())
 }
 
-// kept tells whether the filter keeps f.
+// kept tells whether the filter keeps f: its kind is ticked.
 func (l *libraryScreen) kept(f libraryFile) bool {
-	switch l.takes.Selected {
-	case hidePartial:
-		return !partialTake(f.rel)
-	case onlyPartial:
-		return partialTake(f.rel)
-	}
-	return true
+	return l.takes[takeKind(f.rel)].Checked
 }
 
-// partialTake tells whether the file at path is a take that Keep anyway
-// saved: the recorder adds " (partial)" or " (low quality)" to its title,
-// and the name template puts the title in the file's name, its spaces
-// made underscores when the setting says so, with a number after it when
-// the name was taken. Its tags say so too, but are not read yet for most
-// files, and the index of recorded tracks leaves these files out.
-func partialTake(path string) bool {
+// takeKind tells whether the file at path is a take that Keep anyway
+// saved, partial or in low quality, or a complete one: the recorder adds
+// " (partial)" or " (low quality)" to such a take's title, and the name
+// template puts the title in the file's name, its spaces made underscores
+// when the setting says so, with a number after it when the name was
+// taken. Its tags say so too, but are not read yet for most files, and the
+// index of recorded tracks leaves these files out.
+func takeKind(path string) string {
 	name := strings.ToLower(filepath.Base(path))
-	return strings.Contains(name, "(partial)") || strings.Contains(name, "(low quality)") || strings.Contains(name, "(low_quality)")
+	switch {
+	case strings.Contains(name, "(partial)"):
+		return takePartial
+	case strings.Contains(name, "(low quality)"), strings.Contains(name, "(low_quality)"):
+		return takeLowQuality
+	}
+	return takeComplete
+}
+
+// takeMarker is the marker Keep anyway adds to a take's title, and the
+// space before it: the row shows the kind in its chip instead.
+var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality)\)`)
+
+// takesLabel says which kinds of file the filter shows.
+func (l *libraryScreen) takesLabel() string {
+	var ticked []string
+	for _, kind := range takeKinds {
+		if l.takes[kind].Checked {
+			ticked = append(ticked, kind)
+		}
+	}
+	switch len(ticked) {
+	case 0:
+		return "No files"
+	case len(takeKinds):
+		return "All files"
+	}
+	return strings.Join(ticked, ", ")
+}
+
+// checkSelect looks like a select, but its dropdown holds boxes to tick,
+// and stays open while they are ticked: a select's list closes on the first
+// choice. Its text is whatever Selected is set to.
+type checkSelect struct {
+	widget.Select
+	boxes fyne.CanvasObject
+	pop   *widget.PopUp
+}
+
+func newCheckSelect(boxes fyne.CanvasObject) *checkSelect {
+	s := &checkSelect{boxes: boxes}
+	s.ExtendBaseWidget(s)
+	return s
+}
+
+func (s *checkSelect) Tapped(*fyne.PointEvent) {
+	if c := fyne.CurrentApp().Driver().CanvasForObject(s); c != nil {
+		c.Focus(s)
+	}
+	s.open()
+}
+
+// TypedKey opens the dropdown on the keys that open a select's.
+func (s *checkSelect) TypedKey(e *fyne.KeyEvent) {
+	switch e.Name {
+	case fyne.KeySpace, fyne.KeyUp, fyne.KeyDown:
+		s.open()
+	}
+}
+
+func (s *checkSelect) open() {
+	c := fyne.CurrentApp().Driver().CanvasForObject(s)
+	if c == nil || s.Disabled() {
+		return
+	}
+	if s.pop == nil {
+		s.pop = widget.NewPopUp(s.boxes, c)
+	}
+	s.pop.ShowAtPosition(fyne.CurrentApp().Driver().AbsolutePositionForObject(s).AddXY(0, s.Size().Height))
+	s.pop.Resize(fyne.NewSize(max(s.Size().Width, s.pop.MinSize().Width), s.pop.MinSize().Height))
 }
 
 // untitled is the folder the recorder files an album with no name in, with
