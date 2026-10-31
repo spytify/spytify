@@ -1,0 +1,46 @@
+# timelines/gapless
+# option EndOnStop
+# item 0 "Suite No. 2: I. Allegro" (track, declared 4000ms): audio from 500ms to 4500ms
+# item 1 "Suite No. 2: II. Adagio" (track, declared 5200ms): audio from 4500ms to 9700ms, notified +500ms
+# item 2 "Suite No. 2: III. Scherzo" (track, declared 3700ms): audio from 9700ms to 13400ms, notified -200ms
+# item 3 "Suite No. 2: IV. Interlude" (track, declared 6100ms): audio from 13400ms to 19500ms, notified +800ms
+# item 4 "Suite No. 2: V. Finale" (track, declared 4400ms): audio from 19500ms to 23900ms, notified -300ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Suite No. 2: I. Allegro" id=/com/fake/track/1 length=4000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Suite No. 2: I. Allegro" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Suite No. 2: I. Allegro" artist="Kestrel String Quartet, Lena Ward" album="Suite No. 2 in D" length=4000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Suite No. 2: I. Allegro" start=22050(500ms) length=176400(4000ms)
+    5000ms  > player TrackChanged "Suite No. 2: II. Adagio" id=/com/fake/track/2 length=5200ms pos=0 (ring at 220500)
+    5000ms  log debug: cut for "Suite No. 2: II. Adagio" at 4500 ms (kind 1, noticed at 5000 ms, window 4200..4800 ms)
+    5000ms  started t-002 "Suite No. 2: II. Adagio" artist="Kestrel String Quartet, Lena Ward" album="Suite No. 2 in D" length=5200ms cut=boundary/length offset=-500ms source=44100/2 cover
+    5000ms  take t-002 "Suite No. 2: II. Adagio" start=198450(4500ms) length=229320(5200ms)
+    9500ms  > player TrackChanged "Suite No. 2: III. Scherzo" id=/com/fake/track/3 length=3700ms pos=0 (ring at 418950)
+   10020ms  log debug: cut for "Suite No. 2: III. Scherzo" at 9700 ms (kind 1, noticed at 9500 ms, window 9400..10000 ms)
+   10020ms  started t-003 "Suite No. 2: III. Scherzo" artist="Kestrel String Quartet, Lena Ward" album="Suite No. 2 in D" length=3700ms cut=boundary/length offset=200ms source=44100/2 cover
+   10020ms  take t-003 "Suite No. 2: III. Scherzo" start=427770(9700ms) length=163170(3700ms)
+   14200ms  > player TrackChanged "Suite No. 2: IV. Interlude" id=/com/fake/track/4 length=6100ms pos=0 (ring at 626220)
+   14200ms  log debug: cut for "Suite No. 2: IV. Interlude" at 13400 ms (kind 1, noticed at 14200 ms, window 13100..13700 ms)
+   14200ms  started t-004 "Suite No. 2: IV. Interlude" artist="Kestrel String Quartet, Lena Ward" album="Suite No. 2 in D" length=6100ms cut=boundary/length offset=-800ms source=44100/2 cover
+   14200ms  take t-004 "Suite No. 2: IV. Interlude" start=590940(13400ms) length=269010(6100ms)
+   19200ms  > player TrackChanged "Suite No. 2: V. Finale" id=/com/fake/track/5 length=4400ms pos=0 (ring at 846720)
+   19820ms  log debug: cut for "Suite No. 2: V. Finale" at 19500 ms (kind 1, noticed at 19200 ms, window 19200..19800 ms)
+   19820ms  started t-005 "Suite No. 2: V. Finale" artist="Kestrel String Quartet, Lena Ward" album="Suite No. 2 in D" length=4400ms cut=boundary/length offset=300ms source=44100/2 cover
+   19820ms  take t-005 "Suite No. 2: V. Finale" start=859950(19500ms) length=194040(4400ms)
+   24900ms  > player Stopped pos=-1 (ring at 1098090)
+   24900ms  state waiting
+   24900ms  state stopping
+   24900ms  state idle
+   24900ms  take none
+--- jobs
+job t-001 "Suite No. 2: I. Allegro" played=176400(4000ms) length=176400(4000ms) wav=176400 crc=67f47040 cover=cover-0.jpg
+job t-002 "Suite No. 2: II. Adagio" played=229320(5200ms) length=229320(5200ms) wav=229320 crc=ddc396ab cover=cover-1.jpg
+job t-003 "Suite No. 2: III. Scherzo" played=163170(3700ms) length=163170(3700ms) wav=163170 crc=9931afeb cover=cover-2.jpg
+job t-004 "Suite No. 2: IV. Interlude" played=269010(6100ms) length=269010(6100ms) wav=269010 crc=aac45923 cover=cover-3.jpg
+job t-005 "Suite No. 2: V. Finale" played=194512(4410.7ms) length=194040(4400ms) wav=194512 crc=62279126 cover=cover-4.jpg
+--- end: idle, 0 skipped, 0 ads, 0 overruns

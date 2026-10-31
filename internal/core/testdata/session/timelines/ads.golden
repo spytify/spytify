@@ -1,0 +1,37 @@
+# timelines/ads
+# option EndOnStop
+# item 0 "Harbor Song" (track, declared 6000ms): audio from 500ms to 6500ms, then 500ms of silence
+# item 1 "Sponsored message" (ad, declared 30000ms): audio from 7000ms to 37000ms, notified +600ms, then 300ms of silence
+# item 2 "Afterglow (feat. Dante Moss)" (track, declared 5000ms): audio from 37300ms to 42300ms, notified +700ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Harbor Song" id=/com/fake/track/1 length=6000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Harbor Song" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Harbor Song" artist="Willow Reyes" album="Saltwater" length=6000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Harbor Song" start=22063(500.29ms) length=264600(6000ms)
+    7600ms  > player TrackChanged "Sponsored message" id=/com/fake/ad/2 length=30000ms pos=0 (ring at 335160)
+    7600ms  log debug: cut for "Sponsored message" at 6500 ms (kind 1, noticed at 7600 ms, window 6200..6801 ms)
+    7600ms  started t-002 "Sponsored message" artist="Sponsor" album="" length=30000ms cut=boundary/silence offset=-1100ms source=44100/2
+    7600ms  skipped t-002 ad
+    7600ms  state ad
+    7600ms  take t-002 "Sponsored message" start=286649(6499.98ms) length=1323000(30000ms) no-file reason=ad
+   38000ms  > player TrackChanged "Afterglow (feat. Dante Moss)" id=/com/fake/track/3 length=5000ms pos=0 (ring at 1675800)
+   38000ms  log debug: cut for "Afterglow (feat. Dante Moss)" at 37000 ms (kind 1, noticed at 38000 ms, window 36200..37301 ms)
+   38000ms  started t-003 "Afterglow (feat. Dante Moss)" artist="Willow Reyes, Dante Moss" album="Saltwater" length=5000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+   38000ms  state recording
+   38000ms  log debug: "Afterglow (feat. Dante Moss)" starts at its first sound, 37300 ms
+   38000ms  take t-003 "Afterglow (feat. Dante Moss)" start=1644939(37300.2ms) origin=1631699(36999.98ms) length=220500(5000ms)
+   43300ms  > player Stopped pos=-1 (ring at 1909530)
+   43300ms  state waiting
+   43300ms  state stopping
+   43300ms  state idle
+   43300ms  take none
+--- jobs
+job t-001 "Harbor Song" played=264586(5999.68ms) length=264600(6000ms) wav=264586 crc=2692f9d7 cover=cover-0.jpg
+job t-003 "Afterglow (feat. Dante Moss)" played=220992(5011.16ms) length=220500(5000ms) wav=220992 crc=6daf4838 cover=cover-1.jpg
+--- end: idle, 1 skipped, 1 ads, 0 overruns
