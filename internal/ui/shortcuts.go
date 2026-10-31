@@ -187,11 +187,7 @@ func (t *tabTip) MouseOut() {
 // fit, some go to a menu and keep where they last were; then no tip shows.
 // The window is wide enough for them all.
 func coverTabs(tabs *container.AppTabs, tips []fyne.CanvasObject) {
-	fit := false
-	if n := len(tabs.Items); n > 0 {
-		last := tabButton(tabs.Items[n-1])
-		fit = last != nil && last.Position().X+last.Size().Width <= tabs.Size().Width
-	}
+	fit := tabsFit(tabs)
 	for _, o := range tips {
 		t := o.(*tabTip)
 		b := tabButton(t.item)
@@ -203,6 +199,16 @@ func coverTabs(tabs *container.AppTabs, tips []fyne.CanvasObject) {
 		t.Resize(b.Size())
 		t.Show()
 	}
+}
+
+// tabsFit says whether the tabs all show in their bar.
+func tabsFit(tabs *container.AppTabs) bool {
+	n := len(tabs.Items)
+	if n == 0 {
+		return false
+	}
+	last := tabButton(tabs.Items[n-1])
+	return last != nil && last.Position().X+last.Size().Width <= tabs.Size().Width
 }
 
 // tabButton is the button the tabs draw for item, or nil before they draw

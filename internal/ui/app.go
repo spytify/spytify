@@ -124,6 +124,10 @@ type App struct {
 	// actionKeyAt is when the Record/Stop shortcut last came: see
 	// pressAction.
 	actionKeyAt time.Time
+	// hints show each shortcut's key under what it acts on, once the
+	// shortcut key has been held alone since keysHeld: see watchKeys.
+	hints    *fyne.Container
+	keysHeld time.Time
 
 	// tel is the Sentry bug tracker; launch times the way to a recorder
 	// that answers; checksNoted are the checks last left as a breadcrumb.
@@ -232,7 +236,8 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	top := plain(container.New(layout.NewCustomPaddedLayout(pad, 0, pad, pad), container.NewVBox(container.NewPadded(a.bar), a.banner)))
 	body := inReadingOrder(top, nil, nil, nil, a.center)
 	a.win.SetPadded(false)
-	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
+	a.hints = a.newHints()
+	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewStack(body, a.hints), a.win.Canvas()))
 	// With nothing focused, Escape comes to the window.
 	a.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
 		if e.Name == fyne.KeyEscape {
@@ -244,6 +249,9 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	if !opts.ManualRender {
 		onReopen(a.Reopen)
 		a.watchFocus()
+	}
+	if d, ok := fa.Driver().(desktop.Driver); ok && !opts.ManualRender {
+		go a.pollKeys(d)
 	}
 	_, a.tray = fa.(desktop.App)
 	if a.tray && !opts.ManualRender {
