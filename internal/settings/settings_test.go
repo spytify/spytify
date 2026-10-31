@@ -158,10 +158,10 @@ func TestNormalizeIsOffUnlessTurnedOn(t *testing.T) {
 	if s.Values().Bool("recorder.normalize") {
 		t.Fatal("normalize on by default")
 	}
-	if _, _, _, err := s.Set(map[string]any{"encode.format": "mp3"}); err != nil {
+	if _, _, _, err := s.Set(map[string]any{"encode.format": "flac"}); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(path); !strings.Contains(string(b), `format = "mp3"`) || strings.Contains(string(b), "normalize") || strings.Contains(string(b), "theme") {
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), `format = "flac"`) || strings.Contains(string(b), "normalize") || strings.Contains(string(b), "theme") {
 		t.Errorf("config.toml keeps settings at their default:\n%s", b)
 	}
 
@@ -180,7 +180,7 @@ func TestNormalizeIsOffUnlessTurnedOn(t *testing.T) {
 	if _, _, _, err := s.Set(map[string]any{"recorder.normalize": true}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := s.Set(map[string]any{"encode.format": "flac"}); err != nil {
+	if _, _, _, err := s.Set(map[string]any{"encode.format": "mp3"}); err != nil {
 		t.Fatal(err)
 	}
 	again, err := Open(path)
@@ -275,7 +275,7 @@ func TestLoadWarnsAndKeepsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Values().String("encode.format") != "flac" || s.Values().Path("output.dir") != music {
+	if s.Values().String("encode.format") != "mp3" || s.Values().Path("output.dir") != music {
 		t.Fatal("bad load")
 	}
 	if len(s.Warnings()) != 2 {

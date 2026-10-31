@@ -100,8 +100,10 @@ jobs:
       - run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build ./cmd/spytifyd ./cmd/spytify-cli ./cmd/fakeplayer
 
   # Real Windows: the pure-Go packages and the media session poller in
-  # Windows PowerShell. windows-smoke runs the shipped executables.
+  # Windows PowerShell, with the ffmpeg.exe windows-build ships.
+  # windows-smoke runs the shipped executables.
   windows:
+    needs: windows-build
     runs-on: windows-2022
     defaults:
       run:
@@ -114,6 +116,17 @@ jobs:
       - name: Install ffmpeg
         shell: pwsh
         run: choco install ffmpeg -y --no-progress
+      - uses: actions/download-artifact@v4
+        with:
+          name: spytify-windows
+          path: shipped
+      - name: The shipped ffmpeg.exe first on PATH
+        run: |
+          # It has only what Spytify runs: a test that needs more fails.
+          # Chocolatey's stays for ffprobe, which some tests read files with.
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          cp shipped/ffmpeg.exe "$RUNNER_TEMP/ffmpeg/"
+          cygpath -w "$RUNNER_TEMP/ffmpeg" >> "$GITHUB_PATH"
       - name: Unit tests (all but the desktop UI, which windows-build cross-compiles)
         run: CGO_ENABLED=0 go test $(go list ./... | grep -v -e /internal/ui$ -e /cmd/spytify-ui)
 
@@ -127,9 +140,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install MinGW-w64 and 7-Zip
-        run: scripts/ci/apt-install.sh mingw-w64 7zip
-      - name: Spytify.exe, spytifyd.exe, spytify-cli.exe, spytify-tap.exe, Mesa
+      - name: Install MinGW-w64, nasm and 7-Zip
+        run: scripts/ci/apt-install.sh mingw-w64 nasm 7zip
+      # ffmpeg takes minutes to build: it is built again when its script
+      # changes.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/spytify/ffmpeg-*
+          key: ffmpeg-windows-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - name: Spytify.exe, spytifyd.exe, spytify-cli.exe, spytify-tap.exe, ffmpeg.exe, Mesa
         run: scripts/build-windows.sh dist/windows
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
