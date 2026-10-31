@@ -38,7 +38,7 @@ type libraryFile struct {
 type libraryScreen struct {
 	app    *App
 	root   fyne.CanvasObject
-	search *widget.Entry
+	search *keyEntry
 	sortBy *widget.Select
 	list   *widget.List
 	card   fyne.CanvasObject
@@ -98,7 +98,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	}
 	l.covers = newCovers(loaded)
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
-	l.search = widget.NewEntry()
+	l.search = newKeyEntry(a)
 	l.search.SetPlaceHolder("Search artist, title or album")
 	l.search.OnChanged = func(string) { l.filter() }
 	l.sortBy = widget.NewSelect([]string{"Newest", "Name", byAlbum}, func(string) { l.filter() })

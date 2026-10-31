@@ -33,7 +33,7 @@ import (
 type settingsScreen struct {
 	app      *App
 	root     fyne.CanvasObject
-	search   *widget.Entry
+	search   *keyEntry
 	sections *fyne.Container
 	scroll   *container.Scroll
 
@@ -67,7 +67,7 @@ type field struct {
 
 func newSettingsScreen(a *App) *settingsScreen {
 	s := &settingsScreen{app: a, fields: map[string]*field{}, advanced: map[string]*fold{}, open: map[string]bool{}}
-	s.search = widget.NewEntry()
+	s.search = newKeyEntry(a)
 	s.search.SetPlaceHolder("Search settings")
 	s.search.ActionItem = widget.NewIcon(theme.SearchIcon())
 	s.search.OnChanged = func(string) { s.layout() }
@@ -335,7 +335,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		f.set = func(v any) { sel.SetSelected(swap(fmt.Sprint(number(v)), opts, shown)) }
 		f.input = sel
 	case settings.KindPath:
-		e := newApplyEntry(func(v string) { s.apply(key, v) })
+		e := newApplyEntry(s.app, func(v string) { s.apply(key, v) })
 		browse := newIconButton("", theme.FolderOpenIcon(), func() {
 			pick := dialog.NewFolderOpen(func(u fyne.ListableURI, err error) {
 				if err == nil && u != nil {
@@ -361,7 +361,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		f.input = container.NewBorder(nil, nil, nil, browse, e)
 	default:
-		e := newApplyEntry(func(v string) { s.apply(key, v) })
+		e := newApplyEntry(s.app, func(v string) { s.apply(key, v) })
 		if d.Kind == settings.KindTemplate {
 			s.example = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
 			s.example.Truncation = fyne.TextTruncateEllipsis
@@ -430,13 +430,13 @@ func (s *settingsScreen) showUnknown(text string) {
 
 // applyEntry sends its text on Enter or when it loses focus, if it changed.
 type applyEntry struct {
-	widget.Entry
+	keyEntry
 	shown string
 	done  func(string)
 }
 
-func newApplyEntry(done func(string)) *applyEntry {
-	e := &applyEntry{done: done}
+func newApplyEntry(a *App, done func(string)) *applyEntry {
+	e := &applyEntry{keyEntry: keyEntry{app: a}, done: done}
 	e.ExtendBaseWidget(e)
 	e.OnSubmitted = func(string) { e.submit() }
 	return e
@@ -568,7 +568,7 @@ type playerCard struct {
 func newPlayerCard(a *App) *playerCard {
 	p := &playerCard{app: a, relayout: func() {}}
 	entry := func(placeholder string) *applyEntry {
-		e := newApplyEntry(func(string) { p.save() })
+		e := newApplyEntry(a, func(string) { p.save() })
 		e.SetPlaceHolder(placeholder)
 		return e
 	}
