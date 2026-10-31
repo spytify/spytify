@@ -692,8 +692,8 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	offers := func(text string, button *widget.Button) {
 		t.Helper()
 		a.render()
-		if !r.waitRow.Visible() || r.waiting.Text != text {
-			t.Errorf("the wait row says %q, want %q", r.waiting.Text, text)
+		if !r.waitRow.Visible() || r.waiting.String() != text {
+			t.Errorf("the wait row says %q, want %q", r.waiting.String(), text)
 		}
 		for _, b := range []*widget.Button{r.launch, r.play, r.restart, r.blocked} {
 			if b.Visible() != (b == button) {
