@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -102,5 +103,69 @@ func TestTheCoverCacheKeepsAtMostMaxCovers(t *testing.T) {
 	}
 	if n, _ := fetches.Load("cover 0"); n.(*atomic.Int32).Load() != 2 {
 		t.Error("a dropped cover was not fetched again")
+	}
+}
+
+// A cover that fails to load, or is no picture, leaves the row without one
+// and still counts as a load, so the screen redraws; it is not fetched
+// again. A track with no cover URL asks for nothing.
+func TestACoverThatFailsIsNotFetchedAgain(t *testing.T) {
+	loaded := make(chan struct{}, 4)
+	c := newCovers(func() { loaded <- struct{}{} })
+	var fetches atomic.Int32
+	fails := map[string]func(context.Context) ([]byte, error){
+		"offline": func(context.Context) ([]byte, error) {
+			fetches.Add(1)
+			return nil, errors.New("offline")
+		},
+		"not a picture": func(context.Context) ([]byte, error) {
+			fetches.Add(1)
+			return []byte("<html>"), nil
+		},
+	}
+	for key, fetch := range fails {
+		c.load(key, fetch)
+		select {
+		case <-loaded:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s did not finish", key)
+		}
+	}
+	for key, fetch := range fails {
+		if got := c.load(key, fetch); got.row != nil || got.live != nil {
+			t.Errorf("%s: a cover", key)
+		}
+	}
+	c.mu.Lock()
+	pending := len(c.pending)
+	c.mu.Unlock()
+	if pending != 0 {
+		t.Errorf("%d failed covers are being fetched again", pending)
+	}
+	if got := c.get(""); got.row != nil || got.live != nil {
+		t.Error("a cover with no URL")
+	}
+	if n, done := fetches.Load(), c.loads(); n != 2 || done != 2 {
+		t.Errorf("%d fetches and %d loads, want 2 of each", n, done)
+	}
+}
+
+// shrink fits a picture in a square, wide or tall, keeping its shape and at
+// least a pixel on each side, and leaves one that already fits as it is.
+func TestShrinkKeepsThePicturesShape(t *testing.T) {
+	small := image.NewRGBA(image.Rect(0, 0, 30, 80))
+	if shrink(small, 80) != image.Image(small) {
+		t.Error("a picture that fits was scaled")
+	}
+	for _, c := range []struct{ w, h, wantW, wantH int }{
+		{1000, 400, 80, 32},
+		{400, 1000, 32, 80},
+		{500, 500, 80, 80},
+		{1000, 1, 80, 1},
+		{1, 1000, 1, 80},
+	} {
+		if b := shrink(image.NewRGBA(image.Rect(0, 0, c.w, c.h)), 80).Bounds(); b.Dx() != c.wantW || b.Dy() != c.wantH {
+			t.Errorf("%dx%d shrinks to %dx%d, want %dx%d", c.w, c.h, b.Dx(), b.Dy(), c.wantW, c.wantH)
+		}
 	}
 }
