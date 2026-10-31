@@ -193,6 +193,7 @@ func namingTrack(t tag.Track, info meta.TrackInfo) naming.Track {
 		AlbumArtists:  t.AlbumArtists,
 		Title:         title,
 		Album:         t.Album,
+		Disc:          t.Disc,
 		TrackNumber:   t.Track,
 		Year:          t.Year,
 		Unknown:       strings.TrimSpace(title) == "",
