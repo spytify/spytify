@@ -49,6 +49,8 @@ var (
 	RecorderSkipDuplicatesForward = Key{"recorder.skip_duplicates_forward"}
 	// RecorderSingleTrack is recorder.single_track, "Record a single track then stop" in Settings.
 	RecorderSingleTrack = Key{"recorder.single_track"}
+	// RecorderStopWithPlayer is recorder.stop_with_player, "Stop the session when the player stops or quits" in Settings.
+	RecorderStopWithPlayer = Key{"recorder.stop_with_player"}
 	// RecorderNormalize is recorder.normalize, "Normalize volume" in Settings.
 	RecorderNormalize = Key{"recorder.normalize"}
 	// RecorderTrimSilence is recorder.trim_silence, "Trim leading/trailing silence" in Settings.

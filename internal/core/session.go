@@ -1292,7 +1292,7 @@ func (s *Session) endOfPlayback() {
 		s.closeSegment(c, end)
 		s.cur = nil
 	}
-	if (s.seen && (s.opts.EndOnStop || s.deps.values().Bool("recorder.stop_with_player"))) || s.stop == stopGraceful {
+	if (s.seen && (s.opts.EndOnStop || s.deps.values().Bool(settings.RecorderStopWithPlayer))) || s.stop == stopGraceful {
 		s.finish()
 	}
 	s.refreshState()
