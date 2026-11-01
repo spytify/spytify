@@ -126,15 +126,23 @@ func (c *Client) beforeSend(ev *sentry.Event, _ *sentry.EventHint) (out *sentry.
 	ev.User = computerUser()
 	ev.Message = s.String(ev.Message)
 	ev.Transaction = s.String(ev.Transaction)
-	for i := range ev.Exception {
-		ex := &ev.Exception[i]
-		ex.Value = s.String(ex.Value)
-		if ex.Stacktrace != nil {
-			for j := range ex.Stacktrace.Frames {
-				f := &ex.Stacktrace.Frames[j]
+	frames := func(st *sentry.Stacktrace) {
+		if st != nil {
+			for j := range st.Frames {
+				f := &st.Frames[j]
 				f.AbsPath, f.Filename = s.String(f.AbsPath), s.String(f.Filename)
 			}
 		}
+	}
+	for i := range ev.Exception {
+		ex := &ev.Exception[i]
+		ex.Value = s.String(ex.Value)
+		frames(ex.Stacktrace)
+	}
+	for i := range ev.Threads {
+		th := &ev.Threads[i]
+		th.Name = s.String(th.Name)
+		frames(th.Stacktrace)
 	}
 	for _, b := range ev.Breadcrumbs {
 		c.beforeBreadcrumb(b, nil)

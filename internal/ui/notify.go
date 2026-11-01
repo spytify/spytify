@@ -136,9 +136,9 @@ func (a *App) noticeState(level int) (model.State, bool) {
 // noticeLevel is app.notifications as a level. A recorder of an earlier
 // build does not have the setting: its default holds.
 func noticeLevel(values map[string]any) int {
-	mode, _ := values["app.notifications"].(string)
+	mode, _ := values[settings.AppNotifications.String()].(string)
 	if mode == "" {
-		mode = settings.Defaults().String("app.notifications")
+		mode = settings.Defaults().String(settings.AppNotifications)
 	}
 	switch mode {
 	case "tracks":

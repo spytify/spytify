@@ -50,17 +50,11 @@ func event(t *testing.T, method string, payload any) proto.Event {
 
 func defaults() map[string]any {
 	values := map[string]any{}
-	v := settings.Defaults()
 	for _, d := range settings.Table {
-		switch d.Kind {
-		case settings.KindBool:
-			values[d.Key] = v.Bool(d.Key)
-		case settings.KindInt, settings.KindIntEnum:
-			values[d.Key] = float64(v.Int(d.Key))
-		case settings.KindFloat:
-			values[d.Key] = v.Float(d.Key)
-		default:
-			values[d.Key] = v.String(d.Key)
+		values[d.Key] = d.Default
+		// As JSON brings them.
+		if n, ok := d.Default.(int64); ok {
+			values[d.Key] = float64(n)
 		}
 	}
 	values["output.dir"] = "/Users/listener/Music/Spytify"

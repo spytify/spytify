@@ -51,8 +51,11 @@ func main() {
 		return
 	}
 
-	// A crash of the app leaves its trace for the next launch to send.
-	crash.Keep(filepath.Join(env.StateDir, "spytify-ui.crash.log"))
+	// A crash of the app leaves its trace for the next launch to send,
+	// with the lines the runtime prints to stderr only.
+	crashLog := filepath.Join(env.StateDir, "spytify-ui.crash.log")
+	crash.Keep(crashLog)
+	crash.CaptureStderr(crashLog)
 
 	fa := app.NewWithID("org.spytify.ui")
 	fa.SetIcon(ui.Logo)
@@ -62,7 +65,7 @@ func main() {
 	// At quit, what is queued leaves within 2 s or is dropped.
 	defer tel.Close()
 	saved := savedSettings(env.ConfigPath)
-	privacy := map[string]any{"privacy.bug_tracker": saved.Bool("privacy.bug_tracker")}
+	privacy := map[string]any{settings.PrivacyBugTracker.String(): saved.Bool(settings.PrivacyBugTracker)}
 	// Fyne would close the app, or keep it running with no window, without
 	// a word: say why instead, and leave the recorder alone.
 	if noGL != nil {
@@ -73,7 +76,7 @@ func main() {
 	// it asks for one first.
 	auto := len(env.Target.ProcessNames) > 0
 	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
-		Telemetry: tel, Privacy: privacy, MinimizeToTray: saved.Bool("app.minimize_to_tray"), SoftwareOpenGL: software})
+		Telemetry: tel, Privacy: privacy, MinimizeToTray: saved.Bool(settings.AppMinimizeToTray), SoftwareOpenGL: software})
 	if inst != nil {
 		defer inst.Close()
 		go inst.Serve(w.Reopen)
