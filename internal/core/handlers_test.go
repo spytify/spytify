@@ -257,7 +257,7 @@ func TestPlayerLaunch(t *testing.T) {
 // last minutes stays: another computer may record to the same folder.
 func TestTempFilesLeftByAnEarlierRunAreRemoved(t *testing.T) {
 	c, _ := newTestCore(t, false)
-	tmp := filepath.Join(c.store.Values().Path("output.dir"), ".spytify")
+	tmp := filepath.Join(c.store.Values().Path(settings.OutputDir), ".spytify")
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		t.Fatal(err)
 	}

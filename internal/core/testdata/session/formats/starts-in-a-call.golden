@@ -1,0 +1,32 @@
+# formats/starts-in-a-call
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > the stream is now s16le 16000 Hz 1ch
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 8000(500ms)
+      10ms  log error: the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call
+      10ms  error capture_low_quality "The player's output device runs at 16 kHz mono, not fit for recording: tracks will sound like a phone call. …"
+     500ms  > audio music 1 at 0ms, 48000(3000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=16000/1
+     510ms  state recording
+     510ms  take t-001 "A" start=8004(500.25ms) length=48000(3000ms) format=16000/1
+    3500ms  > audio silence, 8000(500ms)
+    4000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 64000)
+    4000ms  log debug: cut for "B" at 3500 ms (kind 1, noticed at 4000 ms, window 3200..3801 ms)
+    4000ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=16000/1
+    4000ms  take t-002 "B" start=56000(3500ms) length=48000(3000ms) format=16000/1
+    4000ms  > audio music 2 at 0ms, 48000(3000ms)
+    7000ms  > audio silence, 24000(1500ms)
+    8500ms  > player Stopped pos=-1 (ring at 136000)
+    8500ms  state waiting
+    8500ms  state stopping
+    8500ms  state idle
+    8500ms  take none
+--- jobs
+job t-001 "A" played=47996(2999.75ms) length=48000(3000ms) wav=47996 crc=5e07ff2f format=16000/1
+job t-002 "B" played=56160(3510ms) length=48000(3000ms) wav=56160 crc=8a8f5135 format=16000/1
+--- end: idle, 0 skipped, 0 ads, 0 overruns

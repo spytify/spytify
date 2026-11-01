@@ -17,7 +17,7 @@ Your computer is known only by a code made from its machine ID for Spytify alone
 
 ## Sent while the switch is on
 
-- Crashes of Spytify and of the recorder, with their trace, at the next launch, without asking.
+- Crashes of Spytify and of the recorder, with their trace and the error lines printed with it, at the next launch, without asking.
 - Problems that are not crashes, such as no sound reaching the recorder, a file that could not be encoded, or no graphics driver to draw the window, with the steps and clicks that led there. Each is counted; one computer in ten sends its details, once per version.
 - Each launch: whether the recorder got ready, how long it took, the names of the checks that fail, and whether the window is drawn in software for want of a graphics driver.
 - How far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track.

@@ -1,0 +1,34 @@
+# short/gap0-notify+0
+# option EndOnStop
+# item 0 "Track A" (track, declared 3000ms): audio from 500ms to 3500ms
+# item 1 "Track B" (track, declared 200ms): audio from 3500ms to 3700ms
+# item 2 "Track C" (track, declared 2000ms): audio from 3700ms to 5700ms
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Track A" id=/com/fake/track/1 length=3000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Track A" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Track A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=0ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "Track A" start=22058(500.18ms) length=132300(3000ms)
+    3500ms  > player TrackChanged "Track B" id=/com/fake/track/2 length=200ms pos=0 (ring at 154350)
+    3700ms  > player TrackChanged "Track C" id=/com/fake/track/3 length=2000ms pos=0 (ring at 163170)
+    3700ms  log debug: cut for "Track B" at 3500 ms (kind 1, noticed at 3500 ms, window 3200..3801 ms)
+    3700ms  started t-002 "Track B" artist="Artist" album="Album" length=200ms cut=boundary/dip offset=0ms source=44100/2
+    3700ms  take t-002 "Track B" start=154331(3499.57ms) length=8820(200ms)
+    4020ms  log debug: cut for "Track C" at 3701 ms (kind 1, noticed at 3700 ms, window 3500..4001 ms)
+    4020ms  started t-003 "Track C" artist="Artist" album="Album" length=2000ms cut=boundary/length offset=1ms source=44100/2
+    4020ms  take t-003 "Track C" start=163223(3701.2ms) length=88200(2000ms)
+    5700ms  > player Stopped pos=-1 (ring at 251370)
+    5700ms  state waiting
+    5700ms  state stopping
+    5700ms  state idle
+    5700ms  take none
+--- jobs
+job t-001 "Track A" played=132273(2999.39ms) length=132300(3000ms) wav=132273 crc=3f513b08
+job t-002 "Track B" played=8892(201.63ms) length=8820(200ms) wav=8892 crc=dcf17691
+job t-003 "Track C" played=88147(1998.8ms) length=88200(2000ms) wav=88147 crc=0d52372a
+--- end: idle, 0 skipped, 0 ads, 0 overruns

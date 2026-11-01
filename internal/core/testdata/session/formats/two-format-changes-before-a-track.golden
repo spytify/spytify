@@ -1,0 +1,37 @@
+# formats/two-format-changes-before-a-track
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=5000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 220500(5000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=5000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=220500(5000ms)
+    5500ms  > the stream is now s16le 48000 Hz 2ch
+    5500ms  > audio silence, 14400(300ms)
+    5510ms  log info: stream format changed from s16le 44100 Hz 2ch to s16le 48000 Hz 2ch
+    5510ms  take t-001+ "A" start=0(0ms) length=0(0ms) provisional format=48000/2
+    5800ms  > the stream is now s16le 44100 Hz 2ch
+    5800ms  > audio silence, 13230(300ms)
+    5810ms  log info: stream format changed from s16le 48000 Hz 2ch to s16le 44100 Hz 2ch
+    5810ms  take t-001++ "A" start=0(0ms) length=207270(4700ms) provisional
+    6100ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 13230)
+    6100ms  started t-002 "B" artist="Artist" album="Album" length=3000ms source=44100/2
+    6100ms  take t-002 "B" start=0(0ms) length=132300(3000ms) awaiting-sound
+    6100ms  > audio music 2 at 0ms, 132300(3000ms)
+    6110ms  log debug: "B" starts at its first sound, 300 ms
+    6110ms  take t-002 "B" start=13242(300.27ms) origin=0(0ms) length=132300(3000ms)
+    9100ms  > audio silence, 66150(1500ms)
+   10600ms  > player Stopped pos=-1 (ring at 211680)
+   10600ms  state waiting
+   10600ms  state stopping
+   10600ms  state idle
+   10600ms  take none
+--- jobs
+job t-001 "A" played=220489(4999.75ms) length=220500(5000ms) wav=220489 crc=49dd2c85
+job t-002 "B" played=132790(3011.11ms) length=132300(3000ms) wav=132790 crc=bc4937f8
+--- end: idle, 0 skipped, 0 ads, 0 overruns

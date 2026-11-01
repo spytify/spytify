@@ -1,0 +1,33 @@
+# pauses/silence/at100-for1500-notified-150-resumed+0
+# option EndOnStop
+# the stream carries silence while paused
+# item 0 "Track A" (track, declared 4000ms): audio from 500ms to 6000ms, paused at 100ms for 1500ms (notified -150ms, resumed +0ms), then 500ms of silence
+# item 1 "Track B" (track, declared 3000ms): audio from 6500ms to 9500ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     450ms  > player Paused pos=100 (ring at 19845)
+     450ms  state paused
+     500ms  > player Playing pos=-1 (ring at 0)
+     500ms  state waiting
+     500ms  > player TrackChanged "Track A" id=/com/fake/track/1 length=4000ms pos=0 (ring at 0)
+     510ms  log debug: cut for "Track A" at 0 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "Track A" artist="Artist" album="Album" length=4000ms cut=first/first_sound offset=0ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "Track A" start=0(0ms) length=176400(4000ms)
+    2100ms  > player Playing pos=100 (ring at 70484)
+    6500ms  > player TrackChanged "Track B" id=/com/fake/track/2 length=3000ms pos=0 (ring at 264524)
+    6500ms  log debug: cut for "Track B" at 4000 ms (kind 1, noticed at 5998 ms, window 3700..4300 ms)
+    6500ms  started t-002 "Track B" artist="Artist" album="Album" length=3000ms cut=boundary/length offset=-1998ms source=44100/2
+    6500ms  take t-002 "Track B" start=176400(4000ms) length=132300(3000ms)
+   10500ms  > player Stopped pos=-1 (ring at 440924)
+   10500ms  state waiting
+   10500ms  state stopping
+   10500ms  state idle
+   10500ms  take none
+--- jobs
+job t-001 "Track A" played=176400(4000ms) length=176400(4000ms) wav=176400 crc=bccc37ae
+job t-002 "Track B" played=132300(3000ms) length=132300(3000ms) wav=132300 crc=09ef7f0a
+--- end: idle, 0 skipped, 0 ads, 0 overruns

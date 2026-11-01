@@ -1,0 +1,30 @@
+# states/stop-on-a-duplicate
+# option EndOnStop
+# A and B are 3000 ms each
+# Artist - B is already recorded
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > audio music 1 at 1000ms, 88200(2000ms)
+    3500ms  > audio silence, 22050(500ms)
+    4000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 176400)
+    4000ms  log debug: cut for "B" at 3500 ms (kind 1, noticed at 4000 ms, window 3200..3801 ms)
+    4000ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    4000ms  skipped t-002 duplicate
+    4000ms  take t-002 "B" start=154350(3500ms) length=132300(3000ms) no-file reason=duplicate
+    4000ms  > audio music 2 at 0ms, 44100(1000ms)
+    5000ms  > session.stop
+    5000ms  state stopping
+    5000ms  state idle
+    5000ms  take none
+--- jobs
+job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060
+--- end: idle, 1 skipped, 0 ads, 0 overruns
