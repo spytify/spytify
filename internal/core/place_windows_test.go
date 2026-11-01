@@ -16,10 +16,10 @@ func TestPlaceOnWindows(t *testing.T) {
 	if f["output.drive"] != "fixed" || f["output.fs"] == "" {
 		t.Errorf("drive %q, file system %q", f["output.drive"], f["output.fs"])
 	}
-	// "unknown 0x…" would say the cloud API call is wrong.
-	if f["output.cloud"] != "none" {
-		t.Errorf("cloud %q", f["output.cloud"])
-	}
+	// The CI runner, Windows Server 2022, answers 0x80070001
+	// (ERROR_INVALID_FUNCTION): an error of the file system's. A wrong call
+	// would answer E_INVALIDARG or ERROR_INSUFFICIENT_BUFFER.
+	oneOf(t, f, "output.cloud", "none", "unknown 0x80070001")
 	oneOf(t, f, "output.known", "Music", "Documents", "Pictures", "Videos", "Desktop", "Downloads", "Favorites", "home", "elsewhere")
 	oneOf(t, f, "output.music", "home", "moved")
 	oneOf(t, f, "output.cfa", "off", "on", "audit", "disks", "disks audit", "unreadable")
