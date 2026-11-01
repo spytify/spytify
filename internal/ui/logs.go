@@ -52,6 +52,7 @@ func newLogsScreen(a *App) *logsScreen {
 	l := &logsScreen{app: a, path: filepath.Join(a.opts.StateDir, "spytifyd.log")}
 	l.summary = widget.NewLabel("")
 	l.checks = container.NewVBox()
+	a.maskPaths(l.checks)
 	l.checksScroll = container.NewVScroll(l.checks)
 	l.refresh = widget.NewButtonWithIcon("Run the checks again", theme.ViewRefreshIcon(), func() {
 		a.noteAction("run the checks again")
@@ -77,6 +78,7 @@ func newLogsScreen(a *App) *logsScreen {
 		func() fyne.CanvasObject {
 			msg := widget.NewLabel("message")
 			msg.Wrapping = fyne.TextWrapWord
+			a.maskPaths(msg)
 			prefix := widget.NewLabelWithStyle("00:00:00 info ", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 			prefix.SizeName = theme.SizeNameCaptionText
 			return container.NewBorder(nil, nil, prefix, nil, msg)

@@ -130,6 +130,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	// What follows the sort: the filter, then the rescan.
 	refresh := container.NewHBox(l.kinds, rescan)
 	l.count = caption("")
+	a.maskPaths(l.count)
 	l.hint = widget.NewLabel("")
 	l.empty = emptyState("No recordings yet", l.hint)
 	l.list = widget.NewList(

@@ -107,6 +107,7 @@ func newRecordScreen(a *App) *recordScreen {
 		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
 	)
 	r.track.Truncation = fyne.TextTruncateEllipsis
+	a.maskPaths(r.track)
 	r.progress = newBar(theme.ColorNamePrimary)
 	r.elapsed = caption("0:00 / 0:00")
 	r.level = newBar(theme.ColorNameSuccess)

@@ -26,12 +26,14 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-func showError(w fyne.Window, err error) {
+func showError(w fyne.Window, err error) dialog.Dialog {
 	var perr *proto.Error
 	if errors.As(err, &perr) {
 		err = errors.New(perr.Message)
 	}
-	dialog.ShowError(err, w)
+	d := dialog.NewError(err, w)
+	d.Show()
+	return d
 }
 
 func fmtDuration(ms int64) string {

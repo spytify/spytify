@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
@@ -167,7 +168,9 @@ func (a *App) launchReady(s model.State) {
 func (a *App) launchFailed(err error) {
 	kind := startErrorKind(err)
 	a.tel.Log("launch", map[string]any{"ready": false, "start_error": kind, "software_opengl": a.opts.SoftwareOpenGL})
-	a.tel.Problem("recorder_start", kind)
+	// Not on the toolkit's goroutine, which this is: the report waits for
+	// the window's picture, taken there.
+	a.reports.Go(func() { a.tel.Problem("recorder_start", kind) })
 }
 
 func startErrorKind(err error) string {
@@ -345,7 +348,7 @@ func (a *App) askPrivacy(then func()) {
 		return
 	}
 	tracker := a.trackerCheck()
-	body := widget.NewLabel("Spytify can send its crashes, errors, traces and recording counts to its developers through Sentry, to help them fix issues.")
+	body := widget.NewLabel("Spytify can send its crashes, errors with a picture of its window, traces and recording counts to its developers through Sentry, to help them fix issues.")
 	body.Wrapping = fyne.TextWrapWord
 	d := dialog.NewCustom("Help fix issues", "OK", container.NewVBox(body, tracker), a.win)
 	d.SetOnClosed(func() {
@@ -453,6 +456,10 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 // it shows.
 const crashDialogWidth = 600
 
+// screenshotWidth is the width of the window's picture in Send to the
+// developers, which fits the dialog.
+const screenshotWidth = 480
+
 // issueURL opens a new GitHub issue holding a crash. GitHub takes its text
 // from the address, which browsers keep under some 8,000 characters, so
 // the details are cut after their first lines, where the crash happened.
@@ -487,10 +494,22 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	for _, l := range lines {
 		log = append(log, l.TS+" "+l.Level+" "+l.Msg)
 	}
-	report := telemetry.Checks{Failing: failing, Log: log}
-	body := widget.NewLabel("Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded.")
+	// The window as it shows under this dialog, which is not open yet.
+	report := telemetry.Checks{Failing: failing, Log: log, Screenshot: a.picture()}
+	ask := "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
+	preview := container.NewVBox()
+	if shot := report.Screenshot; shot != nil {
+		ask = "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
+		img := canvas.NewImageFromImage(shot)
+		img.FillMode = canvas.ImageFillContain
+		b := shot.Bounds()
+		img.SetMinSize(fyne.NewSize(screenshotWidth, screenshotWidth*float32(b.Dy())/float32(b.Dx())))
+		// At the left, as the log's long lines widen what scrolls.
+		preview.Add(container.NewHBox(img))
+	}
+	preview.Add(widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}))
+	body := widget.NewLabel(ask)
 	body.Wrapping = fyne.TextWrapWord
-	preview := widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	scroll := container.NewScroll(preview)
 	scroll.SetMinSize(fyne.NewSize(0, 160))
 	what := widget.NewAccordion(widget.NewAccordionItem("What will be sent", scroll))

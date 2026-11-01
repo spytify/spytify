@@ -1,6 +1,6 @@
 // Package telemetry is the Sentry bug tracker. With privacy.bug_tracker
 // on, the app sends its crashes, the problems it runs into with the steps
-// that led there, its launches and timings, counts of the tracks it saved
+// that led there and a picture of the window, its launches and timings, counts of the tracks it saved
 // and skipped and how it cut them, and, on a click, the checks that fail. Off, nothing is sent: the Sentry client is not even made. It
 // goes to the developers' Sentry project, set at build time; a build
 // without one sends nothing.
@@ -14,6 +14,7 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"image"
 	"os"
 	"strings"
 	"sync"
@@ -65,6 +66,8 @@ type Client struct {
 	log     sentry.Logger
 	meter   sentry.Meter
 	seen    map[string]bool
+	// screenshot takes the window's picture (SetScreenshot).
+	screenshot func() image.Image
 }
 
 var (
