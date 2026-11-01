@@ -1,0 +1,11 @@
+# states/stop-while-waiting
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > session.stop
+       0ms  state stopping
+       0ms  state idle
+--- jobs
+--- end: idle, 0 skipped, 0 ads, 0 overruns

@@ -1,0 +1,19 @@
+# diskfull/first-take-no-pause
+# setting recorder.pause_on_disk_full = false
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  error disk_full "only 10 MB free in the output folder"
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  skipped t-001 incomplete
+     510ms  state stopping
+     510ms  state idle
+--- jobs
+--- end: idle, 1 skipped, 0 ads, 0 overruns

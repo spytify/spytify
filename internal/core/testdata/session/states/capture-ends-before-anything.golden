@@ -1,0 +1,11 @@
+# states/capture-ends-before-anything
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > capture stream closed
+       0ms  log info: capture stream ended
+       0ms  state stopping
+       0ms  state idle
+--- jobs
+--- end: idle, 0 skipped, 0 ads, 0 overruns

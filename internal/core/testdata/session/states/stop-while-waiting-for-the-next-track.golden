@@ -1,0 +1,17 @@
+# states/stop-while-waiting-for-the-next-track
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=2500 (ring at -)
+       0ms  > player Playing pos=-1 (ring at 0)
+       0ms  log info: "A" is already playing; recording starts with the next track
+       0ms  take t-pre "A" start=0(0ms) length=22050(500ms) ghost
+       0ms  > audio music 1 at 0ms, 13230(300ms)
+     300ms  > session.stop
+     300ms  state stopping
+     300ms  state idle
+     300ms  take none
+--- jobs
+--- end: idle, 0 skipped, 0 ads, 0 overruns
