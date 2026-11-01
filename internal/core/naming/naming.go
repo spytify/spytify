@@ -195,16 +195,19 @@ func Recorded(root string, p Plan, o Options) bool {
 	return false
 }
 
-var placeholder = regexp.MustCompile(`\{([a-z]+)\}`)
+var placeholder = regexp.MustCompile(`\{([a-z_]+)\}`)
 
 func expand(tmpl string, t Track, artistSep string) string {
 	if tmpl == "" {
-		tmpl = "{artist} - {title}"
+		tmpl = "{album_artist} - {title}"
 	}
 	out := placeholder.ReplaceAllStringFunc(tmpl, func(m string) string {
 		switch m {
-		case "{artist}":
-			return artistsOf(t, artistSep)
+		// {artist} is {album_artist}'s old name: saved templates keep it.
+		case "{album_artist}", "{artist}":
+			return albumArtistsOf(t, artistSep)
+		case "{artists}":
+			return allArtists(t, artistSep)
 		case "{title}":
 			return t.Title
 		case "{album}":
@@ -232,9 +235,10 @@ func expand(tmpl string, t Track, artistSep string) string {
 	return out
 }
 
-// artistsOf follows v1's Track.Artists: album artists when known, otherwise
-// the artist plus extra performers, without repeats.
-func artistsOf(t Track, sep string) string {
+// albumArtistsOf follows v1's Track.Artists, which {artist} wrote: album
+// artists when known, otherwise the artist plus extra performers, without
+// repeats.
+func albumArtistsOf(t Track, sep string) string {
 	if len(t.AlbumArtists) > 0 {
 		return strings.Join(t.AlbumArtists, sep)
 	}

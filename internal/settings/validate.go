@@ -12,9 +12,10 @@ import (
 	"time"
 )
 
-var placeholder = regexp.MustCompile(`\{([a-z]+)\}`)
+var placeholder = regexp.MustCompile(`\{([a-z_]+)\}`)
 
-var templateFields = map[string]bool{"artist": true, "title": true, "album": true, "track": true, "year": true}
+// "artist" is "album_artist"'s old name: saved templates keep it.
+var templateFields = map[string]bool{"album_artist": true, "artist": true, "artists": true, "title": true, "album": true, "track": true, "year": true}
 
 // Coerce converts a client-supplied value (JSON number, bool, string, or the
 // string form a CLI sends) to the canonical Go type of the setting, or
@@ -191,7 +192,7 @@ func validTemplate(s string) (string, error) {
 	}
 	matches := placeholder.FindAllStringSubmatch(s, -1)
 	if len(matches) == 0 {
-		return "", fmt.Errorf("template needs at least one of {artist}, {title}, {album}, {track}, {year}")
+		return "", fmt.Errorf("template needs at least one of {album_artist}, {artists}, {title}, {album}, {track}, {year}")
 	}
 	for _, m := range matches {
 		if !templateFields[m[1]] {

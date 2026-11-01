@@ -82,6 +82,10 @@ func TestExample(t *testing.T) {
 	if got, want := Example(o, 1), filepath.Join("Neon_Harbor,_Lumen", "Harbor_Lights_(2024)", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
 		t.Errorf("grouped by all artists %q, want %q", got, want)
 	}
+	o = Options{Template: "{track} {artists} - {title}", Prefix: "none", GroupBy: "none", Extension: "mp3"}
+	if got := Example(o, 1); got != "04 Neon Harbor, Lumen - Café Lumière.mp3" {
+		t.Errorf("all artists %q", got)
+	}
 }
 
 func TestAlbumTrackPrefix(t *testing.T) {
@@ -153,6 +157,29 @@ func TestTemplateFields(t *testing.T) {
 	tr.Year, tr.TrackNumber = 0, 0
 	if got := Build(tr, o).Base; got != "A - T" {
 		t.Fatalf("empty fields: got %q", got)
+	}
+}
+
+// {album_artist} is the album's artists, as {artist} was; {artists} is every
+// artist on the track, guests included.
+func TestArtistFields(t *testing.T) {
+	o := opts()
+	o.ArtistSeparator = "; "
+	tr := Track{Artists: []string{"A", "Guest", "A"}, AlbumArtists: []string{"Band", "Other"}, Title: "T"}
+	for tmpl, want := range map[string]string{
+		"{album_artist} - {title}": "Band; Other - T",
+		"{artist} - {title}":       "Band; Other - T",
+		"{artists} - {title}":      "A; Guest - T",
+	} {
+		o.Template = tmpl
+		if got := Build(tr, o).Base; got != want {
+			t.Errorf("%s: got %q, want %q", tmpl, got, want)
+		}
+	}
+	tr.AlbumArtists = nil
+	o.Template = "{album_artist} - {title}"
+	if got := Build(tr, o).Base; got != "A; Guest - T" {
+		t.Errorf("no album artist: got %q", got)
 	}
 }
 
