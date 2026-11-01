@@ -141,9 +141,10 @@ func CounterLimit(width int) int64 {
 // and the counter at counter: the settings show it under the template.
 func Example(o Options, counter int64) string {
 	// Its accents show what removing diacritics does, its guest what all
-	// artists folders do.
+	// artists folders do. It has no year: the player gives none on macOS
+	// or Windows.
 	t := Track{Artists: []string{"Neon Harbor", "Lumen"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Café Lumière",
-		Album: "Harbor Lights", TrackNumber: 4, Year: 2024}
+		Album: "Harbor Lights", TrackNumber: 4}
 	p := Build(t, o)
 	return filepath.Join(p.Dir, FileName(p, o, counter, t.TrackNumber))
 }

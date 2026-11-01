@@ -14,7 +14,9 @@ import (
 
 var placeholder = regexp.MustCompile(`\{([a-z_]+)\}`)
 
-// "artist" is "album_artist"'s old name: saved templates keep it.
+// "artist" is "album_artist"'s old name, and the note leaves "year" out
+// because the player gives no year on macOS or Windows: saved templates keep
+// both.
 var templateFields = map[string]bool{"album_artist": true, "artist": true, "artists": true, "title": true, "album": true, "track": true, "year": true}
 
 // Coerce converts a client-supplied value (JSON number, bool, string, or the
@@ -192,7 +194,7 @@ func validTemplate(s string) (string, error) {
 	}
 	matches := placeholder.FindAllStringSubmatch(s, -1)
 	if len(matches) == 0 {
-		return "", fmt.Errorf("template needs at least one of {album_artist}, {artists}, {title}, {album}, {track}, {year}")
+		return "", fmt.Errorf("template needs at least one of {album_artist}, {artists}, {title}, {album}, {track}")
 	}
 	for _, m := range matches {
 		if !templateFields[m[1]] {

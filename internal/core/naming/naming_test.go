@@ -74,12 +74,12 @@ func TestExample(t *testing.T) {
 		t.Errorf("underscores and counter %q", got)
 	}
 	o.GroupBy, o.Prefix = "artist/album", "album_track"
-	if got, want := Example(o, 1), filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
+	if got, want := Example(o, 1), filepath.Join("Neon_Harbor", "Harbor_Lights", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
 		t.Errorf("grouped %q, want %q", got, want)
 	}
 	// The sample has a guest, so the example shows what all artists do.
 	o.GroupBy = "artists/album"
-	if got, want := Example(o, 1), filepath.Join("Neon_Harbor,_Lumen", "Harbor_Lights_(2024)", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
+	if got, want := Example(o, 1), filepath.Join("Neon_Harbor,_Lumen", "Harbor_Lights", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
 		t.Errorf("grouped by all artists %q, want %q", got, want)
 	}
 	o = Options{Template: "{track} {artists} - {title}", Prefix: "none", GroupBy: "none", Extension: "mp3"}
