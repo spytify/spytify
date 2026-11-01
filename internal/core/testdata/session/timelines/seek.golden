@@ -1,0 +1,50 @@
+# timelines/seek
+# option EndOnStop
+# item 0 "Rewind" (track, declared 5000ms): audio from 500ms to 5500ms, then 1000ms of silence
+# item 1 "Skip Ahead" (track, declared 8000ms): audio from 6500ms to 11500ms, jumps at 2000ms to 5000ms, then 1000ms of silence
+# item 2 "Back Again" (track, declared 6000ms): audio from 12500ms to 21000ms, jumps at 4000ms to 1500ms, then 1000ms of silence
+# item 3 "Chapter Four" (track, declared 4500ms): audio from 22000ms to 26500ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Rewind" id=/com/fake/track/1 length=5000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Rewind" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Rewind" artist="Theo Lund" album="Chapters" length=5000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Rewind" start=22066(500.36ms) length=220500(5000ms)
+    6500ms  > player TrackChanged "Skip Ahead" id=/com/fake/track/2 length=8000ms pos=0 (ring at 286650)
+    6500ms  log debug: cut for "Skip Ahead" at 5500 ms (kind 1, noticed at 6500 ms, window 5200..5801 ms)
+    6500ms  started t-002 "Skip Ahead" artist="Theo Lund" album="Chapters" length=8000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+    6500ms  take t-002 "Skip Ahead" start=242547(5499.93ms) length=352800(8000ms)
+    8500ms  > player Seeked "Skip Ahead" pos=5000 (ring at 374850)
+    8500ms  log debug: "Skip Ahead": the player jumped to 5000 ms
+    8500ms  log info: "Skip Ahead": playback jumped to 5000 ms, this take is not saved
+    8500ms  skipped t-002 seeked
+    8500ms  take t-002 "Skip Ahead" start=242547(5499.93ms) length=264603(6000.07ms) reason=seeked
+   12500ms  > player TrackChanged "Back Again" id=/com/fake/track/3 length=6000ms pos=0 (ring at 551250)
+   12820ms  log debug: cut for "Back Again" at 11500 ms (kind 1, noticed at 12500 ms, window 11200..12801 ms)
+   12820ms  started t-003 "Back Again" artist="Theo Lund" album="Chapters" length=6000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+   12820ms  take t-003 "Back Again" start=507149(11499.98ms) length=264600(6000ms)
+   16500ms  > player Seeked "Back Again" pos=1500 (ring at 727650)
+   16500ms  log debug: "Back Again": the player jumped to 1500 ms
+   16500ms  log info: "Back Again": playback jumped to 1500 ms, this take is not saved
+   16500ms  skipped t-003 seeked
+   16500ms  take t-003 "Back Again" start=507149(11499.98ms) length=418951(9500.02ms) reason=seeked
+   22000ms  > player TrackChanged "Chapter Four" id=/com/fake/track/4 length=4500ms pos=0 (ring at 970200)
+   22320ms  log debug: cut for "Chapter Four" at 21000 ms (kind 1, noticed at 22000 ms, window 20700..22301 ms)
+   22320ms  started t-004 "Chapter Four" artist="Theo Lund" album="Chapters" length=4500ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+   22320ms  take t-004 "Chapter Four" start=926099(20999.98ms) length=198450(4500ms)
+   27500ms  > player Stopped pos=-1 (ring at 1212750)
+   27500ms  state waiting
+   27500ms  state stopping
+   27500ms  state idle
+   27500ms  take none
+--- jobs
+job t-001 "Rewind" played=220481(4999.57ms) length=220500(5000ms) wav=220481 crc=d089c086 cover=cover-0.jpg
+job t-002 "Skip Ahead" played=264602(6000.05ms) length=264603(6000.07ms) wav=264602 crc=114cdac2 rejected=seeked cover=cover-1.jpg
+job t-003 "Back Again" played=418950(9500ms) length=418951(9500.02ms) wav=418950 crc=7a83faea rejected=seeked cover=cover-2.jpg
+job t-004 "Chapter Four" played=243122(5512.97ms) length=198450(4500ms) wav=243122 crc=54409355 cover=cover-3.jpg
+--- end: idle, 2 skipped, 0 ads, 0 overruns

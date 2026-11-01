@@ -1,0 +1,53 @@
+# timelines/pause-resume
+# option EndOnStop
+# the stream carries silence while paused
+# item 0 "Hold That Thought" (track, declared 8000ms): audio from 500ms to 13500ms, paused at 3000ms for 5000ms (notified +0ms, resumed +0ms), then 1000ms of silence
+# item 1 "Wait For It (Live)" (track, declared 6000ms): audio from 14500ms to 23500ms, paused at 2500ms for 3000ms (notified +300ms, resumed -200ms), then 1000ms of silence
+# item 2 "Not Yet" (track, declared 6000ms): audio from 24500ms to 32500ms, paused at 3500ms for 2000ms (notified -150ms, resumed +250ms), then 1000ms of silence
+# item 3 "After the Break - Remastered" (track, declared 4000ms): audio from 33500ms to 37500ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Hold That Thought" id=/com/fake/track/1 length=8000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Hold That Thought" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Hold That Thought" artist="Velvet Static" album="Intermission" length=8000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Hold That Thought" start=22062(500.27ms) length=352800(8000ms)
+    3500ms  > player Paused pos=3000 (ring at 154350)
+    3500ms  state paused
+    8500ms  > player Playing pos=3000 (ring at 154350)
+    8500ms  state recording
+   14500ms  > player TrackChanged "Wait For It (Live)" id=/com/fake/track/2 length=6000ms pos=0 (ring at 418950)
+   14500ms  log debug: cut for "Wait For It (Live)" at 8500 ms (kind 1, noticed at 9500 ms, window 8200..8801 ms)
+   14500ms  started t-002 "Wait For It (Live)" artist="Velvet Static" album="Intermission" length=6000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+   14500ms  take t-002 "Wait For It (Live)" start=374846(8499.91ms) length=264600(6000ms)
+   17300ms  > player Paused pos=2500 (ring at 542430)
+   17300ms  state paused
+   19800ms  > player Playing pos=2500 (ring at 529200)
+   19800ms  state recording
+   24500ms  > player TrackChanged "Not Yet" id=/com/fake/track/3 length=6000ms pos=0 (ring at 727650)
+   24500ms  log debug: cut for "Not Yet" at 15500 ms (kind 1, noticed at 16500 ms, window 14200..15803 ms)
+   24500ms  started t-003 "Not Yet" artist="Velvet Static" album="Intermission" length=6000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+   24500ms  take t-003 "Not Yet" start=683549(15499.98ms) length=264600(6000ms)
+   27850ms  > player Paused pos=3500 (ring at 875385)
+   27850ms  state paused
+   30250ms  > player Playing pos=3500 (ring at 893025)
+   30250ms  state recording
+   33500ms  > player TrackChanged "After the Break - Remastered" id=/com/fake/track/4 length=4000ms pos=0 (ring at 1036350)
+   33500ms  log debug: cut for "After the Break - Remastered" at 22500 ms (kind 1, noticed at 23500 ms, window 21200..22802 ms)
+   33500ms  started t-004 "After the Break - Remastered" artist="Velvet Static" album="Intermission" length=4000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+   33500ms  take t-004 "After the Break - Remastered" start=992244(22499.86ms) length=176400(4000ms)
+   38500ms  > player Stopped pos=-1 (ring at 1256850)
+   38500ms  state waiting
+   38500ms  state stopping
+   38500ms  state idle
+   38500ms  take none
+--- jobs
+job t-001 "Hold That Thought" played=352784(7999.64ms) length=352800(8000ms) wav=352784 crc=d91e997e cover=cover-0.jpg
+job t-002 "Wait For It (Live)" played=308703(7000.07ms) length=264600(6000ms) wav=308703 crc=3d13e59d cover=cover-1.jpg
+job t-003 "Not Yet" played=308695(6999.89ms) length=264600(6000ms) wav=308695 crc=99ba330d cover=cover-2.jpg
+job t-004 "After the Break - Remastered" played=221072(5012.97ms) length=176400(4000ms) wav=221072 crc=eeeb3b4a cover=cover-3.jpg
+--- end: idle, 0 skipped, 0 ads, 0 overruns

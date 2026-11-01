@@ -1,0 +1,36 @@
+# backtoback/two-tracks-50ms-apart
+# option EndOnStop
+# A, B and C are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 132300(3000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    3500ms  > audio silence, 22050(500ms)
+    4000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 176400)
+    4000ms  log debug: cut for "B" at 3500 ms (kind 1, noticed at 4000 ms, window 3200..3801 ms)
+    4000ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    4000ms  take t-002 "B" start=154350(3500ms) length=132300(3000ms)
+    4000ms  > audio silence, 2205(50ms)
+    4050ms  > player TrackChanged "C" id=/x/c length=3000ms pos=0 (ring at 178605)
+    4050ms  > audio music 3 at 0ms, 132300(3000ms)
+    4370ms  log debug: cut for "C" at 3500 ms (kind 2, noticed at 4050 ms, window 3500..4350 ms)
+    4370ms  started t-003 "C" artist="Artist" album="Album" length=3000ms cut=interrupt/silence offset=-550ms source=44100/2
+    4370ms  take t-003 "C" start=154350(3500ms) length=132300(3000ms)
+    7050ms  > audio silence, 66150(1500ms)
+    8550ms  > player Stopped pos=-1 (ring at 377055)
+    8550ms  state waiting
+    8550ms  state stopping
+    8550ms  state idle
+    8550ms  take none
+--- jobs
+job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060
+job t-002 "B" played=0(0ms) length=132300(3000ms) wav=0 crc=00000000
+job t-003 "C" played=157082(3561.95ms) length=132300(3000ms) wav=157082 crc=765c1f36
+--- end: idle, 0 skipped, 0 ads, 0 overruns

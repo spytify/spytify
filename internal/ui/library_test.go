@@ -66,6 +66,13 @@ func rowNames(l *libraryScreen) []string {
 	return out
 }
 
+// tick ticks the filter's boxes for kinds, and only those.
+func tick(l *libraryScreen, kinds ...string) {
+	for _, k := range takeKinds {
+		l.takes[k].SetChecked(slices.Contains(kinds, k))
+	}
+}
+
 // holdTags keeps the tags from being read until the test ends or calls the
 // function it returns.
 func holdTags(t *testing.T, l *libraryScreen) func() {
@@ -88,29 +95,30 @@ func holdTags(t *testing.T, l *libraryScreen) func() {
 
 // Keep anyway names a take "<title> (partial)" or "<title> (low quality)",
 // with underscores for spaces when the setting says so, and a number after
-// it when the name was taken; nothing else is one.
-func TestPartialTakesAreToldByTheirName(t *testing.T) {
-	for name, want := range map[string]bool{
-		"M83 - Wait (partial).flac":                     true,
-		"M83 - Reunion (low quality).mp3":               true,
-		"M83_-_Reunion_(low_quality).mp3":               true,
-		"M83 - Wait (partial) 2.flac":                   true,
-		"004 M83 - Wait (Partial).m4a":                  true,
-		"Wait (partial) - M83.wav":                      true,
-		"M83/Hurry Up/M83 - Midnight City.flac":         false,
-		"Partial/M83 - Midnight City.flac":              false,
-		"M83 - Partial Eclipse.mp3":                     false,
-		"M83 - Low Quality Dreams (Extended Mix).flac":  false,
-		"M83 - Wait (partial)/M83 - Midnight City.flac": false,
+// it when the name was taken; every other file is a complete take.
+func TestTakesAreToldApartByTheirName(t *testing.T) {
+	for name, want := range map[string]string{
+		"M83 - Wait (partial).flac":                     takePartial,
+		"M83 - Reunion (low quality).mp3":               takeLowQuality,
+		"M83_-_Reunion_(low_quality).mp3":               takeLowQuality,
+		"M83 - Wait (partial) 2.flac":                   takePartial,
+		"004 M83 - Wait (Partial).m4a":                  takePartial,
+		"Wait (partial) - M83.wav":                      takePartial,
+		"M83/Hurry Up/M83 - Midnight City.flac":         takeComplete,
+		"Partial/M83 - Midnight City.flac":              takeComplete,
+		"M83 - Partial Eclipse.mp3":                     takeComplete,
+		"M83 - Low Quality Dreams (Extended Mix).flac":  takeComplete,
+		"M83 - Wait (partial)/M83 - Midnight City.flac": takeComplete,
 	} {
-		if got := partialTake(name); got != want {
-			t.Errorf("partialTake(%q) = %v", name, got)
+		if got := takeKind(name); got != want {
+			t.Errorf("takeKind(%q) = %q, want %q", name, got, want)
 		}
 	}
 }
 
-// The filter hides the partial takes, or shows them alone to clean them up;
-// the count says how many files it leaves out.
+// The filter hides the partial takes, or shows them alone to clean them up,
+// a box per kind of file; the count says how many files it leaves out. A
+// take's row says its kind in a chip, out of its title.
 func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	order := []string{
 		"M83 - Midnight City.flac",
@@ -125,49 +133,78 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	}
 	a, lib, _, _ := libraryOf(t, files, order...)
 	for _, c := range []struct {
-		choice string
+		ticked []string
+		label  string
 		want   []string
 		count  string
 	}{
-		{allFiles, order, "5 files in"},
-		{hidePartial, []string{"M83 - Midnight City.flac", "M83 - Outro.flac"}, "2 of 5 files in"},
-		{onlyPartial, []string{"M83 - Wait (partial).flac", "M83 - Reunion (low quality).mp3", "M83 - Wait (partial) 2.flac"}, "3 of 5 files in"},
+		{[]string{takeComplete, takePartial, takeLowQuality}, "All files", order, "5 files in"},
+		{[]string{takeComplete}, "Complete", []string{"M83 - Midnight City.flac", "M83 - Outro.flac"}, "2 of 5 files in"},
+		{[]string{takePartial, takeLowQuality}, "Partial, Low quality", []string{"M83 - Wait (partial).flac", "M83 - Reunion (low quality).mp3", "M83 - Wait (partial) 2.flac"}, "3 of 5 files in"},
+		{[]string{takeLowQuality}, "Low quality", []string{"M83 - Reunion (low quality).mp3"}, "1 of 5 files in"},
 	} {
-		lib.takes.SetSelected(c.choice)
+		tick(lib, c.ticked...)
+		if got := lib.kinds.Selected; got != c.label {
+			t.Errorf("%q: the filter says %q, want %q", c.ticked, got, c.label)
+		}
 		if got := rowNames(lib); !slices.Equal(got, c.want) {
-			t.Errorf("%s: %q, want %q", c.choice, got, c.want)
+			t.Errorf("%q: %q, want %q", c.ticked, got, c.want)
 		}
 		if got := lib.count.Segments[0].(*widget.TextSegment).Text; !strings.HasPrefix(got, c.count) {
-			t.Errorf("%s: the count says %q", c.choice, got)
+			t.Errorf("%q: the count says %q", c.ticked, got)
 		}
 	}
 	// The filter and the search go together.
+	tick(lib, takePartial, takeLowQuality)
 	lib.search.SetText("wait")
 	if got := rowNames(lib); !slices.Equal(got, []string{"M83 - Wait (partial).flac", "M83 - Wait (partial) 2.flac"}) {
 		t.Errorf("the partial takes matching wait: %q", got)
 	}
 	lib.search.SetText("")
-	setCaption(lib.count, pluralFiles(3, 5, "/Users/listener/Music/Spytify"))
 	a.render()
-	snapshot(t, a, "library-partial-takes")
-	// Its choices, open.
-	test.Tap(lib.takes)
-	top := a.win.Canvas().Overlays().Top()
-	if top == nil || !contains(texts(top), hidePartial) {
-		t.Fatal("the filter shows no choices")
+	shown := texts(lib.list)
+	for _, want := range []string{"Wait", "Wait 2", "Reunion", takePartial, takeLowQuality} {
+		if !slices.Contains(shown, want) {
+			t.Errorf("the rows show %q, without %q", shown, want)
+		}
 	}
+	if contains(shown, "(partial)") || contains(shown, "(low quality)") {
+		t.Errorf("a title keeps its marker: %q", shown)
+	}
+	setCaption(lib.count, pluralFiles(3, 5, "/Users/listener/Music/Spytify"))
+	snapshot(t, a, "library-partial-takes")
+
+	// Its boxes, in a dropdown that stays open while they are ticked.
+	tick(lib, takeComplete, takePartial, takeLowQuality)
+	test.Tap(lib.kinds)
+	top := a.win.Canvas().Overlays().Top()
+	if top == nil || !contains(texts(top), takeLowQuality) {
+		t.Fatal("the filter shows no boxes")
+	}
+	test.Tap(lib.takes[takeComplete])
+	if a.win.Canvas().Overlays().Top() != top {
+		t.Error("the dropdown closed on the first box")
+	}
+	if got := lib.kinds.Selected; got != "Partial, Low quality" || len(lib.rows) != 3 {
+		t.Errorf("Complete unticked in the dropdown: the filter says %q, %d rows", got, len(lib.rows))
+	}
+	setCaption(lib.count, pluralFiles(3, 5, "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-filter")
 	a.win.Canvas().Overlays().Remove(top)
 
+	tick(lib)
+	if !lib.empty.Visible() || lib.hint.Text != "Tick a kind of file to show." || lib.kinds.Selected != "No files" {
+		t.Errorf("no box ticked: empty state shown %v, %q, the filter says %q", lib.empty.Visible(), lib.hint.Text, lib.kinds.Selected)
+	}
 	// Every file a partial take, the list hiding them says so.
 	for _, name := range []string{"M83 - Midnight City.flac", "M83 - Outro.flac"} {
 		if err := os.Remove(filepath.Join(lib.folder, name)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	lib.takes.SetSelected(hidePartial)
+	tick(lib, takeComplete)
 	lib.scan()
-	if !lib.empty.Visible() || lib.hint.Text != "Every file here is a partial take." {
+	if !lib.empty.Visible() || lib.hint.Text != "Every file here is a take cut short or in low quality." {
 		t.Errorf("no file left: empty state shown %v, %q", lib.empty.Visible(), lib.hint.Text)
 	}
 }
@@ -342,10 +379,10 @@ func TestTheTrashButtonMovesAFileToTheTrash(t *testing.T) {
 		if !ok {
 			t.Fatalf("no row for %s", title)
 		}
-		return row.row.Objects[2].(*fyne.Container).Objects[2].(*widget.Button)
+		return row.row.Objects[2].(*fyne.Container).Objects[3].(*widget.Button)
 	}
 
-	button := trashButton("Splendor (low quality)")
+	button := trashButton("Splendor")
 	test.MoveMouse(a.win.Canvas(), fyne.CurrentApp().Driver().AbsolutePositionForObject(button).AddXY(8, 8))
 	setCaption(lib.count, pluralFiles(3, 3, "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-trash")
@@ -377,7 +414,7 @@ func TestTheTrashButtonMovesAFileToTheTrash(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, order[1])); err != nil {
 		t.Fatal(err)
 	}
-	test.Tap(trashButton("Wait (partial)"))
+	test.Tap(trashButton("Wait"))
 	if top := a.win.Canvas().Overlays().Top(); top != nil {
 		t.Fatalf("a file gone already: %q", texts(top))
 	}
