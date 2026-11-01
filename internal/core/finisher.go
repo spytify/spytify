@@ -44,6 +44,9 @@ type finishJob struct {
 	rejected proto.SkipReason
 	// keep saves a held take after all, whatever part of it played.
 	keep bool
+	// suffix ends a kept take's title tag and file name: " (partial)" or
+	// " (low quality)".
+	suffix string
 	// cover is a held take's file cover, read while the file was there.
 	cover     []byte
 	coverMIME string
@@ -371,7 +374,12 @@ func (f *finisher) takeNumber(t *take) bool {
 // there takes a suffix, skips the take or is replaced, as
 // recorder.duplicates says.
 func (f *finisher) pickName(t *take) bool {
-	plan := naming.Build(namingTrack(t.tags, t.info), t.o)
+	// A kept take's suffix ends its file name, wherever the template puts
+	// the title, and its title tag.
+	nt := namingTrack(t.tags, t.info)
+	nt.Suffix = t.suffix
+	plan := naming.Build(nt, t.o)
+	t.tags.Title += t.suffix
 	root := t.v.Path("output.dir")
 	dir := filepath.Join(root, plan.Dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

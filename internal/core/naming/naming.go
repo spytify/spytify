@@ -37,6 +37,7 @@ type Track struct {
 	Year          int
 	Unknown       bool // no title: podcasts and untitled items go to the root
 	FallbackStamp string
+	Suffix        string // ends the name, whatever the template: " (partial)"
 }
 
 // Options are the output.* settings.
@@ -91,7 +92,13 @@ func Build(t Track, o Options) Plan {
 	} else {
 		name = expand(o.Template, t, o.ArtistSeparator)
 	}
-	return Plan{Dir: filepath.Join(dirs...), Base: component(name, o.ASCII, sep)}
+	base := component(name, o.ASCII, sep)
+	if t.Suffix != "" {
+		// Cut to the length limit, the name keeps its suffix whole.
+		suffix := spaces.ReplaceAllString(t.Suffix, sep)
+		base = truncateBytes(base, maxComponent-len(suffix)) + suffix
+	}
+	return Plan{Dir: filepath.Join(dirs...), Base: base}
 }
 
 // FileName is the final name for a plan: prefix, base, extension.
