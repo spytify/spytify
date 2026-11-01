@@ -180,9 +180,8 @@ type App struct {
 	// heard is the link goroutine's: the first sound.
 	heard bool
 
-	pending     sync.Mutex
-	queued      bool
-	levelQueued bool
+	renderQueue throttle
+	levelQueue  throttle
 	barKey      string
 	last        model.State
 }
@@ -464,19 +463,7 @@ func (a *App) scheduleRender() {
 	if a.opts.ManualRender {
 		return
 	}
-	a.pending.Lock()
-	if a.queued {
-		a.pending.Unlock()
-		return
-	}
-	a.queued = true
-	a.pending.Unlock()
-	time.AfterFunc(100*time.Millisecond, func() {
-		a.pending.Lock()
-		a.queued = false
-		a.pending.Unlock()
-		fyne.Do(a.render)
-	})
+	a.renderQueue.schedule(a.render)
 }
 
 func (a *App) render() {
@@ -616,19 +603,7 @@ func (a *App) scheduleLevel() {
 	if a.opts.ManualRender {
 		return
 	}
-	a.pending.Lock()
-	if a.levelQueued {
-		a.pending.Unlock()
-		return
-	}
-	a.levelQueued = true
-	a.pending.Unlock()
-	time.AfterFunc(100*time.Millisecond, func() {
-		a.pending.Lock()
-		a.levelQueued = false
-		a.pending.Unlock()
-		fyne.Do(a.renderLevel)
-	})
+	a.levelQueue.schedule(a.renderLevel)
 }
 
 func (a *App) renderLevel() {
