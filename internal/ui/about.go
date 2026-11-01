@@ -7,7 +7,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -33,10 +32,9 @@ func newAboutScreen(a *App) *aboutScreen {
 	tagline.Wrapping = fyne.TextWrapWord
 	source := widget.NewHyperlink("Source code on GitHub", nil)
 	source.OnTapped = func() { a.openURL(sourceURL) }
-	project := widget.NewButtonWithIcon("Project page", theme.HomeIcon(), func() { a.openURL(siteURL) })
-	donate := widget.NewButton("♥ Donate", func() { a.openURL(donateURL) })
-	donate.Importance = widget.HighImportance
-	updates := widget.NewButtonWithIcon("Check for updates", theme.DownloadIcon(), s.checkNow)
+	project := newIconButton("Project page", theme.HomeIcon(), func() { a.openURL(siteURL) })
+	donate := newLitButton("♥ Donate", nil, widget.HighImportance, func() { a.openURL(donateURL) })
+	updates := newIconButton("Check for updates", theme.DownloadIcon(), s.checkNow)
 	legal := widget.NewLabelWithStyle(disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	legal.Wrapping = fyne.TextWrapWord
 	legal.SizeName = theme.SizeNameCaptionText
@@ -45,7 +43,7 @@ func newAboutScreen(a *App) *aboutScreen {
 		tagline,
 		container.NewCenter(s.versions),
 		container.NewCenter(source),
-		container.NewCenter(container.NewHBox(project, updates, donate)),
+		container.NewCenter(container.NewHBox(project, updates, donate.lit)),
 		layout.NewSpacer(),
 		legal,
 	))))
@@ -71,13 +69,13 @@ func (s *aboutScreen) checkNow() {
 			case err != nil:
 				s.app.showError(fmt.Errorf("update check: %w", err))
 			case tag != "" && newer(tag, proto.Version):
-				dialog.ShowConfirm("Update available", "Spytify "+tag+" is out. Open the release page?", func(ok bool) {
+				ask(s.app.win, "Update available", "Spytify "+tag+" is out. Open the release page?", func(ok bool) {
 					if ok {
 						s.app.openURL(page)
 					}
-				}, s.app.win)
+				})
 			default:
-				dialog.ShowInformation("Up to date", "Spytify "+proto.Version+" is the latest version.", s.app.win)
+				inform(s.app.win, "Up to date", "Spytify "+proto.Version+" is the latest version.")
 			}
 		})
 	}()
@@ -97,17 +95,16 @@ func (a *App) maybeShowFirstRun(then func()) {
 	body := widget.NewLabel("Spytify records the audio the player sends to your speakers. " +
 		"Streaming services send compressed audio, so a FLAC or WAV file avoids a second lossy pass but adds no quality.\n\n" + disclaimer)
 	body.Wrapping = fyne.TextWrapWord
-	again := widget.NewCheck("Don't show this again", nil)
+	again := newCheck("Don't show this again")
 	again.SetChecked(true)
 	box := container.NewVBox(body)
-	var tracker *widget.Check
+	var tracker *check
 	if a.tel.Available() {
 		tracker = a.trackerCheck()
 		box.Add(tracker)
 	}
 	box.Add(again)
-	d := dialog.NewCustom("Before you record", "OK", box, a.win)
-	d.SetOnClosed(func() {
+	showDialog(a.win, "Before you record", box, "OK", "", fyne.NewSize(460, 300), func(bool) {
 		if again.Checked {
 			prefs.SetBool(firstRunKey, true)
 		}
@@ -117,6 +114,4 @@ func (a *App) maybeShowFirstRun(then func()) {
 		}
 		then()
 	})
-	d.Resize(fyne.NewSize(460, 300))
-	d.Show()
 }

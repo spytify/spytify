@@ -152,7 +152,7 @@ const staleTemp = 10 * time.Minute
 // folder when it stopped without cleaning up. A new run holds no take for
 // track.keep yet, so none of them can still be saved.
 func (c *Core) sweepTemp(now time.Time) {
-	dir := filepath.Join(c.store.Values().Path("output.dir"), ".spytify")
+	dir := filepath.Join(c.store.Values().Path(settings.OutputDir), ".spytify")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -220,7 +220,7 @@ func (c *Core) Handle(ctx context.Context, method string, params json.RawMessage
 		if err := decode(&p); err != nil {
 			return nil, err
 		}
-		opts := SessionOptions{SingleTrack: c.store.Values().Bool("recorder.single_track")}
+		opts := SessionOptions{SingleTrack: c.store.Values().Bool(settings.RecorderSingleTrack)}
 		if p.SingleTrack != nil {
 			opts.SingleTrack = *p.SingleTrack
 		}
@@ -337,12 +337,12 @@ func (c *Core) Info() proto.CoreInfoResult {
 		add("ffmpeg found", false, c.ffErr.Error())
 	} else {
 		add("ffmpeg found", true, c.ffmpeg.Version)
-		if preset, ok := encode.PresetFor(v.String("encode.format")); ok && preset.Encoder != "" && preset.Encoder != "flac" {
+		if preset, ok := encode.PresetFor(v.String(settings.EncodeFormat)); ok && preset.Encoder != "" && preset.Encoder != "flac" {
 			add("encoder "+preset.Encoder, c.ffmpeg.HasEncoder(preset.Encoder), "for encode.format="+preset.Format)
 		}
 	}
 	info.Checks = append(info.Checks, c.backends.Probe()...)
-	dir := v.Path("output.dir")
+	dir := v.Path(settings.OutputDir)
 	if err := outputWritable(dir); err != nil {
 		add(proto.CheckOutputWritable, false, err.Error())
 	} else {
@@ -352,7 +352,7 @@ func (c *Core) Info() proto.CoreInfoResult {
 		info.Warnings = append(info.Warnings, c.crashed)
 	}
 	info.Warnings = append(info.Warnings, "turn crossfade and gapless playback off in the player")
-	if v.Bool("player.mute_output") && runtime.GOOS == "windows" {
+	if v.Bool(settings.PlayerMuteOutput) && runtime.GOOS == "windows" {
 		info.Warnings = append(info.Warnings, "player.mute_output is not applied on Windows in the alpha")
 	}
 	return info
@@ -414,7 +414,7 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 	if c.ffErr != nil {
 		return "", proto.Errorf(proto.CodeFFmpegMissing, "%v", c.ffErr)
 	}
-	if err := outputWritable(c.store.Values().Path("output.dir")); err != nil {
+	if err := outputWritable(c.store.Values().Path(settings.OutputDir)); err != nil {
 		return "", proto.Errorf(proto.CodeOutputDir, "the output folder cannot be written to: %v", err)
 	}
 	if err := c.ensureTarget(); err != nil {
@@ -450,14 +450,14 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		mute:    adMuter(np),
 	}, opts)
 	restore := c.pinVolume(np)
-	if c.store.Values().Bool("player.mute_output") && runtime.GOOS == "windows" {
+	if c.store.Values().Bool(settings.PlayerMuteOutput) && runtime.GOOS == "windows" {
 		c.log.Infof("player.mute_output is not applied on Windows in the alpha; the player stays audible")
 	}
 
 	done := make(chan struct{})
 	c.mu.Lock()
 	c.sess, c.fin, c.np, c.done = s, fin, np, done
-	if d := c.store.Values().Duration("recorder.session_timer"); d > 0 {
+	if d := c.store.Values().Duration(settings.RecorderSessionTimer); d > 0 {
 		c.timer = time.AfterFunc(d, func() {
 			c.log.Infof("session timer of %s reached", d)
 			s.Stop(false)
@@ -509,7 +509,7 @@ func (c *Core) newFinisher() *finisher {
 	fin := newFinisher(c.store.Values, c.ffmpeg, c.emit, c.log)
 	fin.keep = c.keep
 	fin.advance = func(next int64) {
-		if _, err := c.SetSettings(map[string]any{"output.counter_next": next}); err != nil {
+		if _, err := c.SetSettings(map[string]any{settings.OutputCounterNext.String(): next}); err != nil {
 			c.log.Errorf("the counter could not move on to %d: %v", next, err)
 		}
 	}
@@ -540,7 +540,7 @@ func (c *Core) Keep(id string) error {
 		suffix = " (low quality)"
 	}
 	j.keep, j.partial, j.rejected = true, true, ""
-	j.info.Title += suffix
+	j.suffix = suffix
 	if c.fin != nil {
 		c.fin.enqueue(j)
 		return nil

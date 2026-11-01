@@ -12,6 +12,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -62,7 +63,7 @@ func holds(root, o fyne.CanvasObject) bool {
 // folded reports whether o is under a group's Advanced.
 func folded(s *settingsScreen, group string, o fyne.CanvasObject) bool {
 	acc := s.advanced[group]
-	return acc != nil && holds(acc.Items[0].Detail, o)
+	return acc != nil && holds(acc.detail, o)
 }
 
 // App comes first, with the player as its advanced part; every setting is
@@ -86,7 +87,7 @@ func TestSettingsAreLaidOutBySection(t *testing.T) {
 		}
 	}
 	for _, acc := range s.advanced {
-		if acc.Items[0].Open {
+		if acc.open {
 			t.Error("an Advanced part is open before anyone opened it")
 		}
 	}
@@ -158,7 +159,7 @@ func TestEveryNoteShowsUnderItsLabel(t *testing.T) {
 	}
 	snapshot(t, a, "settings-notes")
 	for _, acc := range s.advanced {
-		acc.Open(0)
+		acc.setOpen(true)
 	}
 	relayout(s.scroll)
 	drv := fyne.CurrentApp().Driver()
@@ -276,7 +277,7 @@ func TestPickingABitrateSendsItsNumber(t *testing.T) {
 // puts back what the user had opened.
 func TestSettingsSearch(t *testing.T) {
 	a, _, s := settingsApp(t)
-	s.advanced["Output"].Open(0)
+	s.advanced["Output"].setOpen(true)
 	s.search.SetText("bitrate")
 	a.render()
 	all := texts(s.sections)
@@ -285,10 +286,10 @@ func TestSettingsSearch(t *testing.T) {
 	}
 	s.search.SetText("")
 	a.render()
-	if !s.advanced["Output"].Items[0].Open {
+	if !s.advanced["Output"].open {
 		t.Error("the Advanced part the user opened closed after a search")
 	}
-	if s.advanced["Encoding"] != nil && s.advanced["Encoding"].Items[0].Open {
+	if s.advanced["Encoding"] != nil && s.advanced["Encoding"].open {
 		t.Error("an Advanced part a search opened stayed open")
 	}
 }
@@ -303,7 +304,7 @@ func TestTheTemplateShowsAnExample(t *testing.T) {
 	m.SetSettings(v)
 	a.render()
 	// By default the files go in artist and album folders.
-	if got, want := example(), "e.g. "+filepath.Join("Neon Harbor", "Harbor Lights (2024)", "Neon Harbor - Café Lumière.flac"); got != want {
+	if got, want := example(), "e.g. "+filepath.Join("Neon Harbor", "Harbor Lights", "Neon Harbor - Café Lumière.flac"); got != want {
 		t.Errorf("example %q, want %q", got, want)
 	}
 	v["output.underscores"] = true
@@ -312,7 +313,7 @@ func TestTheTemplateShowsAnExample(t *testing.T) {
 	m.SetSettings(v)
 	s.search.SetText("output")
 	a.render()
-	if got, want := example(), "e.g. "+filepath.Join("Neon_Harbor", "Harbor_Lights_(2024)", "001_Neon_Harbor_-_Cafe_Lumiere.flac"); got != want {
+	if got, want := example(), "e.g. "+filepath.Join("Neon_Harbor", "Harbor_Lights", "001_Neon_Harbor_-_Cafe_Lumiere.flac"); got != want {
 		t.Errorf("with underscores, the counter and no diacritics, example %q, want %q", got, want)
 	}
 	if all := texts(s.sections); !contains(all, "Underscores instead of spaces") {
@@ -360,7 +361,7 @@ func TestThePlayerSavesWithoutAButton(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	a, _, s := settingsApp(t)
-	s.advanced["App"].Open(0)
+	s.advanced["App"].setOpen(true)
 	s.layout()
 	if _, err := os.Stat(target.UserEnvPath()); err == nil {
 		t.Fatal("showing the player wrote the .env file")
@@ -514,7 +515,7 @@ func TestTheFolderPickerIsLargerAndCentred(t *testing.T) {
 	a.render()
 	var browse *widget.Button
 	for _, o := range s.fields["output.dir"].input.(*fyne.Container).Objects {
-		if b, ok := o.(*widget.Button); ok {
+		if b, ok := asButton(o); ok {
 			browse = b
 		}
 	}
@@ -540,4 +541,17 @@ func TestTheFolderPickerIsLargerAndCentred(t *testing.T) {
 		t.Errorf("the picker does not show the output folder: %v", texts(top))
 	}
 	snapshot(t, a, "folder-picker")
+}
+
+// A settings card and the advanced block in it are square, with no
+// rounded corners.
+func TestTheSettingsCardsAreSquare(t *testing.T) {
+	test.NewTempApp(t).Settings().SetTheme(spytifyTheme{mode: "light"})
+	for name, o := range map[string]fyne.CanvasObject{"card": newCard(widget.NewLabel("card")), "advanced block": newBlock(widget.NewLabel("block"))} {
+		test.NewTempWindow(t, o)
+		p := o.(*container.ThemeOverride).Content.(*panel)
+		if r := test.TempWidgetRenderer(t, p).(*panelRenderer).box.CornerRadius; r != 0 {
+			t.Errorf("the %s is rounded %v", name, r)
+		}
+	}
 }

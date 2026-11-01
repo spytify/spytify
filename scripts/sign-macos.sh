@@ -19,10 +19,15 @@ for f in spytifyd spytify-cli spytify-tap spytify-ui; do
   [ -f "$dir/$f" ] && sign "$dir/$f"
 done
 # The bundle's helpers first, then the bundle, which seals them and its
-# main executable.
+# main executable. ffmpeg reads and writes files, and gets none of the
+# app's entitlements.
 app="$dir/Spytify.app"
 for f in "$app"/Contents/MacOS/*; do
-  [ "$(basename "$f")" = spytify-ui ] || sign "$f"
+  case "$(basename "$f")" in
+    spytify-ui) ;;
+    ffmpeg) codesign --force --options runtime "$ts" --sign "$id" "$f" ;;
+    *) sign "$f" ;;
+  esac
 done
 sign "$app"
 codesign --verify --strict --deep "$app"

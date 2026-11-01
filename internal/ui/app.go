@@ -6,66 +6,27 @@ package ui
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"runtime"
 	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
-	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
-	"github.com/spytify/spytify/internal/service"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
-
-//go:embed assets/logo.png
-var logoPNG []byte
-
-// Logo is the app and tray icon.
-var Logo = fyne.NewStaticResource("logo.png", logoPNG)
-
-//go:embed assets/logo-wordmark.png
-var wordmarkPNG []byte
-
-// Wordmark is the logo with the name beside it, for the app bar and the About screen.
-var Wordmark = fyne.NewStaticResource("logo-wordmark.png", wordmarkPNG)
-
-//go:embed assets/open-in-new.svg
-var openInNewSVG []byte
-
-// openInNewIcon marks a button that opens a page in the browser: Material
-// Design's open_in_new, like Fyne's own icons, in the button's colour.
-var openInNewIcon = theme.NewThemedResource(fyne.NewStaticResource("open-in-new.svg", openInNewSVG))
-
-//go:embed assets/heart.png
-var heartPNG []byte
-
-// heartIcon is the app bar's way to Donate: v1's heart, from its icons, in
-// its pink in both themes.
-var heartIcon = fyne.NewStaticResource("heart.png", heartPNG)
-
-//go:embed assets/new-releases.png
-var newReleasesPNG []byte
-
-// newReleasesIcon marks a newer release: v1's badge, from its icons, in its
-// green with the mark cut out.
-var newReleasesIcon = fyne.NewStaticResource("new-releases.png", newReleasesPNG)
 
 // Options are what the UI needs from its environment.
 type Options struct {
@@ -88,10 +49,6 @@ type Options struct {
 	// Privacy are the privacy.* settings read at launch, used until the
 	// recorder answers.
 	Privacy map[string]any
-	// MinimizeToTray is app.minimize_to_tray read at launch: its tray is
-	// set up before the toolkit's loop runs, the only time Linux starts
-	// one.
-	MinimizeToTray bool
 	// SoftwareOpenGL says the window is drawn with Mesa's OpenGL, no
 	// graphics driver offering any (package opengl).
 	SoftwareOpenGL bool
@@ -122,16 +79,18 @@ type App struct {
 	tabs    *container.AppTabs
 	// tabsView is the tabs with the plain colour behind their bar.
 	tabsView *fyne.Container
-	center   *fyne.Container
-	offline  fyne.CanvasObject
-	player   *playerCard
+	// tabKeys is the tab bar's stop in the Tab order.
+	tabKeys *tabKeys
+	center  *fyne.Container
+	offline *container.Scroll
+	player  *playerCard
 
 	dot     *widget.Label
 	status  *widget.Label
 	output  *widget.RichText
-	update  *widget.Button
-	donate  *ttwidget.Button
-	action  *widget.Button
+	update  *button
+	donate  *tipButton
+	action  *litButton
 	banner  *widget.Label
 	bar     *fyne.Container
 	covers  *covers
@@ -144,13 +103,9 @@ type App struct {
 	replaced bool
 	// tray says the platform has a system tray (menu bar on macOS);
 	// noTrayHost, that this Linux desktop draws no tray icons
-	// (watchTrayHost); trayLate, that the tray was set up once the
-	// toolkit's loop ran, which Linux never shows (lateTrayShows);
-	// running, that the loop runs. quitApp quits, replaced by tests.
+	// (watchTrayHost). quitApp quits, replaced by tests.
 	tray       bool
 	noTrayHost bool
-	trayLate   bool
-	running    bool
 	quitApp    func()
 	// fyneStop is Fyne's stop hook, which ShowAndRun runs (see New).
 	fyneStop func()
@@ -158,6 +113,9 @@ type App struct {
 	// Record or Stop.
 	trayMenu   *fyne.Menu
 	trayAction *fyne.MenuItem
+	// notes is what the notifications sent while the window is hidden in
+	// the tray keep from one event to the next.
+	notes notices
 	// starting is set while spytifyd is being started; startErr is why
 	// the last start failed.
 	starting   bool
@@ -180,11 +138,13 @@ type App struct {
 	// heard is the link goroutine's: the first sound.
 	heard bool
 
-	pending     sync.Mutex
-	queued      bool
-	levelQueued bool
+	renderQueue throttle
+	levelQueue  throttle
 	barKey      string
 	last        model.State
+
+	// focusSeen is the control followFocus last saw focused.
+	focusSeen fyne.Focusable
 }
 
 // New builds the window; call ShowAndRun to start.
@@ -220,30 +180,28 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.status = widget.NewLabel("")
 	// Secondary, but readable in both themes, unlike a low-importance label.
 	a.output = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
-	a.update = widget.NewButtonWithIcon("", newReleasesIcon, nil)
+	a.update = newIconButton("", newReleasesIcon, nil)
 	// No fill: the badge's own green says it, as the heart's pink does.
 	a.update.Importance = widget.LowImportance
 	a.update.Hide()
-	a.donate = ttwidget.NewButtonWithIcon("", heartIcon, func() { a.openURL(donateURL) })
+	a.donate = newTipButton("", heartIcon, func() { a.openURL(donateURL) })
 	a.donate.Importance = widget.LowImportance
 	a.donate.SetToolTip("Donate")
-	a.action = widget.NewButtonWithIcon("Record", theme.MediaRecordIcon(), a.toggleRecording)
-	a.action.Importance = widget.HighImportance
+	a.action = newLitButton("Record", theme.MediaRecordIcon(), widget.HighImportance, a.toggleRecording)
 	// The wordmark: the logo with the name in its green.
 	mark := canvas.NewImageFromResource(Wordmark)
 	mark.FillMode = canvas.ImageFillContain
 	mark.SetMinSize(fyne.NewSize(26*622/204, 26))
 	brand := container.NewCenter(mark)
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
-	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.donate, a.action))
+	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.donate, a.action.lit))
 
 	a.banner = widget.NewLabel("")
 	a.banner.Wrapping = fyne.TextWrapWord
 	a.banner.Importance = widget.DangerImportance
 	a.banner.Hide()
 
-	start := widget.NewButtonWithIcon("Start the recorder", theme.MediaPlayIcon(), a.StartDaemon)
-	start.Importance = widget.HighImportance
+	start := newLitButton("Start the recorder", theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
 	a.player = newPlayerCard(a)
 	intro := widget.NewLabel("Spytify records through spytifyd, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set.")
 	intro.Wrapping = fyne.TextWrapWord
@@ -255,30 +213,41 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		heading("The recorder is not running"),
 		a.offlineErr,
 		intro,
-		container.NewHBox(start),
+		container.NewHBox(start.lit),
 		caption(opts.Socket),
 		widget.NewSeparator(),
 		newCard(sectionTitle("Player"), indent(a.player.box)),
 	)))
 	a.starting = opts.AutoStart
 
-	a.tabsView = withPlainTabBar(a.tabs)
+	a.tabKeys = newTabKeys(a.tabs)
+	a.tabsView = withPlainTabBar(a.tabs, a.tabKeys)
 	a.center = container.NewStack(a.tabsView)
 	// The window has no padding of its own, so the bars' plain colour goes
 	// to its edges; the page's grey is the window's background.
 	top := plain(container.New(layout.NewCustomPaddedLayout(pad, 0, pad, pad), container.NewVBox(container.NewPadded(a.bar), a.banner)))
-	body := container.NewBorder(top, nil, nil, nil, a.center)
+	body := inReadingOrder(top, nil, nil, nil, a.center)
 	a.win.SetPadded(false)
 	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
+	// With nothing focused, Escape comes to the window.
+	a.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
+		if e.Name == fyne.KeyEscape {
+			escape(a.win.Canvas())
+		}
+	})
 
 	if !opts.ManualRender {
 		onReopen(a.Reopen)
+		a.watchFocus()
 	}
 	_, a.tray = fa.(desktop.App)
 	if a.tray && !opts.ManualRender {
 		watchTrayHost(func(present bool) { fyne.Do(func() { a.setTrayHost(present) }) })
 	}
-	if a.tray && opts.MinimizeToTray {
+	// The toolkit starts a tray with its loop and never after, macOS's
+	// menu bar item included: the icon is there from launch, and
+	// Minimize to tray only says whether closing hides the window to it.
+	if a.tray {
 		a.setupTray()
 	}
 	a.quitApp = fa.Quit
@@ -293,8 +262,9 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	}
 	m.OnChange(a.scheduleRender)
 	m.OnLevel(a.scheduleLevel)
-	m.OnEvent(a.onEvent)
+	m.OnEvent(a.feedTracker)
 	m.OnEvent(a.recheck)
+	m.OnEvent(a.notify)
 	if !opts.ManualRender {
 		go a.clockAds()
 	}
@@ -315,7 +285,6 @@ func (a *App) ShowAndRun() {
 		a.tel.Breadcrumb("app", "launched", nil)
 		a.checkCrashes()
 	})
-	a.running = true
 	a.fa.Run()
 	// Every way out (this window, the tray's Quit, Cmd+Q, a signal) ends
 	// here.
@@ -371,74 +340,11 @@ func (a *App) quit() {
 		a.quitApp()
 		return
 	}
-	dialog.ShowConfirm("Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
+	ask(a.win, "Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
 		if ok {
 			a.quitApp()
 		}
-	}, a.win)
-}
-
-// closeWindow answers the window's close button: with Minimize to tray on
-// and a tray to go to, the window hides there and the recording goes on;
-// otherwise the app quits, which stops the recorder too.
-func (a *App) closeWindow() {
-	if a.hasTray() && a.last.Settings["app.minimize_to_tray"] == true {
-		a.hideToTray()
-		return
-	}
-	a.quit()
-}
-
-// hasTray says whether the tray icon shows, or would: the platform has a
-// tray and, on Linux, the desktop draws it and the toolkit started it.
-func (a *App) hasTray() bool { return a.tray && !a.noTrayHost && !a.trayLate }
-
-// trayNote is what Minimize to tray says under its label: why closing
-// quits even with it on.
-func (a *App) trayNote(s model.State) string {
-	switch {
-	case a.noTrayHost:
-		return noTrayNote
-	case a.trayLate && s.Settings["app.minimize_to_tray"] == true:
-		return lateTrayNote
-	}
-	return ""
-}
-
-// setTrayHost takes watchTrayHost's word: with a tray host, closing hides
-// to the tray, whose icon registers with it by itself; with none, closing
-// quits and Settings says why.
-func (a *App) setTrayHost(present bool) {
-	if a.noTrayHost == !present {
-		return
-	}
-	a.noTrayHost = !present
-	a.render()
-}
-
-// stopDaemon shuts spytifyd down as the app quits, unless it runs as a
-// login service (spytify-cli service install), which keeps it alive.
-func (a *App) stopDaemon() {
-	if daemonIsService() {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	_ = a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil)
-}
-
-// daemonIsService reports whether spytifyd is installed as a login service.
-func daemonIsService() bool {
-	daemon, err := link.FindDaemon()
-	if err != nil {
-		return false
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	p, err := service.For(runtime.GOOS, daemon, home, os.Getuid())
-	return err == nil && service.Installed(p)
+	})
 }
 
 // applyTheme switches to the Spytify theme in the given app.theme mode.
@@ -467,19 +373,7 @@ func (a *App) scheduleRender() {
 	if a.opts.ManualRender {
 		return
 	}
-	a.pending.Lock()
-	if a.queued {
-		a.pending.Unlock()
-		return
-	}
-	a.queued = true
-	a.pending.Unlock()
-	time.AfterFunc(100*time.Millisecond, func() {
-		a.pending.Lock()
-		a.queued = false
-		a.pending.Unlock()
-		fyne.Do(a.render)
-	})
+	a.renderQueue.schedule(a.render)
 }
 
 func (a *App) render() {
@@ -529,12 +423,6 @@ func (a *App) render() {
 		a.action.Enable()
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
 	}
-	// The tray icon comes with Minimize to tray; the toolkit cannot take
-	// it away, so turned off, it goes when Spytify restarts. On Linux,
-	// turned on, it comes then too: see setupTray.
-	if a.hasTray() && a.trayMenu == nil && s.Settings["app.minimize_to_tray"] == true {
-		a.setupTray()
-	}
 	a.syncTray()
 	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {
 		a.banner.SetText(s.LastError.Msg)
@@ -549,10 +437,10 @@ func (a *App) render() {
 	if connected {
 		a.replaceOtherBuild(s)
 	}
-	if mode, _ := s.Settings["app.theme"].(string); mode != "" && mode != a.themeMode {
+	if mode, _ := s.Settings[settings.AppTheme.String()].(string); mode != "" && mode != a.themeMode {
 		a.applyTheme(mode)
 	}
-	if dir, _ := s.Settings["output.dir"].(string); dir != "" && dir != a.outputDir {
+	if dir, _ := s.Settings[settings.OutputDir.String()].(string); dir != "" && dir != a.outputDir {
 		a.outputDir = dir
 		a.tel.SetOutputDir(settings.ExpandHome(dir))
 	}
@@ -561,7 +449,7 @@ func (a *App) render() {
 		a.tabs.Refresh()
 	}
 	if connected && !a.checked && !a.opts.NoUpdateCheck {
-		if v, ok := s.Settings["app.check_updates"].(bool); ok {
+		if v, ok := s.Settings[settings.AppCheckUpdates.String()].(bool); ok {
 			a.checked = true
 			if v {
 				go a.checkUpdate()
@@ -612,6 +500,10 @@ func (a *App) renderCenter(s model.State) {
 		a.center.Refresh()
 	}
 	a.screens[a.tabs.SelectedIndex()].render(s)
+	// The diagnostics' dialog shows over any tab: its checks follow too.
+	if logs := a.screens[tabLogs].(*logsScreen); logs.open && a.tabs.SelectedIndex() != tabLogs {
+		logs.renderChecks(s)
+	}
 }
 
 // scheduleLevel redraws the meter and the progress, at most every 100 ms.
@@ -619,19 +511,7 @@ func (a *App) scheduleLevel() {
 	if a.opts.ManualRender {
 		return
 	}
-	a.pending.Lock()
-	if a.levelQueued {
-		a.pending.Unlock()
-		return
-	}
-	a.levelQueued = true
-	a.pending.Unlock()
-	time.AfterFunc(100*time.Millisecond, func() {
-		a.pending.Lock()
-		a.levelQueued = false
-		a.pending.Unlock()
-		fyne.Do(a.renderLevel)
-	})
+	a.levelQueue.schedule(a.renderLevel)
 }
 
 func (a *App) renderLevel() {
@@ -688,16 +568,22 @@ func checkOK(checks []proto.Check, name string) bool {
 	return false
 }
 
-// failingChecks counts the failing checks but the player's, which the app
-// bar already shows.
+// failingChecks counts the checks that need attention.
 func failingChecks(checks []proto.Check) int {
 	n := 0
 	for _, c := range checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
 			n++
 		}
 	}
 	return n
+}
+
+// needsAttention says whether a check fails in a way the user must fix: not
+// the player's, which the app bar already shows, nor advice, which only
+// lowers quality.
+func needsAttention(c proto.Check) bool {
+	return !c.OK && !c.Advice && c.Name != "player running"
 }
 
 // checkFails says whether the check named name is there and fails: a
@@ -711,13 +597,13 @@ func checkFails(checks []proto.Check, name string) bool {
 	return false
 }
 
-func outputText(settings map[string]any) string {
-	format, _ := settings["encode.format"].(string)
+func outputText(values map[string]any) string {
+	format, _ := values[settings.EncodeFormat.String()].(string)
 	switch format {
 	case "":
 		return ""
 	case "mp3", "aac":
-		return fmt.Sprintf("%s %v kbps", upper(format), number(settings["encode.bitrate_kbps"]))
+		return fmt.Sprintf("%s %v kbps", upper(format), number(values[settings.EncodeBitrateKbps.String()]))
 	}
 	return upper(format)
 }
@@ -734,6 +620,8 @@ func upper(s string) string {
 
 func (a *App) toggleRecording() {
 	s := a.last
+	// A session stopped from here ends with no notification.
+	a.notes.stopAsked = s.Recording()
 	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -753,7 +641,7 @@ func (a *App) toggleRecording() {
 		if errors.As(err, &perr) && perr.Code == proto.CodeOutputDir {
 			// The output folder went since the checks ran: the
 			// diagnostics show them, run again.
-			fyne.Do(func() { a.showTab(tabLogs) })
+			fyne.Do(a.showDiagnostics)
 			a.refreshChecks()
 			return
 		}
@@ -785,7 +673,7 @@ func (a *App) recheck(ev proto.Event) {
 		if ev.Decode(&e) != nil {
 			return
 		}
-		if _, ok := e.Values["output.dir"]; !ok {
+		if _, ok := e.Values[settings.OutputDir.String()]; !ok {
 			return
 		}
 	default:
@@ -811,108 +699,4 @@ func (a *App) do(method string, params any, then func()) {
 
 func (a *App) showError(err error) {
 	showError(a.win, err)
-}
-
-// StartDaemon starts spytifyd and reports why when it stops at once.
-func (a *App) StartDaemon() {
-	fyne.Do(func() {
-		a.starting, a.startErr = true, ""
-		a.tel.Breadcrumb("app", "starting the recorder", nil)
-		if a.launch.started.IsZero() {
-			a.launch.started = time.Now()
-		}
-		a.render()
-	})
-	go func() {
-		err := a.link.StartDaemon()
-		if err == nil {
-			// Started: it answers in a moment, or this says it did not.
-			time.Sleep(startAnswerTimeout)
-			err = errors.New("spytifyd started but does not answer; see its log in Logs")
-			if a.m.Snapshot().Conn == model.Connected {
-				return
-			}
-		}
-		fyne.Do(func() { a.startFailed(err) })
-	}()
-}
-
-// startingText is what the app bar and Record say while spytifyd starts.
-const startingText = "Starting the recorder…"
-
-// startAnswerTimeout is how long a started spytifyd has to answer.
-const startAnswerTimeout = 15 * time.Second
-
-// startFailed shows the offline screen with why the recorder did not start.
-func (a *App) startFailed(err error) {
-	a.starting, a.startErr = false, err.Error()
-	a.launchFailed(err)
-	a.render()
-}
-
-func (a *App) setupTray() {
-	desk, ok := a.fa.(desktop.App)
-	if !ok {
-		return
-	}
-	// The toolkit starts Linux's tray with its loop: one set up later
-	// never shows, and closing quits until Spytify restarts.
-	a.trayLate = a.running && !lateTrayShows
-	desk.SetSystemTrayIcon(Logo)
-	// The tray's action is the app bar's, which render copies there:
-	// Record, Stop, or Stop now while the last track is being saved.
-	a.trayAction = fyne.NewMenuItem("Record", a.toggleRecording)
-	a.trayAction.Disabled = true
-	a.trayMenu = fyne.NewMenu("Spytify",
-		a.trayAction,
-		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Open window", a.showWindow),
-	)
-	desk.SetSystemTrayMenu(a.trayMenu)
-}
-
-// syncTray gives the tray the app bar's action, rebuilding the tray menu
-// only when it changes.
-func (a *App) syncTray() {
-	if a.trayMenu == nil {
-		return
-	}
-	label, off := a.action.Text, a.action.Disabled()
-	if a.trayAction.Label == label && a.trayAction.Disabled == off {
-		return
-	}
-	a.trayAction.Label, a.trayAction.Disabled = label, off
-	a.trayMenu.Refresh()
-}
-
-const trayNoticeKey = "tray-notice-seen"
-
-// hideToTray hides the window, and on macOS the Dock icon with it; the
-// session goes on. The first time, a notification says where the app is.
-func (a *App) hideToTray() {
-	a.win.Hide()
-	if a.opts.ManualRender {
-		return
-	}
-	showInDock(false)
-	prefs := a.fa.Preferences()
-	if !prefs.Bool(trayNoticeKey) {
-		prefs.SetBool(trayNoticeKey, true)
-		a.fa.SendNotification(fyne.NewNotification("Spytify is still running",
-			"It records from the menu bar. Quit it from there, or turn off Minimize to tray in Settings."))
-	}
-}
-
-func (a *App) showWindow() {
-	if !a.opts.ManualRender {
-		showInDock(true)
-	}
-	a.win.Show()
-	a.win.RequestFocus()
-}
-
-// Reopen brings the window back, hidden to the tray or not: Spytify was
-// opened again while it runs. It may be called from any goroutine.
-func (a *App) Reopen() {
-	fyne.Do(a.showWindow)
 }

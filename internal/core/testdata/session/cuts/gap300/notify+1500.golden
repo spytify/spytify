@@ -1,0 +1,34 @@
+# cuts/gap300/notify+1500
+# option EndOnStop
+# item 0 "Track A" (track, declared 3000ms): audio from 500ms to 3500ms, notified +1500ms, then 300ms of silence
+# item 1 "Track B" (track, declared 2500ms): audio from 3800ms to 6300ms, notified +1500ms, then 300ms of silence
+# item 2 "Track C" (track, declared 2000ms): audio from 6600ms to 8600ms, notified +1500ms, then 300ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+    2000ms  > player Playing pos=-1 (ring at 88200)
+    2000ms  > player TrackChanged "Track A" id=/com/fake/track/1 length=3000ms pos=0 (ring at 88200)
+    2000ms  log debug: cut for "Track A" at 1000 ms (kind 0, noticed at 2000 ms, window 1000..1000 ms)
+    2000ms  started t-001 "Track A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=-1000ms source=44100/2
+    2000ms  state recording
+    2000ms  take t-001 "Track A" start=44100(1000ms) length=132300(3000ms)
+    5300ms  > player TrackChanged "Track B" id=/com/fake/track/2 length=2500ms pos=0 (ring at 233730)
+    5300ms  log debug: cut for "Track B" at 3700 ms (kind 1, noticed at 5300 ms, window 3700..4300 ms)
+    5300ms  started t-002 "Track B" artist="Artist" album="Album" length=2500ms cut=boundary/silence offset=-1600ms source=44100/2
+    5300ms  take t-002 "Track B" start=163170(3700ms) length=110250(2500ms)
+    8100ms  > player TrackChanged "Track C" id=/com/fake/track/3 length=2000ms pos=0 (ring at 357210)
+    8100ms  log debug: cut for "Track C" at 6300 ms (kind 1, noticed at 8100 ms, window 5900..6601 ms)
+    8100ms  started t-003 "Track C" artist="Artist" album="Album" length=2000ms cut=boundary/silence offset=-1800ms source=44100/2
+    8100ms  take t-003 "Track C" start=277829(6299.98ms) length=88200(2000ms)
+    8900ms  > player Stopped pos=-1 (ring at 392490)
+    8900ms  state waiting
+    8900ms  state stopping
+    8900ms  state idle
+    8900ms  take none
+--- jobs
+job t-001 "Track A" played=119070(2700ms) length=132300(3000ms) wav=119070 crc=e90807d6
+job t-002 "Track B" played=114659(2599.98ms) length=110250(2500ms) wav=114659 crc=3872ba60
+job t-003 "Track C" played=114661(2600.02ms) length=88200(2000ms) wav=114661 crc=1a212e0a
+--- end: idle, 0 skipped, 0 ads, 0 overruns

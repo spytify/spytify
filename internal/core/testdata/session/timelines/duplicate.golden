@@ -1,0 +1,28 @@
+# timelines/duplicate
+# option EndOnStop
+# item 0 "Hollow Moon" (track, declared 5000ms): audio from 500ms to 5500ms, then 800ms of silence
+# item 1 "Hollow Moon" (track, declared 5000ms): audio from 6300ms to 11300ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Hollow Moon" id=/com/fake/track/1 length=5000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Hollow Moon" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Hollow Moon" artist="Copper Lanterns" album="Night Shift" length=5000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Hollow Moon" start=22059(500.2ms) length=220500(5000ms)
+    6300ms  > player TrackChanged "Hollow Moon" id=/com/fake/track/2 length=5000ms pos=0 (ring at 277830)
+    6300ms  log debug: cut for "Hollow Moon" at 5500 ms (kind 1, noticed at 6300 ms, window 5200..5801 ms)
+    6300ms  started t-002 "Hollow Moon" artist="Copper Lanterns" album="Night Shift" length=5000ms cut=boundary/silence offset=-800ms source=44100/2 cover
+    6300ms  skipped t-002 duplicate
+    6300ms  take t-002 "Hollow Moon" start=242547(5499.93ms) length=220500(5000ms) no-file reason=duplicate
+   12300ms  > player Stopped pos=-1 (ring at 542430)
+   12300ms  state waiting
+   12300ms  state stopping
+   12300ms  state idle
+   12300ms  take none
+--- jobs
+job t-001 "Hollow Moon" played=220488(4999.73ms) length=220500(5000ms) wav=220488 crc=148e495f cover=cover-0.jpg
+--- end: idle, 1 skipped, 0 ads, 0 overruns

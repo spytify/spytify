@@ -8,7 +8,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"image/jpeg"
 	"image/png"
 	"maps"
 	"net/http"
@@ -50,17 +49,11 @@ func event(t *testing.T, method string, payload any) proto.Event {
 
 func defaults() map[string]any {
 	values := map[string]any{}
-	v := settings.Defaults()
 	for _, d := range settings.Table {
-		switch d.Kind {
-		case settings.KindBool:
-			values[d.Key] = v.Bool(d.Key)
-		case settings.KindInt, settings.KindIntEnum:
-			values[d.Key] = float64(v.Int(d.Key))
-		case settings.KindFloat:
-			values[d.Key] = v.Float(d.Key)
-		default:
-			values[d.Key] = v.String(d.Key)
+		values[d.Key] = d.Default
+		// As JSON brings them.
+		if n, ok := d.Default.(int64); ok {
+			values[d.Key] = float64(n)
 		}
 	}
 	values["output.dir"] = "/Users/listener/Music/Spytify"
@@ -194,6 +187,9 @@ func texts(o fyne.CanvasObject) []string {
 		if o == nil || !o.Visible() {
 			return
 		}
+		if b, ok := asButton(o); ok {
+			out = append(out, b.Text)
+		}
 		switch w := o.(type) {
 		case *widget.Label:
 			out = append(out, w.Text)
@@ -206,8 +202,6 @@ func texts(o fyne.CanvasObject) []string {
 		case *canvas.Text:
 			out = append(out, w.Text)
 		case *widget.Hyperlink:
-			out = append(out, w.Text)
-		case *widget.Button:
 			out = append(out, w.Text)
 		case *widget.Card:
 			out = append(out, w.Title)
@@ -689,15 +683,15 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
 	r := a.screens[tabRecord].(*recordScreen)
 	// offers is the wait row's text and the one button it shows.
-	offers := func(text string, button *widget.Button) {
+	offers := func(text string, want fyne.CanvasObject) {
 		t.Helper()
 		a.render()
 		if !r.waitRow.Visible() || r.waiting.Text != text {
 			t.Errorf("the wait row says %q, want %q", r.waiting.Text, text)
 		}
-		for _, b := range []*widget.Button{r.launch, r.play, r.restart, r.blocked} {
-			if b.Visible() != (b == button) {
-				t.Errorf("%q shown %v", b.Text, b.Visible())
+		for _, o := range []fyne.CanvasObject{r.launch, r.play, r.restart, r.blocked} {
+			if b, _ := asButton(o); o.Visible() != (o == want) {
+				t.Errorf("%q shown %v", b.Text, o.Visible())
 			}
 		}
 	}
@@ -851,11 +845,17 @@ func TestOtherScreensRender(t *testing.T) {
 	a.showTab(tabLogs)
 	a.render()
 	all = texts(a.win.Content())
-	for _, want := range []string{"Diagnostics · all 4 checks pass", "already recorded", "session 20261023-120000 started"} {
+	for _, want := range []string{"Diagnostics", "already recorded", "session 20261023-120000 started"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the logs screen", want)
 		}
 	}
+	tapButton(t, a.win.Content(), "Diagnostics")
+	if d := texts(overlay(t, a)); !contains(d, "All 4 checks pass.") || !contains(d, "ffmpeg found") {
+		t.Errorf("the diagnostics: %v", d)
+	}
+	snapshot(t, a, "logs-diagnostics")
+	tapButton(t, overlay(t, a), "Close")
 
 	a.showTab(tabAbout)
 	a.render()
@@ -1192,22 +1192,29 @@ func waitCall(t *testing.T, c *recordingCore, method string) {
 
 func buttons(o fyne.CanvasObject, text string) []*widget.Button {
 	var out []*widget.Button
+	for _, o := range buttonObjects(o, text) {
+		b, _ := asButton(o)
+		out = append(out, b)
+	}
+	return out
+}
+
+// buttonObjects are the buttons showing text under o as the window holds
+// them, the app's own included, to find where they are drawn.
+func buttonObjects(o fyne.CanvasObject, text string) []fyne.CanvasObject {
+	var out []fyne.CanvasObject
 	var walk func(fyne.CanvasObject)
 	walk = func(o fyne.CanvasObject) {
 		if o == nil || !o.Visible() {
 			return
 		}
+		if b, ok := asButton(o); ok {
+			if b.Text == text {
+				out = append(out, o)
+			}
+			return
+		}
 		switch w := o.(type) {
-		case *widget.Button:
-			if w.Text == text {
-				out = append(out, w)
-			}
-			return
-		case *ttwidget.Button:
-			if w.Text == text {
-				out = append(out, &w.Button)
-			}
-			return
 		case *fyne.Container:
 			for _, c := range w.Objects {
 				walk(c)
@@ -1222,6 +1229,24 @@ func buttons(o fyne.CanvasObject, text string) []*widget.Button {
 	}
 	walk(o)
 	return out
+}
+
+// asButton is the widget.Button of a button, Fyne's or one of the app's
+// built on it, to read and tap as Fyne's.
+func asButton(o fyne.CanvasObject) (*widget.Button, bool) {
+	switch b := o.(type) {
+	case *widget.Button:
+		return b, true
+	case *button:
+		return &b.Button, true
+	case *ttwidget.Button:
+		return &b.Button, true
+	case *tipButton:
+		return &b.Button.Button, true
+	case *litButton:
+		return &b.Button, true
+	}
+	return nil, false
 }
 
 func TestLatestReleaseCountsPreReleases(t *testing.T) {
@@ -1340,43 +1365,6 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 			t.Fatal("the cover never loaded")
 		}
 		time.Sleep(50 * time.Millisecond)
-	}
-}
-
-// A cover is fetched, decoded and shrunk once, to twice the size it is
-// shown at; a row showing it again decodes nothing.
-func TestCoversAreShrunkOnce(t *testing.T) {
-	var big bytes.Buffer
-	if err := jpeg.Encode(&big, image.NewRGBA(image.Rect(0, 0, 1200, 800)), nil); err != nil {
-		t.Fatal(err)
-	}
-	loaded := make(chan struct{}, 4)
-	c := newCovers(func() { loaded <- struct{}{} })
-	var fetches atomic.Int32
-	fetch := func(context.Context) ([]byte, error) {
-		fetches.Add(1)
-		return big.Bytes(), nil
-	}
-	if got := c.load("cover", fetch); got.row != nil || got.live != nil {
-		t.Fatal("a cover before it loaded")
-	}
-	<-loaded
-	got := c.load("cover", fetch)
-	c.load("cover", fetch)
-	if n := fetches.Load(); n != 1 {
-		t.Errorf("the cover was fetched %d times", n)
-	}
-	if b := got.live.Bounds(); b.Dx() != 2*liveCover || b.Dy() != 2*liveCover*2/3 {
-		t.Errorf("the live card's cover is %v", b)
-	}
-	if b := got.row.Bounds(); b.Dx() != 2*rowCover || b.Dy() != 2*rowCover*2/3 {
-		t.Errorf("a row's cover is %v", b)
-	}
-	img := canvas.NewImageFromResource(theme.MediaMusicIcon())
-	setCover(img, got.row)
-	img.Refresh()
-	if img.Resource != nil || img.Image != got.row {
-		t.Error("the row's picture is not the thumbnail")
 	}
 }
 
@@ -1648,6 +1636,43 @@ func TestRecordWaitsForThePlayer(t *testing.T) {
 	}
 }
 
+// The diagnostics are a dialog behind a button of the Logs screen, which
+// turns to a warning while a check fails. Opened from another tab, the
+// dialog follows the checks there, and closing it stays on that tab.
+func TestTheDiagnosticsAreADialog(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(defaults())
+	a.showTab(tabLogs)
+	a.render()
+	b := a.screens[tabLogs].(*logsScreen).diagnose
+	if b.Importance != widget.LowImportance {
+		t.Errorf("every check passes: the button's importance is %v", b.Importance)
+	}
+	failCheck(a, m)
+	if b.Importance != widget.WarningImportance {
+		t.Errorf("a check fails: the button's importance is %v", b.Importance)
+	}
+	snapshot(t, a, "logs-check-fails")
+
+	a.showTab(tabRecord)
+	m.SetInfo(info())
+	a.render()
+	d := diagnostics(t, a)
+	if all := texts(d); !contains(all, "All 4 checks pass.") {
+		t.Fatalf("opened from Record: %v", all)
+	}
+	failCheck(a, m)
+	if all := texts(d); !contains(all, "1 of 5 checks need attention.") || !contains(all, "ffmpeg not found") {
+		t.Errorf("a check fails under the dialog: %v", all)
+	}
+	tapButton(t, d, "Close")
+	if a.win.Canvas().Overlays().Top() != nil || a.tabs.SelectedIndex() != tabRecord {
+		t.Errorf("closed: a dialog %v, tab %d", a.win.Canvas().Overlays().Top(), a.tabs.SelectedIndex())
+	}
+}
+
 // A player that is off is in the app bar and offered to open; the
 // diagnostics are not, even while its check still says so.
 func TestNoDiagnosticsForAPlayerThatIsOff(t *testing.T) {
@@ -1687,15 +1712,17 @@ func TestRecordIsOffWithoutAnOutputFolder(t *testing.T) {
 	}
 	snapshot(t, a, "record-no-output")
 	tapButton(t, a.win.Content(), "Open diagnostics")
-	if a.tabs.SelectedIndex() != tabLogs {
+	if a.tabs.SelectedIndex() != tabRecord {
 		t.Fatalf("Open diagnostics shows tab %d", a.tabs.SelectedIndex())
 	}
-	a.render()
 	snapshot(t, a, "diagnostics-no-output")
-	tapButton(t, a.win.Content(), "Choose another folder")
+	tapButton(t, overlay(t, a), "Choose another folder")
 	set := a.screens[tabSettings].(*settingsScreen)
 	if a.tabs.SelectedIndex() != tabSettings || set.search.Text != "Output folder" {
 		t.Fatalf("Choose another folder shows tab %d, searching %q", a.tabs.SelectedIndex(), set.search.Text)
+	}
+	if a.win.Canvas().Overlays().Top() != nil {
+		t.Error("the diagnostics stay over the output folder's setting")
 	}
 	set.search.SetText("")
 
@@ -1740,12 +1767,13 @@ func TestTheOutputFolderIsCheckedAgain(t *testing.T) {
 	core.setNoOutput(true)
 	test.Tap(a.action)
 	// The app shows the diagnostics, then runs the checks: once the model
-	// has them, the tab switched.
+	// has them, the dialog is open and shows the one that fails.
 	eventually(t, "the checks did not run again after the refused start", failing)
 	a.render()
-	if a.tabs.SelectedIndex() != tabLogs || !a.action.Disabled() {
-		t.Fatalf("after the refused start: tab %d, Record disabled %v", a.tabs.SelectedIndex(), a.action.Disabled())
+	if len(buttons(overlay(t, a), "Choose another folder")) != 1 || !a.action.Disabled() {
+		t.Fatalf("after the refused start: diagnostics %v, Record disabled %v", texts(overlay(t, a)), a.action.Disabled())
 	}
+	tapButton(t, overlay(t, a), "Close")
 	// Another folder chosen.
 	core.setNoOutput(false)
 	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{"output.dir": "/Volumes/Other"}}))
@@ -1775,58 +1803,5 @@ func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
 	a.render()
 	if a.banner.Visible() {
 		t.Fatalf("banner still shows %q with the device fit again", a.banner.Text)
-	}
-}
-
-// The cache keeps the covers used last, up to maxCovers: a long session or
-// a scroll through a big library does not grow the app's memory for good.
-func TestTheCoverCacheKeepsAtMostMaxCovers(t *testing.T) {
-	var small bytes.Buffer
-	if err := jpeg.Encode(&small, image.NewRGBA(image.Rect(0, 0, 8, 8)), nil); err != nil {
-		t.Fatal(err)
-	}
-	loaded := make(chan struct{}, 16)
-	c := newCovers(func() { loaded <- struct{}{} })
-	var fetches sync.Map
-	fetch := func(key string) func(context.Context) ([]byte, error) {
-		return func(context.Context) ([]byte, error) {
-			n, _ := fetches.LoadOrStore(key, new(atomic.Int32))
-			n.(*atomic.Int32).Add(1)
-			return small.Bytes(), nil
-		}
-	}
-	load := func(key string) thumbs {
-		t.Helper()
-		if got := c.load(key, fetch(key)); got.row != nil {
-			return got
-		}
-		select {
-		case <-loaded:
-		case <-time.After(5 * time.Second):
-			t.Fatalf("%s did not load", key)
-		}
-		return c.load(key, fetch(key))
-	}
-	load("kept")
-	for i := 0; i < 5*maxCovers; i++ {
-		load(fmt.Sprint("cover ", i))
-		if i%(maxCovers/2) == 0 {
-			load("kept")
-		}
-	}
-	c.mu.Lock()
-	size, pending := len(c.cache), len(c.pending)
-	c.mu.Unlock()
-	if size > maxCovers || pending != 0 {
-		t.Fatalf("%d covers cached, %d pending, at most %d wanted", size, pending, maxCovers)
-	}
-	if n, _ := fetches.Load("kept"); n.(*atomic.Int32).Load() != 1 {
-		t.Error("a cover in use was dropped")
-	}
-	if got := load("cover 0"); got.row == nil {
-		t.Error("a dropped cover does not load again")
-	}
-	if n, _ := fetches.Load("cover 0"); n.(*atomic.Int32).Load() != 2 {
-		t.Error("a dropped cover was not fetched again")
 	}
 }

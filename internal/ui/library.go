@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -18,7 +21,6 @@ import (
 
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
-	"github.com/spytify/spytify/internal/tag"
 	"github.com/spytify/spytify/internal/ui/model"
 )
 
@@ -30,8 +32,9 @@ type libraryFile struct {
 }
 
 // libraryScreen lists every audio file in the output folder, newest first,
-// with a search box. The SQLite index of the plan replaces the folder scan
-// when bulk re-tagging lands.
+// by name or by album, with a search box and a filter of the partial takes.
+// The SQLite index of the plan replaces the folder scan when bulk re-tagging
+// lands.
 type libraryScreen struct {
 	app    *App
 	root   fyne.CanvasObject
@@ -42,23 +45,55 @@ type libraryScreen struct {
 	count  *widget.RichText
 	empty  fyne.CanvasObject
 	hint   *widget.Label
+	takes  map[string]*widget.Check // the filter's box for each kind of file
+	kinds  *checkSelect             // the filter: those boxes, in a dropdown
 
 	folder string
 	all    []libraryFile
 	shown  []libraryFile
+	// rows is the list's: the files shown, under their albums' headings in
+	// the Album view. unread is the keys of the files there whose album only
+	// their tags can tell, not read yet.
+	rows   []libraryRow
+	unread []string
 
 	covers *covers
 	tagged *tagCache
 	ffOnce sync.Once
 	ff     *encode.FFmpeg
+	// redraw is set while a redraw for covers or tags that came in waits
+	// for the toolkit's goroutine: those that come in meanwhile join it.
+	redraw atomic.Bool
 }
+
+// libraryRow is a row of the list: a file, or the heading of an album.
+type libraryRow struct {
+	file    libraryFile
+	heading string // the album's name, on a heading's row
+	note    string // the album's artist and how many files it has
+}
+
+// The Album sort, the kinds of file the filter ticks, and the heading of
+// the files with no album.
+const (
+	byAlbum        = "Album"
+	takeComplete   = "Complete"
+	takePartial    = "Partial"
+	takeLowQuality = "Low quality"
+	noAlbum        = "No album"
+)
+
+var takeKinds = []string{takeComplete, takePartial, takeLowQuality}
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
 	loaded := func() {
 		// Tests draw by hand: see Options.ManualRender.
-		if !a.opts.ManualRender {
-			fyne.Do(l.list.Refresh)
+		if !a.opts.ManualRender && l.redraw.CompareAndSwap(false, true) {
+			fyne.Do(func() {
+				l.redraw.Store(false)
+				l.loaded()
+			})
 		}
 	}
 	l.covers = newCovers(loaded)
@@ -66,35 +101,76 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.search = widget.NewEntry()
 	l.search.SetPlaceHolder("Search artist, title or album")
 	l.search.OnChanged = func(string) { l.filter() }
-	l.sortBy = widget.NewSelect([]string{"Newest", "Name"}, func(string) { l.filter() })
-	refresh := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() {
+	l.sortBy = widget.NewSelect([]string{"Newest", "Name", byAlbum}, func(string) { l.filter() })
+	// Keep anyway saves a take cut short or in low quality: the filter hides
+	// those files, or shows them alone to clean them up, a box per kind of
+	// file in its dropdown. They start ticked without their callback, which
+	// needs the list: the sort's, below, draws the list first.
+	l.takes = map[string]*widget.Check{}
+	boxes := container.NewVBox()
+	for _, kind := range takeKinds {
+		box := newMenuBox(kind, func(bool) { l.filter() })
+		box.Checked = true
+		l.takes[kind] = &box.Check
+		boxes.Add(box)
+	}
+	l.kinds = newCheckSelect(boxes)
+	l.kinds.Selected = l.takesLabel()
+	// A select is as wide as its placeholder, which a choice made never
+	// shows: the longest label fits.
+	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality
+	rescan := newIconButton("", theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
 	})
+	// What follows the sort: the filter, then the rescan.
+	refresh := container.NewHBox(l.kinds, rescan)
 	l.count = caption("")
 	l.hint = widget.NewLabel("")
 	l.empty = emptyState("No recordings yet", l.hint)
 	l.list = widget.NewList(
-		func() int { return len(l.shown) },
+		func() int { return len(l.rows) },
 		func() fyne.CanvasObject {
-			// The title and the artists, as the player lists a track.
-			return trackRow(2, container.NewHBox(
-				&widget.Button{Icon: theme.SearchIcon(), Importance: widget.LowImportance},
-				&widget.Button{Icon: theme.MediaPlayIcon(), Importance: widget.LowImportance}))
+			// The title and the artists, as the player lists a track; or in
+			// the Album view, an album's heading. A take Keep anyway saved
+			// says which in a chip, as the Record screen's rows say theirs.
+			chip := caption("")
+			chip.Segments[0].(*widget.TextSegment).Style.ColorName = colorSkipped
+			reveal, play := newIconButton("", theme.SearchIcon(), nil), newIconButton("", theme.MediaPlayIcon(), nil)
+			reveal.Importance, play.Importance = widget.LowImportance, widget.LowImportance
+			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(chip), reveal, play)), albumHeading())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
-			if id >= len(l.shown) {
+			if id >= len(l.rows) {
 				return
 			}
-			f := l.shown[id]
-			box := o.(*fyne.Container)
+			r := l.rows[id]
+			stack := o.(*fyne.Container)
+			box, heading := stack.Objects[0].(*fyne.Container), stack.Objects[1].(*fyne.Container)
+			show(box, r.heading == "")
+			show(heading, r.heading != "")
+			if r.heading != "" {
+				setAlbumHeading(heading, r.heading, r.note)
+				return
+			}
+			f := r.file
 			// Border layout: center first, then the leading and trailing parts.
-			buttons := box.Objects[2].(*fyne.Container)
+			after := box.Objects[2].(*fyne.Container)
 			title, artist := l.tags(f)
+			kind, chipBox := takeKind(f.rel), after.Objects[0].(*fyne.Container)
+			show(chipBox, kind != takeComplete)
+			if kind != takeComplete {
+				title = takeMarker.ReplaceAllString(title, "")
+				chip := chipBox.Objects[0].(*widget.RichText)
+				if seg := chip.Segments[0].(*widget.TextSegment); seg.Text != kind {
+					seg.Text = kind
+					chip.Refresh()
+				}
+			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
-			buttons.Objects[0].(*widget.Button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
-			buttons.Objects[1].(*widget.Button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
+			after.Objects[1].(*button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
+			after.Objects[2].(*button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
 			box.Refresh()
 		},
 	)
@@ -104,7 +180,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.sortBy.SetSelected("Newest")
 	// The search and the sort are white fields on the page, as in Settings.
 	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search), cardTheme{input: colorCard})
-	l.root = container.NewBorder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty))
+	l.root = inReadingOrder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty))
 	return l
 }
 
@@ -145,87 +221,10 @@ func (f libraryFile) key() string {
 	return fmt.Sprintf("%s\x00%d\x00%d", f.path, f.size, f.modTime.UnixNano())
 }
 
-// tags is a file's title and artists, as its tags say once they are read,
-// or for WAV, which has no tags, the .json beside it. Until then, and for a
-// file without them, they are its name's, "Artist - Title" as the naming
-// template writes it by default.
-func (l *libraryScreen) tags(f libraryFile) (title, artist string) {
-	path := f.path
-	if t := l.tagged.get(f.key(), func(ctx context.Context) trackTags { return l.readTags(ctx, path) }); t.title != "" {
-		return t.title, t.artist
-	}
-	name := strings.TrimSuffix(filepath.Base(f.rel), filepath.Ext(f.rel))
-	if artist, title, ok := tag.SplitArtistTitle(name); ok {
-		return title, artist
-	}
-	return name, ""
-}
-
-func (l *libraryScreen) readTags(ctx context.Context, path string) trackTags {
-	if strings.EqualFold(filepath.Ext(path), ".wav") {
-		var side tag.Track
-		if b, err := os.ReadFile(path + ".json"); err == nil && json.Unmarshal(b, &side) == nil {
-			return trackTags{side.Title, strings.Join(side.Performers, ", ")}
-		}
-		return trackTags{}
-	}
-	ff := l.ffmpeg()
-	if ff == nil {
-		return trackTags{}
-	}
-	tags, err := ff.Tags(ctx, path)
-	if err != nil {
-		return trackTags{}
-	}
-	return trackTags{tags["title"], tags["artist"]}
-}
-
-// trackTags is a file's title and artists; none for a file without tags.
-type trackTags struct{ title, artist string }
-
-// tagCache reads each file's tags once, off the toolkit's goroutine and two
-// at a time: a library holds thousands of files, and only the rows in view
-// ask for theirs.
-type tagCache struct {
-	mu      sync.Mutex
-	read    map[string]trackTags
-	pending map[string]bool
-	loaded  func()
-	slots   chan struct{}
-}
-
-// get returns the tags read under key, or starts read and returns none until
-// it is done; loaded runs then, so the screen can draw them.
-func (c *tagCache) get(key string, read func(context.Context) trackTags) trackTags {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if t, ok := c.read[key]; ok {
-		return t
-	}
-	if !c.pending[key] {
-		c.pending[key] = true
-		go func() {
-			c.slots <- struct{}{}
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			t := read(ctx)
-			cancel()
-			<-c.slots
-			c.mu.Lock()
-			delete(c.pending, key)
-			c.read[key] = t
-			c.mu.Unlock()
-			if c.loaded != nil {
-				c.loaded()
-			}
-		}()
-	}
-	return trackTags{}
-}
-
 func (l *libraryScreen) content() fyne.CanvasObject { return l.root }
 
 func (l *libraryScreen) render(s model.State) {
-	dir, _ := s.Settings["output.dir"].(string)
+	dir, _ := s.Settings[settings.OutputDir.String()].(string)
 	dir = settings.ExpandHome(dir)
 	if dir != l.folder {
 		l.folder = dir
@@ -281,21 +280,50 @@ func (l *libraryScreen) filter() {
 	q := strings.ToLower(strings.TrimSpace(l.search.Text))
 	var shown []libraryFile
 	for _, f := range l.all {
-		if q == "" || strings.Contains(strings.ToLower(f.rel), q) {
+		if (q == "" || strings.Contains(strings.ToLower(f.rel), q)) && l.kept(f) {
 			shown = append(shown, f)
 		}
 	}
-	if l.sortBy.Selected == "Name" {
+	// The Album view keeps this order within each album.
+	if l.sortBy.Selected == "Name" || l.sortBy.Selected == byAlbum {
 		sort.Slice(shown, func(i, j int) bool { return strings.ToLower(shown[i].rel) < strings.ToLower(shown[j].rel) })
 	} else {
 		sort.Slice(shown, func(i, j int) bool { return shown[i].modTime.After(shown[j].modTime) })
 	}
-	l.shown = shown
+	rows := make([]libraryRow, 0, len(shown))
+	var unread []string
+	if l.sortBy.Selected == byAlbum {
+		rows, unread = l.albums(shown)
+		shown = shown[:0]
+		for _, r := range rows {
+			if r.heading == "" {
+				shown = append(shown, r.file)
+			}
+		}
+	} else {
+		for _, f := range shown {
+			rows = append(rows, libraryRow{file: f})
+		}
+	}
+	l.shown, l.rows, l.unread = shown, rows, unread
+	if label := l.takesLabel(); l.kinds.Selected != label {
+		l.kinds.Selected = label
+		l.kinds.Refresh()
+	}
 	setCaption(l.count, pluralFiles(len(shown), len(l.all), l.folder))
 	l.card.Refresh()
 	switch {
 	case len(l.all) == 0:
 		l.hint.SetText("Recorded tracks land in " + l.folder + ".")
+		l.empty.Show()
+	case len(shown) == 0 && q == "" && !slices.ContainsFunc(takeKinds, func(k string) bool { return l.takes[k].Checked }):
+		l.hint.SetText("Tick a kind of file to show.")
+		l.empty.Show()
+	case len(shown) == 0 && q == "" && !l.takes[takeComplete].Checked:
+		l.hint.SetText("None yet: Keep anyway saves a take cut short or in low quality.")
+		l.empty.Show()
+	case len(shown) == 0 && q == "":
+		l.hint.SetText("Every file here is a take cut short or in low quality.")
 		l.empty.Show()
 	case len(shown) == 0:
 		l.hint.SetText("Nothing matches \"" + l.search.Text + "\".")
@@ -304,6 +332,72 @@ func (l *libraryScreen) filter() {
 		l.empty.Hide()
 	}
 	show(l.card, !l.empty.Visible())
+}
+
+// kept tells whether the filter keeps f: its kind is ticked.
+func (l *libraryScreen) kept(f libraryFile) bool {
+	return l.takes[takeKind(f.rel)].Checked
+}
+
+// takeKind tells whether the file at path is a take that Keep anyway
+// saved, partial or in low quality, or a complete one: the recorder adds
+// " (partial)" or " (low quality)" to such a take's title, and the name
+// template puts the title in the file's name, its spaces made underscores
+// when the setting says so, with a number after it when the name was
+// taken. Its tags say so too, but are not read yet for most files, and the
+// index of recorded tracks leaves these files out.
+func takeKind(path string) string {
+	name := strings.ToLower(filepath.Base(path))
+	switch {
+	case strings.Contains(name, "(partial)"):
+		return takePartial
+	case strings.Contains(name, "(low quality)"), strings.Contains(name, "(low_quality)"):
+		return takeLowQuality
+	}
+	return takeComplete
+}
+
+// takeMarker is the marker Keep anyway adds to a take's title, and the
+// space before it: the row shows the kind in its chip instead.
+var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality)\)`)
+
+// takesLabel says which kinds of file the filter shows.
+func (l *libraryScreen) takesLabel() string {
+	var ticked []string
+	for _, kind := range takeKinds {
+		if l.takes[kind].Checked {
+			ticked = append(ticked, kind)
+		}
+	}
+	switch len(ticked) {
+	case 0:
+		return "No files"
+	case len(takeKinds):
+		return "All files"
+	}
+	return strings.Join(ticked, ", ")
+}
+
+func countFiles(n int) string {
+	if n == 1 {
+		return "1 file"
+	}
+	return itoa(n) + " files"
+}
+
+// loaded draws the rows again once covers or tags came in. In the Album
+// view, the tags of a file that no album folder holds may name its album:
+// the files are grouped again then, and only then, as grouping thousands
+// of files for each cover would make scrolling stutter.
+func (l *libraryScreen) loaded() {
+	if l.sortBy.Selected == byAlbum && slices.ContainsFunc(l.unread, func(key string) bool {
+		_, read := l.tagged.known(key)
+		return read
+	}) {
+		l.filter()
+		return
+	}
+	l.list.Refresh()
 }
 
 func pluralFiles(shown, all int, folder string) string {

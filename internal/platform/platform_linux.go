@@ -62,20 +62,30 @@ func (b Backends) Probe() []proto.Check {
 
 var allowedRates = regexp.MustCompile(`key:'clock\.allowed-rates' value:'\[([^\]]*)\]'`)
 
-// rateCheck warns when PipeWire can only run at 48 kHz: 44.1 kHz players
-// are then resampled before they are recorded.
+// rateCheck advises when PipeWire can only run at 48 kHz: 44.1 kHz players
+// are then resampled once before they are recorded, and recording still
+// works.
 func rateCheck() proto.Check {
 	out, err := proc.Command("pw-metadata", "-n", "settings", "0").Output()
-	m := allowedRates.FindSubmatch(out)
-	if err != nil || m == nil {
-		return proto.Check{Name: "PipeWire sample rates", OK: true, Detail: "allowed rates unknown"}
+	if err != nil {
+		out = nil
+	}
+	return ratesCheck(out)
+}
+
+// ratesCheck reads the allowed rates in pw-metadata's settings.
+func ratesCheck(settings []byte) proto.Check {
+	m := allowedRates.FindSubmatch(settings)
+	if m == nil {
+		return proto.Check{Name: "PipeWire sample rates", OK: true, Advice: true, Detail: "allowed rates unknown"}
 	}
 	rates := strings.Fields(strings.ReplaceAll(string(m[1]), ",", " "))
 	for _, r := range rates {
 		if r == "44100" {
-			return proto.Check{Name: "PipeWire sample rates", OK: true, Detail: strings.Join(rates, ", ") + " Hz"}
+			return proto.Check{Name: "PipeWire sample rates", OK: true, Advice: true, Detail: strings.Join(rates, ", ") + " Hz"}
 		}
 	}
-	return proto.Check{Name: "PipeWire sample rates", OK: false, Detail: "only " + strings.Join(rates, ", ") +
-		" Hz: 44.1 kHz audio is resampled before it is recorded; set default.clock.allowed-rates = [ 44100 48000 ]"}
+	return proto.Check{Name: "PipeWire sample rates", OK: false, Advice: true, Detail: "only " + strings.Join(rates, ", ") +
+		" Hz: 44.1 kHz tracks are resampled once. To record them unchanged, put context.properties = { default.clock.allowed-rates = [ 44100 48000 ] }" +
+		" in a .conf file under ~/.config/pipewire/pipewire.conf.d/, then log out and back in"}
 }

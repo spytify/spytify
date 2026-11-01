@@ -435,6 +435,80 @@ func TestSingleTrack(t *testing.T) {
 	}
 }
 
+// With recorder.stop_with_player, a session started as the app and the CLI
+// start one ends when the player stops, not at its pauses; turned on
+// mid-session, it applies to that session. Off, the session outlives the
+// stop: here, until the fake player's stream ends.
+func TestTheSessionEndsWhenThePlayerStops(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		on, midway bool
+	}{{"on", true, false}, {"off", false, false}, {"turned on mid-session", false, true}} {
+		t.Run(c.name, func(t *testing.T) {
+			tl := loadTimeline(t, "pause-resume")
+			s := newScenario(t, tl, map[string]any{"recorder.stop_with_player": c.on})
+			if c.midway {
+				s.player.At(2000, func() {
+					if _, err := s.core.SetSettings(map[string]any{"recorder.stop_with_player": true}); err != nil {
+						t.Error(err)
+					}
+				})
+			}
+			if _, err := s.core.Handle(context.Background(), proto.MethodSessionStart, nil); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan struct{})
+			go func() { s.core.Wait(); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(time.Minute):
+				t.Fatalf("session did not end; log:\n%s", s.logs)
+			}
+			if saved, skipped := outcome(t, s); len(saved) != len(tl.Items) {
+				t.Errorf("saved %v skipped %v, want every track", saved, skipped)
+			}
+			ends := c.on || c.midway
+			if outlived := strings.Contains(s.logs.String(), "capture stream ended"); outlived == ends {
+				t.Errorf("the session outlived the stop: %v, want %v\n%s", outlived, !ends, s.logs)
+			}
+		})
+	}
+}
+
+// With recorder.stop_with_player, the player quitting ends the session
+// too.
+func TestTheSessionEndsWhenThePlayerQuits(t *testing.T) {
+	s, _, _ := directSession(t)
+	s.opts.EndOnStop = false
+	values := s.deps.values
+	s.deps.values = func() settings.Values { return values().With(settings.RecorderStopWithPlayer, true) }
+	events := make(chan meta.Event)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.Run(ctx, make(chan capture.Chunk), events)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+	events <- meta.Event{Kind: meta.TrackChanged, Track: meta.TrackInfo{ID: "/x/track/a", Title: "A", LengthMs: 60000}, PositionMs: 0}
+	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: 0}
+	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Paused, PositionMs: 1000}
+	select {
+	case <-done:
+		t.Fatal("a pause ended the session")
+	case <-time.After(300 * time.Millisecond):
+	}
+	events <- meta.Event{Kind: meta.PlayerGone, PositionMs: -1}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the session outlived the player")
+	}
+}
+
 type countingBackends struct {
 	fakeBackends
 	controls *atomic.Int32

@@ -14,7 +14,8 @@ import (
 // with the setting on and off, as "package folder:TestName".
 var cases = map[string][]string{
 	"app.theme":                        {"internal/ui:TestThemeFollowsTheSetting"},
-	"app.minimize_to_tray":             {"internal/ui:TestClosingTheWindowQuitsUnlessMinimizedToTray", "internal/ui:TestClosingToTheTrayKeepsSpytifyThere", "internal/ui:TestClosingQuitsWhereTheDesktopDrawsNoTray", "internal/ui:TestTheTrayIconComesAtLaunchOrOnLinuxAtTheNext"},
+	"app.notifications":                {"internal/ui:TestNotificationsFollowTheSetting", "internal/ui:TestNotificationsOnlyWhileHiddenInTheTray", "internal/ui:TestOnlyASessionThatEndsOnItsOwnIsNews"},
+	"app.minimize_to_tray":             {"internal/ui:TestClosingTheWindowQuitsUnlessMinimizedToTray", "internal/ui:TestClosingToTheTrayKeepsSpytifyThere", "internal/ui:TestClosingQuitsWhereTheDesktopDrawsNoTray", "internal/ui:TestTheTrayIconIsThereFromLaunch"},
 	"app.autostart_recording":          {"test/e2e:TestAutostartRecordsOnLaunch"},
 	"app.check_updates":                {"internal/ui:TestTheUpdateCheckFollowsTheSetting"},
 	"output.dir":                       {"internal/core:TestOutputFolderGoneStopsTheRecording", "internal/core:TestNoRecordingStartsWithoutAnOutputFolder"},
@@ -34,6 +35,7 @@ var cases = map[string][]string{
 	"recorder.duplicates":              {"internal/core:TestScenarios", "internal/core:TestOutputLayoutForEverySetting"},
 	"recorder.skip_duplicates_forward": {"internal/core:TestSkipDuplicateForward"},
 	"recorder.single_track":            {"test/e2e:TestAutostartRecordsOnLaunch"},
+	"recorder.stop_with_player":        {"internal/core:TestTheSessionEndsWhenThePlayerStops", "internal/core:TestTheSessionEndsWhenThePlayerQuits"},
 	"recorder.normalize":               {"internal/core:TestLoudnessSettings"},
 	"recorder.trim_silence":            {"internal/core:TestSilenceSettings"},
 	"recorder.silence_db":              {"internal/core:TestSilenceSettings"},

@@ -107,9 +107,10 @@ func TestEveryLaunchCountsTheComputer(t *testing.T) {
 	c.Step("launched")
 	c.Flush(5 * time.Second)
 
-	txs := srv.Wait(t, "transaction", 1)
+	srv.Wait(t, "transaction", 1)
 	time.Sleep(100 * time.Millisecond)
-	if txs = srv.Items("transaction"); len(txs) != 1 || txs[0].JSON()["transaction"] != "launch" {
+	txs := srv.Items("transaction")
+	if len(txs) != 1 || txs[0].JSON()["transaction"] != "launch" {
 		t.Fatalf("%d transactions, want the launch alone", len(txs))
 	}
 	tx := txs[0].JSON()
@@ -194,9 +195,10 @@ func TestProblemsAreCountedAndSampled(t *testing.T) {
 	c.Problem("encode", "")
 	c.Flush(5 * time.Second)
 
-	events := srv.Wait(t, "event", 1)
+	srv.Wait(t, "event", 1)
 	time.Sleep(100 * time.Millisecond)
-	if events = srv.Items("event"); len(events) != 1 {
+	events := srv.Items("event")
+	if len(events) != 1 {
 		t.Fatalf("%d problem events, want 1", len(events))
 	}
 	ev := events[0].JSON()
@@ -259,10 +261,14 @@ main.main()
 `
 
 func TestParseTrace(t *testing.T) {
-	summary, frames := parseTrace(trace)
+	summary, stacks := parseTrace(trace)
 	if summary != "panic: runtime error: index out of range [3] with length 3" {
 		t.Fatalf("summary %q", summary)
 	}
+	if len(stacks) != 2 || stacks[0].id != "21" || stacks[0].name != "goroutine 21 [running]" || stacks[1].name != "goroutine 1 [select]" || len(stacks[1].frames) != 1 {
+		t.Fatalf("stacks %+v", stacks)
+	}
+	frames := stacks[0].frames
 	if len(frames) != 3 {
 		t.Fatalf("%d frames: %+v", len(frames), frames)
 	}

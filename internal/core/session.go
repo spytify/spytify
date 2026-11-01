@@ -62,8 +62,9 @@ const (
 // SessionOptions changes how a session ends.
 type SessionOptions struct {
 	SingleTrack bool
-	// EndOnStop ends the session when the player stops after having
-	// played (spytifyd --once).
+	// EndOnStop ends the session when the player stops or quits after
+	// having played (spytifyd --once). recorder.stop_with_player does the
+	// same; it is read then, so turning it on mid-session applies.
 	EndOnStop bool
 	// IdleExit ends the session after this long without audio while the
 	// player is paused or stopped; 0 disables it.
@@ -251,7 +252,7 @@ func (s *Session) muteAds(st proto.SessionState) {
 	if s.deps.mute == nil {
 		return
 	}
-	want := st == proto.StateAd && s.deps.values().Bool("recorder.mute_ads")
+	want := st == proto.StateAd && s.deps.values().Bool(settings.RecorderMuteAds)
 	if want == s.adMuted {
 		return
 	}
@@ -303,8 +304,8 @@ func trackOf(seg *segment) proto.Track {
 
 func (s *Session) tune(f pcm.Format) {
 	v := s.deps.values()
-	s.silenceDB = v.Float("recorder.silence_db")
-	s.window = f.FramesFromMs(v.Int("recorder.boundary_window_ms"))
+	s.silenceDB = v.Float(settings.RecorderSilenceDb)
+	s.window = f.FramesFromMs(v.Int(settings.RecorderBoundaryWindowMs))
 	s.frame = f.FramesFromMs(frameMs)
 	s.step = f.FramesFromMs(stepMs)
 	s.block = f.FramesFromMs(blockMs)
@@ -317,7 +318,7 @@ func (s *Session) ms(v int64) int64 { return s.ring.Format().FramesFromMs(v) }
 // the last files to be finished.
 func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <-chan meta.Event) {
 	v := s.deps.values()
-	s.tmpDir = filepath.Join(v.Path("output.dir"), ".spytify")
+	s.tmpDir = filepath.Join(v.Path(settings.OutputDir), ".spytify")
 	if err := os.MkdirAll(s.tmpDir, 0o755); err != nil {
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: err.Error(), Fatal: true})
 		s.done = true
@@ -1004,13 +1005,13 @@ func (s *Session) newSegment(info meta.TrackInfo, start int64) *segment {
 func (s *Session) classify(seg *segment) {
 	v := s.deps.values()
 	seg.reason = ""
-	short := v.Int("recorder.skip_short_untitled")
+	short := v.Int(settings.RecorderSkipShortUntitled)
 	if seg.info.IsAdvert() || (short > 0 && seg.info.LengthMs > 0 && seg.info.LengthMs < short*1000 && seg.info.Album == "") {
 		seg.reason = proto.SkipAd
 	}
-	if seg.reason == "" && v.String("recorder.duplicates") == "skip" && s.deps.fin.recorded(seg.info, v) {
+	if seg.reason == "" && v.String(settings.RecorderDuplicates) == "skip" && s.deps.fin.recorded(seg.info, v) {
 		seg.reason = proto.SkipDuplicate
-		if v.Bool("recorder.skip_duplicates_forward") {
+		if v.Bool(settings.RecorderSkipDuplicatesForward) {
 			go func() {
 				if err := s.deps.control(proto.CmdNext); err != nil {
 					s.deps.log.Infof("skip to next: %v", err)
@@ -1019,10 +1020,10 @@ func (s *Session) classify(seg *segment) {
 		}
 	}
 	if seg.reason == "" && !seg.ghost && !seg.provisional {
-		if free, ok := diskFree(v.Path("output.dir")); ok && free < minFreeBytes {
+		if free, ok := diskFree(v.Path(settings.OutputDir)); ok && free < minFreeBytes {
 			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: fmt.Sprintf("only %d MB free in the output folder", free>>20)})
 			seg.reason = proto.SkipIncomplete
-			if v.Bool("recorder.pause_on_disk_full") {
+			if v.Bool(settings.RecorderPauseOnDiskFull) {
 				go func() { _ = s.deps.control(proto.CmdPause) }()
 			}
 			s.diskFull = true
@@ -1291,7 +1292,7 @@ func (s *Session) endOfPlayback() {
 		s.closeSegment(c, end)
 		s.cur = nil
 	}
-	if (s.opts.EndOnStop && s.seen) || s.stop == stopGraceful {
+	if (s.seen && (s.opts.EndOnStop || s.deps.values().Bool(settings.RecorderStopWithPlayer))) || s.stop == stopGraceful {
 		s.finish()
 	}
 	s.refreshState()
