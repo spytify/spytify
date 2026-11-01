@@ -21,7 +21,7 @@ func TestPlaceOnWindows(t *testing.T) {
 	// would answer E_INVALIDARG or ERROR_INSUFFICIENT_BUFFER.
 	oneOf(t, f, "output.cloud", "none", "unknown 0x80070001")
 	oneOf(t, f, "output.known", "Music", "Documents", "Pictures", "Videos", "Desktop", "Downloads", "Favorites", "home", "elsewhere")
-	oneOf(t, f, "output.music", "home", "moved")
+	oneOf(t, f, "output.music", "home", "elsewhere")
 	oneOf(t, f, "output.cfa", "off", "on", "audit", "disks", "disks audit", "unreadable")
 }
 
@@ -41,14 +41,4 @@ func TestAMissingDrive(t *testing.T) {
 		}
 	}
 	t.Skip("every drive letter is taken")
-}
-
-func oneOf(t *testing.T, facts map[string]string, key string, want ...string) {
-	t.Helper()
-	for _, w := range want {
-		if facts[key] == w {
-			return
-		}
-	}
-	t.Errorf("%s %q, want one of %v", key, facts[key], want)
 }

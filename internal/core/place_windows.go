@@ -7,35 +7,30 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
-// placeFacts adds what Windows says of where dir is: the kind of drive, a
-// cloud folder, the known folder it is in, where the Music folder is, and
-// Controlled folder access, which keeps unknown apps out of Music and
-// Documents.
-func placeFacts(dir string, facts map[string]string) {
-	if vol := filepath.VolumeName(dir); vol != "" {
-		root := vol + `\`
-		drive := driveKind(root)
-		facts["output.drive"] = drive
-		// A network drive out of reach can hang; the others answer at once.
-		if drive == "fixed" || drive == "removable" {
-			if fs := fileSystem(root); fs != "" {
-				facts["output.fs"] = fs
-			}
-		}
+// volumeOf is the kind of drive dir is on and its file system.
+func volumeOf(dir string) (drive, fs string) {
+	vol := filepath.VolumeName(dir)
+	if vol == "" {
+		return "", ""
 	}
-	facts["output.cloud"] = cloudOf(dir)
-	folders := knownFolders()
-	facts["output.known"] = knownFolder(dir, folders)
-	if where, cloud := musicFolder(folders); where != "" {
-		facts["output.music"], facts["output.music_cloud"] = where, cloud
+	root := vol + `\`
+	drive = driveKind(root)
+	// A network drive out of reach can hang; the others answer at once.
+	if drive == "fixed" || drive == "removable" {
+		fs = fileSystem(root)
 	}
+	return drive, fs
+}
+
+// systemFacts adds Controlled folder access, which keeps unknown apps out
+// of Music and Documents.
+func systemFacts(facts map[string]string) {
 	facts["output.cfa"] = cfaState()
 }
 
@@ -90,6 +85,9 @@ const cfSyncRootInfoProvider = 2
 func cloudOf(dir string) string {
 	if onOneDrive(dir) {
 		return "OneDrive"
+	}
+	if c := homeCloud(dir); c != "" {
+		return c
 	}
 	if procCfGetSyncRootInfoByPath.Find() != nil {
 		return "none"
@@ -146,29 +144,6 @@ func knownFolders() []namedFolder {
 	return out
 }
 
-// musicFolder says whether the Music folder is ~\Music, where the default
-// output folder goes, or was moved, and which cloud syncs it; nothing
-// when Windows does not say.
-func musicFolder(folders []namedFolder) (where, cloud string) {
-	var music, home string
-	for _, f := range folders {
-		switch f.name {
-		case "Music":
-			music = f.path
-		case "home":
-			home = f.path
-		}
-	}
-	if music == "" || home == "" {
-		return "", ""
-	}
-	where = "moved"
-	if strings.EqualFold(filepath.Clean(music), filepath.Join(home, "Music")) {
-		where = "home"
-	}
-	return where, cloudOf(music)
-}
-
 // cfaState is Controlled folder access as Windows Security sets it, or as
 // a policy forces it.
 func cfaState() string {
@@ -194,18 +169,4 @@ func cfaState() string {
 		return cfaMode(v)
 	}
 	return "off"
-}
-
-// existingFolder is dir, or its closest parent that exists.
-func existingFolder(dir string) string {
-	for {
-		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return dir
-		}
-		dir = parent
-	}
 }

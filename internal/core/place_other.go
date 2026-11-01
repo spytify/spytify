@@ -1,5 +1,16 @@
-//go:build !windows
+//go:build !windows && !darwin && !linux
 
 package core
 
-func placeFacts(string, map[string]string) {}
+func volumeOf(string) (drive, fs string) { return "", "" }
+
+func cloudOf(dir string) string {
+	if c := homeCloud(dir); c != "" {
+		return c
+	}
+	return "none"
+}
+
+func knownFolders() []namedFolder { return nil }
+
+func systemFacts(map[string]string) {}
