@@ -11,7 +11,6 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -19,8 +18,8 @@ import (
 
 var logLevels = []string{"error", "info", "debug"}
 
-// logsScreen is the v1 console, filtered by level, under the diagnostics:
-// the checks core.info runs, folded away while they all pass.
+// logsScreen is the v1 console, filtered by level, with the diagnostics a
+// button away: the checks core.info runs, in a dialog over the window.
 type logsScreen struct {
 	app   *App
 	root  fyne.CanvasObject
@@ -30,13 +29,20 @@ type logsScreen struct {
 	all   []proto.LogEvent
 	path  string
 
-	diag *widget.Accordion
-	// checks scroll past checksMaxHeight, above actions: Run the checks
-	// again, and Send to the developers when a check fails.
+	// diagnose opens diag, and turns to a warning while a check fails.
+	// open is whether diag shows: its checks then follow the model from
+	// any tab.
+	diagnose *litButton
+	diag     *widget.PopUp
+	open     bool
+	// summary heads the checks, which scroll past checksMaxHeight, above
+	// actions: Run the checks again, and Send to the developers when a
+	// check fails.
+	summary      *widget.Label
 	checks       *fyne.Container
 	checksScroll *container.Scroll
 	actions      *fyne.Container
-	refresh      *widget.Button
+	refresh      *button
 	lastState    string
 	// sent is the state of the checks last sent to the developers.
 	sent string
@@ -44,15 +50,24 @@ type logsScreen struct {
 
 func newLogsScreen(a *App) *logsScreen {
 	l := &logsScreen{app: a, path: filepath.Join(a.opts.StateDir, "spytifyd.log")}
+	l.summary = widget.NewLabel("")
 	l.checks = container.NewVBox()
 	l.checksScroll = container.NewVScroll(l.checks)
-	l.refresh = widget.NewButtonWithIcon("Run the checks again", theme.ViewRefreshIcon(), func() {
+	l.refresh = newIconButton("Run the checks again", theme.ViewRefreshIcon(), func() {
 		a.noteAction("run the checks again")
 		go a.refreshChecks()
 	})
 	l.refresh.Importance = widget.LowImportance
 	l.actions = container.NewHBox(l.refresh)
-	l.diag = widget.NewAccordion(widget.NewAccordionItem("Diagnostics", container.NewVBox(l.checksScroll, l.actions)))
+	// A dialog of Fyne's stays where it first showed as the checks under it
+	// grow, past the window's edge: this pop-up looks like one, and is
+	// centred again.
+	title := widget.NewLabelWithStyle("Diagnostics", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	done := newButton("Close", l.hideDiagnostics)
+	pad := theme.Padding()
+	body := container.NewBorder(container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done), nil, nil, l.checksScroll)
+	l.diag = widget.NewModalPopUp(container.New(layout.NewCustomPaddedLayout(pad*2, pad*2, pad*2, pad*2), body), a.win.Canvas())
+	l.diagnose = newLitButton("Diagnostics", theme.ConfirmIcon(), widget.LowImportance, a.showDiagnostics)
 
 	l.level = widget.NewCheckGroup(logLevels, func([]string) { l.filter() })
 	l.level.Horizontal = true
@@ -89,7 +104,7 @@ func newLogsScreen(a *App) *logsScreen {
 	)
 	// SetSelected runs the callback, which needs the list.
 	l.level.SetSelected(logLevels)
-	copyAll := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+	copyAll := newIconButton("Copy", theme.ContentCopyIcon(), func() {
 		a.noteAction("copy the log")
 		var b strings.Builder
 		for _, line := range l.lines {
@@ -98,21 +113,54 @@ func newLogsScreen(a *App) *logsScreen {
 		a.fa.Clipboard().SetContent(b.String())
 	})
 	copyAll.Importance = widget.LowImportance
-	open := widget.NewButtonWithIcon("Open log file", theme.DocumentIcon(), func() {
+	open := newIconButton("Open log file", theme.DocumentIcon(), func() {
 		a.noteAction("open the log file")
 		_ = openPath(l.path)
 	})
 	open.Importance = widget.LowImportance
-	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open))
-	// The diagnostics are a card on the page; the log stays plain below.
-	pad := theme.Padding()
-	diag := container.New(layout.NewCustomPaddedLayout(pad, pad, pad*3, pad*3), newCard(l.diag))
-	l.root = container.NewBorder(diag, nil, nil, nil, plain(margin(container.NewBorder(tools, nil, nil, nil, l.list))))
+	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
+	l.root = plain(margin(inReadingOrder(tools, nil, nil, nil, l.list)))
 	return l
 }
 
-// checksMaxHeight is about four checks: more scroll.
-const checksMaxHeight = 160
+// checksMaxHeight is about seven checks: more scroll. diagWidth leaves a
+// check's detail room beside its name and the button that fixes it.
+const (
+	checksMaxHeight = 300
+	diagWidth       = 640
+)
+
+// showDiagnostics opens the checks over the window, from any tab, scrolled
+// to the one that fails. Opening them is counted once a launch, with the
+// checks that fail then.
+func (a *App) showDiagnostics() {
+	a.noteAction("open diagnostics")
+	if !a.diagNoted && a.tel.Enabled() {
+		a.diagNoted = true
+		a.tel.Log("diagnostics", map[string]any{"failing": failingNames(a.last.Info.Checks)})
+	}
+	l := a.screens[tabLogs].(*logsScreen)
+	l.renderChecks(a.last)
+	l.open = true
+	l.diag.Show()
+	l.fitDiagnostics()
+	l.checksScroll.ScrollToBottom()
+	focusFirst(a.win)
+}
+
+func (l *logsScreen) hideDiagnostics() {
+	l.open = false
+	l.diag.Hide()
+}
+
+// fitDiagnostics sizes the dialog to its checks, centred in the window: the
+// overlay centres it only when it shows.
+func (l *logsScreen) fitDiagnostics() {
+	size := fyne.NewSize(diagWidth, l.diag.MinSize().Height)
+	l.diag.Resize(size)
+	c := l.diag.Canvas.Size()
+	l.diag.Move(fyne.NewPos((c.Width-size.Width)/2, (c.Height-size.Height)/2))
+}
 
 func padLevel(s string) string {
 	for len(s) < 5 {
@@ -131,11 +179,11 @@ func (l *logsScreen) render(s model.State) {
 
 func (l *logsScreen) renderChecks(s model.State) {
 	failing := failingChecks(s.Info.Checks)
-	title := fmt.Sprintf("Diagnostics · all %d checks pass", len(s.Info.Checks))
+	summary := fmt.Sprintf("All %d checks pass.", len(s.Info.Checks))
 	if failing > 0 {
-		title = fmt.Sprintf("Diagnostics · %d of %d checks need attention", failing, len(s.Info.Checks))
+		summary = fmt.Sprintf("%d of %d checks need attention.", failing, len(s.Info.Checks))
 	}
-	state := fmt.Sprint(title, s.Info.Checks, s.Info.Warnings)
+	state := fmt.Sprint(summary, s.Info.Checks, s.Info.Warnings)
 	// The send button follows the bug tracker's switch too.
 	on, _ := l.app.privacy(trackerKey).(bool)
 	redraw := fmt.Sprint(state, on)
@@ -153,14 +201,15 @@ func (l *logsScreen) renderChecks(s model.State) {
 		}
 		var fix fyne.CanvasObject
 		if c.Name == "player running" && !c.OK {
-			open := widget.NewButtonWithIcon("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), l.app.launchPlayer)
-			open.Importance = widget.HighImportance
-			fix = open
+			open := newLitButton("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
+			fix = open.lit
 		}
 		if c.Name == proto.CheckOutputWritable && !c.OK {
-			choose := widget.NewButtonWithIcon("Choose another folder", theme.FolderOpenIcon(), l.app.showOutputSetting)
-			choose.Importance = widget.HighImportance
-			fix = choose
+			choose := newLitButton("Choose another folder", theme.FolderOpenIcon(), widget.HighImportance, func() {
+				l.hideDiagnostics()
+				l.app.showOutputSetting()
+			})
+			fix = choose.lit
 		}
 		row := container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail))
 		if c.OK {
@@ -176,7 +225,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 	// Stuck on a check: the user may send it to the developers, once for
 	// these results, unless they opted out of the bug tracker.
 	if failing > 0 && l.app.tel.Available() {
-		send := ttwidget.NewButtonWithIcon("Send to the developers", theme.MailSendIcon(), nil)
+		send := newIconButton("Send to the developers", theme.MailSendIcon(), nil)
 		done := func() {
 			l.sent = state
 			send.SetText("Sent")
@@ -191,14 +240,15 @@ func (l *logsScreen) renderChecks(s model.State) {
 				done()
 			})
 		}
+		l.actions.Objects = []fyne.CanvasObject{l.refresh, send}
 		switch {
 		case !on:
+			// No tooltip shows in a pop-up: the reason is written out.
 			send.Disable()
-			send.SetToolTip(optedOut)
+			l.actions.Objects = append(l.actions.Objects, container.NewCenter(caption(optedOut)))
 		case l.sent == state:
 			done()
 		}
-		l.actions.Objects = []fyne.CanvasObject{l.refresh, send}
 	} else {
 		l.actions.Objects = []fyne.CanvasObject{l.refresh}
 	}
@@ -206,18 +256,17 @@ func (l *logsScreen) renderChecks(s model.State) {
 	l.checks.Objects = lines(rows)
 	l.checks.Refresh()
 	// The checks take what they need up to checksMaxHeight, then scroll:
-	// the log below keeps its room.
+	// the dialog stays inside the window.
 	l.checksScroll.SetMinSize(fyne.NewSize(0, min(l.checks.MinSize().Height, checksMaxHeight)))
-	l.diag.Items[0].Title = title
-	// Fold the checks away while they all pass; open them when one fails.
-	if failing > 0 {
-		l.diag.Open(0)
-	} else {
-		l.diag.Close(0)
+	l.summary.SetText(summary)
+	if l.open {
+		l.fitDiagnostics()
 	}
-	l.diag.Refresh()
-	// The diagnostics changed height: lay the log out below them again.
-	l.root.Refresh()
+	l.diagnose.Icon, l.diagnose.Importance = theme.ConfirmIcon(), widget.LowImportance
+	if failing > 0 {
+		l.diagnose.Icon, l.diagnose.Importance = theme.WarningIcon(), widget.WarningImportance
+	}
+	l.diagnose.Refresh()
 	l.checksScroll.ScrollToBottom()
 }
 

@@ -33,10 +33,9 @@ func newAboutScreen(a *App) *aboutScreen {
 	tagline.Wrapping = fyne.TextWrapWord
 	source := widget.NewHyperlink("Source code on GitHub", nil)
 	source.OnTapped = func() { a.openURL(sourceURL) }
-	project := widget.NewButtonWithIcon("Project page", theme.HomeIcon(), func() { a.openURL(siteURL) })
-	donate := widget.NewButton("♥ Donate", func() { a.openURL(donateURL) })
-	donate.Importance = widget.HighImportance
-	updates := widget.NewButtonWithIcon("Check for updates", theme.DownloadIcon(), s.checkNow)
+	project := newIconButton("Project page", theme.HomeIcon(), func() { a.openURL(siteURL) })
+	donate := newLitButton("♥ Donate", nil, widget.HighImportance, func() { a.openURL(donateURL) })
+	updates := newIconButton("Check for updates", theme.DownloadIcon(), s.checkNow)
 	legal := widget.NewLabelWithStyle(disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	legal.Wrapping = fyne.TextWrapWord
 	legal.SizeName = theme.SizeNameCaptionText
@@ -45,7 +44,7 @@ func newAboutScreen(a *App) *aboutScreen {
 		tagline,
 		container.NewCenter(s.versions),
 		container.NewCenter(source),
-		container.NewCenter(container.NewHBox(project, updates, donate)),
+		container.NewCenter(container.NewHBox(project, updates, donate.lit)),
 		layout.NewSpacer(),
 		legal,
 	))))
@@ -79,6 +78,7 @@ func (s *aboutScreen) checkNow() {
 			default:
 				dialog.ShowInformation("Up to date", "Spytify "+proto.Version+" is the latest version.", s.app.win)
 			}
+			focusFirst(s.app.win)
 		})
 	}()
 }
@@ -119,4 +119,5 @@ func (a *App) maybeShowFirstRun(then func()) {
 	})
 	d.Resize(fyne.NewSize(460, 300))
 	d.Show()
+	focusFirst(a.win)
 }

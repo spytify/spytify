@@ -48,7 +48,7 @@ func frontMatter(title string) string {
 func settingsPage() string {
 	var b strings.Builder
 	b.WriteString(frontMatter("Settings"))
-	b.WriteString("Every setting is in `config.toml`, which the recorder validates. Change them in the app's Settings, where the advanced ones are folded under each section, or with `spytify-cli set key=value`; `spytify-cli get` lists them.\n")
+	b.WriteString("Every setting but the player's is in `config.toml`, which the recorder validates. Change them in the app's Settings, where the advanced ones are folded under each section, or with `spytify-cli set key=value`; `spytify-cli get` lists them.\n")
 	var groups []string
 	seen := map[string]bool{}
 	for _, d := range settings.Table {
@@ -66,19 +66,92 @@ func settingsPage() string {
 					rows = append(rows, d)
 				}
 			}
-			if len(rows) == 0 {
+			// The app folds the player under App's advanced settings.
+			player := advanced && g == "App"
+			if len(rows) == 0 && !player {
 				continue
 			}
 			if advanced {
 				b.WriteString("\nAdvanced:\n")
 			}
+			if player {
+				b.WriteString(playerSection())
+			}
+			if len(rows) == 0 {
+				continue
+			}
 			b.WriteString("\n| Setting | Key | Values | Default |\n| --- | --- | --- | --- |\n")
 			for _, d := range rows {
 				fmt.Fprintf(&b, "| %s | `%s` | %s | %s |\n", cell(d.Label), d.Key, cell(values(d)), cell(defaultOf(d)))
 			}
+			if advanced {
+				b.WriteString("\n")
+				for _, d := range rows {
+					fmt.Fprintf(&b, "- **%s**: %s\n", d.Label, explain(d.Key))
+				}
+			}
 		}
 	}
-	b.WriteString("\nThe recorded application is chosen with environment variables, not in `config.toml`: see [Configuration](advanced.html#configuration).\n")
+	return b.String()
+}
+
+// explanations tell what each advanced setting does, and how, under its
+// group's table.
+var explanations = map[settings.Key]string{
+	settings.OutputTemplate:       "Builds each file's name, before its extension. `{album_artist}` is the album's artist, or the track's when the album names none; `{artists}` is every artist on the track; `{title}` the title; `{album}` the album, `Untitled` when there is none; `{track}` its number on the album, on two digits. A placeholder with nothing to fill it is dropped, with the empty brackets and the dashes it leaves at the ends. Characters a file name can't hold (`/ \\ : * ? \" < > |`) are removed. Group by folders makes the folders, and File name prefix goes in front.",
+	settings.OutputUnderscores:    "Puts `_` in place of every space in folder and file names: `001_Artist_-_Title.mp3`. The tags keep their spaces.",
+	settings.OutputAsciiFilenames: "Takes the accents off the letters of folder and file names: `é` becomes `e`, `ü` becomes `u`. Letters with no accent to remove, such as `ø`, `ß` or Japanese, stay as they are. The tags keep the names as written.",
+	settings.OutputPrefix:         "Puts a number in front of each file name. Counter numbers the files in the order they are saved, from Next counter number, on Counter digits digits: `001 Artist - Title.mp3`. Album track number is the track's number on its album, on two digits: `04 Artist - Title.mp3`; a track with no number gets no prefix.",
+	settings.OutputCounterNext:    "The number the next saved file gets, with the Counter prefix. Each saved file moves it on by one, across sessions and restarts; a track that is not saved, such as an ad or a duplicate, takes no number. Set it back to 1 to start a new numbered set, such as a CD.",
+	settings.OutputCounterWidth:   "How many digits the counter writes: 3 gives `001` to `999`. A track that would go past the last number they hold is not saved, and the session stops with an error: raise the digits or set Next counter number back.",
+
+	settings.TagsCover:           "Puts the album cover the player shows inside each MP3, AAC or FLAC file. A WAV file holds no tags: its details go to a `.json` file next to it, without the cover. A cover that can't be fetched is left out, and the log says why.",
+	settings.TagsCoverSize:       "Small and Medium shrink the cover until its longer side is 300 or 640 pixels, keeping its shape; a smaller cover is kept as it is, never enlarged. Large keeps the cover as the player gives it. A bigger cover makes every file bigger.",
+	settings.TagsExtraToSubtitle: "Splits the title at its first ` - `, or before the parentheses that end it, and tags the end as a subtitle: `Song (Live)` and `Song - Live` get the title `Song` and the subtitle `Live`. MP3 and FLAC have a subtitle tag; AAC has none, so its title stays whole. File names keep the whole title.",
+	settings.TagsArtistSeparator: "What goes between artist names when there are several: in the artist and album artist tags, in `{album_artist}` and `{artists}`, and in the All artists folders. The default gives `Artist A, Artist B`.",
+
+	settings.RecorderTrimSilence:      "Cuts the silence at the start and end of each file. The file starts at the first sound above Silence threshold and ends after the last one, and keeps the fade around them down to 12 dB under the threshold, so a soft attack or a fading last note is not clipped. A take with no sound above the threshold is not saved. Off keeps each file as it was cut between tracks.",
+	settings.RecorderSilenceDb:        "The level under which sound counts as silence, in dBFS: 0 is the loudest a file can hold, and lower is quieter. Spytify uses it to find where one track ends and the next begins, where a track's first sound is, what Trim leading/trailing silence removes, and the silence of a pause, which is left out of the file. Raise it (towards -40) if hiss between tracks stays in the files; lower it (towards -60) if quiet intros or fade-outs get cut off.",
+	settings.RecorderBoundaryWindowMs: "When a track plays to its end, the player announces the next one a little early or late. Spytify looks for the cut this many milliseconds on each side of the end the track's length gives: at the quietest point if it is under Silence threshold, at a clear dip in level if two tracks fade into each other, and otherwise at that length. A change announced earlier counts as a skip, and is cut where it happens. A wider window allows for a player that announces further from the end, but can cut at a quiet moment near it.",
+	settings.RecorderSessionTimer:     "Ends the session this long after it starts, written like `90m` or `1h30m`; `0s` never ends it. The track playing at that moment is recorded to its end first.",
+	settings.RecorderTargetLufs:       "The loudness Normalize volume brings tracks to, in LUFS; -14 is the level many streaming services play at. Each track gets one gain for its whole length, never compressed: a louder track is turned down to the target, and a quieter one is turned up only as far as its peaks stay under -1.5 dBTP, so it can end a little under the target. Not used while Normalize volume is off.",
+	settings.RecorderPauseOnDiskFull:  "Before each track, Spytify checks that the output folder has 256 MB free. When it has less, the track is not recorded and the session stops with an error. This setting pauses the player too, so the music does not go on unrecorded.",
+	settings.PlayerMuteOutput:         "Silences the player on this computer's speakers or headphones during a session, while the files are recorded as usual: on macOS the capture mutes the player's sound, and on Linux its stream goes to an output nobody hears. It applies from the next session. Windows does not apply it yet: the player stays audible.",
+
+	settings.RecorderSkipShortUntitled: "Some ads don't say they are ads. An item whose length is under this many seconds and that has no album is taken for one: it is not recorded, and Mute ads silences it. Podcast episodes are always recorded. 0 turns this off, and records short clips too.",
+}
+
+func explain(key string) string {
+	for k, text := range explanations {
+		if k.String() == key {
+			return text
+		}
+	}
+	return ""
+}
+
+// playerRows are the player rows the app folds under App's advanced
+// settings. The app saves them as environment variables, not in config.toml.
+var playerRows = []struct{ label, variable, def, doc string }{
+	{"Player process", "SPYTIFY_TARGET_PROCESS", "the build's default", "The player's process name, as the system lists it; case and `.exe` don't matter. A comma list covers a player packaged several ways, such as Snap or Flatpak builds that run under another name. Spytify finds the running player by it, records that player's sound only, and reads its track details. It is required."},
+	{"Bundle id (macOS)", "SPYTIFY_TARGET_BUNDLE_ID", "read from the installed app", "The player's app id on macOS, such as `org.example.player`. It finds the helper processes the player plays from, and names the player for AppleScript, which gives the track details. Empty reads it from the installed app."},
+	{"MPRIS name (Linux)", "SPYTIFY_TARGET_MPRIS", "`org.mpris.MediaPlayer2.<name>`", "The D-Bus name under which the player shares its track details and takes its controls (MPRIS). Empty tries `org.mpris.MediaPlayer2.` followed by each process name; set it when the player uses another name."},
+	{"Launch command", "SPYTIFY_TARGET_LAUNCH", "the system's own way", "A command that opens the player, run when you open it from Spytify (the app or `spytify-cli launch`) and when a session starts while the player is closed; Spytify then waits up to 15 seconds for it. Empty opens the player the system's way, by its bundle id or name, and a session starts only once the player is open."},
+}
+
+// playerSection documents the player rows, with what the app does on saving
+// them.
+func playerSection() string {
+	var b strings.Builder
+	b.WriteString("\nThe player Spytify records. The app saves it in the `.env` file of your configuration folder as the [environment variables](advanced.html#configuration) below, which the recorder reads when it starts: after a change, the app offers to restart `spytifyd`.\n")
+	b.WriteString("\n| Setting | Variable | Default |\n| --- | --- | --- |\n")
+	for _, p := range playerRows {
+		fmt.Fprintf(&b, "| %s | `%s` | %s |\n", p.label, p.variable, cell(p.def))
+	}
+	b.WriteString("\n")
+	for _, p := range playerRows {
+		fmt.Fprintf(&b, "- **%s**: %s\n", p.label, p.doc)
+	}
 	return b.String()
 }
 
