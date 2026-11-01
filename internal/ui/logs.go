@@ -124,10 +124,11 @@ func newLogsScreen(a *App) *logsScreen {
 }
 
 // checksMaxHeight is about seven checks: more scroll. diagWidth leaves a
-// check's detail room beside its name and the button that fixes it.
+// passing check's detail room beside its name, and a failed check's reason
+// few lines under it.
 const (
 	checksMaxHeight = 300
-	diagWidth       = 640
+	diagWidth       = 800
 )
 
 // showDiagnostics opens the checks over the window, from any tab, scrolled
@@ -156,9 +157,15 @@ func (l *logsScreen) hideDiagnostics() {
 // fitDiagnostics sizes the dialog to its checks, centred in the window: the
 // overlay centres it only when it shows.
 func (l *logsScreen) fitDiagnostics() {
-	size := fyne.NewSize(diagWidth, l.diag.MinSize().Height)
-	l.diag.Resize(size)
 	c := l.diag.Canvas.Size()
+	width := max(min(diagWidth, c.Width-8*theme.Padding()), l.diag.MinSize().Width)
+	// Laid out at its width first: a failed check's reason wraps to it, and
+	// only then do the checks know their height. They take it up to
+	// checksMaxHeight, then scroll: the dialog stays inside the window.
+	l.diag.Resize(fyne.NewSize(width, l.diag.MinSize().Height))
+	l.checksScroll.SetMinSize(fyne.NewSize(0, min(l.checks.MinSize().Height, checksMaxHeight)))
+	size := fyne.NewSize(width, l.diag.MinSize().Height)
+	l.diag.Resize(size)
 	l.diag.Move(fyne.NewPos((c.Width-size.Width)/2, (c.Height-size.Height)/2))
 }
 
@@ -219,7 +226,14 @@ func (l *logsScreen) renderChecks(s model.State) {
 			})
 			fix = choose.lit
 		}
-		row := container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail))
+		name := container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c)))
+		var row fyne.CanvasObject = container.NewBorder(nil, nil, name, fix, clipped(c.Detail))
+		if !c.OK && c.Detail != "" {
+			// Why it failed goes under the name, whole and in line with it:
+			// beside it, cut short, it lost the reason.
+			reason := container.New(layout.NewCustomPaddedLayout(0, 0, theme.IconInlineSize()+theme.Padding(), 0), wrapped(c.Detail))
+			row = container.New(layout.NewCustomPaddedVBoxLayout(0), container.NewBorder(nil, nil, name, fix), reason)
+		}
 		if c.OK {
 			passed = append(passed, row)
 		} else {
@@ -263,9 +277,6 @@ func (l *logsScreen) renderChecks(s model.State) {
 	l.actions.Refresh()
 	l.checks.Objects = lines(rows)
 	l.checks.Refresh()
-	// The checks take what they need up to checksMaxHeight, then scroll:
-	// the dialog stays inside the window.
-	l.checksScroll.SetMinSize(fyne.NewSize(0, min(l.checks.MinSize().Height, checksMaxHeight)))
 	l.summary.SetText(summary)
 	if l.open {
 		l.fitDiagnostics()
