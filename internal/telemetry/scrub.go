@@ -26,13 +26,13 @@ type Scrubber struct {
 }
 
 // SetOutput names the output folder, whose name the user chose and can
-// be their own. A drive's root is left as it is.
+// be their own; "" names none. A drive's root is left as it is.
 func (s *Scrubber) SetOutput(dir string) {
 	if s == nil {
 		return
 	}
 	var output []string
-	if dir = filepath.Clean(dir); filepath.Dir(dir) != dir {
+	if dir = filepath.Clean(dir); dir != "." && filepath.Dir(dir) != dir {
 		output = []string{dir}
 		if slash := filepath.ToSlash(dir); slash != dir {
 			output = append(output, slash)

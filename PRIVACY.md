@@ -4,7 +4,7 @@ Spytify has one switch for what it sends its developers: the **Sentry bug tracke
 
 ## Never kept
 
-Before a report leaves your computer, Spytify removes your computer's name, and turns your user name into `<user>`, your home folder into `~` and your output folder into `<output>` wherever they appear.
+Before a report leaves your computer, Spytify removes your computer's name, and turns your user name into `<user>`, your home folder into `~` and your output folder into `<output>` wherever they appear. The default output folder, `~/Spytify`, or `~/Music/Spytify` up to 2.0.0-alpha.7, names no one past your home folder: it stays as it is, your home folder as `~`.
 
 In a picture of Spytify's window, a blur covers the output folder's field, and your user name, your home folder and your output folder in every text where they appear: the rest of the text shows. No picture is taken while the window is hidden in the tray, or while an error message or the folder picker is open.
 

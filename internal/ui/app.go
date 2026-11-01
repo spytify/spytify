@@ -448,6 +448,10 @@ func (a *App) render() {
 	}
 	if dir, _ := s.Settings[settings.OutputDir.String()].(string); dir != "" && dir != a.outputDir {
 		a.outputDir = dir
+		// The home folder in it leaves as ~ all the same.
+		if settings.IsDefaultOutputDir(dir) {
+			dir = ""
+		}
 		a.tel.SetOutputDir(settings.ExpandHome(dir))
 	}
 	if a.tabs.Items[tabRecord].Text != record {

@@ -20,6 +20,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -297,6 +298,35 @@ func TestThePictureCoversThePaths(t *testing.T) {
 	}
 	if rt := richTexts(d, "ffmpeg version 9.0.2"); len(rt) != 1 || blurs(a, img, rt[0]) {
 		t.Errorf("the check naming no folder is blurred (%d)", len(rt))
+	}
+}
+
+// The default output folders name no one: a path in one is blurred up to
+// the home folder, and the rest shows. A folder the user chose is blurred
+// whole, in the home folder or out of it.
+func TestTheDefaultFolderShowsPastTheHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home folder:", err)
+	}
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
+	library := filepath.Join(string(filepath.Separator), "Library", "Spytify")
+	for dir, hidden := range map[string]string{
+		"~/Spytify":       home,
+		"~/Music/Spytify": home,
+		"~/Mixtapes":      filepath.Join(home, "Mixtapes"),
+		library:           library,
+	} {
+		values := defaults()
+		values["output.dir"] = dir
+		m.SetSettings(values)
+		a.render()
+		path := filepath.Join(settings.ExpandHome(dir), "M83", "Intro.flac")
+		if got, want := a.tel.Private(path), [][2]int{{0, len(hidden)}}; !slices.Equal(got, want) {
+			t.Errorf("output folder %s: %q hides %v, want %v", dir, path, got, want)
+		}
 	}
 }
 

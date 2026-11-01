@@ -124,7 +124,8 @@ func (c *Client) Enabled() bool {
 	return c.tracker != nil
 }
 
-// SetOutputDir names the output folder, which leaves as <output>.
+// SetOutputDir names the output folder, which leaves as <output>; ""
+// names none.
 func (c *Client) SetOutputDir(dir string) {
 	if c != nil {
 		c.scrub.SetOutput(dir)
