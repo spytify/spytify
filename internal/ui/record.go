@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -37,13 +38,18 @@ type recordScreen struct {
 	session    *fyne.Container
 
 	card  *fyne.Container
+	glow  *canvas.Image
 	cover *canvas.Image
-	// track is the state, the title, the artist and album, then the
-	// format, one line each.
+	// state says whether the track is recorded, with the level while it is;
+	// rate, channels and fileRate are the stream's format.
+	state                    *badge
+	recDot, pausedIcon       fyne.CanvasObject
+	meter                    *levelMeter
+	rate, channels, fileRate *badge
+	// track is the title, then the artist and album.
 	track    *widget.RichText
 	progress *bar
 	elapsed  *widget.RichText
-	level    *bar
 
 	waitRow *fyne.Container
 	waiting *widget.RichText
@@ -98,35 +104,46 @@ func newRecordScreen(a *App) *recordScreen {
 
 	r.cover = canvas.NewImageFromResource(theme.MediaMusicIcon())
 	r.cover.FillMode = canvas.ImageFillContain
+	r.cover.CornerRadius = 6
 	r.cover.SetMinSize(fyne.NewSquareSize(liveCover))
-	// One block, as a list row's: stacked widgets would each add their
-	// padding between the lines.
+	// The card's background is its cover blurred: a few pixels of it,
+	// stretched smoothly.
+	r.glow = canvas.NewImageFromImage(noCoverGlow)
+	r.glow.FillMode = canvas.ImageFillStretch
+	r.glow.ScaleMode = canvas.ImageScaleSmooth
+	r.recDot = container.NewGridWrap(fyne.NewSquareSize(8), canvas.NewCircle(color.NRGBA{R: 0xba, G: 0x1a, B: 0x1a, A: 0xff}))
+	r.pausedIcon = container.NewGridWrap(fyne.NewSquareSize(14), widget.NewIcon(theme.MediaPauseIcon()))
+	r.meter = newLevelMeter(colorOnRecBadge)
+	r.state = newBadge("", colorRecBadge, "", colorOnRecBadge)
+	r.state.lead = container.NewStack(r.recDot, r.pausedIcon)
+	r.state.tail = r.meter
+	r.rate = newBadge("", "", colorMediaLine, theme.ColorNameForeground)
+	r.channels = newBadge("", "", colorMediaLine, theme.ColorNameForeground)
+	r.fileRate = newBadge("", "", colorMediaLine, theme.ColorNameForeground)
+	// One block for the title and the artist: stacked widgets would each add
+	// their padding between the lines.
 	r.track = widget.NewRichText(
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameError, SizeName: theme.SizeNameCaptionText, TextStyle: fyne.TextStyle{Bold: true}}},
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameSubHeadingText, TextStyle: fyne.TextStyle{Bold: true}}},
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameHeadingText, TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameText}},
 	)
 	r.track.Truncation = fyne.TextTruncateEllipsis
-	r.progress = newBar(theme.ColorNamePrimary)
 	r.elapsed = caption("0:00 / 0:00")
-	r.level = newBar(theme.ColorNameSuccess)
-	skip := widget.NewButtonWithIcon("Skip", theme.MediaSkipNextIcon(), func() {
+	r.progress = newBar(theme.ColorNamePrimary)
+	skip := widget.NewButtonWithIcon("", theme.MediaSkipNextIcon(), func() {
 		a.noteAction("skip")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdNext}, nil)
 	})
-	// Length and Level are a pair of rows as close as two lines of text,
-	// their bars starting and ending at one x.
-	meters := container.NewBorder(nil, nil, nil, tight(r.elapsed), container.New(layout.NewFormLayout(),
-		tight(caption("Length")), r.progress,
-		tight(caption("Level")), r.level))
-	info := container.NewVBox(r.track, meters)
-	// The track being recorded is on a card of its own colour, apart from
-	// the list.
 	pad := theme.Padding()
-	live := container.NewBorder(nil, nil, r.cover, container.NewCenter(skip), container.NewVBox(layout.NewSpacer(), info, layout.NewSpacer()))
-	// Rounder than the list's card: on a box this big, the same radius looks
-	// square.
-	r.card = inset(newPanel(colorLive, colorCardLine, 16, fyne.NewSize(pad*2, pad*2), live))
+	skipBox := container.NewVBox(layout.NewSpacer(),
+		container.NewCenter(container.NewGridWrap(fyne.NewSquareSize(48), skip)), container.NewCenter(caption("Skip")),
+		layout.NewSpacer())
+	info := container.NewVBox(layout.NewSpacer(), container.NewHBox(r.state, r.rate, r.channels, r.fileRate), r.track, r.elapsed, layout.NewSpacer())
+	body := container.NewBorder(nil, nil, r.cover, skipBox, container.New(layout.NewCustomPaddedLayout(0, 0, pad*3, pad*2), info))
+	// The track being recorded is on its cover's colours, from one side of
+	// the window to the other, its progress along the bottom edge.
+	media := container.NewStack(r.glow, container.NewBorder(nil, r.progress, nil, nil,
+		container.New(layout.NewCustomPaddedLayout(pad*3, pad*3, pad*3, pad*4), body)))
+	r.card = container.NewStack(container.NewThemeOverride(media, mediaTheme{}))
 
 	r.waiting = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorInfoText, Inline: true}})
 	r.launch = widget.NewButtonWithIcon("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
@@ -155,15 +172,15 @@ func newRecordScreen(a *App) *recordScreen {
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
-			chip := caption("Skipped: duplicate")
-			keep := widget.NewButtonWithIcon("Keep anyway", theme.DocumentSaveIcon(), nil)
+			status := newBadge("Skipped: duplicate", colorSkippedBadge, "", colorOnSkippedBadge)
+			keep := container.NewCenter(outlined(widget.NewButton("Keep anyway", nil)))
 			keep.Hide()
 			reveal := widget.NewButtonWithIcon("", theme.SearchIcon(), nil)
 			reveal.Importance = widget.LowImportance
 			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
 			// The title, the artist, then the length, format and size.
-			return trackRow(3, container.NewHBox(container.NewCenter(chip), container.NewCenter(keep), container.NewCenter(reveal), container.NewCenter(play)))
+			return trackRow(3, container.NewHBox(container.NewCenter(status), keep, container.NewCenter(reveal), container.NewCenter(play)))
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(r.rows) {
@@ -174,21 +191,18 @@ func newRecordScreen(a *App) *recordScreen {
 			box := o.(*fyne.Container)
 			right := box.Objects[2].(*fyne.Container)
 			setTrackRow(box, a.covers.get(row.CoverURL).row, row.Title, row.Artist, rowDetails(row))
-			chip := right.Objects[0].(*fyne.Container).Objects[0].(*widget.RichText)
-			seg := chip.Segments[0].(*widget.TextSegment)
-			if c := chipColor(row); seg.Text != row.StatusText() || seg.Style.ColorName != c {
-				seg.Text, seg.Style.ColorName = row.StatusText(), c
-				chip.Refresh()
-			}
-			keepBtn := right.Objects[1].(*fyne.Container).Objects[0].(*widget.Button)
+			fill, ink := badgeColors(row)
+			right.Objects[0].(*fyne.Container).Objects[0].(*badge).set(row.StatusText(), fill, ink)
+			keep := right.Objects[1].(*fyne.Container)
+			keepBtn := keep.Objects[0].(*panel).content.(*widget.Button)
 			revealBtn := right.Objects[2].(*fyne.Container).Objects[0].(*widget.Button)
 			playBtn := right.Objects[3].(*fyne.Container).Objects[0].(*widget.Button)
 			if row.Keepable {
 				id := row.ID
 				keepBtn.OnTapped = func() { a.keep(id) }
-				keepBtn.Show()
+				keep.Show()
 			} else {
-				keepBtn.Hide()
+				keep.Hide()
 			}
 			if row.Path != "" && row.Status == model.Saved {
 				path := row.Path
@@ -200,12 +214,13 @@ func newRecordScreen(a *App) *recordScreen {
 				revealBtn.Disable()
 				playBtn.Disable()
 			}
-			// The chip's text changed width: lay the row out again.
+			// The badge's text changed width: lay the row out again.
 			box.Refresh()
 		},
 	)
 
 	r.totals = caption("")
+	r.totals.Segments[0].(*widget.TextSegment).Style.ColorName = colorLabel
 	openFolder := widget.NewButtonWithIcon("Open folder", theme.FolderOpenIcon(), func() {
 		a.noteAction("open folder")
 		if r.folder != "" {
@@ -218,11 +233,12 @@ func newRecordScreen(a *App) *recordScreen {
 		a.m.ClearRows()
 	})
 	r.clear.Importance = widget.LowImportance
-	footer := container.NewBorder(nil, nil, nil, container.NewHBox(r.clear, openFolder), r.totals)
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
 	r.listCard = listCard(r.list)
-	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow), inset(footer), nil, nil,
-		container.NewStack(inset(r.listCard), r.noRows))
+	// The info bar over the track being recorded, the session's files under
+	// them and its totals at the bottom.
+	r.session = container.NewBorder(container.NewVBox(r.waitRow, r.card), footerBar(r.totals, container.NewHBox(r.clear, openFolder)), nil, nil,
+		container.NewStack(r.listCard, r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
 	return r
 }
@@ -245,15 +261,16 @@ func rowDetails(r model.Row) string {
 	return strings.Join(parts, " · ")
 }
 
-// chipColor is the status in a soft tone: the row's title is what matters.
-func chipColor(r model.Row) fyne.ThemeColorName {
+// badgeColors is a row's status badge: green for a saved file, sand for a
+// skipped one, grey while it is on its way.
+func badgeColors(r model.Row) (fill, ink fyne.ThemeColorName) {
 	switch r.Status {
 	case model.Saved:
-		return colorSaved
+		return colorSavedBadge, colorOnSavedBadge
 	case model.Skipped:
-		return colorSkipped
+		return colorSkippedBadge, colorOnSkippedBadge
 	}
-	return theme.ColorNamePlaceHolder
+	return theme.ColorNameInputBackground, theme.ColorNamePlaceHolder
 }
 
 // keep saves a take cut short after all, the part that played: the row
@@ -317,49 +334,38 @@ func (r *recordScreen) render(s model.State) {
 	r.idle.Hide()
 	r.session.Show()
 
-	if c := s.Current; c != nil {
-		r.card.Show()
-		r.waitRow.Hide()
-		sub := c.Artist
-		if c.Album != "" {
-			sub += " · " + c.Album
-		}
-		lines := []string{stateText(s.Session, c), c.Title, sub}
-		if src := sourceText(c.SourceRate, c.SourceChannels); src != "" {
-			lines = append(lines, src)
-		}
-		setRowText(r.track, lines...)
-		setCover(r.cover, r.app.covers.get(c.CoverURL).live)
-	} else {
-		r.card.Hide()
-		// A session the output folder ended, its drive unplugged: Record
-		// stays off until the folder is back or another one is chosen.
-		blocked := s.Session == proto.StateIdle && checkFails(s.Info.Checks, proto.CheckOutputWritable)
-		// Nothing is recorded until the player plays, whatever the list
-		// holds: between sessions or while one waits, the row says so and
-		// offers the one next step, to open the player or to play. Waiting
-		// with the player running is also a track that started before the
-		// session, which only a restart records; the session does not tell
-		// it from a stopped player.
-		waits := s.Session == proto.StateIdle || s.Session == proto.StateWaiting || s.Session == proto.StatePaused
-		down := waits && !blocked && !playerRunning(s)
-		paused := s.Session == proto.StatePaused && !down
-		text := waitingText(s.Session)
-		switch {
-		case blocked:
-			text = "Session ended: Spytify cannot write to the output folder, so Record is off."
-		case down:
-			text = fmt.Sprintf("Nothing is recorded while %s is not running.", player)
-		case paused:
-			text = fmt.Sprintf("Nothing is recorded while %s is paused: press play there.", player)
-		}
-		setCaption(r.waiting, text)
-		r.launch.SetText("Open " + player)
-		show(r.launch, down)
-		show(r.play, paused)
-		show(r.restart, s.Session == proto.StateWaiting && !down)
-		show(r.blocked, blocked)
-		r.waitRow.Show()
+	c := s.Current
+	// A session the output folder ended, its drive unplugged: Record stays
+	// off until the folder is back or another one is chosen.
+	blocked := c == nil && s.Session == proto.StateIdle && checkFails(s.Info.Checks, proto.CheckOutputWritable)
+	// Nothing is recorded until the player plays, whatever the list holds:
+	// between sessions or while one waits, the info bar says so and offers
+	// the one next step, to open the player or to play; over a track the
+	// player paused, it offers to play. Waiting with the player running is
+	// also a track that started before the session, which only a restart
+	// records; the session does not tell it from a stopped player.
+	waits := s.Session == proto.StateIdle || s.Session == proto.StateWaiting || s.Session == proto.StatePaused
+	down := c == nil && waits && !blocked && !playerRunning(s)
+	paused := s.Session == proto.StatePaused && !down
+	text := waitingText(s.Session)
+	switch {
+	case blocked:
+		text = "Session ended: Spytify cannot write to the output folder, so Record is off."
+	case down:
+		text = fmt.Sprintf("Nothing is recorded while %s is not running.", player)
+	case paused:
+		text = fmt.Sprintf("Nothing is recorded while %s is paused: press play there.", player)
+	}
+	setCaption(r.waiting, text)
+	r.launch.SetText("Open " + player)
+	show(r.launch, down)
+	show(r.play, paused)
+	show(r.restart, c == nil && s.Session == proto.StateWaiting && !down)
+	show(r.blocked, blocked)
+	show(r.waitRow, c == nil || paused)
+	show(r.card, c != nil)
+	if c != nil {
+		r.renderCard(c, s.Session)
 	}
 	r.renderLive(s.Current, s.Session, s.Level)
 
@@ -377,6 +383,47 @@ func (r *recordScreen) render(s model.State) {
 	}
 	t := s.Totals()
 	setCaption(r.totals, fmt.Sprintf("%d saved · %d skipped · %d ads · %s", t.Saved, t.Skipped, t.Ads, fmtBytes(t.Bytes)))
+}
+
+// renderCard shows the track being recorded: its cover, blurred behind the
+// card too, its title, whether it is recorded, and the stream's format.
+func (r *recordScreen) renderCard(c *model.Row, session proto.SessionState) {
+	sub := c.Artist
+	if c.Album != "" {
+		sub += " · " + c.Album
+	}
+	setRowText(r.track, c.Title, sub)
+	text, recording := stateText(session, c)
+	fill, ink := colorMediaBadge, theme.ColorNameForeground
+	switch {
+	case recording:
+		fill, ink = colorRecBadge, colorOnRecBadge
+	case c.Status == model.Skipped:
+		fill, ink = colorSkippedBadge, colorOnSkippedBadge
+	}
+	r.state.set(text, fill, ink)
+	pausedIcon := session == proto.StatePaused && c.Status != model.Skipped
+	show(r.recDot, recording)
+	show(r.pausedIcon, pausedIcon)
+	show(r.state.lead, recording || pausedIcon)
+	show(r.meter, recording)
+	parts := sourceParts(c.SourceRate, c.SourceChannels)
+	for i, b := range []*badge{r.rate, r.channels, r.fileRate} {
+		show(b, i < len(parts))
+		if i < len(parts) {
+			b.set(parts[i], "", theme.ColorNameForeground)
+		}
+	}
+	cover := r.app.covers.get(c.CoverURL)
+	setCover(r.cover, cover.live)
+	g := cover.glow
+	if g == nil {
+		g = noCoverGlow
+	}
+	if r.glow.Image != g {
+		r.glow.Image = g
+		r.glow.Refresh()
+	}
 }
 
 // renderLive moves the progress, the elapsed time and the meter, which the
@@ -397,12 +444,15 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 	if v < 0 || session != proto.StateRecording {
 		v = 0
 	}
-	r.level.SetValue(v)
+	r.meter.SetLevel(v)
 }
 
-// relayout lays the screen out again when a part appeared or went away.
+// relayout lays the screen out again when a part appeared or went away, or
+// a badge on the card changed width.
 func (r *recordScreen) relayout() {
-	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), len(r.track.Segments), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
+	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(),
+		r.state.text, r.state.lead.Visible(), r.rate.text, r.channels.text, r.fileRate.Visible(), r.fileRate.text,
+		r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()
@@ -417,43 +467,44 @@ func show(o fyne.CanvasObject, visible bool) {
 	}
 }
 
-func stateText(st proto.SessionState, c *model.Row) string {
+// stateText is what the card's badge says of the track, and whether it is
+// recorded: the red badge, with the level.
+func stateText(st proto.SessionState, c *model.Row) (text string, recording bool) {
 	if c.Status == model.Skipped {
-		return "PLAYING, NOT RECORDED: " + strings.ToUpper(strings.TrimPrefix(c.StatusText(), "Skipped: "))
+		return "Playing, not recorded: " + strings.TrimPrefix(c.StatusText(), "Skipped: "), false
 	}
 	switch st {
 	case proto.StatePaused:
-		return "PAUSED"
+		return "Paused", false
 	case proto.StateStopping:
-		return "RECORDING · STOPS AFTER THIS TRACK"
+		return "Recording · stops after this track", true
 	case proto.StateAd:
-		return "ADVERT, NOT RECORDED"
+		return "Advert, not recorded", false
 	}
-	return "● RECORDING"
+	return "Recording", true
 }
 
-// sourceText is the captured stream, "44.1 kHz stereo", and the file's rate
-// when the encoder writes it at a lower one: "96 kHz stereo, 48 kHz file".
-func sourceText(rate, channels int) string {
+// sourceParts is the captured stream, a badge each: "44.1 kHz", "Stereo",
+// then the file's rate when the encoder writes it at a lower one: "48 kHz
+// file". None while the stream is not known.
+func sourceParts(rate, channels int) []string {
 	if rate <= 0 {
-		return ""
+		return nil
 	}
 	khz := func(rate int) string { return strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64) + " kHz" }
-	text := khz(rate)
+	parts := []string{khz(rate)}
 	switch channels {
 	case 1:
-		text += " mono"
+		parts = append(parts, "Mono")
 	case 2:
-		text += " stereo"
+		parts = append(parts, "Stereo")
 	default:
-		text = fmt.Sprintf("%s %d channels", text, channels)
+		parts = append(parts, fmt.Sprintf("%d channels", channels))
 	}
-	// Not an arrow: the app's font has none, and the symbol font Fyne
-	// falls back to draws the space after it far too wide.
 	if file := encode.FileRate(rate); file != rate {
-		text += ", " + khz(file) + " file"
+		parts = append(parts, khz(file)+" file")
 	}
-	return text
+	return parts
 }
 
 func waitingText(st proto.SessionState) string {

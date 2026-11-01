@@ -174,13 +174,6 @@ func setTrackRow(row *fyne.Container, cover image.Image, title string, lines ...
 	setCover(row.Objects[1].(*canvas.Image), cover)
 }
 
-// tight takes a caption's padding off above and below it, so that rows of
-// captions sit as close as the lines of a paragraph.
-func tight(o fyne.CanvasObject) *fyne.Container {
-	p := -theme.InnerPadding()
-	return container.New(layout.NewCustomPaddedLayout(p, p, 0, 0), o)
-}
-
 // wrapped is a caption that breaks into lines.
 func wrapped(text string) *widget.RichText {
 	rt := caption(text)
@@ -208,15 +201,15 @@ func setCaption(rt *widget.RichText, text string) {
 // The sides of a cover in a list row and on the live card.
 const (
 	rowCover  = 40
-	liveCover = 96
+	liveCover = 120
 )
 
 // thumbs is a cover at the sizes the app shows it, twice those in points
 // for HiDPI screens: a cover can be thousands of pixels wide, and Fyne
 // decodes and scales a picture from a resource again on every refresh, as
-// a list row's is each time the list redraws. Both are nil while there is
-// no cover.
-type thumbs struct{ row, live image.Image }
+// a list row's is each time the list redraws. glow is the live card's
+// background. All are nil while there is no cover.
+type thumbs struct{ row, live, glow image.Image }
 
 func newThumbs(data []byte) (thumbs, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
@@ -224,8 +217,39 @@ func newThumbs(data []byte) (thumbs, error) {
 		return thumbs{}, err
 	}
 	live := shrink(img, 2*liveCover)
-	return thumbs{row: shrink(live, 2*rowCover), live: live}, nil
+	return thumbs{row: shrink(live, 2*rowCover), live: live, glow: glow(live)}, nil
 }
+
+// glowSide is the side, in pixels, of the cover behind the live card:
+// stretched over the card with smooth scaling, so few pixels blur into the
+// cover's colours. The graphics card stretches it; nothing is computed
+// again per frame.
+const glowSide = 6
+
+// glow is a cover shrunk to a few pixels and darkened, so white text reads
+// on it.
+func glow(cover image.Image) image.Image {
+	dst := image.NewNRGBA(image.Rect(0, 0, glowSide, glowSide))
+	draw.BiLinear.Scale(dst, dst.Bounds(), cover, cover.Bounds(), draw.Src, nil)
+	for i := 0; i < len(dst.Pix); i += 4 {
+		for c := i; c < i+3; c++ {
+			dst.Pix[c] = uint8(int(dst.Pix[c]) * 55 / 100)
+		}
+		dst.Pix[i+3] = 0xff
+	}
+	return dst
+}
+
+// noCoverGlow is the live card's background while its track has no cover:
+// the app's green, deeper to the right.
+var noCoverGlow = func() image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	img.SetNRGBA(0, 0, color.NRGBA{R: 0x1d, G: 0x7a, B: 0x45, A: 0xff})
+	img.SetNRGBA(1, 0, color.NRGBA{R: 0x0f, G: 0x47, B: 0x29, A: 0xff})
+	img.SetNRGBA(0, 1, color.NRGBA{R: 0x13, G: 0x5a, B: 0x33, A: 0xff})
+	img.SetNRGBA(1, 1, color.NRGBA{R: 0x0b, G: 0x2e, B: 0x1c, A: 0xff})
+	return img
+}()
 
 // shrink scales img down to fit in a square of side px, keeping its shape;
 // a smaller picture stays as it is.
@@ -386,8 +410,8 @@ func (r *barRenderer) Layout(s fyne.Size) {
 func (r *barRenderer) MinSize() fyne.Size { return fyne.NewSize(40, barHeight) }
 
 func (r *barRenderer) Refresh() {
-	r.track.FillColor = theme.Color(theme.ColorNameInputBackground)
-	r.fill.FillColor = theme.Color(r.b.color)
+	r.track.FillColor = theme.ColorForWidget(theme.ColorNameInputBackground, r.b)
+	r.fill.FillColor = theme.ColorForWidget(r.b.color, r.b)
 	r.track.CornerRadius, r.fill.CornerRadius = barHeight/2, barHeight/2
 	r.Layout(r.b.Size())
 	r.track.Refresh()
@@ -591,12 +615,29 @@ func inset(o fyne.CanvasObject) *fyne.Container {
 	return container.New(layout.NewCustomPaddedLayout(pad, pad, pad*2, pad*2), o)
 }
 
-// listCard holds a list in a card as tall as its rows, up to the room it is
-// given; refresh it when the number of rows changes.
+// listCard holds a list on the card's colour, as tall as its rows up to the
+// room it is given, square and from one side of the window to the other: a
+// line between rows starts under their covers. Refresh it when the number
+// of rows changes.
 func listCard(list *widget.List) *fyne.Container {
-	pad := theme.Padding()
-	box := newPanel(colorCard, colorCardLine, 10, fyne.NewSize(pad, pad), list)
+	box := newPanel(colorCard, "", 0, fyne.NewSize(3*theme.Padding(), 0), list)
 	return container.New(fitRows{list}, container.NewThemeOverride(box, cardTheme{input: colorCardInput, surface: colorCard}))
+}
+
+// footerBar is a screen's bottom bar, on a grey of its own under a line:
+// what the screen holds on the left, its actions on the right.
+func footerBar(left, actions fyne.CanvasObject) fyne.CanvasObject {
+	pad := theme.Padding()
+	row := container.New(layout.NewCustomPaddedLayout(pad/2, pad/2, pad*2, pad),
+		container.NewBorder(nil, nil, nil, actions, container.NewVBox(layout.NewSpacer(), left, layout.NewSpacer())))
+	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, newPanel(colorFooter, "", 0, fyne.Size{}, row))
+}
+
+// outlined draws a line around a button without a fill of its own, for a
+// secondary action on a list row.
+func outlined(b *widget.Button) *panel {
+	b.Importance = widget.LowImportance
+	return newPanel("", colorOutline, 8, fyne.Size{}, b)
 }
 
 // fitRows lays a list's card out no taller than its rows: under software
