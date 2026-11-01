@@ -11,6 +11,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/ui/model"
@@ -205,6 +206,88 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	lib.scan()
 	if !lib.empty.Visible() || lib.hint.Text != "Every file here is a take cut short or in low quality." {
 		t.Errorf("no file left: empty state shown %v, %q", lib.empty.Visible(), lib.hint.Text)
+	}
+}
+
+// The filter's dropdown takes the keys a select's list does: Space or an
+// arrow opens it on its first box, the arrows go from box to box, Space
+// ticks the box focused, Enter and Escape close it. Tab closes it and goes
+// on: it went round the boxes, and the keyboard never got out.
+func TestTheFilterWorksFromTheKeyboard(t *testing.T) {
+	order := []string{"M83 - Midnight City.flac", "M83 - Wait (partial).flac"}
+	files := map[string]string{}
+	for _, name := range order {
+		files[name] = ""
+	}
+	a, lib, _, _ := libraryOf(t, files, order...)
+	c := a.win.Canvas()
+	// The keys as Fyne 2.8.2's window sends them: Tab goes to a control
+	// that takes it, else moves the focus; Space is the key, then its
+	// character, to whatever has the focus by then.
+	key := func(k fyne.KeyName) {
+		if f, ok := c.Focused().(fyne.Tabbable); k == fyne.KeyTab && (!ok || !f.AcceptsTab()) {
+			c.FocusNext()
+			return
+		}
+		if f := c.Focused(); f != nil {
+			f.TypedKey(&fyne.KeyEvent{Name: k})
+		}
+	}
+	space := func() {
+		key(fyne.KeySpace)
+		if f := c.Focused(); f != nil {
+			f.TypedRune(' ')
+		}
+	}
+	box := func() string {
+		if b, ok := c.Focused().(*menuBox); ok {
+			return b.Text
+		}
+		return fmt.Sprintf("%T", c.Focused())
+	}
+
+	c.Focus(lib.kinds)
+	space()
+	if c.Overlays().Top() == nil || box() != takeComplete || !lib.takes[takeComplete].Checked {
+		t.Fatalf("Space: dropdown shown %v, the focus on %s, Complete ticked %v", c.Overlays().Top() != nil, box(), lib.takes[takeComplete].Checked)
+	}
+	for _, step := range []struct {
+		key  fyne.KeyName
+		want string
+	}{
+		{fyne.KeyDown, takePartial},
+		{fyne.KeyDown, takeLowQuality},
+		{fyne.KeyDown, takeLowQuality},
+		{fyne.KeyUp, takePartial},
+	} {
+		key(step.key)
+		if box() != step.want {
+			t.Fatalf("%s: the focus is on %s, want %s", step.key, box(), step.want)
+		}
+	}
+	space()
+	if lib.takes[takePartial].Checked || lib.kinds.Selected != takeComplete+", "+takeLowQuality || len(lib.rows) != 1 {
+		t.Errorf("Space on Partial: ticked %v, the filter says %q, %d rows", lib.takes[takePartial].Checked, lib.kinds.Selected, len(lib.rows))
+	}
+
+	key(fyne.KeyTab)
+	if c.Overlays().Top() != nil {
+		t.Fatalf("Tab left the dropdown open, the focus on %s", box())
+	}
+	if b, ok := c.Focused().(*widget.Button); !ok || b.Icon != theme.ViewRefreshIcon() {
+		t.Errorf("Tab went to %s, want the rescan after the filter", box())
+	}
+
+	for _, k := range []fyne.KeyName{fyne.KeyEscape, fyne.KeyReturn, fyne.KeyEnter} {
+		c.Focus(lib.kinds)
+		key(fyne.KeyDown)
+		if box() != takeComplete {
+			t.Fatalf("Down on the filter: the focus is on %s", box())
+		}
+		key(k)
+		if c.Overlays().Top() != nil || c.Focused() != lib.kinds {
+			t.Errorf("%s: dropdown shown %v, the focus on %s", k, c.Overlays().Top() != nil, box())
+		}
 	}
 }
 
