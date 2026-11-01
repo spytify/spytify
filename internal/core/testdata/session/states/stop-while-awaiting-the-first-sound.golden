@@ -1,0 +1,26 @@
+# states/stop-while-awaiting-the-first-sound
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=100 (ring at -)
+       0ms  > player Playing pos=-1 (ring at 0)
+       0ms  started t-001 "A" artist="Artist" album="Album" length=3000ms source=44100/2
+       0ms  state recording
+       0ms  take t-001 "A" start=0(0ms) length=132300(3000ms) awaiting-sound
+       0ms  > audio silence, 13230(300ms)
+     300ms  > session.stop
+     300ms  state stopping
+     300ms  > audio silence, 13230(300ms)
+     600ms  > audio music 1 at 0ms, 132300(3000ms)
+     610ms  log debug: "A" starts at its first sound, 600 ms
+     610ms  take t-001 "A" start=26471(600.25ms) origin=0(0ms) length=132300(3000ms)
+    3600ms  > audio silence, 22050(500ms)
+    4100ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 180810)
+    4100ms  log debug: cut for "B" at 3600 ms (kind 1, noticed at 4100 ms, window 2700..3901 ms)
+    4100ms  state idle
+    4100ms  take none
+--- jobs
+job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060
+--- end: idle, 0 skipped, 0 ads, 0 overruns

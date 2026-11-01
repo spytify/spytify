@@ -62,7 +62,7 @@ func TestWriterTagsEveryFormat(t *testing.T) {
 	var cover bytes.Buffer
 	png.Encode(&cover, image.NewRGBA(image.Rect(0, 0, 4, 4)))
 	track := Track{Title: "Song", Subtitle: "Live", SubtitleSep: SepParenthesis, Performers: []string{"Artist", "Guest"}, AlbumArtists: []string{"Artist"},
-		Album: "Album", Genres: []string{"pop"}, Track: 2, Disc: 1, Year: 2001, Cover: cover.Bytes(), CoverMIME: "image/png"}
+		Album: "Album", Track: 2, Disc: 1, Year: 2001, Cover: cover.Bytes(), CoverMIME: "image/png"}
 
 	for _, format := range []string{"flac", "mp3", "aac"} {
 		codec := map[string]string{"flac": "flac", "mp3": "libmp3lame", "aac": "aac"}[format]

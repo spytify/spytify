@@ -1,0 +1,40 @@
+# cases/length-from-a-refresh-after-a-track-outlived-its-own
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=2000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 352800(8000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=2000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=88200(2000ms)
+    6210ms  log info: no track change by the declared end of "A"; recording on until the next one
+    6210ms  take t-001 "A" start=22061(500.25ms) length=0(0ms)
+    8500ms  > audio silence, 22050(500ms)
+    9000ms  > player TrackChanged "B" id=/x/b length=0ms pos=0 (ring at 396900)
+    9000ms  > audio music 2 at 0ms, 44100(1000ms)
+    9320ms  log debug: cut for "B" at 8500 ms (kind 2, noticed at 9000 ms, window 8000..9300 ms)
+    9320ms  started t-002 "B" artist="Artist" album="Album" length=0ms cut=interrupt/silence offset=-500ms source=44100/2
+    9320ms  take t-002 "B" start=374850(8500ms) length=0(0ms)
+   10000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=-1 (ring at 441000)
+   10000ms  > audio music 2 at 1000ms, 88200(2000ms)
+   12000ms  > audio silence, 22050(500ms)
+   12500ms  > player TrackChanged "C" id=/x/c length=3000ms pos=0 (ring at 551250)
+   12500ms  > audio music 3 at 0ms, 132300(3000ms)
+   12820ms  log debug: cut for "C" at 12000 ms (kind 2, noticed at 12500 ms, window 11500..12800 ms)
+   12820ms  started t-003 "C" artist="Artist" album="Album" length=3000ms cut=interrupt/silence offset=-500ms source=44100/2
+   12820ms  take t-003 "C" start=529200(12000ms) length=132300(3000ms)
+   15500ms  > audio silence, 66150(1500ms)
+   17000ms  > player Stopped pos=-1 (ring at 749700)
+   17000ms  state waiting
+   17000ms  state stopping
+   17000ms  state idle
+   17000ms  take none
+--- jobs
+job t-001 "A" played=352789(7999.75ms) length=0(0ms) wav=352789 crc=91b53a14
+job t-002 "B" played=154350(3500ms) length=0(0ms) wav=154350 crc=a0330101
+job t-003 "C" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=0130b55d
+--- end: idle, 0 skipped, 0 ads, 0 overruns

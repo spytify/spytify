@@ -37,6 +37,7 @@ type Track struct {
 	Year          int
 	Unknown       bool // no title: podcasts and untitled items go to the root
 	FallbackStamp string
+	Suffix        string // ends the name, whatever the template: " (partial)"
 }
 
 // Options are the output.* settings.
@@ -91,7 +92,13 @@ func Build(t Track, o Options) Plan {
 	} else {
 		name = expand(o.Template, t, o.ArtistSeparator)
 	}
-	return Plan{Dir: filepath.Join(dirs...), Base: component(name, o.ASCII, sep)}
+	base := component(name, o.ASCII, sep)
+	if t.Suffix != "" {
+		// Cut to the length limit, the name keeps its suffix whole.
+		suffix := spaces.ReplaceAllString(t.Suffix, sep)
+		base = truncateBytes(base, maxComponent-len(suffix)) + suffix
+	}
+	return Plan{Dir: filepath.Join(dirs...), Base: base}
 }
 
 // FileName is the final name for a plan: prefix, base, extension.
@@ -134,9 +141,10 @@ func CounterLimit(width int) int64 {
 // and the counter at counter: the settings show it under the template.
 func Example(o Options, counter int64) string {
 	// Its accents show what removing diacritics does, its guest what all
-	// artists folders do.
+	// artists folders do. It has no year: the player gives none on macOS
+	// or Windows.
 	t := Track{Artists: []string{"Neon Harbor", "Lumen"}, AlbumArtists: []string{"Neon Harbor"}, Title: "Café Lumière",
-		Album: "Harbor Lights", TrackNumber: 4, Year: 2024}
+		Album: "Harbor Lights", TrackNumber: 4}
 	p := Build(t, o)
 	return filepath.Join(p.Dir, FileName(p, o, counter, t.TrackNumber))
 }
@@ -188,16 +196,19 @@ func Recorded(root string, p Plan, o Options) bool {
 	return false
 }
 
-var placeholder = regexp.MustCompile(`\{([a-z]+)\}`)
+var placeholder = regexp.MustCompile(`\{([a-z_]+)\}`)
 
 func expand(tmpl string, t Track, artistSep string) string {
 	if tmpl == "" {
-		tmpl = "{artist} - {title}"
+		tmpl = "{album_artist} - {title}"
 	}
 	out := placeholder.ReplaceAllStringFunc(tmpl, func(m string) string {
 		switch m {
-		case "{artist}":
-			return artistsOf(t, artistSep)
+		// {artist} is {album_artist}'s old name: saved templates keep it.
+		case "{album_artist}", "{artist}":
+			return albumArtistsOf(t, artistSep)
+		case "{artists}":
+			return allArtists(t, artistSep)
 		case "{title}":
 			return t.Title
 		case "{album}":
@@ -225,9 +236,10 @@ func expand(tmpl string, t Track, artistSep string) string {
 	return out
 }
 
-// artistsOf follows v1's Track.Artists: album artists when known, otherwise
-// the artist plus extra performers, without repeats.
-func artistsOf(t Track, sep string) string {
+// albumArtistsOf follows v1's Track.Artists, which {artist} wrote: album
+// artists when known, otherwise the artist plus extra performers, without
+// repeats.
+func albumArtistsOf(t Track, sep string) string {
 	if len(t.AlbumArtists) > 0 {
 		return strings.Join(t.AlbumArtists, sep)
 	}
