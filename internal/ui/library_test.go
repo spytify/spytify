@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -421,5 +422,86 @@ func TestTheAlbumViewGroupsThousandsOfFilesWithoutTheirTags(t *testing.T) {
 	lib.list.ScrollTo(3000)
 	if len(drawn) == 0 || len(drawn) > 12 || !drawn[3000] {
 		t.Errorf("scrolled to row 3,000, drew %d rows", len(drawn))
+	}
+}
+
+// The trash button moves the file to the trash, a WAV with the .json beside
+// it, without a question; the row goes. A trash that refuses says why, and
+// the file keeps its row.
+func TestTheTrashButtonMovesAFileToTheTrash(t *testing.T) {
+	order := []string{
+		"M83 - Splendor (low quality).wav",
+		"M83 - Wait (partial).flac",
+		"M83 - Midnight City.flac",
+	}
+	a, lib, dir, _ := libraryOf(t, map[string]string{
+		order[0]:           "",
+		order[0] + ".json": `{"title": "Splendor (low quality)", "performers": ["M83"]}`,
+		order[1]:           "",
+		order[2]:           "",
+	}, order...)
+	bin := t.TempDir()
+	var moved []string
+	var refuse error
+	real := moveToTrash
+	t.Cleanup(func() { moveToTrash = real })
+	moveToTrash = func(path string) error {
+		if _, err := os.Lstat(path); err != nil {
+			return err
+		}
+		if refuse != nil {
+			return refuse
+		}
+		moved = append(moved, path)
+		return os.Rename(path, filepath.Join(bin, filepath.Base(path)))
+	}
+	trashButton := func(title string) *button {
+		t.Helper()
+		a.render()
+		row, ok := drawnRows(t, lib.list)[title]
+		if !ok {
+			t.Fatalf("no row for %s", title)
+		}
+		return row.row.Objects[2].(*fyne.Container).Objects[3].(*button)
+	}
+
+	first := trashButton("Splendor")
+	test.MoveMouse(a.win.Canvas(), fyne.CurrentApp().Driver().AbsolutePositionForObject(first).AddXY(8, 8))
+	setCaption(lib.count, pluralFiles(3, 3, "/Users/listener/Music/Spytify"))
+	snapshot(t, a, "library-trash")
+	test.Tap(first)
+	wav := filepath.Join(dir, order[0])
+	if !slices.Equal(moved, []string{wav, wav + ".json"}) {
+		t.Fatalf("moved %q to the trash", moved)
+	}
+	if top := a.win.Canvas().Overlays().Top(); top != nil {
+		t.Fatalf("a question or an error: %q", texts(top))
+	}
+	if got := rowNames(lib); !slices.Equal(got, order[1:]) {
+		t.Fatalf("rows after the trash: %q", got)
+	}
+
+	refuse = &os.PathError{Op: "trash", Path: filepath.Join(dir, order[2]), Err: errors.New("its drive has no trash folder Spytify can use")}
+	test.Tap(trashButton("Midnight City"))
+	top := a.win.Canvas().Overlays().Top()
+	if top == nil || !contains(texts(top), "no trash folder") {
+		t.Fatal("a refused trash says nothing")
+	}
+	a.win.Canvas().Overlays().Remove(top)
+	if got := rowNames(lib); !slices.Equal(got, order[1:]) {
+		t.Fatalf("rows after a refused trash: %q", got)
+	}
+
+	// Gone already, from another program, the file leaves its row quietly.
+	refuse = nil
+	if err := os.Remove(filepath.Join(dir, order[1])); err != nil {
+		t.Fatal(err)
+	}
+	test.Tap(trashButton("Wait"))
+	if top := a.win.Canvas().Overlays().Top(); top != nil {
+		t.Fatalf("a file gone already: %q", texts(top))
+	}
+	if got := rowNames(lib); !slices.Equal(got, order[2:]) {
+		t.Fatalf("rows after the trash of a file gone: %q", got)
 	}
 }

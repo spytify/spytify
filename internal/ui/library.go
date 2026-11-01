@@ -3,7 +3,9 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -136,9 +138,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 			// says which in a chip, as the Record screen's rows say theirs.
 			chip := caption("")
 			chip.Segments[0].(*widget.TextSegment).Style.ColorName = colorSkipped
-			reveal, play := newIconButton("", theme.SearchIcon(), nil), newIconButton("", theme.MediaPlayIcon(), nil)
-			reveal.Importance, play.Importance = widget.LowImportance, widget.LowImportance
-			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(chip), reveal, play)), albumHeading())
+			reveal, play, bin := newIconButton("", theme.SearchIcon(), nil), newIconButton("", theme.MediaPlayIcon(), nil), newIconButton("", theme.DeleteIcon(), nil)
+			reveal.Importance, play.Importance, bin.Importance = widget.LowImportance, widget.LowImportance, widget.LowImportance
+			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(chip), reveal, play, bin)), albumHeading())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.rows) {
@@ -171,6 +173,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 			path := f.path
 			after.Objects[1].(*button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
 			after.Objects[2].(*button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
+			after.Objects[3].(*button).OnTapped = func() { l.app.noteAction("move a file to the trash"); l.trash(f) }
 			box.Refresh()
 		},
 	)
@@ -398,6 +401,45 @@ func (l *libraryScreen) loaded() {
 		return
 	}
 	l.list.Refresh()
+}
+
+// trash moves f to the system's trash, and the .json the recorder writes
+// beside a WAV file with it, then takes f off the list. It asks nothing
+// first: the trash gives a file back, and a question each time would slow
+// down clearing a handful of partial takes. The recorder's index of the
+// tracks it saved needs no word: a track whose file left its path counts as
+// not recorded, unless another file has its name, so it records again.
+func (l *libraryScreen) trash(f libraryFile) {
+	move := func() error {
+		if err := moveToTrash(f.path); err != nil {
+			return err
+		}
+		side := f.path + ".json"
+		if _, err := os.Lstat(side); err != nil || !strings.EqualFold(filepath.Ext(f.path), ".wav") {
+			return nil
+		}
+		return moveToTrash(side)
+	}
+	done := func(err error) {
+		// A file gone already, by a double click or from another program,
+		// leaves the list without a word.
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			showError(l.app.win, err)
+		}
+		if _, err := os.Lstat(f.path); err == nil {
+			return
+		}
+		l.all = slices.DeleteFunc(l.all, func(g libraryFile) bool { return g.path == f.path })
+		l.filter()
+	}
+	if l.app.opts.ManualRender {
+		done(move())
+		return
+	}
+	go func() {
+		err := move()
+		fyne.Do(func() { done(err) })
+	}()
 }
 
 func pluralFiles(shown, all int, folder string) string {

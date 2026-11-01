@@ -87,6 +87,8 @@ func focusName(a *App, f fyne.Focusable) string {
 			return "Show in folder"
 		case theme.MediaPlayIcon().Name():
 			return "Play"
+		case theme.DeleteIcon().Name():
+			return "Move to trash"
 		case theme.ViewRefreshIcon().Name():
 			return "Rescan"
 		case theme.FolderOpenIcon().Name():
@@ -281,7 +283,7 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	a.render()
 	c := a.win.Canvas()
 	lib := a.screens[tabLibrary].(*libraryScreen)
-	wantOrder(t, a, "Donate", "Stop", "Tabs", "Search artist, title or album", "Sort", "Filter", "Rescan", "list", "Show in folder", "Play")
+	wantOrder(t, a, "Donate", "Stop", "Tabs", "Search artist, title or album", "Sort", "Filter", "Rescan", "list", "Show in folder", "Play", "Move to trash")
 
 	test.Type(tabTo(t, a, "Search artist, title or album", 1), "nothing like it")
 	if len(lib.shown) != 0 {
