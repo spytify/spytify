@@ -21,12 +21,9 @@ const (
 	colorSkipped fyne.ThemeColorName = "spytifySkipped"
 )
 
-// The outline and icon of an info alert, and its text: the blues of MUI's
-// outlined info Alert.
-const (
-	colorInfo     fyne.ThemeColorName = "spytifyInfo"
-	colorInfoText fyne.ThemeColorName = "spytifyInfoText"
-)
+// An info alert's text, in the green of its outline and icon, darker on the
+// light theme and lighter on the dark one, as MUI's outlined Alert does.
+const colorInfoText fyne.ThemeColorName = "spytifyInfoText"
 
 // Cards on a darker page, a settings card's advanced settings in a greyer
 // block, the track being recorded on a card of its own (white as the others
@@ -112,16 +109,11 @@ func (t spytifyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color
 			return color.NRGBA{R: 0xa8, G: 0x84, B: 0x4c, A: 0xff}
 		}
 		return color.NRGBA{R: 0xc4, G: 0xa4, B: 0x70, A: 0xff}
-	case colorInfo:
-		if light {
-			return color.NRGBA{R: 0x02, G: 0x88, B: 0xd1, A: 0xff}
-		}
-		return color.NRGBA{R: 0x29, G: 0xb6, B: 0xf6, A: 0xff}
 	case colorInfoText:
 		if light {
-			return color.NRGBA{R: 0x01, G: 0x43, B: 0x61, A: 0xff}
+			return color.NRGBA{R: 0x08, G: 0x37, B: 0x19, A: 0xff}
 		}
-		return color.NRGBA{R: 0xb8, G: 0xe7, B: 0xfc, A: 0xff}
+		return color.NRGBA{R: 0xa5, G: 0xef, B: 0xbe, A: 0xff}
 	case theme.ColorNamePrimary, theme.ColorNameHyperlink:
 		return green
 	case theme.ColorNameFocus:
