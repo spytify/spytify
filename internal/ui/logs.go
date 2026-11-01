@@ -145,7 +145,7 @@ func (a *App) showDiagnostics() {
 	l.diag.Show()
 	l.fitDiagnostics()
 	l.checksScroll.ScrollToBottom()
-	focusFirst(a.win)
+	closesOnEscape(a.win, l.hideDiagnostics)
 }
 
 func (l *logsScreen) hideDiagnostics() {
