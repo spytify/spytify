@@ -13,7 +13,9 @@ import (
 	"time"
 )
 
-var placeholder = regexp.MustCompile(`\{([a-z_]+)\}`)
+// braced is any {name} in a template: a placeholder when templateFields has
+// the name exactly, unknown otherwise, capitals and spaces included.
+var braced = regexp.MustCompile(`\{[^{}]*\}`)
 
 // "artist" is "album_artist"'s old name, and the note leaves "year" out
 // because the player gives no year on macOS or Windows: saved templates keep
@@ -198,7 +200,7 @@ func validTemplate(s string) (string, error) {
 	for _, p := range UnknownPlaceholders(s) {
 		s = strings.ReplaceAll(s, p, "")
 	}
-	if !placeholder.MatchString(s) {
+	if !braced.MatchString(s) {
 		return "", fmt.Errorf("template needs at least one of {album_artist}, {artists}, {title}, {album}, {track}")
 	}
 	return s, nil
@@ -208,9 +210,9 @@ func validTemplate(s string) (string, error) {
 // that are not placeholders: saving the template leaves them out.
 func UnknownPlaceholders(tmpl string) []string {
 	var out []string
-	for _, m := range placeholder.FindAllStringSubmatch(tmpl, -1) {
-		if !templateFields[m[1]] && !slices.Contains(out, m[0]) {
-			out = append(out, m[0])
+	for _, m := range braced.FindAllString(tmpl, -1) {
+		if !templateFields[m[1:len(m)-1]] && !slices.Contains(out, m) {
+			out = append(out, m)
 		}
 	}
 	return out

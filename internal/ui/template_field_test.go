@@ -23,8 +23,8 @@ func TestTheTemplateNamesWhatIsNotAPlaceholder(t *testing.T) {
 	// Focused, as while typing, so a render keeps the text.
 	a.win.Canvas().Focus(e)
 	line := func() string { return s.unknown.Segments[0].(*widget.TextSegment).Text }
-	e.SetText("{album_artist} {discc} - {title} {foo} {discc}")
-	if !s.unknown.Visible() || line() != "Not placeholders, left out when saved: {discc}, {foo}" {
+	e.SetText("{album_artist} {discc} - {title} {foo} {Yearr} {discc}")
+	if !s.unknown.Visible() || line() != "Not placeholders, left out when saved: {discc}, {foo}, {Yearr}" {
 		t.Errorf("shown %v: %q", s.unknown.Visible(), line())
 	}
 	if pos, size := s.unknown.Position(), s.unknown.Size(); pos.Y < e.Size().Height || size.Height == 0 {
