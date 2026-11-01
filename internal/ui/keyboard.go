@@ -72,8 +72,8 @@ func (a *App) followFocus() {
 	}
 	a.focusSeen = f
 	o, ok := f.(fyne.CanvasObject)
-	// A dialog has the keys, and the app bar does not scroll.
-	if !ok || c.Overlays().Top() != nil || inContainers(a.bar, o) {
+	// A dialog has the keys, and the app bar and the tab bar do not scroll.
+	if !ok || c.Overlays().Top() != nil || inContainers(a.bar, o) || o == a.tabKeys {
 		return
 	}
 	switch {
