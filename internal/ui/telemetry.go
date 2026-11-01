@@ -28,14 +28,22 @@ func (a *App) launchReady(s model.State) {
 	now := time.Now()
 	a.tel.Step("ready")
 	a.tel.Breadcrumb("app", "recorder ready", nil)
-	a.tel.Log("launch", map[string]any{
+	attrs := map[string]any{
 		"ready":           true,
 		"ms":              now.Sub(a.launch.start).Milliseconds(),
 		"auto_started":    !a.launch.started.IsZero(),
 		"failing":         failingNames(s.Info.Checks),
 		"advice":          adviceNames(s.Info.Checks),
 		"software_opengl": a.opts.SoftwareOpenGL,
-	})
+	}
+	// Where the output folder is, say, written to or not, for every
+	// launch: what share of them a fix would reach.
+	for _, c := range s.Info.Checks {
+		for k, v := range c.Facts {
+			attrs[k] = v
+		}
+	}
+	a.tel.Log("launch", attrs)
 	var spans []telemetry.Span
 	if !a.launch.started.IsZero() && a.launch.connected.After(a.launch.started) {
 		spans = append(spans, telemetry.Span{Op: "recorder.start", Start: a.launch.started, End: a.launch.connected})
