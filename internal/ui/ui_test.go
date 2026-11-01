@@ -1419,8 +1419,8 @@ func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
 		t.Fatalf("%d files listed", len(lib.shown))
 	}
 	drawn := map[widget.ListItemID]bool{}
-	update := lib.list.UpdateItem
-	lib.list.UpdateItem = func(id widget.ListItemID, o fyne.CanvasObject) {
+	update := lib.list.update
+	lib.list.update = func(id widget.ListItemID, o fyne.CanvasObject) {
 		drawn[id] = true
 		update(id, o)
 	}

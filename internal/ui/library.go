@@ -40,8 +40,7 @@ type libraryScreen struct {
 	root   fyne.CanvasObject
 	search *widget.Entry
 	sortBy *widget.Select
-	list   *widget.List
-	card   fyne.CanvasObject
+	list   *cardList
 	count  *widget.RichText
 	empty  fyne.CanvasObject
 	hint   *widget.Label
@@ -137,7 +136,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.count.Segments[0].(*widget.TextSegment).Style.ColorName = colorLabel
 	l.hint = widget.NewLabel("")
 	l.empty = emptyState("No recordings yet", l.hint)
-	l.list = widget.NewList(
+	l.list = newCardList(
 		func() int { return len(l.rows) },
 		func() fyne.CanvasObject {
 			// The title and the artists, as the player lists a track; or in
@@ -177,15 +176,13 @@ func newLibraryScreen(a *App) *libraryScreen {
 			box.Refresh()
 		},
 	)
-	l.card = listCard(l.list)
-	// SetSelected runs the callback, which needs the list, its card and the
-	// count.
+	// SetSelected runs the callback, which needs the list and the count.
 	l.sortBy.SetSelected("Newest")
 	// The search and the sort are white fields on the page, as in Settings.
 	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, l.kinds), l.search), cardTheme{input: colorCard})
 	// The files from one side of the window to the other, their count and
 	// folder at the bottom, as the Record screen's session.
-	l.root = inReadingOrder(inset(top), footerBar(l.count, container.NewHBox(rescan, openFolder)), nil, nil, container.NewStack(l.card, l.empty))
+	l.root = inReadingOrder(inset(top), footerBar(l.count, container.NewHBox(rescan, openFolder)), nil, nil, container.NewStack(l.list, l.empty))
 	return l
 }
 
@@ -316,7 +313,7 @@ func (l *libraryScreen) filter() {
 		l.kinds.Refresh()
 	}
 	setCaption(l.count, pluralFiles(len(shown), len(l.all), l.folder))
-	l.card.Refresh()
+	l.list.Refresh()
 	switch {
 	case len(l.all) == 0:
 		l.hint.SetText("Recorded tracks land in " + l.folder + ".")
@@ -336,7 +333,7 @@ func (l *libraryScreen) filter() {
 	default:
 		l.empty.Hide()
 	}
-	show(l.card, !l.empty.Visible())
+	show(l.list, !l.empty.Visible())
 }
 
 // kept tells whether the filter keeps f: its kind is ticked.

@@ -130,7 +130,7 @@ func focusName(a *App, f fyne.Focusable) string {
 		return w.Text
 	case *widget.Hyperlink:
 		return w.Text
-	case *widget.List:
+	case *widget.List, *cardList:
 		return "list"
 	}
 	if key := setting(f.(fyne.CanvasObject)); key != "" {
