@@ -8,7 +8,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
@@ -33,6 +32,7 @@ func (a *App) launchReady(s model.State) {
 		"ms":              now.Sub(a.launch.start).Milliseconds(),
 		"auto_started":    !a.launch.started.IsZero(),
 		"failing":         failingNames(s.Info.Checks),
+		"advice":          adviceNames(s.Info.Checks),
 		"software_opengl": a.opts.SoftwareOpenGL,
 	})
 	var spans []telemetry.Span
@@ -70,7 +70,19 @@ func startErrorKind(err error) string {
 func failingNames(checks []proto.Check) []string {
 	var names []string
 	for _, c := range checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
+			names = append(names, c.Name)
+		}
+	}
+	return names
+}
+
+// adviceNames names the advice checks that fail: recording works, at a
+// lower quality.
+func adviceNames(checks []proto.Check) []string {
+	var names []string
+	for _, c := range checks {
+		if !c.OK && c.Advice {
 			names = append(names, c.Name)
 		}
 	}
@@ -210,17 +222,12 @@ func (a *App) noteAction(what string) {
 	}
 }
 
-// noteTab notes the tab shown; opening Logs, where the diagnostics are,
-// is counted once a launch with the checks that fail then.
+// noteTab notes the tab shown.
 func (a *App) noteTab(i int) {
 	if i < 0 || i >= len(a.tabs.Items) {
 		return
 	}
 	a.tel.Breadcrumb("ui", "tab "+a.tabs.Items[i].Text, nil)
-	if i == tabLogs && !a.diagNoted && a.tel.Enabled() {
-		a.diagNoted = true
-		a.tel.Log("diagnostics", map[string]any{"failing": failingNames(a.last.Info.Checks)})
-	}
 }
 
 // sendChecks shows what the diagnostics' report holds, and sends it on
@@ -228,7 +235,7 @@ func (a *App) noteTab(i int) {
 func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	var failing []proto.Check
 	for _, c := range s.Info.Checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
 			failing = append(failing, c)
 		}
 	}
@@ -246,11 +253,10 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	preview := widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	scroll := container.NewScroll(preview)
 	scroll.SetMinSize(fyne.NewSize(0, 160))
-	what := widget.NewAccordion(widget.NewAccordionItem("What will be sent", scroll))
-	message := widget.NewMultiLineEntry()
+	what := newFold("What will be sent", scroll)
+	message := newCommentEntry()
 	message.SetPlaceHolder("Comment (optional)")
-	message.Wrapping = fyne.TextWrapWord
-	d := dialog.NewCustomConfirm("Send to the developers", "Send", "Cancel", container.NewVBox(body, what, message), func(send bool) {
+	showDialog(a.win, "Send to the developers", container.NewVBox(body, what, message), "Cancel", "Send", fyne.NewSize(560, 420), func(send bool) {
 		if !send {
 			return
 		}
@@ -261,7 +267,5 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 			err := a.tel.SendChecks(report, text)
 			fyne.Do(func() { sent(err == nil) })
 		})
-	}, a.win)
-	d.Resize(fyne.NewSize(560, 420))
-	d.Show()
+	})
 }

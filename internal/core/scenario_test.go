@@ -314,7 +314,7 @@ func TestEachFileSaysItsCounter(t *testing.T) {
 		t.Fatalf("counters %v, want 5 6 7", got)
 	}
 	// The next recording goes on from there.
-	if next := s.core.store.Values().Int("output.counter_next"); next != 8 {
+	if next := s.core.store.Values().Int(settings.OutputCounterNext); next != 8 {
 		t.Errorf("next counter number %d, want 8", next)
 	}
 }

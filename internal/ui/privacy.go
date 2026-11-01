@@ -9,9 +9,9 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -22,8 +22,9 @@ import (
 // and how they were cut, and, on a click, the checks that fail. Off, it
 // sends nothing and asks nothing.
 
+var trackerKey = settings.PrivacyBugTracker.String()
+
 const (
-	trackerKey = "privacy.bug_tracker"
 	// pendingKey holds privacy choices made before the recorder answered,
 	// sent to it once it does.
 	pendingKey = "privacy-pending"
@@ -123,7 +124,7 @@ func (a *App) renderPrivacy(s model.State) {
 	if checks := fmt.Sprint(s.Info.Checks); checks != a.checksNoted {
 		a.checksNoted = checks
 		a.tel.Breadcrumb("checks", fmt.Sprintf("%d of %d pass", len(s.Info.Checks)-len(failingNames(s.Info.Checks)), len(s.Info.Checks)),
-			map[string]any{"failing": strings.Join(failingNames(s.Info.Checks), ", ")})
+			map[string]any{"failing": strings.Join(failingNames(s.Info.Checks), ", "), "advice": strings.Join(adviceNames(s.Info.Checks), ", ")})
 	}
 }
 
@@ -138,19 +139,16 @@ func (a *App) askPrivacy(then func()) {
 	tracker := a.trackerCheck()
 	body := widget.NewLabel("Spytify can send its crashes, errors, traces and recording counts to its developers through Sentry, to help them fix issues.")
 	body.Wrapping = fyne.TextWrapWord
-	d := dialog.NewCustom("Help fix issues", "OK", container.NewVBox(body, tracker), a.win)
-	d.SetOnClosed(func() {
+	showDialog(a.win, "Help fix issues", container.NewVBox(body, tracker), "OK", "", fyne.NewSize(460, 220), func(bool) {
 		prefs.SetBool(privacySeenKey, true)
 		a.setPrivacy(trackerKey, tracker.Checked)
 		then()
 	})
-	d.Resize(fyne.NewSize(460, 220))
-	d.Show()
 }
 
 // trackerCheck is the bug tracker box, as the setting is now.
-func (a *App) trackerCheck() *widget.Check {
-	c := widget.NewCheck(trackerLabel, nil)
+func (a *App) trackerCheck() *check {
+	c := newCheck(trackerLabel)
 	on, _ := a.privacy(trackerKey).(bool)
 	c.SetChecked(on)
 	return c

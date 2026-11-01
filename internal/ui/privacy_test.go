@@ -2,7 +2,6 @@ package ui
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -89,6 +88,11 @@ func checkBoxes(o fyne.CanvasObject, label string) []*widget.Check {
 				out = append(out, w)
 			}
 			return
+		case *check:
+			if w.Text == label {
+				out = append(out, &w.Check)
+			}
+			return
 		case *fyne.Container:
 			for _, child := range w.Objects {
 				walk(child)
@@ -115,7 +119,7 @@ func quiet(a *App, srv *fakesentry.Server) int {
 
 // With the bug tracker off, the app sends nothing at all, not at launch,
 // not while recording, not on a problem, a failed start or a crash: the
-// crash only shows, and the diagnostics' button says why it is off.
+// crash only shows, and the diagnostics say why their button is off.
 func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	srv := fakesentry.New(t)
 	a, m := privacyApp(t, srv, false)
@@ -136,19 +140,11 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	if a.win.Canvas().Overlays().Top() != nil {
 		t.Error("a dialog shows with the bug tracker off")
 	}
-	send := sendButton(t, a)
-	if !send.Disabled() || send.ToolTip() != optedOut {
-		t.Errorf("Send to the developers: disabled %v, tooltip %q", send.Disabled(), send.ToolTip())
+	diagnostics(t, a)
+	if send := sendButton(t, a); !send.Disabled() || !contains(texts(overlay(t, a)), optedOut) {
+		t.Errorf("Send to the developers: disabled %v, the dialog %v", send.Disabled(), texts(overlay(t, a)))
 	}
 	snapshot(t, a, "privacy-diagnostics-off")
-	// The tooltip shows through fyne.Do, which the test driver runs on the
-	// tooltip's timer goroutine, not a main loop: hovering races here, so
-	// only for the picture, made without -race.
-	if os.Getenv("SPYTIFY_UI_SNAPSHOTS") != "" {
-		test.MoveMouse(a.win.Canvas(), a.fa.Driver().AbsolutePositionForObject(send).AddXY(20, 10))
-		time.Sleep(time.Second)
-		snapshot(t, a, "privacy-diagnostics-off-tooltip")
-	}
 	if n := quiet(a, srv); n != 0 {
 		t.Fatalf("%d requests reached Sentry with the bug tracker off", n)
 	}
@@ -218,7 +214,7 @@ func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	}
 	a.showTab(tabLogs)
 	failCheck(a, m)
-	tapButton(t, a.win.Content(), "Run the checks again")
+	tapButton(t, diagnostics(t, a), "Run the checks again")
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "No audio from the player for 10 s"}))

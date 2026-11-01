@@ -33,8 +33,8 @@ type recordScreen struct {
 	idleText   *widget.Label
 	hint       *widget.Label
 	attention  *fyne.Container
-	openPlayer *widget.Button
-	diagnose   *widget.Button
+	openPlayer *litButton
+	diagnose   *litButton
 	session    *fyne.Container
 
 	card  *fyne.Container
@@ -55,12 +55,12 @@ type recordScreen struct {
 	waiting *widget.RichText
 	// launch and play are what a waiting session needs from the player:
 	// to run, then to play.
-	launch  *widget.Button
-	play    *widget.Button
-	restart *widget.Button
+	launch  *litButton
+	play    *litButton
+	restart *button
 	// blocked leads to the diagnostics once a session ended for want of
 	// an output folder.
-	blocked *widget.Button
+	blocked *litButton
 
 	rows []model.Row
 	list *cardList
@@ -71,7 +71,7 @@ type recordScreen struct {
 	// event, ten times a second.
 	shown  string
 	noRows fyne.CanvasObject
-	clear  *widget.Button
+	clear  *button
 	totals *widget.RichText
 	folder string
 }
@@ -89,12 +89,10 @@ func newRecordScreen(a *App) *recordScreen {
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	r.hint.Wrapping = fyne.TextWrapWord
 	r.hint.SizeName = theme.SizeNameCaptionText
-	r.diagnose = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
-	r.diagnose.Importance = widget.WarningImportance
+	r.diagnose = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
 	diagnose := r.diagnose
-	r.openPlayer = widget.NewButtonWithIcon("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
-	r.openPlayer.Importance = widget.HighImportance
-	r.attention = container.NewCenter(container.NewHBox(r.openPlayer, diagnose))
+	r.openPlayer = newLitButton("Open the player", theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
+	r.attention = container.NewCenter(container.NewHBox(r.openPlayer.lit, diagnose.lit))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
 		r.idleTitle,
@@ -128,7 +126,7 @@ func newRecordScreen(a *App) *recordScreen {
 	r.track.Truncation = fyne.TextTruncateEllipsis
 	r.elapsed = caption("0:00 / 0:00")
 	r.progress = newBar(theme.ColorNamePrimary)
-	skip := widget.NewButtonWithIcon("", theme.MediaSkipNextIcon(), func() {
+	skip := newIconButton("", theme.MediaSkipNextIcon(), func() {
 		a.noteAction("skip")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdNext}, nil)
 	})
@@ -145,26 +143,23 @@ func newRecordScreen(a *App) *recordScreen {
 	r.card = container.NewStack(container.NewThemeOverride(media, mediaTheme{}))
 
 	r.waiting = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorInfoText, Inline: true}})
-	r.launch = widget.NewButtonWithIcon("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
-	r.launch.Importance = widget.HighImportance
-	r.play = widget.NewButtonWithIcon("Play", theme.MediaPlayIcon(), func() {
+	r.launch = newLitButton("Open the player", theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
+	r.play = newLitButton("Play", theme.MediaPlayIcon(), widget.HighImportance, func() {
 		a.noteAction("play in the player")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdPlay}, nil)
 	})
-	r.play.Importance = widget.HighImportance
 	// A track already playing when the session starts is not recorded;
 	// playing it again from 0:00 makes it the next track.
-	r.restart = widget.NewButtonWithIcon("Record this track from the start", theme.MediaReplayIcon(), func() {
+	r.restart = newIconButton("Record this track from the start", theme.MediaReplayIcon(), func() {
 		a.noteAction("record this track from the start")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
-	r.blocked = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
-	r.blocked.Importance = widget.WarningImportance
+	r.blocked = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
 	// What the session waits for is an outlined info alert, as MUI draws
 	// one in the app's green: an outline and icon around green text, the
 	// page showing through, the next step on the right.
 	infoIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.InfoIcon(), theme.ColorNamePrimary)))
-	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch, r.play, r.restart, r.blocked),
+	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch.lit, r.play.lit, r.restart, r.blocked.lit),
 		container.NewVBox(layout.NewSpacer(), r.waiting, layout.NewSpacer()))
 	r.waitRow = inset(newPanel("", theme.ColorNamePrimary, 8, fyne.NewSize(pad*2, pad*1.5), alert))
 
@@ -172,11 +167,11 @@ func newRecordScreen(a *App) *recordScreen {
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
 			status := newBadge("Skipped: duplicate", colorSkippedBadge, "", colorOnSkippedBadge)
-			keep := container.NewCenter(outlined(widget.NewButton("Keep anyway", nil)))
+			keep := container.NewCenter(outlined(newButton("Keep anyway", nil)))
 			keep.Hide()
-			reveal := widget.NewButtonWithIcon("", theme.SearchIcon(), nil)
+			reveal := newIconButton("", theme.SearchIcon(), nil)
 			reveal.Importance = widget.LowImportance
-			play := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
+			play := newIconButton("", theme.MediaPlayIcon(), nil)
 			play.Importance = widget.LowImportance
 			// The title, the artist, then the length, format and size.
 			return trackRow(3, container.NewHBox(container.NewCenter(status), keep, container.NewCenter(reveal), container.NewCenter(play)))
@@ -193,9 +188,9 @@ func newRecordScreen(a *App) *recordScreen {
 			fill, ink := badgeColors(row)
 			right.Objects[0].(*fyne.Container).Objects[0].(*badge).set(row.StatusText(), fill, ink)
 			keep := right.Objects[1].(*fyne.Container)
-			keepBtn := keep.Objects[0].(*panel).content.(*widget.Button)
-			revealBtn := right.Objects[2].(*fyne.Container).Objects[0].(*widget.Button)
-			playBtn := right.Objects[3].(*fyne.Container).Objects[0].(*widget.Button)
+			keepBtn := keep.Objects[0].(*panel).content.(*button)
+			revealBtn := right.Objects[2].(*fyne.Container).Objects[0].(*button)
+			playBtn := right.Objects[3].(*fyne.Container).Objects[0].(*button)
 			if row.Keepable {
 				id := row.ID
 				keepBtn.OnTapped = func() { a.keep(id) }
@@ -220,14 +215,14 @@ func newRecordScreen(a *App) *recordScreen {
 
 	r.totals = caption("")
 	r.totals.Segments[0].(*widget.TextSegment).Style.ColorName = colorLabel
-	openFolder := widget.NewButtonWithIcon("Open folder", theme.FolderOpenIcon(), func() {
+	openFolder := newIconButton("Open folder", theme.FolderOpenIcon(), func() {
 		a.noteAction("open folder")
 		if r.folder != "" {
 			_ = openPath(r.folder)
 		}
 	})
 	openFolder.Importance = widget.LowImportance
-	r.clear = widget.NewButtonWithIcon("Clear list", theme.ContentClearIcon(), func() {
+	r.clear = newIconButton("Clear list", theme.ContentClearIcon(), func() {
 		a.noteAction("clear list")
 		a.m.ClearRows()
 	})
@@ -235,7 +230,7 @@ func newRecordScreen(a *App) *recordScreen {
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
 	// The info bar over the track being recorded, the session's files under
 	// them and its totals at the bottom.
-	r.session = container.NewBorder(container.NewVBox(r.waitRow, r.card), footerBar(r.totals, container.NewHBox(r.clear, openFolder)), nil, nil,
+	r.session = inReadingOrder(container.NewVBox(r.waitRow, r.card), footerBar(r.totals, container.NewHBox(r.clear, openFolder)), nil, nil,
 		container.NewStack(r.list, r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
 	return r
@@ -292,7 +287,7 @@ func (a *App) keep(id string) {
 func (r *recordScreen) content() fyne.CanvasObject { return r.root }
 
 func (r *recordScreen) render(s model.State) {
-	r.folder, _ = s.Settings["output.dir"].(string)
+	r.folder, _ = s.Settings[settings.OutputDir.String()].(string)
 	r.folder = settings.ExpandHome(r.folder)
 	defer r.relayout()
 	player := s.Info.Target.Process

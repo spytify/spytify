@@ -7,7 +7,6 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -308,19 +307,3 @@ func (rr *cardRowRenderer) Objects() []fyne.CanvasObject {
 }
 
 func (rr *cardRowRenderer) Destroy() {}
-
-// footerBar is a screen's bottom bar, on a grey of its own under a line:
-// what the screen holds on the left, its actions on the right.
-func footerBar(left, actions fyne.CanvasObject) fyne.CanvasObject {
-	pad := theme.Padding()
-	row := container.New(layout.NewCustomPaddedLayout(pad/2, pad/2, pad*2, pad),
-		container.NewBorder(nil, nil, nil, actions, container.NewVBox(layout.NewSpacer(), left, layout.NewSpacer())))
-	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, newPanel(colorFooter, "", 0, fyne.Size{}, row))
-}
-
-// outlined draws a line around a button without a fill of its own, for a
-// secondary action on a list row.
-func outlined(b *widget.Button) *panel {
-	b.Importance = widget.LowImportance
-	return newPanel("", colorOutline, 8, fyne.Size{}, b)
-}

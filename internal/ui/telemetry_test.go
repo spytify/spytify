@@ -8,43 +8,25 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/test"
-	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// sendButton is the diagnostics' Send to the developers button, with its
-// tooltip.
-func sendButton(t *testing.T, a *App) *ttwidget.Button {
+// diagnostics opens the diagnostics' dialog and returns it.
+func diagnostics(t *testing.T, a *App) fyne.CanvasObject {
 	t.Helper()
-	var found []*ttwidget.Button
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		switch w := o.(type) {
-		case *ttwidget.Button:
-			if w.Text == "Send to the developers" {
-				found = append(found, w)
-			}
-			return
-		case *fyne.Container:
-			for _, child := range w.Objects {
-				walk(child)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, child := range test.WidgetRenderer(w).Objects() {
-				walk(child)
-			}
-		}
-	}
-	walk(a.win.Content())
+	a.showDiagnostics()
+	return overlay(t, a)
+}
+
+// sendButton is the Send to the developers button of the diagnostics'
+// dialog, which shows.
+func sendButton(t *testing.T, a *App) *widget.Button {
+	t.Helper()
+	found := buttons(overlay(t, a), "Send to the developers")
 	if len(found) != 1 {
 		t.Fatalf("%d Send to the developers buttons", len(found))
 	}
@@ -110,18 +92,18 @@ func TestSendToTheDevelopers(t *testing.T) {
 	connect(t, a, m, true)
 	a.showTab(tabLogs)
 	a.render()
-	if b := buttons(a.win.Content(), "Send to the developers"); len(b) != 0 {
+	if b := buttons(diagnostics(t, a), "Send to the developers"); len(b) != 0 {
 		t.Fatal("a Send button while every check passes")
 	}
 	failCheck(a, m)
 	snapshot(t, a, "privacy-diagnostics")
-	if logs := a.screens[tabLogs].(*logsScreen); logs.checksScroll.Offset.Y <= 0 {
+	if s := a.screens[tabLogs].(*logsScreen).checksScroll; s.Content.Size().Height == 0 || s.Offset.Y+s.Size().Height < s.Content.Size().Height {
 		t.Error("the checks are not scrolled down to the one that fails")
 	}
-	if send := sendButton(t, a); send.Disabled() || send.ToolTip() != "" {
-		t.Fatalf("Send to the developers: disabled %v, tooltip %q", send.Disabled(), send.ToolTip())
+	if send := sendButton(t, a); send.Disabled() || contains(texts(overlay(t, a)), optedOut) {
+		t.Fatalf("Send to the developers: disabled %v, the dialog %v", send.Disabled(), texts(overlay(t, a)))
 	}
-	tapButton(t, a.win.Content(), "Send to the developers")
+	tapButton(t, overlay(t, a), "Send to the developers")
 	snapshot(t, a, "privacy-send-checks")
 	tapButton(t, overlay(t, a), "Send")
 	ev := srv.Wait(t, "event", 1)[0].JSON()
