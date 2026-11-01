@@ -1,0 +1,24 @@
+# states/player-quits-with-stop-with-player
+# setting recorder.stop_with_player = true
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > audio music 1 at 1000ms, 44100(1000ms)
+    2500ms  > player gone (ring at 110250)
+    2500ms  log info: player interface gone
+    2500ms  state waiting
+    2500ms  state stopping
+    2500ms  state idle
+    2500ms  take none
+--- jobs
+job t-001 "A" played=88189(1999.75ms) length=132300(3000ms) wav=88189 crc=eeb20d3b
+--- end: idle, 0 skipped, 0 ads, 0 overruns

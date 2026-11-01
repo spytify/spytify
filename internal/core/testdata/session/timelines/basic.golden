@@ -1,0 +1,34 @@
+# timelines/basic
+# option EndOnStop
+# item 0 "Midnight Ferry" (track, declared 5000ms): audio from 500ms to 5500ms, then 1000ms of silence
+# item 1 "Paper Lanterns" (track, declared 6000ms): audio from 6500ms to 12500ms, then 1000ms of silence
+# item 2 "Golden Hour - 2011 Remaster" (track, declared 4500ms): audio from 13500ms to 18000ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Midnight Ferry" id=/com/fake/track/1 length=5000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Midnight Ferry" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Midnight Ferry" artist="Neon Harbor" album="Harbor Lights" length=5000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Midnight Ferry" start=22061(500.25ms) length=220500(5000ms)
+    6500ms  > player TrackChanged "Paper Lanterns" id=/com/fake/track/2 length=6000ms pos=0 (ring at 286650)
+    6500ms  log debug: cut for "Paper Lanterns" at 5500 ms (kind 1, noticed at 6500 ms, window 5200..5801 ms)
+    6500ms  started t-002 "Paper Lanterns" artist="Juno Vale, The Low Tides, Ivo Brandt" album="Paper Lanterns" length=6000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+    6500ms  take t-002 "Paper Lanterns" start=242549(5499.98ms) length=264600(6000ms)
+   13500ms  > player TrackChanged "Golden Hour - 2011 Remaster" id=/com/fake/track/3 length=4500ms pos=0 (ring at 595350)
+   13500ms  log debug: cut for "Golden Hour - 2011 Remaster" at 12500 ms (kind 1, noticed at 13500 ms, window 11200..12801 ms)
+   13500ms  started t-003 "Golden Hour - 2011 Remaster" artist="Marlow Keys" album="Golden Hour (Deluxe Edition)" length=4500ms cut=boundary/silence offset=-1000ms source=44100/2 cover
+   13500ms  take t-003 "Golden Hour - 2011 Remaster" start=551248(12499.95ms) length=198450(4500ms)
+   19000ms  > player Stopped pos=-1 (ring at 837900)
+   19000ms  state waiting
+   19000ms  state stopping
+   19000ms  state idle
+   19000ms  take none
+--- jobs
+job t-001 "Midnight Ferry" played=220488(4999.73ms) length=220500(5000ms) wav=220488 crc=4724467e cover=cover-0.jpg
+job t-002 "Paper Lanterns" played=308699(6999.98ms) length=264600(6000ms) wav=308699 crc=91fa8652 cover=cover-1.jpg
+job t-003 "Golden Hour - 2011 Remaster" played=243122(5512.97ms) length=198450(4500ms) wav=243122 crc=867650a0 cover=cover-2.jpg
+--- end: idle, 0 skipped, 0 ads, 0 overruns

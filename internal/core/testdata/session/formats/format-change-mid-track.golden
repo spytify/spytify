@@ -1,0 +1,34 @@
+# formats/format-change-mid-track
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=8000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 176400(4000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=8000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=352800(8000ms)
+    4500ms  > the stream is now s16le 48000 Hz 2ch
+    4500ms  > audio music 1 at 4000ms, 192000(4000ms)
+    4510ms  log info: stream format changed from s16le 44100 Hz 2ch to s16le 48000 Hz 2ch
+    4510ms  take t-001+ "A" start=0(0ms) length=192000(4000ms) provisional format=48000/2
+    7510ms  take t-001+ "A" start=0(0ms) length=192000(4000ms) ghost format=48000/2
+    8500ms  > audio silence, 24000(500ms)
+    9000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 216000)
+    9000ms  log debug: cut for "B" at 4000 ms (kind 1, noticed at 4500 ms, window 3700..4300 ms)
+    9000ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=48000/2
+    9000ms  take t-002 "B" start=192000(4000ms) length=144000(3000ms) format=48000/2
+    9000ms  > audio music 2 at 0ms, 144000(3000ms)
+   12000ms  > audio silence, 72000(1500ms)
+   13500ms  > player Stopped pos=-1 (ring at 432000)
+   13500ms  state waiting
+   13500ms  state stopping
+   13500ms  state idle
+   13500ms  take none
+--- jobs
+job t-001 "A" played=176389(3999.75ms) length=352800(8000ms) wav=176389 crc=8c370f66 partial
+job t-002 "B" played=168480(3510ms) length=144000(3000ms) wav=168480 crc=7c8f9cdf format=48000/2
+--- end: idle, 0 skipped, 0 ads, 0 overruns
