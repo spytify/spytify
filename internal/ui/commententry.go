@@ -22,3 +22,12 @@ func newCommentEntry() *commentEntry {
 
 // AcceptsTab is false: Tab moves the focus on.
 func (e *commentEntry) AcceptsTab() bool { return false }
+
+// TypedKey passes Escape on to the window, which closes the dialog.
+func (e *commentEntry) TypedKey(k *fyne.KeyEvent) {
+	if k.Name == fyne.KeyEscape {
+		escapeFrom(e, k)
+		return
+	}
+	e.Entry.TypedKey(k)
+}

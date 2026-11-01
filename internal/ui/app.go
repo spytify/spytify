@@ -15,7 +15,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
@@ -50,10 +49,6 @@ type Options struct {
 	// Privacy are the privacy.* settings read at launch, used until the
 	// recorder answers.
 	Privacy map[string]any
-	// MinimizeToTray is app.minimize_to_tray read at launch: its tray is
-	// set up before the toolkit's loop runs, the only time Linux starts
-	// one.
-	MinimizeToTray bool
 	// SoftwareOpenGL says the window is drawn with Mesa's OpenGL, no
 	// graphics driver offering any (package opengl).
 	SoftwareOpenGL bool
@@ -84,9 +79,11 @@ type App struct {
 	tabs    *container.AppTabs
 	// tabsView is the tabs with the plain colour behind their bar.
 	tabsView *fyne.Container
-	center   *fyne.Container
-	offline  *container.Scroll
-	player   *playerCard
+	// tabKeys is the tab bar's stop in the Tab order.
+	tabKeys *tabKeys
+	center  *fyne.Container
+	offline *container.Scroll
+	player  *playerCard
 
 	dot     *widget.Label
 	status  *widget.Label
@@ -106,13 +103,9 @@ type App struct {
 	replaced bool
 	// tray says the platform has a system tray (menu bar on macOS);
 	// noTrayHost, that this Linux desktop draws no tray icons
-	// (watchTrayHost); trayLate, that the tray was set up once the
-	// toolkit's loop ran, which Linux never shows (lateTrayShows);
-	// running, that the loop runs. quitApp quits, replaced by tests.
+	// (watchTrayHost). quitApp quits, replaced by tests.
 	tray       bool
 	noTrayHost bool
-	trayLate   bool
-	running    bool
 	quitApp    func()
 	// fyneStop is Fyne's stop hook, which ShowAndRun runs (see New).
 	fyneStop func()
@@ -227,7 +220,8 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	)))
 	a.starting = opts.AutoStart
 
-	a.tabsView = withPlainTabBar(a.tabs)
+	a.tabKeys = newTabKeys(a.tabs)
+	a.tabsView = withPlainTabBar(a.tabs, a.tabKeys)
 	a.center = container.NewStack(a.tabsView)
 	// The window has no padding of its own, so the bars' plain colour goes
 	// to its edges; the page's grey is the window's background.
@@ -235,6 +229,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	body := inReadingOrder(top, nil, nil, nil, a.center)
 	a.win.SetPadded(false)
 	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
+	// With nothing focused, Escape comes to the window.
+	a.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
+		if e.Name == fyne.KeyEscape {
+			escape(a.win.Canvas())
+		}
+	})
 
 	if !opts.ManualRender {
 		onReopen(a.Reopen)
@@ -244,7 +244,10 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	if a.tray && !opts.ManualRender {
 		watchTrayHost(func(present bool) { fyne.Do(func() { a.setTrayHost(present) }) })
 	}
-	if a.tray && opts.MinimizeToTray {
+	// The toolkit starts a tray with its loop and never after, macOS's
+	// menu bar item included: the icon is there from launch, and
+	// Minimize to tray only says whether closing hides the window to it.
+	if a.tray {
 		a.setupTray()
 	}
 	a.quitApp = fa.Quit
@@ -279,7 +282,6 @@ func (a *App) ShowAndRun() {
 		a.tel.Breadcrumb("app", "launched", nil)
 		a.checkCrashes()
 	})
-	a.running = true
 	a.fa.Run()
 	// Every way out (this window, the tray's Quit, Cmd+Q, a signal) ends
 	// here.
@@ -335,12 +337,11 @@ func (a *App) quit() {
 		a.quitApp()
 		return
 	}
-	dialog.ShowConfirm("Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
+	ask(a.win, "Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
 		if ok {
 			a.quitApp()
 		}
-	}, a.win)
-	focusFirst(a.win)
+	})
 }
 
 // applyTheme switches to the Spytify theme in the given app.theme mode.
@@ -418,12 +419,6 @@ func (a *App) render() {
 	default:
 		a.action.Enable()
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
-	}
-	// The tray icon comes with Minimize to tray; the toolkit cannot take
-	// it away, so turned off, it goes when Spytify restarts. On Linux,
-	// turned on, it comes then too: see setupTray.
-	if a.hasTray() && a.trayMenu == nil && s.Settings[settings.AppMinimizeToTray.String()] == true {
-		a.setupTray()
 	}
 	a.syncTray()
 	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {
@@ -560,16 +555,22 @@ func checkOK(checks []proto.Check, name string) bool {
 	return false
 }
 
-// failingChecks counts the failing checks but the player's, which the app
-// bar already shows.
+// failingChecks counts the checks that need attention.
 func failingChecks(checks []proto.Check) int {
 	n := 0
 	for _, c := range checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
 			n++
 		}
 	}
 	return n
+}
+
+// needsAttention says whether a check fails in a way the user must fix: not
+// the player's, which the app bar already shows, nor advice, which only
+// lowers quality.
+func needsAttention(c proto.Check) bool {
+	return !c.OK && !c.Advice && c.Name != "player running"
 }
 
 // checkFails says whether the check named name is there and fails: a

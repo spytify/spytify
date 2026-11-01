@@ -88,6 +88,11 @@ func checkBoxes(o fyne.CanvasObject, label string) []*widget.Check {
 				out = append(out, w)
 			}
 			return
+		case *check:
+			if w.Text == label {
+				out = append(out, &w.Check)
+			}
+			return
 		case *fyne.Container:
 			for _, child := range w.Objects {
 				walk(child)

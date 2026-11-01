@@ -8,7 +8,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
@@ -33,6 +32,7 @@ func (a *App) launchReady(s model.State) {
 		"ms":              now.Sub(a.launch.start).Milliseconds(),
 		"auto_started":    !a.launch.started.IsZero(),
 		"failing":         failingNames(s.Info.Checks),
+		"advice":          adviceNames(s.Info.Checks),
 		"software_opengl": a.opts.SoftwareOpenGL,
 	}
 	// Where the output folder is, say, written to or not, for every
@@ -78,7 +78,19 @@ func startErrorKind(err error) string {
 func failingNames(checks []proto.Check) []string {
 	var names []string
 	for _, c := range checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
+			names = append(names, c.Name)
+		}
+	}
+	return names
+}
+
+// adviceNames names the advice checks that fail: recording works, at a
+// lower quality.
+func adviceNames(checks []proto.Check) []string {
+	var names []string
+	for _, c := range checks {
+		if !c.OK && c.Advice {
 			names = append(names, c.Name)
 		}
 	}
@@ -231,7 +243,7 @@ func (a *App) noteTab(i int) {
 func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	var failing []proto.Check
 	for _, c := range s.Info.Checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
 			failing = append(failing, c)
 		}
 	}
@@ -252,7 +264,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	what := newFold("What will be sent", scroll)
 	message := newCommentEntry()
 	message.SetPlaceHolder("Comment (optional)")
-	d := dialog.NewCustomConfirm("Send to the developers", "Send", "Cancel", container.NewVBox(body, what, message), func(send bool) {
+	showDialog(a.win, "Send to the developers", container.NewVBox(body, what, message), "Cancel", "Send", fyne.NewSize(560, 420), func(send bool) {
 		if !send {
 			return
 		}
@@ -263,8 +275,5 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 			err := a.tel.SendChecks(report, text)
 			fyne.Do(func() { sent(err == nil) })
 		})
-	}, a.win)
-	d.Resize(fyne.NewSize(560, 420))
-	d.Show()
-	focusFirst(a.win)
+	})
 }

@@ -96,10 +96,12 @@ type TargetInfo struct {
 }
 
 // Check is one line of the capability probe shown before Record is enabled.
+// An Advice check that fails only lowers quality: recording still works.
 type Check struct {
 	Name   string `json:"name"`
 	OK     bool   `json:"ok"`
 	Detail string `json:"detail,omitempty"`
+	Advice bool   `json:"advice,omitempty"`
 	// Facts say what the check found, without a name or a path, for the
 	// bug tracker: where the output folder is, say.
 	Facts map[string]string `json:"facts,omitempty"`

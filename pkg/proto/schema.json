@@ -17,6 +17,9 @@
     },
     "Check": {
       "properties": {
+        "advice": {
+          "type": "boolean"
+        },
         "detail": {
           "type": "string"
         },

@@ -76,7 +76,7 @@ func main() {
 	// it asks for one first.
 	auto := len(env.Target.ProcessNames) > 0
 	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
-		Telemetry: tel, Privacy: privacy, MinimizeToTray: saved.Bool(settings.AppMinimizeToTray), SoftwareOpenGL: software})
+		Telemetry: tel, Privacy: privacy, SoftwareOpenGL: software})
 	if inst != nil {
 		defer inst.Close()
 		go inst.Serve(w.Reopen)
