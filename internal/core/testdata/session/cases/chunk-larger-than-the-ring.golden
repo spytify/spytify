@@ -1,0 +1,27 @@
+# cases/chunk-larger-than-the-ring
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > audio music 2 at 0ms, 220500(5000ms)
+    6500ms  error ring_overflow "44100 frames lost"
+    6500ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms) partial
+    6500ms  > audio silence, 66150(1500ms)
+    7210ms  log info: no track change by the declared end of "A"; recording on until the next one
+    7210ms  take t-001 "A" start=22061(500.25ms) length=0(0ms) partial
+    8000ms  > player Stopped pos=-1 (ring at 352800)
+    8000ms  state waiting
+    8000ms  state stopping
+    8000ms  state idle
+    8000ms  take none
+--- jobs
+job t-001 "A" played=330739(7499.75ms) length=0(0ms) wav=286639 crc=b77113c5 partial
+--- end: idle, 0 skipped, 0 ads, 44100 overruns

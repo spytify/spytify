@@ -27,7 +27,7 @@ Go 1.26 or later.
 ```sh
 go build -o bin/ ./cmd/spytifyd ./cmd/spytify-cli ./cmd/spytify-ui   # Linux
 scripts/build-linux.sh                                               # Linux packages: dist/*.tar.gz, .deb, .rpm
-scripts/build-macos.sh                                               # macOS: bin/Spytify.app and the command-line tools
+scripts/build-macos.sh                                               # macOS: bin/Spytify.app, with ffmpeg, and the command-line tools
 scripts/build-windows.sh                                             # Windows, cross-compiled: bin/windows/*.exe, ffmpeg.exe and Mesa's OpenGL
 ```
 
@@ -35,7 +35,7 @@ scripts/build-windows.sh                                             # Windows, 
   - Linux: `gcc`, `libgl1-mesa-dev`, `xorg-dev`, `libwayland-dev`, `libxkbcommon-dev`, `wayland-protocols` (Debian names).
   - macOS: the Xcode command line tools, which also build `spytify-tap`.
   - Windows: MinGW-w64 (`x86_64-w64-mingw32-gcc`, `-g++` and `-windres`), from Linux or macOS; it also builds `spytify-tap.exe` and puts the icon and version information in `Spytify.exe` ([`windows/spytify.rc`](windows/spytify.rc)). 7-Zip (`7z` or `7zz`) unpacks Mesa into `opengl\`: with no graphics driver offering OpenGL, the app draws its window with Mesa's, in software. For that, `Spytify.exe` must not link `opengl32.dll`, which go-gl/gl does: the script builds it with a copy of go-gl/gl whose loader is [`windows/go-gl-procaddr.go.in`](windows/go-gl-procaddr.go.in), and `checkexe` fails the build otherwise. A plain `go build` of the app links it, and draws without Mesa.
-  - Windows' `ffmpeg.exe` is built from source by [`scripts/build-ffmpeg.sh`](scripts/build-ffmpeg.sh) (it needs `make` and `nasm`), with only the encoders, filters and formats Spytify runs. Code that runs ffmpeg for something new adds the component to the script's list, with a test that runs it, and runs the tests with that build: the script says how.
+  - The ffmpeg of the Windows zip and of the macOS app is built from source by [`scripts/build-ffmpeg.sh`](scripts/build-ffmpeg.sh) (it needs `make` and `nasm`; on a Mac, `brew install nasm`), with only the encoders, filters and formats Spytify runs. The Mac's is universal and runs from macOS 14.2, as the app. `SPYTIFY_NO_FFMPEG=1` leaves it out of either build. Code that runs ffmpeg for something new adds the component to the script's list, with a test that runs it, and runs the tests with that build: the script says how.
 - What the app needs at run time (ffmpeg, PipeWire, the macOS permissions) is on the [Install](https://spytify.github.io/spytify/v2/install.html) page.
 - The macOS app is ad-hoc signed: macOS asks for its permissions again after every rebuild, and another Mac refuses it until it is signed and notarised.
 

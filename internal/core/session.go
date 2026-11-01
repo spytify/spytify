@@ -62,8 +62,9 @@ const (
 // SessionOptions changes how a session ends.
 type SessionOptions struct {
 	SingleTrack bool
-	// EndOnStop ends the session when the player stops after having
-	// played (spytifyd --once).
+	// EndOnStop ends the session when the player stops or quits after
+	// having played (spytifyd --once). recorder.stop_with_player does the
+	// same; it is read then, so turning it on mid-session applies.
 	EndOnStop bool
 	// IdleExit ends the session after this long without audio while the
 	// player is paused or stopped; 0 disables it.
@@ -1291,7 +1292,7 @@ func (s *Session) endOfPlayback() {
 		s.closeSegment(c, end)
 		s.cur = nil
 	}
-	if (s.opts.EndOnStop && s.seen) || s.stop == stopGraceful {
+	if (s.seen && (s.opts.EndOnStop || s.deps.values().Bool("recorder.stop_with_player"))) || s.stop == stopGraceful {
 		s.finish()
 	}
 	s.refreshState()

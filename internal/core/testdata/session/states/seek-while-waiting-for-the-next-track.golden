@@ -1,0 +1,31 @@
+# states/seek-while-waiting-for-the-next-track
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=2000 (ring at -)
+       0ms  > player Playing pos=-1 (ring at 0)
+       0ms  log info: "A" is already playing; recording starts with the next track
+       0ms  take t-pre "A" start=0(0ms) length=44100(1000ms) ghost
+       0ms  > audio music 1 at 0ms, 13230(300ms)
+     300ms  > player Seeked "A" pos=500 (ring at 13230)
+     300ms  log debug: "A": the player jumped to 500 ms
+     300ms  take t-pre "A" start=0(0ms) length=123480(2800ms) ghost
+     300ms  > audio music 1 at 300ms, 110250(2500ms)
+    2800ms  > audio silence, 22050(500ms)
+    3300ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 145530)
+    3300ms  log debug: cut for "B" at 2800 ms (kind 1, noticed at 3300 ms, window 2500..3101 ms)
+    3300ms  started t-001 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    3300ms  state recording
+    3300ms  take t-001 "B" start=123480(2800ms) length=132300(3000ms)
+    3300ms  > audio music 2 at 0ms, 132300(3000ms)
+    6300ms  > audio silence, 66150(1500ms)
+    7800ms  > player Stopped pos=-1 (ring at 343980)
+    7800ms  state waiting
+    7800ms  state stopping
+    7800ms  state idle
+    7800ms  take none
+--- jobs
+job t-001 "B" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=c244853d
+--- end: idle, 0 skipped, 0 ads, 0 overruns

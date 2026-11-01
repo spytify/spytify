@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# Builds the ffmpeg that the Windows build ships beside spytifyd.exe, from
-# the official sources of FFmpeg, LAME and zlib, pinned and checked, with only
-# what Spytify runs it for: the four output formats, the filters
-# internal/encode applies, and tags and covers copied as they are. A full
-# build is over 130 MB; this one is a few.
+# Builds the ffmpeg that the Windows zip and the macOS app ship beside
+# spytifyd, from the official sources of FFmpeg, LAME and zlib, pinned and
+# checked, with only what Spytify runs it for: the four output formats, the
+# filters internal/encode applies, and tags and covers copied as they are. A
+# full build is over 130 MB; this one is a few.
 #
 #   scripts/build-ffmpeg.sh OUT [HOST]
 #
 # OUT gets ffmpeg (ffmpeg.exe for Windows), its license and a README that
 # says where it comes from. HOST is a cross-compiler's prefix, such as
-# x86_64-w64-mingw32 (Debian: apt install mingw-w64); without it, the build
-# is for this machine, which tests the same components. Needs make, nasm, xz
-# and a C compiler. The build is kept in the cache, by HOST and this
-# script's checksum.
+# x86_64-w64-mingw32 (Debian: apt install mingw-w64), or a clang target on
+# a Mac, such as x86_64-apple-macos14.2: the processor and the oldest macOS
+# it runs on. Without it, the build is for this machine, which tests the
+# same components. Needs make, nasm, xz and a C compiler. The build is kept
+# in the cache, by HOST and this script's checksum.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -32,15 +33,15 @@ zlib_url="https://github.com/madler/zlib/releases/download/v$zlib_version/zlib-$
 zlib_sha256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 
 # What Spytify runs ffmpeg for, and nothing else: an encoder, a filter or a
-# format left out here is missing from the Windows zip's ffmpeg.exe. Code
-# that runs ffmpeg for something new adds it here, with a test that runs it,
-# and checks the build:
+# format left out here is missing from the ffmpeg of the Windows zip and of
+# the macOS app. Code that runs ffmpeg for something new adds it here, with
+# a test that runs it, and checks the build:
 #
 #   scripts/build-ffmpeg.sh /tmp/ffmpeg && PATH=/tmp/ffmpeg:$PATH go test ./...
 #
-# CI's windows job runs the tests with the Windows build: a component
-# missing fails them, but only where a test runs it. configure takes lists
-# with commas.
+# CI's windows job runs the tests with the Windows build, and macos-build
+# the encode and tag tests with the macOS one: a component missing fails
+# them, but only where a test runs it. configure takes lists with commas.
 # shellcheck disable=SC2054
 components=(
   # internal/encode: a take's WAV, trimmed, its volume set, resampled and
@@ -81,12 +82,28 @@ if [ ! -f "$cache/$exe" ]; then
   lame=(--prefix="$prefix" --disable-shared --enable-static --disable-frontend --disable-decoder)
   zlib=()
   ffmpeg=(--prefix="$prefix" --pkg-config-flags=--static --extra-cflags="-I$prefix/include" --extra-ldflags="-L$prefix/lib")
-  if [ -n "$host" ]; then
-    lame+=(--host="$host")
-    zlib=(CC="$host-gcc" AR="$host-ar" RANLIB="$host-ranlib")
-    # -static: nothing but Windows' own DLLs to load.
-    ffmpeg+=(--enable-cross-compile --cross-prefix="$host-" --arch="${host%%-*}" --target-os=mingw32 --extra-ldexeflags=-static)
-  fi
+  strip="strip"
+  case "$host" in
+    "") ;;
+    *-apple-macos*)
+      # Xcode's clang builds for either processor from either Mac. LAME's
+      # configure knows arm64 as aarch64.
+      cc="clang -target $host"
+      arch="${host%%-*}"
+      lame+=(--host="${arch/arm64/aarch64}-apple-darwin" CC="$cc")
+      zlib=(CC="$cc")
+      # configure links CoreFoundation, CoreMedia and CoreVideo whatever is
+      # enabled; nothing here uses them, so only libSystem is loaded.
+      ffmpeg+=(--enable-cross-compile --arch="$arch" --target-os=darwin --cc="$cc" "--extra-ldexeflags=-Wl,-dead_strip_dylibs")
+      ;;
+    *)
+      lame+=(--host="$host")
+      zlib=(CC="$host-gcc" AR="$host-ar" RANLIB="$host-ranlib")
+      # -static: nothing but Windows' own DLLs to load.
+      ffmpeg+=(--enable-cross-compile --cross-prefix="$host-" --arch="${host%%-*}" --target-os=mingw32 --extra-ldexeflags=-static)
+      strip="$host-strip"
+      ;;
+  esac
   (cd "$src/lame-$lame_version" && ./configure "${lame[@]}" > /dev/null && make -j"$jobs" > /dev/null && make install > /dev/null)
   (cd "$src/zlib-$zlib_version" && env ${zlib[@]+"${zlib[@]}"} ./configure --prefix="$prefix" --static > /dev/null && make -j"$jobs" libz.a > /dev/null && make install > /dev/null)
   (
@@ -99,7 +116,7 @@ if [ ! -f "$cache/$exe" ]; then
   )
   mkdir -p "$cache.part"
   cp "$src/ffmpeg-$ffmpeg_version/$exe" "$cache.part/"
-  "${host:+$host-}strip" "$cache.part/$exe"
+  "$strip" "$cache.part/$exe"
   cp "$src/ffmpeg-$ffmpeg_version/COPYING.LGPLv2.1" "$cache.part/LICENSE.txt"
   rm -rf "$cache"
   mv "$cache.part" "$cache"
