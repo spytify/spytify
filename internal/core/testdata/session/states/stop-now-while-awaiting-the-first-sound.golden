@@ -1,0 +1,20 @@
+# states/stop-now-while-awaiting-the-first-sound
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=100 (ring at -)
+       0ms  > player Playing pos=-1 (ring at 0)
+       0ms  started t-001 "A" artist="Artist" album="Album" length=3000ms source=44100/2
+       0ms  state recording
+       0ms  take t-001 "A" start=0(0ms) length=132300(3000ms) awaiting-sound
+       0ms  > audio silence, 13230(300ms)
+     300ms  > session.stop now
+     300ms  skipped t-001 incomplete
+     300ms  state stopping
+     300ms  state idle
+     300ms  take none
+--- jobs
+job t-001 "A" played=0(0ms) length=132300(3000ms) wav=13230 crc=55e13685 rejected=incomplete
+--- end: idle, 1 skipped, 0 ads, 0 overruns

@@ -1,0 +1,47 @@
+# timelines/settings
+# option EndOnStop
+# item 0 "Ça plane (Live)" (track, declared 4000ms): audio from 500ms to 4500ms, then 600ms of silence
+# item 1 "Back - Remastered 2011" (track, declared 4000ms): audio from 5100ms to 9100ms, then 600ms of silence
+# item 2 "Un titre vraiment très long qui ne tient pas dans un nom de fichier parce qu'il continue encore et encore, bien au-delà de ce qu'un disque accepte pour un seul nom, avec des accents à chaque mot pour que la coupe tombe au milieu d'une lettre écrite sur deux octets" (track, declared 4000ms): audio from 9700ms to 13700ms, then 600ms of silence
+# item 3 "Song (feat. Someone)" (track, declared 5000ms): audio from 14300ms to 19300ms, then 600ms of silence
+# item 4 "Short Clip" (track, declared 3000ms): audio from 19900ms to 22900ms, then 600ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Ça plane (Live)" id=/com/fake/track/1 length=4000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Ça plane (Live)" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Ça plane (Live)" artist="Zoë Ångström, Élodie Brûlé, Guest" album="Œuvres: complètes?" length=4000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Ça plane (Live)" start=22065(500.34ms) length=176400(4000ms)
+    5100ms  > player TrackChanged "Back - Remastered 2011" id=/com/fake/track/2 length=4000ms pos=0 (ring at 224910)
+    5100ms  log debug: cut for "Back - Remastered 2011" at 4500 ms (kind 1, noticed at 5100 ms, window 4200..4801 ms)
+    5100ms  started t-002 "Back - Remastered 2011" artist="AC/DC" album="Back in Black" length=4000ms cut=boundary/silence offset=-600ms source=44100/2 cover
+    5100ms  take t-002 "Back - Remastered 2011" start=198449(4499.98ms) length=176400(4000ms)
+    9700ms  > player TrackChanged "Un titre vraiment très long qui ne tient pas dans un nom de fichier parce qu'il continue encore et encore, bien au-delà de ce qu'un disque accepte pour un seul nom, avec des accents à chaque mot pour que la coupe tombe au milieu d'une lettre écrite sur deux octets" id=/com/fake/track/3 length=4000ms pos=0 (ring at 427770)
+    9700ms  log debug: cut for "Un titre vraiment très long qui ne tient pas dans un nom de fichier parce qu'il continue encore et encore, bien au-delà de ce qu'un disque accepte pour un seul nom, avec des accents à chaque mot pour que la coupe tombe au milieu d'une lettre écrite sur deux octets" at 9100 ms (kind 1, noticed at 9700 ms, window 8200..9401 ms)
+    9700ms  started t-003 "Un titre vraiment très long qui ne tient pas dans un nom de fichier parce qu'il continue encore et encore, bien au-delà de ce qu'un disque accepte pour un seul nom, avec des accents à chaque mot pour que la coupe tombe au milieu d'une lettre écrite sur deux octets" artist="Long Names" album="Long" length=4000ms cut=boundary/silence offset=-600ms source=44100/2 cover
+    9700ms  take t-003 "Un titre vraiment très long qui ne tient pas dans un nom de fichier parce qu'il continue encore et encore, bien au-delà de ce qu'un disque accepte pour un seul nom, avec des accents à chaque mot pour que la coupe tombe au milieu d'une lettre écrite sur deux octets" start=401308(9099.95ms) length=176400(4000ms)
+   14300ms  > player TrackChanged "Song (feat. Someone)" id=/com/fake/track/4 length=5000ms pos=0 (ring at 630630)
+   14300ms  log debug: cut for "Song (feat. Someone)" at 13700 ms (kind 1, noticed at 14300 ms, window 12800..14002 ms)
+   14300ms  started t-004 "Song (feat. Someone)" artist="Quiet Start" album="Lead" length=5000ms cut=boundary/silence offset=-600ms source=44100/2 cover
+   14300ms  take t-004 "Song (feat. Someone)" start=604166(13699.91ms) length=220500(5000ms)
+   19900ms  > player TrackChanged "Short Clip" id=/com/fake/track/5 length=3000ms pos=0 (ring at 877590)
+   21120ms  log debug: cut for "Short Clip" at 19300 ms (kind 1, noticed at 19900 ms, window 18400..21102 ms)
+   21120ms  started t-005 "Short Clip" artist="Promo" album="" length=3000ms cut=boundary/silence offset=-600ms source=44100/2 cover
+   21120ms  skipped t-005 ad
+   21120ms  state ad
+   21120ms  take t-005 "Short Clip" start=851129(19299.98ms) length=132300(3000ms) no-file reason=ad
+   23500ms  > player Stopped pos=-1 (ring at 1036350)
+   23500ms  state waiting
+   23500ms  state stopping
+   23500ms  state idle
+   23500ms  take none
+--- jobs
+job t-001 "Ça plane (Live)" played=176384(3999.64ms) length=176400(4000ms) wav=176384 crc=5d4f4ca6 cover=cover-0.jpg
+job t-002 "Back - Remastered 2011" played=202859(4599.98ms) length=176400(4000ms) wav=202859 crc=477a3767 cover=cover-1.jpg
+job t-003 "Un titre vraiment très long qui ne tient pas dans un nom de fichier parce qu'il continue encore et encore, bien au-delà de ce qu'un disque accepte pour un seul nom, avec des accents à chaque mot pour que la coupe tombe au milieu d'une lettre écrite sur deux octets" played=202858(4599.95ms) length=176400(4000ms) wav=202858 crc=cbadbebc cover=cover-2.jpg
+job t-004 "Song (feat. Someone)" played=246963(5600.07ms) length=220500(5000ms) wav=246963 crc=b25e4c19 cover=cover-3.jpg
+--- end: idle, 1 skipped, 1 ads, 0 overruns

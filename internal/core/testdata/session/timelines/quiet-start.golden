@@ -1,0 +1,44 @@
+# timelines/quiet-start
+# option EndOnStop
+# item 0 "Morning Static" (track, declared 5000ms): audio from 500ms to 5500ms, then 500ms of silence
+# item 1 "Sponsored" (ad, declared 6000ms): audio from 6000ms to 12000ms, notified +300ms, then 1000ms of silence
+# item 2 "Hush (Live at the Harbor Hall)" (track, declared 7000ms): audio from 13000ms to 20000ms, notified +100ms, then 100ms of silence
+# item 3 "Right on Cue" (track, declared 5000ms): audio from 20100ms to 25100ms, notified +100ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Morning Static" id=/com/fake/track/1 length=5000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Morning Static" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Morning Static" artist="Mara Quill" album="Orchard" length=5000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Morning Static" start=22066(500.36ms) length=220500(5000ms)
+    6300ms  > player TrackChanged "Sponsored" id=/com/fake/ad/2 length=6000ms pos=0 (ring at 277830)
+    6300ms  log debug: cut for "Sponsored" at 5500 ms (kind 1, noticed at 6300 ms, window 5200..5801 ms)
+    6300ms  started t-002 "Sponsored" artist="Sponsor" album="" length=6000ms cut=boundary/silence offset=-800ms source=44100/2
+    6300ms  skipped t-002 ad
+    6300ms  state ad
+    6300ms  take t-002 "Sponsored" start=242547(5499.93ms) length=264600(6000ms) no-file reason=ad
+   13100ms  > player TrackChanged "Hush (Live at the Harbor Hall)" id=/com/fake/track/3 length=7000ms pos=0 (ring at 577710)
+   13100ms  log debug: cut for "Hush (Live at the Harbor Hall)" at 12000 ms (kind 1, noticed at 13100 ms, window 11200..12300 ms)
+   13100ms  started t-003 "Hush (Live at the Harbor Hall)" artist="Mara Quill" album="Orchard Live" length=7000ms cut=boundary/silence offset=-1100ms source=44100/2 cover
+   13100ms  state recording
+   13100ms  take t-003 "Hush (Live at the Harbor Hall)" start=529200(12000ms) length=308700(7000ms) awaiting-sound
+   13810ms  log debug: "Hush (Live at the Harbor Hall)" starts at its first sound, 13800 ms
+   13810ms  take t-003 "Hush (Live at the Harbor Hall)" start=608590(13800.23ms) origin=529200(12000ms) length=308700(7000ms)
+   20200ms  > player TrackChanged "Right on Cue" id=/com/fake/track/4 length=5000ms pos=0 (ring at 890820)
+   21120ms  log debug: cut for "Right on Cue" at 20000 ms (kind 1, noticed at 20200 ms, window 18700..21101 ms)
+   21120ms  started t-004 "Right on Cue" artist="Mara Quill, Theo Lund" album="Orchard Live" length=5000ms cut=boundary/silence offset=-200ms source=44100/2 cover
+   21120ms  take t-004 "Right on Cue" start=881999(19999.98ms) length=220500(5000ms)
+   26100ms  > player Stopped pos=-1 (ring at 1151010)
+   26100ms  state waiting
+   26100ms  state stopping
+   26100ms  state idle
+   26100ms  take none
+--- jobs
+job t-001 "Morning Static" played=220481(4999.57ms) length=220500(5000ms) wav=220481 crc=d089c086 cover=cover-0.jpg
+job t-003 "Hush (Live at the Harbor Hall)" played=273409(6199.75ms) length=308700(7000ms) wav=273409 crc=c34cf336 cover=cover-1.jpg
+job t-004 "Right on Cue" played=225392(5110.93ms) length=220500(5000ms) wav=225392 crc=ac444a80 cover=cover-2.jpg
+--- end: idle, 1 skipped, 1 ads, 0 overruns
