@@ -88,7 +88,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Spytify.app and the command-line tools
+      - name: Install nasm
+        run: brew install nasm
+      # ffmpeg takes minutes to build: it is built again when its script
+      # changes.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/spytify/ffmpeg-*
+          key: ffmpeg-macos-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - name: Spytify.app, with ffmpeg, and the command-line tools
         run: SPYTIFY_VERSION="${{ needs.version.outputs.version }}" scripts/build-macos.sh dist/macos
       - name: Sign with the Developer ID
         if: env.MACOS_CERT_P12 != ''

@@ -317,10 +317,32 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Spytify.app and universal spytifyd, spytify-cli, spytify-tap
+      - name: Install nasm, and Homebrew's ffmpeg for ffprobe
+        run: brew install nasm ffmpeg
+      # ffmpeg takes minutes to build: it is built again when its script
+      # changes.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/spytify/ffmpeg-*
+          key: ffmpeg-macos-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - name: Spytify.app, with ffmpeg, and universal spytifyd, spytify-cli, spytify-tap
         run: scripts/build-macos.sh dist
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
+      - name: The encode and tag tests with the app's ffmpeg, on each processor
+        run: |
+          # It has only what Spytify runs: a test that needs more fails.
+          # Homebrew's stays for ffprobe, which some tests read files with.
+          # The x86_64 half runs under Rosetta.
+          f=dist/Spytify.app/Contents/MacOS/ffmpeg
+          for arch in arm64 x86_64; do
+            # From macOS 14.2, as the app, loading nothing but libSystem.
+            vtool -arch $arch -show-build "$f" | grep -E '^ *minos 14\.2$'
+            test "$(otool -arch $arch -L "$f" | tail -n +2 | awk '{ print $1 }')" = /usr/lib/libSystem.B.dylib
+            mkdir -p "$RUNNER_TEMP/ffmpeg-$arch"
+            lipo -thin $arch -output "$RUNNER_TEMP/ffmpeg-$arch/ffmpeg" "$f"
+            PATH="$RUNNER_TEMP/ffmpeg-$arch:$PATH" go test -count=1 ./internal/encode/... ./internal/tag/...
+          done
       # A disk image keeps the app's executable bits, which an artifact's zip
       # drops.
       - name: Disk image and command-line zip
