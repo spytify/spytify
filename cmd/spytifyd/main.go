@@ -120,7 +120,7 @@ func run() int {
 		return 2
 	}
 	if backends == nil {
-		backends = platform.Backends{Logf: log.Infof, TapHelper: env.TapHelper, MuteOutput: func() bool { return store.Values().Bool("player.mute_output") }}
+		backends = platform.Backends{Logf: log.Infof, TapHelper: env.TapHelper, MuteOutput: func() bool { return store.Values().Bool(settings.PlayerMuteOutput) }}
 	}
 
 	c := core.New(core.Options{Env: env, Store: store, Log: log, Crashed: crashed, Backends: backends, FindProcess: findProcess})
@@ -171,8 +171,8 @@ func run() int {
 	defer cancel()
 	c.SetShutdown(cancel)
 	go c.WatchTarget(ctx)
-	if store.Values().Bool("app.autostart_recording") {
-		if _, err := c.StartSession(core.SessionOptions{SingleTrack: store.Values().Bool("recorder.single_track")}); err != nil {
+	if store.Values().Bool(settings.AppAutostartRecording) {
+		if _, err := c.StartSession(core.SessionOptions{SingleTrack: store.Values().Bool(settings.RecorderSingleTrack)}); err != nil {
 			log.Errorf("autostart: %v", err)
 		}
 	}
