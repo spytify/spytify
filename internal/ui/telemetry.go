@@ -8,7 +8,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
@@ -244,7 +243,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	what := newFold("What will be sent", scroll)
 	message := newCommentEntry()
 	message.SetPlaceHolder("Comment (optional)")
-	d := dialog.NewCustomConfirm("Send to the developers", "Send", "Cancel", container.NewVBox(body, what, message), func(send bool) {
+	showDialog(a.win, "Send to the developers", container.NewVBox(body, what, message), "Cancel", "Send", fyne.NewSize(560, 420), func(send bool) {
 		if !send {
 			return
 		}
@@ -255,8 +254,5 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 			err := a.tel.SendChecks(report, text)
 			fyne.Do(func() { sent(err == nil) })
 		})
-	}, a.win)
-	d.Resize(fyne.NewSize(560, 420))
-	d.Show()
-	focusFirst(a.win)
+	})
 }

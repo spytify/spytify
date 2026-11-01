@@ -134,8 +134,8 @@ func bareRig(t *testing.T, extra map[string]any, opts SessionOptions) *rig {
 	}
 	log, _ := NewLogger("", nil)
 	log.SetEmitter(r.emit)
-	r.fin = &finisher{values: store.Values, emit: r.emit, log: log, jobs: make(chan finishJob, 256), claims: map[string]bool{},
-		index: openIndex(filepath.Join(out, ".spytify", "recorded.jsonl"))}
+	r.fin = &finisher{values: store.Values, emit: r.emit, log: log, jobs: make(chan finishJob, 256),
+		records: openRecords(out)}
 	r.s = newSession("t", sessionDeps{values: store.Values, emit: r.emit, log: log, fin: r.fin, control: r.control, mute: r.mute}, opts)
 	return r
 }
@@ -722,9 +722,9 @@ func info(id, title string, lengthMs int64) meta.TrackInfo {
 
 // alreadyRecorded makes the finisher take a track for one saved before.
 func (r *rig) alreadyRecorded(artist, title string) {
-	r.fin.mu.Lock()
-	r.fin.claims[trackKey(artist, title)] = true
-	r.fin.mu.Unlock()
+	r.fin.records.mu.Lock()
+	r.fin.records.claims[trackKey(artist, title)] = true
+	r.fin.records.mu.Unlock()
 	r.describe("%s - %s is already recorded", artist, title)
 }
 

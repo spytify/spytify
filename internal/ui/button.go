@@ -27,8 +27,12 @@ func newIconButton(text string, icon fyne.Resource, tapped func()) *button {
 
 // TypedKey presses the button on Space, as Fyne's does on the key, not its
 // character: the buttons of Fyne's dialogs close them on the key, and the
-// character then goes to the button that opened the dialog.
-func (b *button) TypedKey(e *fyne.KeyEvent) { pressOnSpace(&b.Button, e) }
+// character then goes to the button that opened the dialog. Escape goes on
+// to the window, which closes the modal the button is in.
+func (b *button) TypedKey(e *fyne.KeyEvent) {
+	pressOnSpace(&b.Button, e)
+	escapeFrom(b, e)
+}
 
 // pressOnSpace presses b on Space, leaving the focus where it is, for Tab
 // to go on from there, once closed a dialog b opens.
@@ -50,4 +54,7 @@ func newTipButton(text string, icon fyne.Resource, tapped func()) *tipButton {
 	return b
 }
 
-func (b *tipButton) TypedKey(e *fyne.KeyEvent) { pressOnSpace(&b.Button.Button, e) }
+func (b *tipButton) TypedKey(e *fyne.KeyEvent) {
+	pressOnSpace(&b.Button.Button, e)
+	escapeFrom(b, e)
+}

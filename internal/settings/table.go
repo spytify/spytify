@@ -59,7 +59,7 @@ var Table = []Def{
 	{Key: "app.autostart_recording", Tab: "App", Group: "App", Label: "Start recording on launch", Kind: KindBool, Default: false},
 	{Key: "app.check_updates", Tab: "App", Group: "App", Label: "Check for updates", Kind: KindBool, Default: true},
 
-	{Key: "output.dir", Tab: "Recorder", Group: "Output", Label: "Output folder", Kind: KindPath, Default: "~/Music/Spytify"},
+	{Key: "output.dir", Tab: "Recorder", Group: "Output", Label: "Output folder", Kind: KindPath, Default: "~/Spytify"},
 	{Key: "output.group_by", Tab: "Recorder", Group: "Output", Label: "Group by folders", Kind: KindEnum, Enum: []string{"none", "artist", "artist/album", "artists", "artists/album"}, Choices: []string{"No folders", "Main artist", "Main artist / Album", "All artists", "All artists / Album"}, Default: "artist/album", Note: "Main artist: the album's artist, so collaborations share one folder."},
 	{Key: "output.template", Tab: "Recorder", Group: "Output", Label: "File name template", Kind: KindTemplate, Default: "{album_artist} - {title}", Note: "Placeholders: {album_artist}, {artists}, {title}, {album}, {track}", Advanced: true},
 	{Key: "output.underscores", Tab: "Recorder", Group: "Output", Label: "Underscores instead of spaces", Kind: KindBool, Default: false, Advanced: true},

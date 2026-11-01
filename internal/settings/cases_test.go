@@ -15,7 +15,7 @@ import (
 var cases = map[string][]string{
 	"app.theme":                        {"internal/ui:TestThemeFollowsTheSetting"},
 	"app.notifications":                {"internal/ui:TestNotificationsFollowTheSetting", "internal/ui:TestNotificationsOnlyWhileHiddenInTheTray", "internal/ui:TestOnlyASessionThatEndsOnItsOwnIsNews"},
-	"app.minimize_to_tray":             {"internal/ui:TestClosingTheWindowQuitsUnlessMinimizedToTray", "internal/ui:TestClosingToTheTrayKeepsSpytifyThere", "internal/ui:TestClosingQuitsWhereTheDesktopDrawsNoTray", "internal/ui:TestTheTrayIconComesAtLaunchOrOnLinuxAtTheNext"},
+	"app.minimize_to_tray":             {"internal/ui:TestClosingTheWindowQuitsUnlessMinimizedToTray", "internal/ui:TestClosingToTheTrayKeepsSpytifyThere", "internal/ui:TestClosingQuitsWhereTheDesktopDrawsNoTray", "internal/ui:TestTheTrayIconIsThereFromLaunch"},
 	"app.autostart_recording":          {"test/e2e:TestAutostartRecordsOnLaunch"},
 	"app.check_updates":                {"internal/ui:TestTheUpdateCheckFollowsTheSetting"},
 	"output.dir":                       {"internal/core:TestOutputFolderGoneStopsTheRecording", "internal/core:TestNoRecordingStartsWithoutAnOutputFolder"},
