@@ -1,0 +1,24 @@
+# cases/first-track-silent
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 132300(3000ms)
+    2000ms  log debug: cut for "A" at 0 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+    2000ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/notice offset=0ms source=44100/2
+    2000ms  state recording
+    2000ms  take t-001 "A" start=0(0ms) length=132300(3000ms)
+    3000ms  > audio music 1 at 0ms, 132300(3000ms)
+    6000ms  > audio silence, 66150(1500ms)
+    6710ms  log info: no track change by the declared end of "A"; recording on until the next one
+    6710ms  take t-001 "A" start=0(0ms) length=0(0ms)
+    7500ms  > player Stopped pos=-1 (ring at 330750)
+    7500ms  state waiting
+    7500ms  state stopping
+    7500ms  state idle
+    7500ms  take none
+--- jobs
+job t-001 "A" played=330750(7500ms) length=0(0ms) wav=300321 crc=62d1f638
+--- end: idle, 0 skipped, 0 ads, 0 overruns

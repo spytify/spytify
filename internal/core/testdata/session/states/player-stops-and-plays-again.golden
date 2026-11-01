@@ -1,0 +1,40 @@
+# states/player-stops-and-plays-again
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > audio music 1 at 1000ms, 88200(2000ms)
+    3500ms  > audio silence, 22050(500ms)
+    4000ms  > player Stopped pos=-1 (ring at 176400)
+    4000ms  state waiting
+    4000ms  take none
+    4000ms  > player TrackChanged none pos=-1 (ring at 176400)
+    4000ms  > audio silence, 44100(1000ms)
+    5000ms  > player Playing pos=-1 (ring at 220500)
+    5000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 220500)
+    5000ms  > audio silence, 8820(200ms)
+    5200ms  > audio music 2 at 0ms, 132300(3000ms)
+    5210ms  log debug: cut for "B" at 5200 ms (kind 0, noticed at 5000 ms, window 4000..4000 ms)
+    5210ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=200ms source=44100/2
+    5210ms  state recording
+    5210ms  take t-002 "B" start=229332(5200.27ms) length=132300(3000ms)
+    8200ms  > audio silence, 66150(1500ms)
+    9700ms  > player Stopped pos=-1 (ring at 427770)
+    9700ms  state waiting
+    9700ms  take none
+    9700ms  > capture stream closed
+    9700ms  log info: capture stream ended
+    9700ms  state stopping
+    9700ms  state idle
+--- jobs
+job t-001 "A" played=132772(3010.7ms) length=132300(3000ms) wav=132772 crc=79b39a16
+job t-002 "B" played=132772(3010.7ms) length=132300(3000ms) wav=132772 crc=50b67051
+--- end: idle, 0 skipped, 0 ads, 0 overruns

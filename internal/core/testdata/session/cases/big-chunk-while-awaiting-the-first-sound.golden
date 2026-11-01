@@ -1,0 +1,30 @@
+# cases/big-chunk-while-awaiting-the-first-sound
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=100 (ring at -)
+       0ms  > player Playing pos=-1 (ring at 0)
+       0ms  started t-001 "A" artist="Artist" album="Album" length=3000ms source=44100/2
+       0ms  state recording
+       0ms  take t-001 "A" start=0(0ms) length=132300(3000ms) awaiting-sound
+       0ms  > audio silence, 13230(300ms)
+     300ms  > audio silence then music 1, 198450(4500ms)
+    4800ms  error ring_overflow "22050 frames lost"
+    4800ms  take t-001 "A" start=0(0ms) length=132300(3000ms) partial
+    4800ms  > audio silence, 22050(500ms)
+    5300ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 233730)
+    5300ms  log debug: cut for "B" at 4800 ms (kind 1, noticed at 5300 ms, window 2700..5103 ms)
+    5300ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    5300ms  take t-002 "B" start=211679(4799.98ms) length=132300(3000ms)
+    5300ms  > audio music 2 at 0ms, 132300(3000ms)
+    8300ms  > audio silence, 66150(1500ms)
+    9800ms  > player Stopped pos=-1 (ring at 432180)
+    9800ms  state waiting
+    9800ms  state stopping
+    9800ms  state idle
+    9800ms  take none
+--- jobs
+job t-001 "A" played=211679(4799.98ms) length=132300(3000ms) wav=189629 crc=ab860d76 partial
+job t-002 "B" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=c127898a
+--- end: idle, 0 skipped, 0 ads, 22050 overruns

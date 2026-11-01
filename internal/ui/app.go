@@ -180,10 +180,8 @@ type App struct {
 	// one still going must not touch the next test's window.
 	reports sync.WaitGroup
 	calls   sync.WaitGroup
-	// heard and incomplete are the link goroutine's: the first sound, and
-	// the incomplete tracks in a row.
-	heard      bool
-	incomplete int
+	// heard is the link goroutine's: the first sound.
+	heard bool
 
 	pending     sync.Mutex
 	queued      bool

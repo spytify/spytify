@@ -1,0 +1,46 @@
+# states/ad-between-tracks
+# setting recorder.mute_ads = true
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > audio music 1 at 1000ms, 88200(2000ms)
+    3500ms  > audio silence, 13230(300ms)
+    3800ms  > player TrackChanged "Sponsored" id=/x/ad/1 length=3000ms pos=0 (ring at 167580)
+    3800ms  > audio music 9 at 0ms, 132300(3000ms)
+    3820ms  log debug: cut for "Sponsored" at 3500 ms (kind 1, noticed at 3800 ms, window 3200..3801 ms)
+    3820ms  started t-002 "Sponsored" artist="Sponsor" album="" length=3000ms cut=boundary/silence offset=-300ms source=44100/2
+    3820ms  skipped t-002 ad
+    3820ms  state ad
+    3820ms  mute true
+    3820ms  take t-002 "Sponsored" start=154350(3500ms) length=132300(3000ms) no-file reason=ad
+    6800ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 299880)
+    6800ms  > audio music 9 at 3000ms, 8820(200ms)
+    7000ms  > audio silence, 13230(300ms)
+    7120ms  log debug: cut for "B" at 7000 ms (kind 1, noticed at 6800 ms, window 6200..7101 ms)
+    7120ms  started t-003 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=200ms source=44100/2
+    7120ms  state recording
+    7120ms  mute false
+    7120ms  take t-003 "B" start=308700(7000ms) length=132300(3000ms) awaiting-sound
+    7300ms  > audio music 2 at 0ms, 132300(3000ms)
+    7310ms  log debug: "B" starts at its first sound, 7300 ms
+    7310ms  take t-003 "B" start=321942(7300.27ms) origin=308700(7000ms) length=132300(3000ms)
+   10300ms  > audio silence, 66150(1500ms)
+   11800ms  > player Stopped pos=-1 (ring at 520380)
+   11800ms  state waiting
+   11800ms  state stopping
+   11800ms  state idle
+   11800ms  take none
+--- jobs
+job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060
+job t-003 "B" played=132790(3011.11ms) length=132300(3000ms) wav=132790 crc=bc4937f8
+--- end: idle, 1 skipped, 1 ads, 0 overruns

@@ -16,6 +16,7 @@ import (
 // the media session API for what plays.
 func (b Backends) New(t target.Target) (capture.Capture, meta.NowPlaying, error) {
 	if build := capture.WindowsBuild(); !capture.LoopbackSupported(build) {
+		//lint:ignore ST1005 the app's error dialog shows it to the user as written
 		return nil, nil, fmt.Errorf("Windows build %d has no process loopback capture; Windows 10 version 2004 or later is needed", build)
 	}
 	c, err := capture.NewWindows(b.TapHelper, target.FindProcess, b.logf)

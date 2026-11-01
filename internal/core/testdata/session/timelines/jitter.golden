@@ -1,0 +1,76 @@
+# timelines/jitter
+# option EndOnStop
+# item 0 "Static Bloom" (track, declared 5200ms): audio from 500ms to 5700ms, notified -300ms, then 500ms of silence
+# item 1 "Northbound (Live)" (track, declared 4700ms): audio from 6200ms to 10900ms, notified +800ms, then 200ms of silence
+# item 2 "Glass Orchard" (track, declared 6100ms): audio from 11100ms to 17200ms
+# item 3 "Slow Satellites" (track, declared 4000ms): audio from 17200ms to 21200ms, notified +450ms, then 800ms of silence
+# item 4 "Driftwood - 2015 Remaster" (track, declared 5500ms): audio from 22000ms to 27500ms, notified -150ms, then 300ms of silence
+# item 5 "Ember" (track, declared 6600ms): audio from 27800ms to 34400ms, notified +650ms
+# item 6 "Electric Fields" (track, declared 4300ms): audio from 34400ms to 38700ms, notified +200ms, then 1000ms of silence
+# item 7 "Paper Planes (Acoustic)" (track, declared 5000ms): audio from 39700ms to 44700ms, notified -300ms, then 150ms of silence
+# item 8 "Lighthouse Radio" (track, declared 5800ms): audio from 44850ms to 50650ms, notified +800ms, then 400ms of silence
+# item 9 "Last Train Home (Live at the Harbor Hall)" (track, declared 4900ms): audio from 51050ms to 55950ms, notified +100ms ±200ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     200ms  > player Playing pos=-1 (ring at 8820)
+     200ms  > player TrackChanged "Static Bloom" id=/com/fake/track/1 length=5200ms pos=0 (ring at 8820)
+     510ms  log debug: cut for "Static Bloom" at 500 ms (kind 0, noticed at 200 ms, window 0..0 ms)
+     510ms  started t-001 "Static Bloom" artist="Saffron Tide" album="Tidal" length=5200ms cut=first/first_sound offset=300ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Static Bloom" start=22066(500.36ms) length=229320(5200ms)
+    7000ms  > player TrackChanged "Northbound (Live)" id=/com/fake/track/2 length=4700ms pos=0 (ring at 308700)
+    7000ms  log debug: cut for "Northbound (Live)" at 5700 ms (kind 1, noticed at 7000 ms, window 5400..6001 ms)
+    7000ms  started t-002 "Northbound (Live)" artist="Saffron Tide" album="Tidal" length=4700ms cut=boundary/silence offset=-1300ms source=44100/2 cover
+    7000ms  take t-002 "Northbound (Live)" start=251369(5699.98ms) length=207270(4700ms)
+   11100ms  > player TrackChanged "Glass Orchard" id=/com/fake/track/3 length=6100ms pos=0 (ring at 489510)
+   11220ms  log debug: cut for "Glass Orchard" at 10900 ms (kind 1, noticed at 11100 ms, window 10100..11201 ms)
+   11220ms  started t-003 "Glass Orchard" artist="Mara Quill" album="Orchard" length=6100ms cut=boundary/silence offset=-200ms source=44100/2 cover
+   11220ms  take t-003 "Glass Orchard" start=480684(10899.86ms) length=269010(6100ms)
+   17650ms  > player TrackChanged "Slow Satellites" id=/com/fake/track/4 length=4000ms pos=0 (ring at 778365)
+   17650ms  log debug: cut for "Slow Satellites" at 17199 ms (kind 1, noticed at 17650 ms, window 16700..17501 ms)
+   17650ms  started t-004 "Slow Satellites" artist="Mara Quill, Theo Lund" album="Orchard" length=4000ms cut=boundary/dip offset=-451ms source=44100/2 cover
+   17650ms  take t-004 "Slow Satellites" start=758486(17199.23ms) length=176400(4000ms)
+   21850ms  > player TrackChanged "Driftwood - 2015 Remaster" id=/com/fake/track/5 length=5500ms pos=0 (ring at 963585)
+   21850ms  log debug: cut for "Driftwood - 2015 Remaster" at 21200 ms (kind 1, noticed at 21850 ms, window 20899..21501 ms)
+   21850ms  started t-005 "Driftwood - 2015 Remaster" artist="Copper Lanterns" album="Night Shift" length=5500ms cut=boundary/silence offset=-650ms source=44100/2 cover
+   21850ms  take t-005 "Driftwood - 2015 Remaster" start=934919(21199.98ms) length=242550(5500ms)
+   28450ms  > player TrackChanged "Ember" id=/com/fake/track/6 length=6600ms pos=0 (ring at 1254645)
+   28450ms  log debug: cut for "Ember" at 27500 ms (kind 1, noticed at 28450 ms, window 26400..27802 ms)
+   28450ms  started t-006 "Ember" artist="Copper Lanterns" album="Night Shift" length=6600ms cut=boundary/silence offset=-950ms source=44100/2 cover
+   28450ms  take t-006 "Ember" start=1212747(27499.93ms) length=291060(6600ms)
+   34600ms  > player TrackChanged "Electric Fields" id=/com/fake/track/7 length=4300ms pos=0 (ring at 1525860)
+   34720ms  log debug: cut for "Electric Fields" at 34399 ms (kind 1, noticed at 34600 ms, window 33800..34701 ms)
+   34720ms  started t-007 "Electric Fields" artist="Ada Okoro, Saffron Tide, Kenji Mori" album="Fields" length=4300ms cut=boundary/dip offset=-201ms source=44100/2 cover
+   34720ms  take t-007 "Electric Fields" start=1517012(34399.37ms) length=189630(4300ms)
+   39400ms  > player TrackChanged "Paper Planes (Acoustic)" id=/com/fake/track/8 length=5000ms pos=0 (ring at 1737540)
+   39400ms  log debug: cut for "Paper Planes (Acoustic)" at 38700 ms (kind 1, noticed at 39400 ms, window 38399..39002 ms)
+   39400ms  started t-008 "Paper Planes (Acoustic)" artist="Velvet Static" album="Lighthouse Radio" length=5000ms cut=boundary/silence offset=-700ms source=44100/2 cover
+   39400ms  take t-008 "Paper Planes (Acoustic)" start=1706669(38699.98ms) length=220500(5000ms)
+   45650ms  > player TrackChanged "Lighthouse Radio" id=/com/fake/track/9 length=5800ms pos=0 (ring at 2013165)
+   45650ms  log debug: cut for "Lighthouse Radio" at 44700 ms (kind 1, noticed at 45650 ms, window 43400..45001 ms)
+   45650ms  started t-009 "Lighthouse Radio" artist="Velvet Static" album="Lighthouse Radio" length=5800ms cut=boundary/silence offset=-950ms source=44100/2 cover
+   45650ms  take t-009 "Lighthouse Radio" start=1971269(44699.98ms) length=255780(5800ms)
+   51350ms  > player TrackChanged "Last Train Home (Live at the Harbor Hall)" id=/com/fake/track/10 length=4900ms pos=0 (ring at 2264535)
+   51350ms  log debug: cut for "Last Train Home (Live at the Harbor Hall)" at 50650 ms (kind 1, noticed at 51350 ms, window 50200..50951 ms)
+   51350ms  started t-010 "Last Train Home (Live at the Harbor Hall)" artist="Nils Arden" album="Live in Bergen" length=4900ms cut=boundary/silence offset=-700ms source=44100/2 cover
+   51350ms  take t-010 "Last Train Home (Live at the Harbor Hall)" start=2233663(50649.95ms) length=216090(4900ms)
+   56950ms  > player Stopped pos=-1 (ring at 2511495)
+   56950ms  state waiting
+   56950ms  state stopping
+   56950ms  state idle
+   56950ms  take none
+--- jobs
+job t-001 "Static Bloom" played=229303(5199.61ms) length=229320(5200ms) wav=229303 crc=fb70a9eb cover=cover-0.jpg
+job t-002 "Northbound (Live)" played=229315(5199.89ms) length=207270(4700ms) wav=229315 crc=cab79370 cover=cover-1.jpg
+job t-003 "Glass Orchard" played=277802(6299.37ms) length=269010(6100ms) wav=277802 crc=58a4bb70 cover=cover-2.jpg
+job t-004 "Slow Satellites" played=176433(4000.75ms) length=176400(4000ms) wav=176433 crc=6d8a099d cover=cover-3.jpg
+job t-005 "Driftwood - 2015 Remaster" played=277828(6299.95ms) length=242550(5500ms) wav=277828 crc=8162ce9b cover=cover-4.jpg
+job t-006 "Ember" played=304265(6899.43ms) length=291060(6600ms) wav=304265 crc=6ab25aaa cover=cover-5.jpg
+job t-007 "Electric Fields" played=189657(4300.61ms) length=189630(4300ms) wav=189657 crc=164446e4 cover=cover-6.jpg
+job t-008 "Paper Planes (Acoustic)" played=264600(6000ms) length=220500(5000ms) wav=264600 crc=7c450115 cover=cover-7.jpg
+job t-009 "Lighthouse Radio" played=262394(5949.98ms) length=255780(5800ms) wav=262394 crc=7edbc7ab cover=cover-8.jpg
+job t-010 "Last Train Home (Live at the Harbor Hall)" played=234242(5311.61ms) length=216090(4900ms) wav=234242 crc=67420bfd cover=cover-9.jpg
+--- end: idle, 0 skipped, 0 ads, 0 overruns

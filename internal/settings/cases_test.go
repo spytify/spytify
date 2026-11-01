@@ -35,6 +35,7 @@ var cases = map[string][]string{
 	"recorder.duplicates":              {"internal/core:TestScenarios", "internal/core:TestOutputLayoutForEverySetting"},
 	"recorder.skip_duplicates_forward": {"internal/core:TestSkipDuplicateForward"},
 	"recorder.single_track":            {"test/e2e:TestAutostartRecordsOnLaunch"},
+	"recorder.stop_with_player":        {"internal/core:TestTheSessionEndsWhenThePlayerStops", "internal/core:TestTheSessionEndsWhenThePlayerQuits"},
 	"recorder.normalize":               {"internal/core:TestLoudnessSettings"},
 	"recorder.trim_silence":            {"internal/core:TestSilenceSettings"},
 	"recorder.silence_db":              {"internal/core:TestSilenceSettings"},

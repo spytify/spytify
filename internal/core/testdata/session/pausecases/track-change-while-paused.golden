@@ -1,0 +1,34 @@
+# pausecases/track-change-while-paused
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 88200(2000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    2500ms  > player Paused pos=-1 (ring at 110250)
+    2500ms  state paused
+    2500ms  > audio silence, 22050(500ms)
+    3000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 110250)
+    3000ms  > audio silence, 22050(500ms)
+    3500ms  > player Playing pos=-1 (ring at 110250)
+    3500ms  state recording
+    3500ms  > audio music 2 at 0ms, 132300(3000ms)
+    4820ms  log debug: cut for "B" at 3501 ms (kind 1, noticed at 2500 ms, window 3200..3801 ms)
+    4820ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/length offset=1001ms source=44100/2
+    4820ms  take t-002 "B" start=154378(3500.63ms) length=132300(3000ms)
+    6500ms  > audio silence, 66150(1500ms)
+    8000ms  > player Stopped pos=-1 (ring at 308595)
+    8000ms  state waiting
+    8000ms  state stopping
+    8000ms  state idle
+    8000ms  take none
+--- jobs
+job t-001 "A" played=132317(3000.39ms) length=132300(3000ms) wav=132317 crc=6678dcba
+job t-002 "B" played=119070(2700ms) length=132300(3000ms) wav=119070 crc=e6ff3aca
+--- end: idle, 0 skipped, 0 ads, 0 overruns
