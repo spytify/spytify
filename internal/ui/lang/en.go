@@ -139,7 +139,6 @@ const (
 	NotAPlaceholder = "Not a placeholder, left out when saved: %s"
 	NotPlaceholders = "Not placeholders, left out when saved: %s"
 	NoTrayIcons     = "This desktop shows no tray icons: closing quits. On GNOME, the AppIndicator and KStatusNotifierItem Support extension adds them."
-	TrayIconLater   = "The tray icon comes when Spytify restarts: until then, closing quits."
 )
 
 // The player the recorder records, in Settings and while the recorder is

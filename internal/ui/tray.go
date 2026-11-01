@@ -6,7 +6,6 @@ import (
 
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/ui/lang"
-	"github.com/spytify/spytify/internal/ui/model"
 )
 
 // closeWindow answers the window's close button: with Minimize to tray on
@@ -20,18 +19,15 @@ func (a *App) closeWindow() {
 	a.quit()
 }
 
-// hasTray says whether the tray icon shows, or would: the platform has a
-// tray and, on Linux, the desktop draws it and the toolkit started it.
-func (a *App) hasTray() bool { return a.tray && !a.noTrayHost && !a.trayLate }
+// hasTray says whether the tray icon shows: the platform has a tray and,
+// on Linux, the desktop draws it.
+func (a *App) hasTray() bool { return a.tray && !a.noTrayHost }
 
 // trayNote is what Minimize to tray says under its label: why closing
 // quits even with it on.
-func (a *App) trayNote(s model.State) string {
-	switch {
-	case a.noTrayHost:
+func (a *App) trayNote() string {
+	if a.noTrayHost {
 		return lang.NoTrayIcons
-	case a.trayLate && s.Settings[settings.AppMinimizeToTray.String()] == true:
-		return lang.TrayIconLater
 	}
 	return ""
 }
@@ -52,9 +48,6 @@ func (a *App) setupTray() {
 	if !ok {
 		return
 	}
-	// The toolkit starts Linux's tray with its loop: one set up later
-	// never shows, and closing quits until Spytify restarts.
-	a.trayLate = a.running && !lateTrayShows
 	desk.SetSystemTrayIcon(Logo)
 	// The tray's action is the app bar's, which render copies there:
 	// Record, Stop, or Stop now while the last track is being saved.
