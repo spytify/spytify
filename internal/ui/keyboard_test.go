@@ -89,6 +89,8 @@ func focusName(a *App, f fyne.Focusable) string {
 			return "Play"
 		case theme.ViewRefreshIcon().Name():
 			return "Rescan"
+		case theme.MediaSkipNextIcon().Name():
+			return "Skip"
 		case theme.FolderOpenIcon().Name():
 			return "Choose folder"
 		}
@@ -268,8 +270,8 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	}
 }
 
-// Library: the search, the sort, the filter and the rescan above the files,
-// then each file's buttons.
+// Library: the search, the sort and the filter above the files, then each
+// file's buttons, then Rescan and Open folder in the footer.
 func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	revealed, opened := fakeOS(t)
 	a, _, file, _ := recorded(t)
@@ -277,7 +279,7 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	a.render()
 	c := a.win.Canvas()
 	lib := a.screens[tabLibrary].(*libraryScreen)
-	wantOrder(t, a, "Donate", "Stop", "Search artist, title or album", "Sort", "Filter", "Rescan", "list", "Show in folder", "Play")
+	wantOrder(t, a, "Donate", "Stop", "Search artist, title or album", "Sort", "Filter", "list", "Show in folder", "Play", "Rescan", "Open folder")
 
 	test.Type(tabTo(t, a, "Search artist, title or album", 1), "nothing like it")
 	if len(lib.shown) != 0 {

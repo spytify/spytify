@@ -14,11 +14,21 @@ var (
 	greenLight = color.NRGBA{R: 0x13, G: 0x8a, B: 0x3f, A: 0xff}
 )
 
-// Muted status colours for the session list, softer than Success and
-// Warning, which stay for the status dot and the level bar.
+// A list row's status badge and the text on it: a soft green for a saved
+// file and a sand for a skipped one on the light theme, deep ones under
+// light text on the dark theme.
 const (
-	colorSaved   fyne.ThemeColorName = "spytifySaved"
-	colorSkipped fyne.ThemeColorName = "spytifySkipped"
+	colorSavedBadge     fyne.ThemeColorName = "spytifySavedBadge"
+	colorOnSavedBadge   fyne.ThemeColorName = "spytifyOnSavedBadge"
+	colorSkippedBadge   fyne.ThemeColorName = "spytifySkippedBadge"
+	colorOnSkippedBadge fyne.ThemeColorName = "spytifyOnSkippedBadge"
+)
+
+// A screen's footer, on a grey of its own under the list, and the line
+// around a button drawn as an outline.
+const (
+	colorFooter  fyne.ThemeColorName = "spytifyFooter"
+	colorOutline fyne.ThemeColorName = "spytifyOutline"
 )
 
 // An info alert's text, in the green of its outline and icon, darker on the
@@ -26,13 +36,9 @@ const (
 const colorInfoText fyne.ThemeColorName = "spytifyInfoText"
 
 // Cards on a darker page, a settings card's advanced settings in a greyer
-// block, the track being recorded on a card of its own (white as the others
-// in the light theme, where a tint made its grey text hard to read; lighter
-// than them in the dark one), and text in three steps, a card's title
-// strongest. The bars at the top,
-// the log and About stay on Fyne's plain window colour.
+// block, and text in three steps, a card's title strongest. The bars at
+// the top, the log and About stay on Fyne's plain window colour.
 const (
-	colorLive          fyne.ThemeColorName = "spytifyLive"
 	colorPage          fyne.ThemeColorName = "spytifyPage"
 	colorPlain         fyne.ThemeColorName = "spytifyPlain"
 	colorCard          fyne.ThemeColorName = "spytifyCard"
@@ -46,20 +52,25 @@ const (
 	colorSubtle        fyne.ThemeColorName = "spytifySubtle"
 )
 
-// cardColors are the light and dark values of those colours.
+// cardColors are the light and dark values of the colours above.
 var cardColors = map[fyne.ThemeColorName][2]color.NRGBA{
-	colorLive:          {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x26, G: 0x26, B: 0x29, A: 0xff}},
-	colorPage:          {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x0f, G: 0x0f, B: 0x10, A: 0xff}},
-	colorPlain:         {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x17, G: 0x17, B: 0x18, A: 0xff}},
-	colorCard:          {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x1c, G: 0x1c, B: 0x1e, A: 0xff}},
-	colorCardLine:      {{R: 0xe8, G: 0xe8, B: 0xed, A: 0xff}, {R: 0x2c, G: 0x2c, B: 0x2e, A: 0xff}},
-	colorCardInput:     {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x2a, G: 0x2a, B: 0x2d, A: 0xff}},
-	colorAdvanced:      {{R: 0xf5, G: 0xf5, B: 0xf7, A: 0xff}, {R: 0x15, G: 0x15, B: 0x17, A: 0xff}},
-	colorAdvancedInput: {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x24, G: 0x24, B: 0x27, A: 0xff}},
-	colorScrollShadow:  {{A: 0x14}, {A: 0x40}},
-	colorTitle:         {{R: 0x1d, G: 0x1d, B: 0x1f, A: 0xff}, {R: 0xf5, G: 0xf5, B: 0xf7, A: 0xff}},
-	colorLabel:         {{R: 0x3a, G: 0x3a, B: 0x3e, A: 0xff}, {R: 0xd6, G: 0xd6, B: 0xdb, A: 0xff}},
-	colorSubtle:        {{R: 0x6e, G: 0x6e, B: 0x73, A: 0xff}, {R: 0xa1, G: 0xa1, B: 0xa6, A: 0xff}},
+	colorSavedBadge:     {{R: 0xdc, G: 0xef, B: 0xe2, A: 0xff}, {R: 0x17, G: 0x35, B: 0x23, A: 0xff}},
+	colorOnSavedBadge:   {{R: 0x1e, G: 0x4d, B: 0x30, A: 0xff}, {R: 0xb5, G: 0xe3, B: 0xc5, A: 0xff}},
+	colorSkippedBadge:   {{R: 0xf8, G: 0xec, B: 0xd4, A: 0xff}, {R: 0x3d, G: 0x2f, B: 0x12, A: 0xff}},
+	colorOnSkippedBadge: {{R: 0x5a, G: 0x42, B: 0x12, A: 0xff}, {R: 0xf2, G: 0xd9, B: 0xa6, A: 0xff}},
+	colorFooter:         {{R: 0xeb, G: 0xeb, B: 0xef, A: 0xff}, {R: 0x14, G: 0x14, B: 0x16, A: 0xff}},
+	colorOutline:        {{R: 0xd2, G: 0xd2, B: 0xd8, A: 0xff}, {R: 0x3a, G: 0x3a, B: 0x3e, A: 0xff}},
+	colorPage:           {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x0f, G: 0x0f, B: 0x10, A: 0xff}},
+	colorPlain:          {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x17, G: 0x17, B: 0x18, A: 0xff}},
+	colorCard:           {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x1c, G: 0x1c, B: 0x1e, A: 0xff}},
+	colorCardLine:       {{R: 0xe8, G: 0xe8, B: 0xed, A: 0xff}, {R: 0x2c, G: 0x2c, B: 0x2e, A: 0xff}},
+	colorCardInput:      {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x2a, G: 0x2a, B: 0x2d, A: 0xff}},
+	colorAdvanced:       {{R: 0xf5, G: 0xf5, B: 0xf7, A: 0xff}, {R: 0x15, G: 0x15, B: 0x17, A: 0xff}},
+	colorAdvancedInput:  {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x24, G: 0x24, B: 0x27, A: 0xff}},
+	colorScrollShadow:   {{A: 0x14}, {A: 0x40}},
+	colorTitle:          {{R: 0x1d, G: 0x1d, B: 0x1f, A: 0xff}, {R: 0xf5, G: 0xf5, B: 0xf7, A: 0xff}},
+	colorLabel:          {{R: 0x3a, G: 0x3a, B: 0x3e, A: 0xff}, {R: 0xd6, G: 0xd6, B: 0xdb, A: 0xff}},
+	colorSubtle:         {{R: 0x6e, G: 0x6e, B: 0x73, A: 0xff}, {R: 0xa1, G: 0xa1, B: 0xa6, A: 0xff}},
 }
 
 // spytifyTheme is Fyne's theme with the green in place of the blue accent.
@@ -99,16 +110,6 @@ func (t spytifyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color
 		return c[1]
 	}
 	switch name {
-	case colorSaved:
-		if light {
-			return color.NRGBA{R: 0x4f, G: 0x8f, B: 0x66, A: 0xff}
-		}
-		return color.NRGBA{R: 0x7c, G: 0xb8, B: 0x93, A: 0xff}
-	case colorSkipped:
-		if light {
-			return color.NRGBA{R: 0xa8, G: 0x84, B: 0x4c, A: 0xff}
-		}
-		return color.NRGBA{R: 0xc4, G: 0xa4, B: 0x70, A: 0xff}
 	case colorInfoText:
 		if light {
 			return color.NRGBA{R: 0x08, G: 0x37, B: 0x19, A: 0xff}
@@ -183,3 +184,50 @@ func (c cardTheme) Size(n fyne.ThemeSizeName) float32 {
 	}
 	return s
 }
+
+// The recording card's own colours: a badge of translucent white and the
+// outline of one, and the red Recording badge with its dot.
+const (
+	colorMediaBadge fyne.ThemeColorName = "spytifyMediaBadge"
+	colorMediaLine  fyne.ThemeColorName = "spytifyMediaLine"
+	colorRecBadge   fyne.ThemeColorName = "spytifyRecBadge"
+	colorOnRecBadge fyne.ThemeColorName = "spytifyOnRecBadge"
+)
+
+// mediaTheme is the app's theme on the recording card, over the cover's
+// darkened colours whichever the app's theme: white text and icons,
+// buttons and the bar's track in translucent white, the bright green.
+type mediaTheme struct{}
+
+func (mediaTheme) base() fyne.Theme { return fyne.CurrentApp().Settings().Theme() }
+
+func (m mediaTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
+	white := color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
+	switch name {
+	case theme.ColorNameForeground:
+		return white
+	case theme.ColorNamePlaceHolder:
+		return withAlpha(white, 0xd9)
+	case theme.ColorNameButton, colorMediaBadge:
+		return withAlpha(white, 0x2e)
+	case theme.ColorNameHover:
+		return withAlpha(white, 0x1f)
+	case theme.ColorNamePressed:
+		return withAlpha(white, 0x40)
+	case theme.ColorNameInputBackground:
+		return withAlpha(white, 0x4d)
+	case colorMediaLine:
+		return withAlpha(white, 0x66)
+	case theme.ColorNamePrimary:
+		return greenDark
+	case colorRecBadge:
+		return color.NRGBA{R: 0xff, G: 0xda, B: 0xd6, A: 0xff}
+	case colorOnRecBadge:
+		return color.NRGBA{R: 0x41, G: 0x00, B: 0x02, A: 0xff}
+	}
+	return m.base().Color(name, v)
+}
+
+func (m mediaTheme) Font(s fyne.TextStyle) fyne.Resource     { return m.base().Font(s) }
+func (m mediaTheme) Icon(n fyne.ThemeIconName) fyne.Resource { return m.base().Icon(n) }
+func (m mediaTheme) Size(n fyne.ThemeSizeName) float32       { return m.base().Size(n) }

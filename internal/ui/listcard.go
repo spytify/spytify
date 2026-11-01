@@ -7,11 +7,12 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// listCard holds a list in a card as tall as its rows, up to the room it is
-// given; refresh it when the number of rows changes.
+// listCard holds a list on the card's colour, as tall as its rows up to the
+// room it is given, square and from one side of the window to the other: a
+// line between rows starts under their covers. Refresh it when the number
+// of rows changes.
 func listCard(list *widget.List) *fyne.Container {
-	pad := theme.Padding()
-	box := newPanel(colorCard, colorCardLine, 10, fyne.NewSize(pad, pad), list)
+	box := newPanel(colorCard, "", 0, fyne.NewSize(3*theme.Padding(), 0), list)
 	return container.New(fitRows{list}, container.NewThemeOverride(box, cardTheme{input: colorCardInput, surface: colorCard}))
 }
 

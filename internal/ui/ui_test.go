@@ -238,7 +238,7 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	feedSession(t, m)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Saved", "Skipped: duplicate",
+	for _, want := range []string{"Recording", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Saved", "Skipped: duplicate",
 		"2 saved · 1 skipped · 0 ads", "Stop", "Player is running", "FLAC", "Skip"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
@@ -263,10 +263,11 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 		t.Errorf("app bar action %q", a.action.Text)
 	}
 	snapshot(t, a, "record")
-	// The picture carries art: the card's cover and one on every row.
+	// The picture carries art: the card's cover, blurred behind it too, and
+	// one on every row.
 	pictures := slices.DeleteFunc(images(a.win.Content()), func(s string) bool { return !strings.HasPrefix(s, "picture ") })
-	if len(pictures) != 4 {
-		t.Errorf("%d covers on the Record screen, want the card's and three rows': %v", len(pictures), images(a.win.Content()))
+	if len(pictures) != 5 {
+		t.Errorf("%d pictures on the Record screen, want the card's cover and its glow, and three rows': %v", len(pictures), images(a.win.Content()))
 	}
 
 	test.Tap(r.clear)
@@ -279,42 +280,37 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	}
 }
 
-// A device above 48 kHz is written at a lower rate, and the card says so on
-// a line of its own, under the artist and album.
+// A device above 48 kHz is written at a lower rate, and the card says so in
+// a badge of its own, after the stream's rate and channels.
 func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	a.render()
 	r := a.screens[tabRecord].(*recordScreen)
-	// lines is the card's text, one entry per line as drawn, top to bottom.
-	lines := func() []string {
+	// badges is what the card's badges shown say, left to right.
+	badges := func() []string {
 		var out []string
-		y := float32(-1)
-		for _, o := range test.WidgetRenderer(r.track).Objects() {
-			if txt, ok := o.(*canvas.Text); ok && txt.Text != "" {
-				if txt.Position().Y <= y {
-					t.Errorf("%q is not on a line of its own", txt.Text)
-				}
-				y = txt.Position().Y
-				out = append(out, txt.Text)
+		for _, b := range []*badge{r.state, r.rate, r.channels, r.fileRate} {
+			if b.Visible() {
+				out = append(out, b.text)
 			}
 		}
 		return out
 	}
-	// No format known, no line for it.
-	if got, want := lines(), []string{"● RECORDING", "Midnight City", "M83 · Hurry Up, We're Dreaming"}; !slices.Equal(got, want) {
-		t.Errorf("card lines %q, want %q", got, want)
+	// No format known, no badge for it.
+	if got, want := badges(), []string{"Recording"}; !slices.Equal(got, want) {
+		t.Errorf("card badges %q, want %q", got, want)
 	}
 
 	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-004", Path: "/Users/listener/Music/Spytify/M83/Midnight City.flac", DurationMs: 243000, Bytes: 31_400_000, Tagged: true, TaggedBy: "lastfm"}))
 	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000},
 		Source: &proto.AudioSource{SampleRate: 96000, Channels: 2}}))
 	a.render()
-	if got, want := lines(), []string{"● RECORDING", "Outro", "M83 · Hurry Up, We're Dreaming", "96 kHz stereo, 48 kHz file"}; !slices.Equal(got, want) {
-		t.Errorf("card lines %q, want %q", got, want)
+	if got, want := badges(), []string{"Recording", "96 kHz", "Stereo", "48 kHz file"}; !slices.Equal(got, want) {
+		t.Errorf("card badges %q, want %q", got, want)
 	}
-	if all := texts(r.card); !contains(all, "Length") || !contains(all, "Level") || !contains(all, "0:00 / 4:07") {
-		t.Errorf("no Length and Level rows on the card: %q", all)
+	if all := texts(r.card); !contains(all, "Outro") || !contains(all, "M83 · Hurry Up, We're Dreaming") || !contains(all, "0:00 / 4:07") {
+		t.Errorf("the card does not show the track and its time: %q", all)
 	}
 	snapshot(t, a, "record-96khz-layout")
 
@@ -346,6 +342,37 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	}
 	inside(panel)
 	snapshot(t, a, "record-96khz-narrow")
+}
+
+// A player paused mid-track keeps the track's card, its badge saying so,
+// with the info bar above it offering to play.
+func TestAPausedTrackHasTheInfoBarAboveItsCard(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StatePaused}))
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	if !r.card.Visible() || r.state.text != "Paused" || r.meter.Visible() {
+		t.Errorf("paused card: shown %v, badge %q, meter shown %v", r.card.Visible(), r.state.text, r.meter.Visible())
+	}
+	if !r.waitRow.Visible() || !strings.HasSuffix(r.waiting.String(), "is paused: press play there.") || !r.play.Visible() || r.restart.Visible() {
+		t.Errorf("info bar shown %v, says %q, Play %v, restart %v", r.waitRow.Visible(), r.waiting.String(), r.play.Visible(), r.restart.Visible())
+	}
+	if d := fyne.CurrentApp().Driver(); d.AbsolutePositionForObject(r.waitRow).Y >= d.AbsolutePositionForObject(r.card).Y {
+		t.Error("the info bar is not above the card")
+	}
+	snapshot(t, a, "record-paused")
+	light := defaults()
+	light["app.theme"] = "light"
+	m.SetSettings(light)
+	a.render()
+	snapshot(t, a, "record-paused-light")
+
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	a.render()
+	if r.waitRow.Visible() || r.state.text != "Recording" || !r.meter.Visible() {
+		t.Errorf("playing again: info bar %v, badge %q, meter %v", r.waitRow.Visible(), r.state.text, r.meter.Visible())
+	}
 }
 
 // drawnRow is a track's row in a list as drawn: the row, and its lines of
@@ -486,7 +513,7 @@ func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
 	snapshot(t, a, "history-rows")
 
 	longArtist := "M83 with The Hurry Up Orchestra, The Choir of the Night, The Second Night Strings and The Brass of the Rain"
-	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra)"
+	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra and the Choir)"
 	play(proto.Track{ID: "s-007", Artist: longArtist, Title: "Splendor", LengthMs: 313000},
 		proto.Track{ID: "s-008", Artist: "M83", Title: longTitle, LengthMs: 247000},
 		proto.Track{ID: "s-009", Artist: "M83", Title: "Year One, One UFO", Album: "Hurry Up, We're Dreaming", LengthMs: 194000})
@@ -1422,14 +1449,15 @@ func TestHoverAndSelectionAreTranslucent(t *testing.T) {
 	}
 }
 
-func TestSourceText(t *testing.T) {
+func TestSourceParts(t *testing.T) {
 	for _, c := range []struct {
 		rate, ch int
-		want     string
-	}{{44100, 2, "44.1 kHz stereo"}, {48000, 2, "48 kHz stereo"}, {48000, 1, "48 kHz mono"}, {96000, 2, "96 kHz stereo, 48 kHz file"},
-		{88200, 2, "88.2 kHz stereo, 44.1 kHz file"}, {96000, 6, "96 kHz 6 channels, 48 kHz file"}, {0, 2, ""}} {
-		if got := sourceText(c.rate, c.ch); got != c.want {
-			t.Errorf("sourceText(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
+		want     []string
+	}{{44100, 2, []string{"44.1 kHz", "Stereo"}}, {48000, 2, []string{"48 kHz", "Stereo"}}, {48000, 1, []string{"48 kHz", "Mono"}},
+		{96000, 2, []string{"96 kHz", "Stereo", "48 kHz file"}}, {88200, 2, []string{"88.2 kHz", "Stereo", "44.1 kHz file"}},
+		{96000, 6, []string{"96 kHz", "6 channels", "48 kHz file"}}, {0, 2, nil}} {
+		if got := sourceParts(c.rate, c.ch); !slices.Equal(got, c.want) {
+			t.Errorf("sourceParts(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
 		}
 	}
 }
@@ -1490,18 +1518,18 @@ func TestTheMeterWaitsUnderADialog(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	a.render()
-	meter := a.screens[tabRecord].(*recordScreen).level
-	before := meter.value
+	meter := a.screens[tabRecord].(*recordScreen).meter
+	before := meter.lit
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -3}))
 	d := dialog.NewInformation("A dialog", "covering the meter", a.win)
 	d.Show()
 	a.renderLevel()
-	if meter.value != before {
-		t.Fatalf("the meter moved under a dialog: %v to %v", before, meter.value)
+	if meter.lit != before {
+		t.Fatalf("the meter moved under a dialog: %v to %v bars", before, meter.lit)
 	}
 	d.Hide()
 	a.renderLevel()
-	if meter.value == before {
+	if meter.lit == before {
 		t.Fatal("the meter did not move once the dialog closed")
 	}
 }
