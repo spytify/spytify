@@ -45,7 +45,7 @@ func TestAPanelFollowsTheTheme(t *testing.T) {
 	fa := test.NewTempApp(t)
 	fa.Settings().SetTheme(spytifyTheme{mode: "light"})
 	outlined := newPanel(colorCard, colorCardLine, 10, fyne.Size{}, widget.NewLabel("outlined"))
-	plain := newPanel(colorLive, "", 4, fyne.Size{}, widget.NewLabel("plain"))
+	plain := newPanel(colorFooter, "", 4, fyne.Size{}, widget.NewLabel("plain"))
 	input := newPanel(theme.ColorNameInputBackground, "", 0, fyne.Size{}, widget.NewLabel("input"))
 	test.NewTempWindow(t, container.NewVBox(outlined, plain, container.NewThemeOverride(input, cardTheme{input: colorCardInput})))
 	box := func(p *panel) *canvas.Rectangle { return test.TempWidgetRenderer(t, p).(*panelRenderer).box }
@@ -54,7 +54,7 @@ func TestAPanelFollowsTheTheme(t *testing.T) {
 		if b := box(outlined); b.FillColor != cardColors[colorCard][i] || b.StrokeColor != cardColors[colorCardLine][i] || b.StrokeWidth != 1 || b.CornerRadius != 10 {
 			t.Errorf("%s, outlined: %v, outline %v %v wide, rounded %v", mode, b.FillColor, b.StrokeColor, b.StrokeWidth, b.CornerRadius)
 		}
-		if b := box(plain); b.FillColor != cardColors[colorLive][i] || b.StrokeWidth != 0 || b.CornerRadius != 4 {
+		if b := box(plain); b.FillColor != cardColors[colorFooter][i] || b.StrokeWidth != 0 || b.CornerRadius != 4 {
 			t.Errorf("%s, plain: %v, outline %v wide, rounded %v", mode, b.FillColor, b.StrokeWidth, b.CornerRadius)
 		}
 		if b := box(input); b.FillColor != cardColors[colorCardInput][i] {

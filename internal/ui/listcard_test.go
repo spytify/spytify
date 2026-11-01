@@ -47,8 +47,9 @@ func TestAListCardIsAsTallAsItsRows(t *testing.T) {
 	}
 }
 
-// The card is a white panel with a light outline, and the list inside sees
-// the card's colours: its surface as the background, inputs a shade darker.
+// The card is the card's colour, square and with no outline, the list three
+// paddings in from its sides; the list inside sees the card's colours: its
+// surface as the background, inputs a shade darker.
 func TestAListCardIsDrawnInTheCardsColours(t *testing.T) {
 	test.NewTempApp(t).Settings().SetTheme(spytifyTheme{mode: "light"})
 	list := widget.NewList(func() int { return 1 }, func() fyne.CanvasObject { return widget.NewLabel("row") }, func(widget.ListItemID, fyne.CanvasObject) {})
@@ -56,10 +57,10 @@ func TestAListCardIsDrawnInTheCardsColours(t *testing.T) {
 	test.NewTempWindow(t, card)
 	p := card.Objects[0].(*container.ThemeOverride).Content.(*panel)
 	box := test.TempWidgetRenderer(t, p).(*panelRenderer).box
-	if box.FillColor != cardColors[colorCard][0] || box.StrokeColor != cardColors[colorCardLine][0] || box.CornerRadius != 10 {
-		t.Errorf("the card is %v, outlined %v, rounded %v", box.FillColor, box.StrokeColor, box.CornerRadius)
+	if box.FillColor != cardColors[colorCard][0] || box.StrokeWidth != 0 || box.CornerRadius != 0 {
+		t.Errorf("the card is %v, outlined %v wide, rounded %v", box.FillColor, box.StrokeWidth, box.CornerRadius)
 	}
-	if pad := theme.Padding(); list.Position() != fyne.NewPos(pad, pad) {
+	if pad := theme.Padding(); list.Position() != fyne.NewPos(3*pad, 0) {
 		t.Errorf("the list is at %v in its card", list.Position())
 	}
 	if got := theme.ColorForWidget(theme.ColorNameBackground, list); got != cardColors[colorCard][0] {
