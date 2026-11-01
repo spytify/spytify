@@ -63,7 +63,7 @@ func holds(root, o fyne.CanvasObject) bool {
 // folded reports whether o is under a group's Advanced.
 func folded(s *settingsScreen, group string, o fyne.CanvasObject) bool {
 	acc := s.advanced[group]
-	return acc != nil && holds(acc.Items[0].Detail, o)
+	return acc != nil && holds(acc.detail, o)
 }
 
 // App comes first, with the player as its advanced part; every setting is
@@ -87,7 +87,7 @@ func TestSettingsAreLaidOutBySection(t *testing.T) {
 		}
 	}
 	for _, acc := range s.advanced {
-		if acc.Items[0].Open {
+		if acc.open {
 			t.Error("an Advanced part is open before anyone opened it")
 		}
 	}
@@ -159,7 +159,7 @@ func TestEveryNoteShowsUnderItsLabel(t *testing.T) {
 	}
 	snapshot(t, a, "settings-notes")
 	for _, acc := range s.advanced {
-		acc.Open(0)
+		acc.setOpen(true)
 	}
 	relayout(s.scroll)
 	drv := fyne.CurrentApp().Driver()
@@ -277,7 +277,7 @@ func TestPickingABitrateSendsItsNumber(t *testing.T) {
 // puts back what the user had opened.
 func TestSettingsSearch(t *testing.T) {
 	a, _, s := settingsApp(t)
-	s.advanced["Output"].Open(0)
+	s.advanced["Output"].setOpen(true)
 	s.search.SetText("bitrate")
 	a.render()
 	all := texts(s.sections)
@@ -286,10 +286,10 @@ func TestSettingsSearch(t *testing.T) {
 	}
 	s.search.SetText("")
 	a.render()
-	if !s.advanced["Output"].Items[0].Open {
+	if !s.advanced["Output"].open {
 		t.Error("the Advanced part the user opened closed after a search")
 	}
-	if s.advanced["Encoding"] != nil && s.advanced["Encoding"].Items[0].Open {
+	if s.advanced["Encoding"] != nil && s.advanced["Encoding"].open {
 		t.Error("an Advanced part a search opened stayed open")
 	}
 }
@@ -361,7 +361,7 @@ func TestThePlayerSavesWithoutAButton(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	a, _, s := settingsApp(t)
-	s.advanced["App"].Open(0)
+	s.advanced["App"].setOpen(true)
 	s.layout()
 	if _, err := os.Stat(target.UserEnvPath()); err == nil {
 		t.Fatal("showing the player wrote the .env file")
@@ -515,7 +515,7 @@ func TestTheFolderPickerIsLargerAndCentred(t *testing.T) {
 	a.render()
 	var browse *widget.Button
 	for _, o := range s.fields["output.dir"].input.(*fyne.Container).Objects {
-		if b, ok := o.(*widget.Button); ok {
+		if b, ok := asButton(o); ok {
 			browse = b
 		}
 	}

@@ -421,7 +421,7 @@ func iconButtons(o fyne.CanvasObject, icon fyne.Resource) []*widget.Button {
 		if o == nil || !o.Visible() {
 			return
 		}
-		if b, ok := o.(*widget.Button); ok {
+		if b, ok := asButton(o); ok {
 			if b.Text == "" && b.Icon != nil && b.Icon.Name() == icon.Name() && !b.Disabled() {
 				out = append(out, b)
 			}

@@ -52,7 +52,7 @@ type settingsScreen struct {
 	tray     *settings.Def
 	player   *playerCard
 	// advanced remembers which Advanced parts the user opened.
-	advanced  map[string]*widget.Accordion
+	advanced  map[string]*fold
 	open      map[string]bool
 	lastQuery string
 }
@@ -66,7 +66,7 @@ type field struct {
 }
 
 func newSettingsScreen(a *App) *settingsScreen {
-	s := &settingsScreen{app: a, fields: map[string]*field{}, advanced: map[string]*widget.Accordion{}, open: map[string]bool{}}
+	s := &settingsScreen{app: a, fields: map[string]*field{}, advanced: map[string]*fold{}, open: map[string]bool{}}
 	s.search = widget.NewEntry()
 	s.search.SetPlaceHolder("Search settings")
 	s.search.ActionItem = widget.NewIcon(theme.SearchIcon())
@@ -83,7 +83,7 @@ func newSettingsScreen(a *App) *settingsScreen {
 	// The search is a white field on the page, as the cards are.
 	search := container.NewThemeOverride(container.NewPadded(s.search), cardTheme{input: colorCard})
 	// Lighter shadows at the scrolled edges, as in the cards.
-	s.root = container.NewBorder(search, nil, nil, nil, container.NewThemeOverride(s.scroll, cardTheme{}))
+	s.root = inReadingOrder(search, nil, nil, nil, container.NewThemeOverride(s.scroll, cardTheme{}))
 	return s
 }
 
@@ -112,11 +112,11 @@ func (s *settingsScreen) layout() {
 	// Remember what the user opened, not what a search opened.
 	if s.lastQuery == "" {
 		for g, acc := range s.advanced {
-			s.open[g] = acc.Items[0].Open
+			s.open[g] = acc.open
 		}
 	}
 	s.lastQuery = q
-	s.advanced = map[string]*widget.Accordion{}
+	s.advanced = map[string]*fold{}
 	var sections []fyne.CanvasObject
 	for _, g := range groups() {
 		var main, adv []fyne.CanvasObject
@@ -147,9 +147,9 @@ func (s *settingsScreen) layout() {
 		}
 		rows := main
 		if len(block) > 0 {
-			acc := widget.NewAccordion(widget.NewAccordionItem("Advanced", newBlock(block...)))
+			acc := newFold("Advanced", newBlock(block...))
 			if q != "" || s.open[g] {
-				acc.Open(0)
+				acc.setOpen(true)
 			}
 			s.advanced[g] = acc
 			rows = append(rows, acc)
@@ -164,7 +164,7 @@ func (s *settingsScreen) header(group string, keys []string) fyne.CanvasObject {
 	if len(keys) == 0 {
 		return sectionTitle(group)
 	}
-	reset := widget.NewButtonWithIcon("Reset", theme.HistoryIcon(), func() {
+	reset := newIconButton("Reset", theme.HistoryIcon(), func() {
 		s.app.noteAction("reset " + group)
 		s.resetKeys(keys)
 	})
@@ -234,7 +234,7 @@ const minControlWidth = 240
 
 func natural(control fyne.CanvasObject) bool {
 	switch control.(type) {
-	case *toggle, *widget.Button:
+	case *toggle, *button:
 		return true
 	}
 	return false
@@ -336,7 +336,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		f.input = sel
 	case settings.KindPath:
 		e := newApplyEntry(func(v string) { s.apply(key, v) })
-		browse := widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() {
+		browse := newIconButton("", theme.FolderOpenIcon(), func() {
 			pick := dialog.NewFolderOpen(func(u fyne.ListableURI, err error) {
 				if err == nil && u != nil {
 					e.SetText(u.Path())
@@ -352,6 +352,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			if top := s.app.win.Canvas().Overlays().Top(); top != nil {
 				top.Refresh()
 			}
+			focusFirst(s.app.win)
 		})
 		f.set = func(v any) {
 			if str, _ := v.(string); !s.focused(e) {
@@ -583,7 +584,7 @@ func newPlayerCard(a *App) *playerCard {
 		rows = append(rows, settingRow("MPRIS name", p.mpris, nil))
 	}
 	rows = append(rows, settingRow("Launch command", p.launch, nil))
-	restart := widget.NewButtonWithIcon("Restart spytifyd", theme.ViewRefreshIcon(), p.restart)
+	restart := newIconButton("Restart spytifyd", theme.ViewRefreshIcon(), p.restart)
 	note := widget.NewRichText(&widget.TextSegment{Text: "Saved. spytifyd records this player once it restarts.", Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
 	p.notice = container.New(rowLayout{}, note, restart)
 	p.notice.Hide()
@@ -670,6 +671,7 @@ func (p *playerCard) restart() {
 				restart()
 			}
 		}, p.app.win)
+		focusFirst(p.app.win)
 		return
 	}
 	restart()
