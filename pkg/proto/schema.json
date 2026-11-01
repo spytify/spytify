@@ -20,6 +20,12 @@
         "detail": {
           "type": "string"
         },
+        "facts": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
         "name": {
           "type": "string"
         },

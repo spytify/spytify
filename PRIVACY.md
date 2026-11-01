@@ -20,10 +20,11 @@ Your computer is known only by a code made from its machine ID for Spytify alone
 - Crashes of Spytify and of the recorder, with their trace and the error lines printed with it, at the next launch, without asking.
 - Problems that are not crashes, such as no sound reaching the recorder, a file that could not be encoded, or no graphics driver to draw the window, with the steps and clicks that led there. Each is counted; one computer in ten sends its details, once per version.
 - Each launch: whether the recorder got ready, how long it took, the names of the checks that fail, and whether the window is drawn in software for want of a graphics driver.
+- Each launch, where the output folder is, never its path: whether it is the default one, whether it exists, and the error number when it cannot be written to; on Windows also the kind of drive (fixed, removable, network, missing) and its file system, the cloud service that syncs it (OneDrive, Dropbox, Google Drive, iCloud, Box or "other", never a business's name), which of your folders it is in (Music, Documents…), whether your Music folder was moved and to which cloud, and whether Controlled folder access is on.
 - How far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track.
 - How long saving a track takes, for one track in a hundred.
 - Recording counts, for every track: saved (with its format), skipped (with the reason, such as an ad or a duplicate) or kept by hand after being cut short, how its start was found and how far from where the player said the track changed. These carry no name of a track, an artist or an album.
-- **Send to the developers** (Logs, when a check fails): the checks that fail and the end of the recorder's log, with an optional comment, once you have seen them.
+- **Send to the developers** (Logs, when a check fails): the checks that fail, with what they found (where the output folder is, as above), and the end of the recorder's log, with an optional comment, once you have seen them.
 
 The names of tracks, artists and albums do go where they appear in an error message or a log line.
 
