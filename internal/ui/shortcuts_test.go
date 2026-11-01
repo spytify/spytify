@@ -177,6 +177,78 @@ func TestShortcutsGoThroughTextFields(t *testing.T) {
 	}
 }
 
+// S puts the focus in the search field of the Library or the Settings, from
+// anywhere on the screen, a field included, its text selected for what is
+// typed to replace it. Elsewhere, under a dialog or offline, it moves
+// nothing.
+func TestTheShortcutGoesToTheSearch(t *testing.T) {
+	a, _ := connectedTestApp(t)
+	c := a.win.Canvas()
+	library := a.screens[tabLibrary].(*libraryScreen).search
+	settings := a.screens[tabSettings].(*settingsScreen).search
+	press(t, a, fyne.KeyS)
+	if f := c.Focused(); f != nil {
+		t.Fatalf("on the Record screen, S focused %T", f)
+	}
+	press(t, a, fyne.Key2)
+	press(t, a, fyne.KeyS)
+	if c.Focused() != library {
+		t.Fatalf("on the Library, S focused %T", c.Focused())
+	}
+	test.Type(library, "m83")
+	press(t, a, fyne.Key3)
+	sw := a.screens[tabSettings].(*settingsScreen).fields["recorder.mute_ads"].input.(*toggle)
+	c.Focus(sw)
+	press(t, a, fyne.KeyS)
+	if c.Focused() != settings {
+		t.Fatalf("from a Settings switch, S focused %T", c.Focused())
+	}
+	var folder *applyEntry
+	for _, o := range a.screens[tabSettings].(*settingsScreen).fields["output.dir"].input.(*fyne.Container).Objects {
+		if e, ok := o.(*applyEntry); ok {
+			folder = e
+		}
+	}
+	c.Focus(folder)
+	press(t, a, fyne.KeyS)
+	if c.Focused() != settings {
+		t.Fatalf("from the output folder field, S focused %T", c.Focused())
+	}
+	press(t, a, fyne.Key2)
+	press(t, a, fyne.KeyS)
+	if c.Focused() != library || library.SelectedText() != "m83" {
+		t.Fatalf("back on the Library: %T focused, %q selected", c.Focused(), library.SelectedText())
+	}
+	test.Type(library, "air")
+	if library.Text != "air" {
+		t.Fatalf("typed after S, the search reads %q", library.Text)
+	}
+	for _, key := range []fyne.KeyName{fyne.Key4, fyne.Key5} {
+		press(t, a, key)
+		press(t, a, fyne.KeyS)
+		if f := c.Focused(); f != nil {
+			t.Errorf("on tab %d, S focused %T", a.tabs.SelectedIndex(), f)
+		}
+	}
+
+	press(t, a, fyne.Key3)
+	d := dialog.NewInformation("Spytify", "A question", a.win)
+	d.Show()
+	press(t, a, fyne.KeyS)
+	if c.Focused() == settings {
+		t.Fatal("under a dialog, S focused the search")
+	}
+	d.Hide()
+
+	off, _, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	off.tabs.SelectIndex(tabLibrary)
+	off.render()
+	press(t, off, fyne.KeyS)
+	if f := off.win.Canvas().Focused(); f != nil {
+		t.Fatalf("offline, S focused %T", f)
+	}
+}
+
 // A dialog takes the keys, as it takes the clicks.
 func TestNoShortcutsUnderADialog(t *testing.T) {
 	a, _, core := connectedApp(t)

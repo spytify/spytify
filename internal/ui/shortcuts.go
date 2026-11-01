@@ -15,11 +15,15 @@ import (
 )
 
 // The shortcuts take the system's shortcut key, Cmd on macOS and Ctrl
-// elsewhere: with R, the app bar's Record or Stop; with 1, 2 and on, the
-// tabs in their order. Fyne's own (copy, cut, paste, select all, undo,
-// redo, and an entry's word moves) and the system's (quit, hide, minimize)
-// use other keys, and none of these types a character in a field.
-const actionKey = fyne.KeyR
+// elsewhere: with R, the app bar's Record or Stop; with S, the search field
+// of the Library or the Settings; with 1, 2 and on, the tabs in their
+// order. Fyne's own (copy, cut, paste, select all, undo, redo, and an
+// entry's word moves) and the system's (quit, hide, minimize) use other
+// keys, and none of these types a character in a field.
+const (
+	actionKey = fyne.KeyR
+	searchKey = fyne.KeyS
+)
 
 var tabDigits = []fyne.KeyName{fyne.Key1, fyne.Key2, fyne.Key3, fyne.Key4, fyne.Key5, fyne.Key6, fyne.Key7, fyne.Key8, fyne.Key9}
 
@@ -67,6 +71,7 @@ func (a *App) addShortcuts() {
 	run := func(s fyne.Shortcut) { a.runShortcut(s) }
 	c := a.win.Canvas()
 	c.AddShortcut(shortcutFor(actionKey), run)
+	c.AddShortcut(shortcutFor(searchKey), run)
 	for _, key := range tabDigits[:min(len(a.tabs.Items), len(tabDigits))] {
 		c.AddShortcut(shortcutFor(key), run)
 	}
@@ -79,16 +84,19 @@ func (a *App) runShortcut(s fyne.Shortcut) bool {
 		return false
 	}
 	tab := slices.Index(tabDigits, k.KeyName)
-	if k.KeyName != actionKey && (tab < 0 || tab >= len(a.tabs.Items)) {
+	if k.KeyName != actionKey && k.KeyName != searchKey && (tab < 0 || tab >= len(a.tabs.Items)) {
 		return false
 	}
 	// A dialog or a menu takes the keys, as it takes the clicks.
 	if a.win.Canvas().Overlays().Top() != nil {
 		return true
 	}
-	if k.KeyName == actionKey {
+	switch k.KeyName {
+	case actionKey:
 		a.pressAction()
-	} else {
+	case searchKey:
+		a.keySearch()
+	default:
 		a.keyTab(tab)
 	}
 	return true
@@ -115,6 +123,33 @@ func (a *App) keyTab(i int) {
 	}
 	a.win.Canvas().Unfocus()
 	a.tabs.SelectIndex(i)
+}
+
+// searchField is the search field of the screen shown, the Library's or
+// the Settings', or nil on the others.
+func (a *App) searchField() *keyEntry {
+	// The offline screen shows no tabs.
+	if a.center.Objects[0] != a.tabsView {
+		return nil
+	}
+	switch s := a.screens[a.tabs.SelectedIndex()].(type) {
+	case *libraryScreen:
+		return s.search
+	case *settingsScreen:
+		return s.search
+	}
+	return nil
+}
+
+// keySearch puts the focus in the search field of the screen shown, its
+// text selected, for what is typed to replace the last search.
+func (a *App) keySearch() {
+	e := a.searchField()
+	if e == nil {
+		return
+	}
+	a.win.Canvas().Focus(e)
+	e.Entry.TypedShortcut(&fyne.ShortcutSelectAll{})
 }
 
 // keyEntry is an entry the app's shortcuts go through: Fyne hands every

@@ -84,13 +84,20 @@ func (r *hintRenderer) Objects() []fyne.CanvasObject { return []fyne.CanvasObjec
 func (r *hintRenderer) Destroy() {}
 
 // newHints is the layer of the hints, over the whole window: R under the
-// app bar's Record or Stop, 1 to 5 under the tabs.
+// app bar's Record or Stop, S under the search field of the screen shown,
+// 1 to 5 under the tabs.
 func (a *App) newHints() *fyne.Container {
 	hints := []fyne.CanvasObject{newHint(actionKey, func() fyne.CanvasObject {
 		if a.action.Disabled() {
 			return nil
 		}
 		return a.action
+	}), newHint(searchKey, func() fyne.CanvasObject {
+		// A nil *keyEntry would make a CanvasObject that is not nil.
+		if e := a.searchField(); e != nil {
+			return e
+		}
+		return nil
 	})}
 	for i, item := range a.tabs.Items[:min(len(a.tabs.Items), len(tabDigits))] {
 		hints = append(hints, newHint(tabDigits[i], func() fyne.CanvasObject {

@@ -195,6 +195,38 @@ func TestRFollowsTheButton(t *testing.T) {
 	underItsTarget(t, a, shownKeys(a)["R"], a.action)
 }
 
+// S shows under the search field of the Library and of the Settings, and
+// on no other screen, following the tab shown while the key is held.
+func TestSShowsUnderTheSearch(t *testing.T) {
+	a, _ := connectedTestApp(t)
+	start := time.Now()
+	holdUntilShown(t, a, start)
+	if shownKeys(a)["S"] != nil {
+		t.Fatal("S shows on the Record screen")
+	}
+	for i, step := range []struct {
+		tab    int
+		search fyne.CanvasObject
+	}{
+		{tabLibrary, a.screens[tabLibrary].(*libraryScreen).search},
+		{tabSettings, a.screens[tabSettings].(*settingsScreen).search},
+		{tabLogs, nil},
+		{tabAbout, nil},
+	} {
+		a.tabs.SelectIndex(step.tab)
+		a.watchKeys(shortcutKey, start.Add(hintHold+time.Duration(i+1)*hintPoll))
+		h := shownKeys(a)["S"]
+		switch {
+		case step.search == nil && h != nil:
+			t.Errorf("S shows on tab %d", step.tab)
+		case step.search != nil && h == nil:
+			t.Errorf("no S on tab %d", step.tab)
+		case h != nil:
+			underItsTarget(t, a, h, step.search)
+		}
+	}
+}
+
 // The hints take no click, no hover and no focus: Fyne gives them to what
 // is under the mouse that takes them, so they go to what a hint covers.
 func TestHintsTakeNoClick(t *testing.T) {
@@ -226,7 +258,7 @@ func TestHintsTakeNoClick(t *testing.T) {
 }
 
 // The hints as pictures, in both themes, on the Record screen with a
-// session going.
+// session going, and on the Settings, S under their search.
 func TestShortcutHintSnapshots(t *testing.T) {
 	if os.Getenv("SPYTIFY_UI_SNAPSHOTS") == "" {
 		t.Skip("only for the pictures")
@@ -241,5 +273,10 @@ func TestShortcutHintSnapshots(t *testing.T) {
 		holdUntilShown(t, a, time.Now())
 		snapshot(t, a, "shortcut-hints-"+look)
 		a.watchKeys(0, time.Now())
+		a.tabs.SelectIndex(tabSettings)
+		holdUntilShown(t, a, time.Now())
+		snapshot(t, a, "shortcut-hints-settings-"+look)
+		a.watchKeys(0, time.Now())
+		a.tabs.SelectIndex(tabRecord)
 	}
 }
