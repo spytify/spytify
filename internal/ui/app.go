@@ -84,9 +84,11 @@ type App struct {
 	tabs    *container.AppTabs
 	// tabsView is the tabs with the plain colour behind their bar.
 	tabsView *fyne.Container
-	center   *fyne.Container
-	offline  *container.Scroll
-	player   *playerCard
+	// tabKeys is the tab bar's stop in the Tab order.
+	tabKeys *tabKeys
+	center  *fyne.Container
+	offline *container.Scroll
+	player  *playerCard
 
 	dot     *widget.Label
 	status  *widget.Label
@@ -229,7 +231,8 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	)))
 	a.starting = opts.AutoStart
 
-	a.tabsView = withPlainTabBar(a.tabs)
+	a.tabKeys = newTabKeys(a.tabs)
+	a.tabsView = withPlainTabBar(a.tabs, a.tabKeys)
 	a.center = container.NewStack(a.tabsView)
 	// The window has no padding of its own, so the bars' plain colour goes
 	// to its edges; the page's grey is the window's background.
