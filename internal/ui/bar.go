@@ -54,8 +54,8 @@ func (r *barRenderer) Layout(s fyne.Size) {
 func (r *barRenderer) MinSize() fyne.Size { return fyne.NewSize(40, barHeight) }
 
 func (r *barRenderer) Refresh() {
-	r.track.FillColor = theme.Color(theme.ColorNameInputBackground)
-	r.fill.FillColor = theme.Color(r.b.color)
+	r.track.FillColor = theme.ColorForWidget(theme.ColorNameInputBackground, r.b)
+	r.fill.FillColor = theme.ColorForWidget(r.b.color, r.b)
 	r.track.CornerRadius, r.fill.CornerRadius = barHeight/2, barHeight/2
 	r.Layout(r.b.Size())
 	r.track.Refresh()

@@ -127,8 +127,8 @@ func (c *Client) once(key string) bool {
 
 // Problem reports a problem that is not a crash, such as no sound reaching
 // the recorder. Every one is counted in the logs; its details, with the
-// breadcrumbs that led to it, go as a Sentry issue once per install and
-// version, from a share of the installs.
+// breadcrumbs that led to it and the window's picture, go as a Sentry
+// issue once per install and version, from a share of the installs.
 func (c *Client) Problem(reason, detail string) {
 	defer quietly()
 	hub := c.hub()
@@ -150,6 +150,9 @@ func (c *Client) Problem(reason, detail string) {
 	ev.Tags["reason"] = reason
 	if detail != "" {
 		ev.Contexts["problem"] = sentry.Context{"detail": detail}
+	}
+	if att := screenshot(c.takeScreenshot()); att != nil {
+		ev.Attachments = append(ev.Attachments, att)
 	}
 	hub.CaptureEvent(ev)
 }

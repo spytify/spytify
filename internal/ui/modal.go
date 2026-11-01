@@ -110,7 +110,7 @@ func showDialog(w fyne.Window, title string, content fyne.CanvasObject, dismiss,
 // showText is Fyne's text dialog with the app's buttons: the message
 // centred and wrapped, the dialog as wide as it reads on one line, up to
 // 600 or nine tenths of the window, as Fyne's is.
-func showText(w fyne.Window, title, message, dismiss, confirm string, answered func(bool)) {
+func showText(w fyne.Window, title, message, dismiss, confirm string, answered func(bool)) *dialog.CustomDialog {
 	label := &widget.Label{Text: message, Alignment: fyne.TextAlignCenter, Wrapping: fyne.TextWrapWord}
 	d, no := newDialog(w, title, label, dismiss, confirm, answered)
 	// Fyne's dialog pads its content with 32 across, and a padding each side.
@@ -125,6 +125,7 @@ func showText(w fyne.Window, title, message, dismiss, confirm string, answered f
 		top.Refresh()
 	}
 	closesOnEscape(w, no)
+	return d
 }
 
 // ask is dialog.ShowConfirm: No, then Yes.
