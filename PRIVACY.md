@@ -4,7 +4,9 @@ Spytify has one switch for what it sends its developers: the **Sentry bug tracke
 
 ## Never kept
 
-Before a report leaves your computer, Spytify removes your computer's name, and turns your user name into `<user>`, your home folder into `~` and your output folder into `<output>` wherever they appear.
+Before a report leaves your computer, Spytify removes your computer's name, and turns your user name into `<user>`, your home folder into `~` and your output folder into `<output>` wherever they appear. The default output folder, `~/Spytify`, or `~/Music/Spytify` up to 2.0.0-alpha.7, names no one past your home folder: it stays as it is, your home folder as `~`.
+
+In a picture of Spytify's window, a blur covers the output folder's field, and your user name, your home folder and your output folder in every text where they appear: the rest of the text shows. No picture is taken while the window is hidden in the tray, or while an error message or the folder picker is open.
 
 On Sentry's side, the project is set to:
 
@@ -18,15 +20,15 @@ Your computer is known only by a code made from its machine ID for Spytify alone
 ## Sent while the switch is on
 
 - Crashes of Spytify and of the recorder, with their trace and the error lines printed with it, at the next launch, without asking.
-- Problems that are not crashes, such as no sound reaching the recorder, a file that could not be encoded, or no graphics driver to draw the window, with the steps and clicks that led there. Each is counted; one computer in ten sends its details, once per version.
+- Problems that are not crashes, such as no sound reaching the recorder, a file that could not be encoded, or no graphics driver to draw the window, with the steps and clicks that led there and a picture of Spytify's window. Each is counted; one computer in ten sends its details, once per version.
 - Each launch: whether the recorder got ready, how long it took, the names of the checks that fail, and whether the window is drawn in software for want of a graphics driver.
 - Each launch, where the output folder is, never its path: whether it is the default one, whether it exists, the error number when it cannot be written to, the kind of drive (fixed, removable or external, network, missing) and its file system, the cloud service that syncs it (OneDrive, Dropbox, Google Drive, iCloud, Nextcloud, pCloud, MEGA, Box or "other", never an account or a business's name), which of your folders it is in (Music, Documents…), whether your Music folder is `~/Music` and which cloud syncs it, and on Windows whether Controlled folder access is on.
 - How far a new install got, once each: launched, recorder ready, first recording, first sound, first saved track.
 - How long saving a track takes, for one track in a hundred.
 - Recording counts, for every track: saved (with its format), skipped (with the reason, such as an ad or a duplicate) or kept by hand after being cut short, how its start was found and how far from where the player said the track changed. These carry no name of a track, an artist or an album.
-- **Send to the developers** (Logs, when a check fails): the checks that fail, with what they found (where the output folder is, as above), and the end of the recorder's log, with an optional comment, once you have seen them.
+- **Send to the developers** (Logs, when a check fails): the checks that fail, with what they found (where the output folder is, as above), the end of the recorder's log and a picture of Spytify's window, which you can untick, with an optional comment, once you have seen them.
 
-The names of tracks, artists and albums do go where they appear in an error message or a log line.
+The names of tracks, artists and albums do go where they appear in an error message, a log line or the window's picture, which also shows the covers on screen.
 
 Reports go to the developers' project on [Sentry](https://sentry.io), in the United States.
 

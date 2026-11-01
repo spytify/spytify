@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
 	"net/http"
 	"runtime"
 	"sort"
@@ -18,10 +19,12 @@ import (
 )
 
 // Checks is what the diagnostics' Send to the developers button sends:
-// the checks that fail and the end of spytifyd's log.
+// the checks that fail, the end of spytifyd's log and the window's
+// picture, when there is one.
 type Checks struct {
-	Failing []proto.Check
-	Log     []string
+	Failing    []proto.Check
+	Log        []string
+	Screenshot image.Image
 }
 
 // failingNames are the names of the checks that fail, sorted, so the same
@@ -90,6 +93,9 @@ func (c *Client) SendChecks(r Checks, message string) (err error) {
 	ev.Contexts["checks"] = details
 	if len(r.Log) > 0 {
 		ev.Attachments = []*sentry.Attachment{{Filename: "spytifyd.log", ContentType: "text/plain", Payload: []byte(c.scrub.String(strings.Join(r.Log, "\n")))}}
+	}
+	if att := screenshot(r.Screenshot); att != nil {
+		ev.Attachments = append(ev.Attachments, att)
 	}
 	id := hub.CaptureEvent(ev)
 	if id == nil || !hub.Flush(10*time.Second) {

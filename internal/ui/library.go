@@ -134,7 +134,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 	// buttons as the window narrows.
 	l.count = clipped("")
 	l.count.Segments[0].(*widget.TextSegment).Style.ColorName = colorLabel
+	a.maskPaths(l.count)
 	l.hint = widget.NewLabel("")
+	a.maskPaths(l.hint)
 	l.empty = emptyState("No recordings yet", l.hint)
 	l.list = newCardList(
 		func() int { return len(l.rows) },

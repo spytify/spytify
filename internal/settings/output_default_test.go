@@ -98,3 +98,21 @@ func TestTheFormerOutputFolderIsSavedWithTheSettings(t *testing.T) {
 		t.Errorf("output.dir %q once saved", got)
 	}
 }
+
+// The default output folders, the former one too, are told from one the
+// user chose, written with ~ or not.
+func TestIsDefaultOutputDir(t *testing.T) {
+	for dir, want := range map[string]bool{
+		"~/Spytify":                            true,
+		"~/Spytify/":                           true,
+		ExpandHome("~/Spytify"):                true,
+		"~/Music/Spytify":                      true,
+		"~/Mixtapes":                           false,
+		filepath.FromSlash("/Library/Spytify"): false,
+		"":                                     false,
+	} {
+		if got := IsDefaultOutputDir(dir); got != want {
+			t.Errorf("IsDefaultOutputDir(%q) = %v, want %v", dir, got, want)
+		}
+	}
+}
