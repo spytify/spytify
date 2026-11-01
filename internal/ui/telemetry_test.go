@@ -12,6 +12,7 @@ import (
 
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/internal/ui/link"
+	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -148,4 +149,34 @@ func TestALowQualityDeviceLeavesNoReport(t *testing.T) {
 			t.Errorf("reported %v", ev["message"])
 		}
 	}
+}
+
+// Every launch says where the output folder is, written to or not: what
+// share of them a fix would reach.
+func TestTheLaunchSaysWhereTheOutputFolderIs(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	in := info()
+	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, OK: true, Detail: "/music",
+		Facts: map[string]string{"output.drive": "fixed", "output.cloud": "OneDrive"}})
+	m.SetConn(model.Connected, "")
+	m.SetInfo(in)
+	values := defaults()
+	values[trackerKey] = true
+	m.SetSettings(values)
+	a.render()
+	a.tel.Flush(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, l := range srv.Logs() {
+			if l.Body == "launch" {
+				if l.Attrs["output.drive"] != "fixed" || l.Attrs["output.cloud"] != "OneDrive" {
+					t.Errorf("launch %v", l.Attrs)
+				}
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("no launch log")
 }
