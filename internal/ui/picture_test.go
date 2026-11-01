@@ -9,12 +9,15 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
@@ -74,6 +77,109 @@ func TestTheBlurKeepsNothingOfTheText(t *testing.T) {
 	if one.NRGBAAt(5, 10) != (color.NRGBA{A: 0xff}) {
 		t.Error("the blur goes past its box")
 	}
+}
+
+// The blur takes the folder in a line and leaves the rest: each pixel the
+// folder draws is under it, as Fyne lays out a log line's label and a
+// check's detail.
+func TestTheBlurCoversTheFolderOnly(t *testing.T) {
+	test.NewTempApp(t)
+	fyne.CurrentApp().Settings().SetTheme(spytifyTheme{})
+	sep := string(filepath.Separator)
+	short := filepath.Join(sep, "Users", "listener", "Mixtapes")
+	long := filepath.Join(sep, "Users", "listener", strings.Repeat("Mixtapes from the attic ", 6))
+	label, cut := widget.NewLabel(""), widget.NewLabel("")
+	cut.Truncation = fyne.TextTruncateEllipsis
+	detail := widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{SizeName: theme.SizeNameCaptionText, Inline: true}})
+	w := test.NewWindow(container.NewVBox(label, detail, cut))
+	defer w.Close()
+	w.Resize(fyne.NewSize(700, 200))
+	for _, c := range []struct {
+		name   string
+		obj    fyne.CanvasObject
+		set    func(string)
+		folder string
+	}{
+		{"label", label, label.SetText, short},
+		{"rich text", detail, func(s string) {
+			detail.Segments[0].(*widget.TextSegment).Text = s
+			detail.Refresh()
+		}, short},
+		// Past the cut, the blur goes to the label's end.
+		{"cut short", cut, cut.SetText, long},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			shot := func(text string) image.Image {
+				c.set(text)
+				return w.Canvas().Capture()
+			}
+			saved, withFolder := shot("saved "), shot("saved "+c.folder)
+			full := shot("saved " + c.folder + filepath.Join(sep, "M83", "Intro.flac"))
+			private := func(s string) [][2]int {
+				if i := strings.Index(s, c.folder); i >= 0 {
+					return [][2]int{{i, i + len(c.folder)}}
+				}
+				return nil
+			}
+			at := fyne.CurrentApp().Driver().AbsolutePositionForObject(c.obj)
+			boxes := privateBoxes(w.Canvas(), c.obj, at, private)
+			if len(boxes) != 1 {
+				t.Fatalf("%d boxes, want the folder's", len(boxes))
+			}
+			box, bg := boxes[0], color.NRGBAModel.Convert(saved.At(0, 0))
+			// Each drawing of a line shades its letters a little apart:
+			// what tells is where a letter is and was not.
+			for _, p := range ink(withFolder, bg, saved) {
+				if !p.In(box) {
+					t.Fatalf("the folder draws at %v, out of the blur %v", p, box)
+				}
+			}
+			for _, p := range ink(saved, bg, nil) {
+				if p.In(box) {
+					t.Fatalf("saved is under the blur %v at %v", box, p)
+				}
+			}
+			rest := slices.ContainsFunc(ink(full, bg, withFolder), func(p image.Point) bool { return !p.In(box) })
+			if rest != (c.folder == short) {
+				t.Errorf("the rest of the line shows %v under the blur %v", rest, box)
+			}
+		})
+	}
+}
+
+// ink is where img draws on bg and but does not draw at all: a letter's
+// pixels, told from the background by more than its edges' shading.
+func ink(img image.Image, bg color.Color, but image.Image) []image.Point {
+	from := func(img image.Image, x, y int) int {
+		a, b := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA), bg.(color.NRGBA)
+		d := func(u, v uint8) int { return max(int(u)-int(v), int(v)-int(u)) }
+		return d(a.R, b.R) + d(a.G, b.G) + d(a.B, b.B)
+	}
+	var at []image.Point
+	r := img.Bounds()
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			if from(img, x, y) > 96 && (but == nil || from(but, x, y) < 24) {
+				at = append(at, image.Pt(x, y))
+			}
+		}
+	}
+	return at
+}
+
+// blurs says the picture changes some of obj from the window as it shows.
+func blurs(a *App, img image.Image, obj fyne.CanvasObject) bool {
+	c := a.win.Canvas()
+	box := pixelBox(c, a.fa.Driver().AbsolutePositionForObject(obj), obj.Size()).Intersect(img.Bounds())
+	shot := c.Capture()
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		for x := box.Min.X; x < box.Max.X; x++ {
+			if color.NRGBAModel.Convert(img.At(x, y)) != color.NRGBAModel.Convert(shot.At(x, y)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // visible are the visible objects of type T under o.
@@ -171,11 +277,12 @@ func TestThePictureCoversThePaths(t *testing.T) {
 	a.render()
 	img = a.picture()
 	content := a.win.Canvas().Content()
-	if l := labels(content, saved); len(l) != 1 || !covered(a, img, l[0]) {
-		t.Errorf("the line naming the output folder shows (%d lines)", len(l))
+	// The folder's part of a line is blurred, the rest shows.
+	if l := labels(content, saved); len(l) != 1 || !blurs(a, img, l[0]) || covered(a, img, l[0]) {
+		t.Errorf("the line naming the output folder is not blurred in part (%d lines)", len(l))
 	}
-	if l := labels(content, started); len(l) != 1 || covered(a, img, l[0]) {
-		t.Errorf("the line naming no folder is covered (%d lines)", len(l))
+	if l := labels(content, started); len(l) != 1 || blurs(a, img, l[0]) {
+		t.Errorf("the line naming no folder is blurred (%d lines)", len(l))
 	}
 
 	in := info()
@@ -185,11 +292,11 @@ func TestThePictureCoversThePaths(t *testing.T) {
 	a.render()
 	d := diagnostics(t, a)
 	img = a.picture()
-	if rt := richTexts(d, detail); len(rt) != 1 || !covered(a, img, rt[0]) {
-		t.Errorf("the check naming the output folder shows (%d)", len(rt))
+	if rt := richTexts(d, detail); len(rt) != 1 || !blurs(a, img, rt[0]) || covered(a, img, rt[0]) {
+		t.Errorf("the check naming the output folder is not blurred in part (%d)", len(rt))
 	}
-	if rt := richTexts(d, "ffmpeg version 9.0.2"); len(rt) != 1 || covered(a, img, rt[0]) {
-		t.Errorf("the check naming no folder is covered (%d)", len(rt))
+	if rt := richTexts(d, "ffmpeg version 9.0.2"); len(rt) != 1 || blurs(a, img, rt[0]) {
+		t.Errorf("the check naming no folder is blurred (%d)", len(rt))
 	}
 }
 

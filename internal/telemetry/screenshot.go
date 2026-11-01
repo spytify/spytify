@@ -20,10 +20,13 @@ func (c *Client) SetScreenshot(take func() image.Image) {
 	c.mu.Unlock()
 }
 
-// Private says a text names the user, their home folder or the output
-// folder, which a report leaves out.
-func (c *Client) Private(s string) bool {
-	return c != nil && c.scrub.String(s) != s
+// Private is where a text names the user, their home folder or the output
+// folder, which a report leaves out, as Scrubber.Spans.
+func (c *Client) Private(s string) [][2]int {
+	if c == nil {
+		return nil
+	}
+	return c.scrub.Spans(s)
 }
 
 // takeScreenshot is the window's picture, or nil.

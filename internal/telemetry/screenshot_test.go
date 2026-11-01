@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
@@ -93,24 +94,31 @@ func TestSendChecksScreenshot(t *testing.T) {
 	}
 }
 
-// Private says what the scrubbing would change: the window's picture
-// covers the same texts.
+// Private is where the scrubbing would change a text: the window's picture
+// covers the same parts.
 func TestPrivate(t *testing.T) {
 	c := New(Options{})
 	home, _ := os.UserHomeDir()
-	c.SetOutputDir(filepath.Join(string(filepath.Separator), "Volumes", "Mixtapes"))
-	for text, want := range map[string]bool{
-		filepath.Join(home, "Music", "x.flac"):                                true,
-		filepath.Join(string(filepath.Separator), "Volumes", "Mixtapes", "a"): true,
-		"M83 - Midnight City.flac":                                            false,
-		"":                                                                    false,
+	mixtapes := filepath.Join(string(filepath.Separator), "Volumes", "Mixtapes")
+	c.SetOutputDir(mixtapes)
+	for text, want := range map[string][][2]int{
+		"saved " + filepath.Join(home, "Music", "x.flac"): {{6, 6 + len(home)}},
+		"mkdir " + mixtapes + ": permission denied":       {{6, 6 + len(mixtapes)}},
+		"M83 - Midnight City.flac":                        nil,
+		"":                                                nil,
 	} {
-		if got := c.Private(text); got != want {
+		if got := c.Private(text); !slices.Equal(got, want) {
 			t.Errorf("Private(%q) = %v, want %v", text, got, want)
 		}
 	}
+	// The output folder in the home folder is one part, not two.
+	spytify := filepath.Join(home, "Spytify")
+	c.SetOutputDir(spytify)
+	if got, want := c.Private(filepath.Join(spytify, "a.flac")), [][2]int{{0, len(spytify)}}; !slices.Equal(got, want) {
+		t.Errorf("Private = %v, want %v", got, want)
+	}
 	var none *Client
-	if none.Private(home) {
+	if none.Private(home) != nil {
 		t.Error("a nil client finds a text private")
 	}
 }
