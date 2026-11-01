@@ -706,6 +706,10 @@ func TestTabLeavesTheComment(t *testing.T) {
 		t.Fatalf("the dialog opens with %q focused", got)
 	}
 	pressTab(c)
+	if got := focusName(a, c.Focused()); got != pictureLabel {
+		t.Fatalf("Tab from the fold: %q focused, want the picture's tick box", got)
+	}
+	pressTab(c)
 	comment := c.Focused()
 	test.Type(comment, "stuck")
 	pressTab(c)

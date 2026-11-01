@@ -225,6 +225,9 @@ func (a *App) noteTab(i int) {
 // developers, which fits the dialog.
 const screenshotWidth = 480
 
+// pictureLabel is Send to the developers' tick box for the picture.
+const pictureLabel = "Send the picture of the window"
+
 // sendChecks shows what the diagnostics' report holds, and sends it on
 // Send.
 func (a *App) sendChecks(s model.State, sent func(ok bool)) {
@@ -244,28 +247,49 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	}
 	// The window as it shows under this dialog, which is not open yet.
 	report := telemetry.Checks{Failing: failing, Log: log, Screenshot: a.picture()}
-	ask := "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
+	without := "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
+	body := widget.NewLabel(without)
+	body.Wrapping = fyne.TextWrapWord
 	preview := container.NewVBox()
+	// keep, ticked, sends the picture; unticked, the dialog and the
+	// report leave it out.
+	var keep *widget.Check
 	if shot := report.Screenshot; shot != nil {
-		ask = "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
+		with := "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
 		img := canvas.NewImageFromImage(shot)
 		img.FillMode = canvas.ImageFillContain
 		b := shot.Bounds()
 		img.SetMinSize(fyne.NewSize(screenshotWidth, screenshotWidth*float32(b.Dy())/float32(b.Dx())))
 		// At the left, as the log's long lines widen what scrolls.
-		preview.Add(container.NewHBox(img))
+		pic := container.NewHBox(img)
+		preview.Add(pic)
+		keep = widget.NewCheck(pictureLabel, func(on bool) {
+			if on {
+				body.SetText(with)
+				pic.Show()
+			} else {
+				body.SetText(without)
+				pic.Hide()
+			}
+		})
+		keep.SetChecked(true)
 	}
 	preview.Add(widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}))
-	body := widget.NewLabel(ask)
-	body.Wrapping = fyne.TextWrapWord
 	scroll := container.NewScroll(preview)
 	scroll.SetMinSize(fyne.NewSize(0, 160))
-	what := newFold("What will be sent", scroll)
+	content := container.NewVBox(body, newFold("What will be sent", scroll))
+	if keep != nil {
+		content.Add(keep)
+	}
 	message := newCommentEntry()
 	message.SetPlaceHolder("Comment (optional)")
-	d := dialog.NewCustomConfirm("Send to the developers", "Send", "Cancel", container.NewVBox(body, what, message), func(send bool) {
+	content.Add(message)
+	d := dialog.NewCustomConfirm("Send to the developers", "Send", "Cancel", content, func(send bool) {
 		if !send {
 			return
+		}
+		if keep != nil && !keep.Checked {
+			report.Screenshot = nil
 		}
 		text := message.Text
 		// A report that does not leave is no error to show: the button

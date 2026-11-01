@@ -233,52 +233,53 @@ func TestARecorderThatDidNotStartGoesWithThePicture(t *testing.T) {
 	}
 }
 
-// Send to the developers shows the window's picture it sends; with none,
-// such as with the window hidden in the tray, it shows and sends none.
+// Send to the developers shows the window's picture it sends, which a
+// tick box leaves out; with none, such as with the window hidden in the
+// tray, it shows and sends none, and has no tick box.
 func TestSendToTheDevelopersShowsThePicture(t *testing.T) {
-	for name, hidden := range map[string]bool{"shown": false, "hidden": true} {
-		t.Run(name, func(t *testing.T) {
-			sendWithPicture(t, hidden)
+	for _, c := range []struct {
+		name           string
+		hidden, untick bool
+	}{{"sent", false, false}, {"unticked", false, true}, {"hidden", true, false}} {
+		t.Run(c.name, func(t *testing.T) {
+			srv := fakesentry.New(t)
+			a, m := privacyApp(t, srv, true)
+			connect(t, a, m, true)
+			a.showTab(tabLogs)
+			failCheck(a, m)
+			diagnostics(t, a)
+			if c.hidden {
+				a.hideToTray()
+			}
+			tapButton(t, overlay(t, a), "Send to the developers")
+			d := overlay(t, a)
+			for _, f := range visible[*fold](d) {
+				f.setOpen(true)
+			}
+			keep := checkBoxes(d, pictureLabel)
+			if len(keep) != 1 && !c.hidden || len(keep) != 0 && c.hidden {
+				t.Fatalf("%d tick boxes for the picture", len(keep))
+			}
+			if c.untick {
+				test.Tap(keep[0])
+			}
+			want := !c.hidden && !c.untick
+			var pictures int
+			for _, name := range images(d) {
+				if strings.HasPrefix(name, "picture ") {
+					pictures++
+				}
+			}
+			asked := strings.Join(texts(d), " ")
+			asks := strings.Contains(asked, "a picture of the window to the developers")
+			if (pictures == 1) != want || pictures > 1 || asks != want {
+				t.Errorf("%d pictures shown, asked %q; want the picture %v", pictures, asked, want)
+			}
+			tapButton(t, d, "Send")
+			srv.Wait(t, "event", 1)
+			if sent := sentScreenshot(t, srv) != nil; sent != want {
+				t.Errorf("screenshot sent %v, want %v", sent, want)
+			}
 		})
-	}
-}
-
-func sendWithPicture(t *testing.T, hidden bool) {
-	{
-		srv := fakesentry.New(t)
-		a, m := privacyApp(t, srv, true)
-		connect(t, a, m, true)
-		a.showTab(tabLogs)
-		failCheck(a, m)
-		diagnostics(t, a)
-		if hidden {
-			a.hideToTray()
-		}
-		tapButton(t, overlay(t, a), "Send to the developers")
-		d := overlay(t, a)
-		for _, f := range visible[*fold](d) {
-			f.setOpen(true)
-		}
-		var pictures int
-		for _, name := range images(d) {
-			if strings.HasPrefix(name, "picture ") {
-				pictures++
-			}
-		}
-		asked := strings.Join(texts(d), " ")
-		if hidden {
-			if pictures != 0 || strings.Contains(asked, "picture") {
-				t.Errorf("hidden: %d pictures shown, asked %q", pictures, asked)
-			}
-		} else {
-			if pictures != 1 || !strings.Contains(asked, "a picture of the window") {
-				t.Errorf("%d pictures shown, asked %q", pictures, asked)
-			}
-		}
-		tapButton(t, d, "Send")
-		srv.Wait(t, "event", 1)
-		if sent := sentScreenshot(t, srv); (sent != nil) == hidden {
-			t.Errorf("hidden %v: screenshot sent %v", hidden, sent != nil)
-		}
 	}
 }
