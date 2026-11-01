@@ -82,9 +82,9 @@ func TestExample(t *testing.T) {
 	if got, want := Example(o, 1), filepath.Join("Neon_Harbor,_Lumen", "Harbor_Lights_(2024)", "04_Neon_Harbor_-_Café_Lumière.mp3"); got != want {
 		t.Errorf("grouped by all artists %q, want %q", got, want)
 	}
-	o = Options{Template: "{disc}-{track} {album_artist} - {title}", Prefix: "none", GroupBy: "none", Extension: "mp3"}
-	if got := Example(o, 1); got != "1-04 Neon Harbor - Café Lumière.mp3" {
-		t.Errorf("disc and album artist %q", got)
+	o = Options{Template: "{track} {artists} - {title}", Prefix: "none", GroupBy: "none", Extension: "mp3"}
+	if got := Example(o, 1); got != "04 Neon Harbor, Lumen - Café Lumière.mp3" {
+		t.Errorf("all artists %q", got)
 	}
 }
 
@@ -160,23 +160,26 @@ func TestTemplateFields(t *testing.T) {
 	}
 }
 
-// {disc} is not padded and empty when unknown; {album_artist} falls back to
-// the track's first artist, as the album artist tag does.
-func TestDiscAndAlbumArtistFields(t *testing.T) {
+// {album_artist} is the album's artists, as {artist} was; {artists} is every
+// artist on the track, guests included.
+func TestArtistFields(t *testing.T) {
 	o := opts()
-	o.Template, o.ArtistSeparator = "{disc}-{track} {album_artist} - {title}", "; "
-	tr := Track{Artists: []string{"A", "Guest"}, AlbumArtists: []string{"Band", "Other"}, Title: "T", Disc: 2, TrackNumber: 3}
-	if got := Build(tr, o).Base; got != "2-03 Band; Other - T" {
-		t.Fatalf("got %q", got)
+	o.ArtistSeparator = "; "
+	tr := Track{Artists: []string{"A", "Guest", "A"}, AlbumArtists: []string{"Band", "Other"}, Title: "T"}
+	for tmpl, want := range map[string]string{
+		"{album_artist} - {title}": "Band; Other - T",
+		"{artist} - {title}":       "Band; Other - T",
+		"{artists} - {title}":      "A; Guest - T",
+	} {
+		o.Template = tmpl
+		if got := Build(tr, o).Base; got != want {
+			t.Errorf("%s: got %q, want %q", tmpl, got, want)
+		}
 	}
-	tr.Disc, tr.AlbumArtists = 0, nil
-	if got := Build(tr, o).Base; got != "03 A - T" {
-		t.Fatalf("no disc, no album artist: got %q", got)
-	}
-	o.Template = "{disc}{track} {title}"
-	tr.Disc = 12
-	if got := Build(tr, o).Base; got != "1203 T" {
-		t.Fatalf("disc 12: got %q", got)
+	tr.AlbumArtists = nil
+	o.Template = "{album_artist} - {title}"
+	if got := Build(tr, o).Base; got != "A; Guest - T" {
+		t.Errorf("no album artist: got %q", got)
 	}
 }
 
@@ -232,21 +235,5 @@ func TestRecorded(t *testing.T) {
 	}
 	if !Recorded(root, p, o) {
 		t.Fatal("counter-prefixed copy not found")
-	}
-	o.Template = "{disc}-{track} {title}"
-	disc := base
-	disc.Disc, disc.TrackNumber = 2, 3
-	if Recorded(root, Build(disc, o), o) {
-		t.Fatal("disc 2 found before it was recorded")
-	}
-	if err := os.WriteFile(filepath.Join(root, "008 2-03 Title - Live.mp3"), []byte{1}, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if !Recorded(root, Build(disc, o), o) {
-		t.Fatal("disc 2's counter-prefixed copy not found")
-	}
-	disc.Disc = 1
-	if Recorded(root, Build(disc, o), o) {
-		t.Fatal("disc 1 taken for disc 2")
 	}
 }

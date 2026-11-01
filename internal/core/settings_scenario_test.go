@@ -215,16 +215,22 @@ func TestTheSubtitleOptionKeepsTheFileName(t *testing.T) {
 	}
 }
 
-// The player's disc number reaches {disc}; with no album artist from the
-// player, {album_artist} is the first artist, as in the tags.
-func TestTheTemplateNamesTheDiscAndAlbumArtist(t *testing.T) {
-	o := naming.Options{GroupBy: "none", Template: "{disc}-{track} {album_artist} - {title}"}
-	info := meta.TrackInfo{Title: "Song", Artists: []string{"Neon Harbor", "Lumen"}, DiscNumber: 2, TrackNumber: 5}
-	if got := naming.Build(namingTrack(tag.FromLocal(info, tag.Options{}), info), o).Base; got != "2-05 Neon Harbor - Song" {
+// With no album artist from the player, {album_artist} is the first artist,
+// as in the tags; {artists} names the guest too.
+func TestTheTemplateNamesTheArtists(t *testing.T) {
+	o := naming.Options{GroupBy: "none", Template: "{track} {album_artist} - {title}"}
+	info := meta.TrackInfo{Title: "Song", Artists: []string{"Neon Harbor", "Lumen"}, TrackNumber: 5}
+	name := func() string { return naming.Build(namingTrack(tag.FromLocal(info, tag.Options{}), info), o).Base }
+	if got := name(); got != "05 Neon Harbor - Song" {
 		t.Errorf("named %q", got)
 	}
+	o.Template = "{track} {artists} - {title}"
+	if got := name(); got != "05 Neon Harbor, Lumen - Song" {
+		t.Errorf("all artists, named %q", got)
+	}
 	info.AlbumArtists = []string{"Various Artists"}
-	if got := naming.Build(namingTrack(tag.FromLocal(info, tag.Options{}), info), o).Base; got != "2-05 Various Artists - Song" {
+	o.Template = "{track} {album_artist} - {title}"
+	if got := name(); got != "05 Various Artists - Song" {
 		t.Errorf("with an album artist, named %q", got)
 	}
 }
