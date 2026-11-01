@@ -68,14 +68,14 @@ var Table = []Def{
 	{Key: "output.counter_next", Tab: "Recorder", Group: "Output", Label: "Next counter number", Kind: KindInt, Default: int64(1), Min: 0, Max: 999999999, Ranged: true, Advanced: true, Note: "It carries on from one recording to the next: set it back to 1 for a new CD."},
 	{Key: "output.counter_width", Tab: "Recorder", Group: "Output", Label: "Counter digits", Kind: KindInt, Default: int64(3), Min: 1, Max: 9, Ranged: true, Advanced: true, Note: "3 makes 001. Past 999, the recording stops."},
 
-	{Key: "encode.format", Tab: "Recorder", Group: "Encoding", Label: "Output format", Kind: KindEnum, Enum: []string{"mp3", "aac", "flac", "wav"}, Default: "mp3"},
+	{Key: "encode.format", Tab: "Recorder", Group: "Encoding", Label: "Output format", Kind: KindEnum, Enum: []string{"mp3", "aac", "flac", "wav"}, Choices: []string{"MP3", "AAC", "FLAC", "WAV"}, Default: "mp3"},
 	{Key: "encode.bitrate_kbps", Tab: "Recorder", Group: "Encoding", Label: "Bitrate", Kind: KindIntEnum, Ints: bitrates, Choices: sizesPerMinute(bitrates), Default: int64(160), Note: "Not used by FLAC and WAV."},
 	{Key: "tags.cover", Tab: "Tags", Group: "Encoding", Label: "Embed album cover", Kind: KindBool, Default: true, Advanced: true},
 	{Key: "tags.cover_size", Tab: "Tags", Group: "Encoding", Label: "Cover size", Kind: KindEnum, Enum: []string{"small", "medium", "large"}, Choices: []string{"Small (300 px)", "Medium (640 px)", "Large (as it comes)"}, Default: "medium", Advanced: true, Note: "A cover is shrunk to fit, never enlarged."},
 	{Key: "tags.extra_to_subtitle", Tab: "Tags", Group: "Encoding", Label: "Move parenthesised extra title to subtitle", Kind: KindBool, Default: false, Advanced: true, Note: `Moves "Live" from "Song (Live)" or "Song - Live" to the subtitle tag (MP3, FLAC).`},
 	{Key: "tags.artist_separator", Tab: "Tags", Group: "Encoding", Label: "Multiple artists separator", Kind: KindString, Default: ", ", Advanced: true},
 
-	{Key: "recorder.duplicates", Tab: "Recorder", Group: "Recording", Label: "Already recorded tracks", Kind: KindEnum, Enum: []string{"skip", "suffix", "overwrite"}, Default: "skip"},
+	{Key: "recorder.duplicates", Tab: "Recorder", Group: "Recording", Label: "Already recorded tracks", Kind: KindEnum, Enum: []string{"skip", "suffix", "overwrite"}, Choices: []string{"Skip", "Suffix", "Overwrite"}, Default: "skip"},
 	{Key: "recorder.skip_duplicates_forward", Tab: "Recorder", Group: "Recording", Label: "Skip to the next track when already recorded", Kind: KindBool, Default: false},
 	{Key: "recorder.single_track", Tab: "Recorder", Group: "Recording", Label: "Record a single track then stop", Kind: KindBool, Default: false},
 	{Key: "recorder.stop_with_player", Tab: "Recorder", Group: "Recording", Label: "Stop the session when the player stops or quits", Kind: KindBool, Default: false, Note: "A pause does not stop it, even when the player pauses at the end of a playlist."},
