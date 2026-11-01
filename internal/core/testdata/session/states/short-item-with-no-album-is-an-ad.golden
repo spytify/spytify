@@ -1,0 +1,41 @@
+# states/short-item-with-no-album-is-an-ad
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > audio music 1 at 1000ms, 88200(2000ms)
+    3500ms  > audio silence, 13230(300ms)
+    3800ms  > player TrackChanged "Clip" id=/x/clip length=3000ms pos=0 (ring at 167580)
+    3800ms  > audio music 3 at 0ms, 132300(3000ms)
+    3820ms  log debug: cut for "Clip" at 3500 ms (kind 1, noticed at 3800 ms, window 3200..3801 ms)
+    3820ms  started t-002 "Clip" artist="Someone" album="" length=3000ms cut=boundary/silence offset=-300ms source=44100/2
+    3820ms  skipped t-002 ad
+    3820ms  state ad
+    3820ms  take t-002 "Clip" start=154350(3500ms) length=132300(3000ms) no-file reason=ad
+    6800ms  > audio silence, 13230(300ms)
+    7100ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 313110)
+    7100ms  > audio music 2 at 0ms, 132300(3000ms)
+    7120ms  log debug: cut for "B" at 6800 ms (kind 1, noticed at 7100 ms, window 6200..7101 ms)
+    7120ms  started t-003 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-300ms source=44100/2
+    7120ms  state recording
+    7120ms  log debug: "B" starts at its first sound, 7100 ms
+    7120ms  take t-003 "B" start=313122(7100.27ms) origin=299880(6800ms) length=132300(3000ms)
+   10100ms  > audio silence, 66150(1500ms)
+   11600ms  > player Stopped pos=-1 (ring at 511560)
+   11600ms  state waiting
+   11600ms  state stopping
+   11600ms  state idle
+   11600ms  take none
+--- jobs
+job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060
+job t-003 "B" played=132790(3011.11ms) length=132300(3000ms) wav=132790 crc=bc4937f8
+--- end: idle, 1 skipped, 1 ads, 0 overruns

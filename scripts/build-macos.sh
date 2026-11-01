@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Builds Spytify for macOS into bin/ (or the folder given):
 #   spytifyd, spytify-cli, spytify-tap   universal command-line binaries
-#   Spytify.app                          the desktop app, with the daemon and
-#                                        the capture helper inside it
+#   Spytify.app                          the desktop app, with the daemon,
+#                                        the capture helper and ffmpeg inside
+#                                        it (scripts/build-ffmpeg.sh;
+#                                        SPYTIFY_NO_FFMPEG=1 leaves ffmpeg out)
 # Needs Go and the Xcode command line tools (swiftc, clang, lipo, codesign,
-# sips, iconutil).
+# sips, iconutil), and for ffmpeg make and nasm (brew install nasm).
 #
 # The player recorded when none is chosen comes from SPYTIFY_DEFAULT_PROCESS,
 # a bare name such as "player", from the environment or an untracked
@@ -50,11 +52,27 @@ CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" MACOSX_DEPLOYMENT
   go build -trimpath -ldflags "$ldflags" -o "$tmp/spytify-ui-amd64" ./cmd/spytify-ui
 lipo -create -output "$out/spytify-ui" "$tmp/spytify-ui-arm64" "$tmp/spytify-ui-amd64"
 
+# ffmpeg goes in the app only, beside spytifyd, which looks there first
+# after PATH. The command-line tools are often put on PATH, where a copy
+# this small would stand in for a full ffmpeg.
+if [ "${SPYTIFY_NO_FFMPEG:-}" != 1 ]; then
+  for arch in arm64 x86_64; do
+    scripts/build-ffmpeg.sh "$tmp/ffmpeg-$arch" "$arch-apple-macos14.2"
+  done
+  lipo -create -output "$tmp/ffmpeg" "$tmp/ffmpeg-arm64/ffmpeg" "$tmp/ffmpeg-x86_64/ffmpeg"
+fi
+
 # The app is put together aside and moved in whole: Finder, when it sees a
 # bundle before its icon is written, keeps a blank icon for it.
 app="$tmp/Spytify.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$out/spytify-ui" "$out/spytifyd" "$out/spytify-tap" "$out/spytify-cli" "$app/Contents/MacOS/"
+if [ -f "$tmp/ffmpeg" ]; then
+  cp "$tmp/ffmpeg" "$app/Contents/MacOS/"
+  # codesign takes anything in Contents/MacOS for code: the license and the
+  # README go with the other resources.
+  cp "$tmp/ffmpeg-arm64/ffmpeg-LICENSE.txt" "$tmp/ffmpeg-arm64/ffmpeg-README.txt" "$app/Contents/Resources/"
+fi
 sed "s/@VERSION@/$version/g" macos/Info.plist > "$app/Contents/Info.plist"
 iconset="$tmp/AppIcon.iconset"
 mkdir -p "$iconset"
@@ -68,8 +86,8 @@ iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 for f in spytifyd spytify-cli spytify-tap spytify-ui; do
   codesign --force --sign - "$out/$f" >/dev/null 2>&1
 done
-for f in spytifyd spytify-cli spytify-tap; do
-  codesign --force --sign - "$app/Contents/MacOS/$f" >/dev/null 2>&1
+for f in "$app"/Contents/MacOS/*; do
+  [ "$(basename "$f")" = spytify-ui ] || codesign --force --sign - "$f" >/dev/null 2>&1
 done
 codesign --force --sign - "$app" >/dev/null 2>&1
 rm -rf "$out/Spytify.app"

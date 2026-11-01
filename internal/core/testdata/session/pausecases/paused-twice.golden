@@ -1,0 +1,42 @@
+# pausecases/paused-twice
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=4000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=4000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=176400(4000ms)
+    1500ms  > player Paused pos=-1 (ring at 66150)
+    1500ms  state paused
+    1500ms  > audio silence, 17640(400ms)
+    1900ms  > player Playing pos=-1 (ring at 66150)
+    1900ms  state recording
+    1900ms  > audio music 1 at 1000ms, 66150(1500ms)
+    3400ms  > audio silence, 13230(300ms)
+    3700ms  > player Paused pos=-1 (ring at 145530)
+    3700ms  state paused
+    3700ms  > audio silence, 17640(400ms)
+    4100ms  > player Playing pos=-1 (ring at 132300)
+    4100ms  state recording
+    4100ms  > audio music 1 at 2500ms, 66150(1500ms)
+    5600ms  > audio silence, 22050(500ms)
+    6100ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 220500)
+    6100ms  log debug: cut for "B" at 4500 ms (kind 1, noticed at 5000 ms, window 4200..4801 ms)
+    6100ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    6100ms  take t-002 "B" start=198450(4500ms) length=132300(3000ms)
+    6100ms  > audio music 2 at 0ms, 132300(3000ms)
+    9100ms  > audio silence, 66150(1500ms)
+   10600ms  > player Stopped pos=-1 (ring at 418950)
+   10600ms  state waiting
+   10600ms  state stopping
+   10600ms  state idle
+   10600ms  take none
+--- jobs
+job t-001 "A" played=176389(3999.75ms) length=176400(4000ms) wav=176389 crc=8c370f66
+job t-002 "B" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=c244853d
+--- end: idle, 0 skipped, 0 ads, 0 overruns

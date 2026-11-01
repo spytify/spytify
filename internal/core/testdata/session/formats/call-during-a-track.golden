@@ -1,0 +1,43 @@
+# formats/call-during-a-track
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > the stream is now s16le 16000 Hz 1ch
+    1500ms  > audio music 1 at 1000ms, 32000(2000ms)
+    1510ms  log error: the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call
+    1510ms  error capture_low_quality "The player's output device runs at 16 kHz mono, not fit for recording: tracks will sound like a phone call. …"
+    1510ms  log info: stream format changed from s16le 44100 Hz 2ch to s16le 16000 Hz 1ch
+    1510ms  log debug: "A" starts at its first sound, 0 ms
+    1510ms  take t-001 "A" start=0(0ms) length=48000(3000ms) format=16000/1
+    3500ms  > audio silence, 8000(500ms)
+    4000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 40000)
+    4000ms  > audio music 2 at 0ms, 16000(1000ms)
+    4820ms  log debug: cut for "B" at 3000 ms (kind 1, noticed at 2500 ms, window 2700..3300 ms)
+    4820ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/length offset=500ms source=16000/1
+    4820ms  take t-002 "B" start=48000(3000ms) length=48000(3000ms) format=16000/1
+    5000ms  > the stream is now s16le 44100 Hz 2ch
+    5000ms  > audio music 2 at 1000ms, 88200(2000ms)
+    5010ms  log info: the capture is s16le 44100 Hz 2ch, fit for music again
+    5010ms  error capture_low_quality ""
+    5010ms  log info: stream format changed from s16le 16000 Hz 1ch to s16le 44100 Hz 2ch
+    5010ms  log debug: "B" starts at its first sound, 0 ms
+    5010ms  take t-002 "B" start=0(0ms) length=132300(3000ms)
+    7000ms  > audio silence, 66150(1500ms)
+    8500ms  > player Stopped pos=-1 (ring at 154350)
+    8500ms  state waiting
+    8500ms  state stopping
+    8500ms  state idle
+    8500ms  take none
+--- jobs
+job t-001 "A" played=48000(3000ms) length=48000(3000ms) wav=48000 crc=903bbfeb format=16000/1
+job t-002 "B" played=119070(2700ms) length=132300(3000ms) wav=119070 crc=9012e39b
+--- end: idle, 0 skipped, 0 ads, 0 overruns
