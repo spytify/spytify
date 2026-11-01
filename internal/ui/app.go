@@ -15,7 +15,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
@@ -238,6 +237,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	body := inReadingOrder(top, nil, nil, nil, a.center)
 	a.win.SetPadded(false)
 	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
+	// With nothing focused, Escape comes to the window.
+	a.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
+		if e.Name == fyne.KeyEscape {
+			escape(a.win.Canvas())
+		}
+	})
 
 	if !opts.ManualRender {
 		onReopen(a.Reopen)
@@ -338,12 +343,11 @@ func (a *App) quit() {
 		a.quitApp()
 		return
 	}
-	dialog.ShowConfirm("Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
+	ask(a.win, "Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
 		if ok {
 			a.quitApp()
 		}
-	}, a.win)
-	focusFirst(a.win)
+	})
 }
 
 // applyTheme switches to the Spytify theme in the given app.theme mode.

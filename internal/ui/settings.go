@@ -352,7 +352,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			if top := s.app.win.Canvas().Overlays().Top(); top != nil {
 				top.Refresh()
 			}
-			focusFirst(s.app.win)
+			closesOnEscape(s.app.win, pick.Hide)
 		})
 		f.set = func(v any) {
 			if str, _ := v.(string); !s.focused(e) {
@@ -666,12 +666,11 @@ func (p *playerCard) restart() {
 		})
 	}
 	if p.app.last.Recording() {
-		dialog.ShowConfirm("Restart spytifyd?", "A session is recording; restarting stops it now.", func(ok bool) {
+		ask(p.app.win, "Restart spytifyd?", "A session is recording; restarting stops it now.", func(ok bool) {
 			if ok {
 				restart()
 			}
-		}, p.app.win)
-		focusFirst(p.app.win)
+		})
 		return
 	}
 	restart()

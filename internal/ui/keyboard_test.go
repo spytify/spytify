@@ -124,6 +124,8 @@ func focusName(a *App, f fyne.Focusable) string {
 		return "Filter"
 	case *widget.Check:
 		return w.Text
+	case *check:
+		return w.Text
 	case *widget.Hyperlink:
 		return w.Text
 	case *widget.List:
