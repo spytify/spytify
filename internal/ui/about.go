@@ -79,6 +79,7 @@ func (s *aboutScreen) checkNow() {
 			default:
 				dialog.ShowInformation("Up to date", "Spytify "+proto.Version+" is the latest version.", s.app.win)
 			}
+			focusFirst(s.app.win)
 		})
 	}()
 }
@@ -119,4 +120,5 @@ func (a *App) maybeShowFirstRun(then func()) {
 	})
 	d.Resize(fyne.NewSize(460, 300))
 	d.Show()
+	focusFirst(a.win)
 }

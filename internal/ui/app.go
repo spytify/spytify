@@ -86,7 +86,7 @@ type App struct {
 	// tabsView is the tabs with the plain colour behind their bar.
 	tabsView *fyne.Container
 	center   *fyne.Container
-	offline  fyne.CanvasObject
+	offline  *container.Scroll
 	player   *playerCard
 
 	dot     *widget.Label
@@ -150,6 +150,9 @@ type App struct {
 	levelQueue  throttle
 	barKey      string
 	last        model.State
+
+	// focusSeen is the control followFocus last saw focused.
+	focusSeen fyne.Focusable
 }
 
 // New builds the window; call ShowAndRun to start.
@@ -232,12 +235,13 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	// The window has no padding of its own, so the bars' plain colour goes
 	// to its edges; the page's grey is the window's background.
 	top := plain(container.New(layout.NewCustomPaddedLayout(pad, 0, pad, pad), container.NewVBox(container.NewPadded(a.bar), a.banner)))
-	body := container.NewBorder(top, nil, nil, nil, a.center)
+	body := inReadingOrder(top, nil, nil, nil, a.center)
 	a.win.SetPadded(false)
 	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
 
 	if !opts.ManualRender {
 		onReopen(a.Reopen)
+		a.watchFocus()
 	}
 	_, a.tray = fa.(desktop.App)
 	if a.tray && !opts.ManualRender {
@@ -339,6 +343,7 @@ func (a *App) quit() {
 			a.quitApp()
 		}
 	}, a.win)
+	focusFirst(a.win)
 }
 
 // applyTheme switches to the Spytify theme in the given app.theme mode.

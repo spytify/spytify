@@ -120,7 +120,7 @@ func newLogsScreen(a *App) *logsScreen {
 	})
 	open.Importance = widget.LowImportance
 	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open, l.diagnose))
-	l.root = plain(margin(container.NewBorder(tools, nil, nil, nil, l.list)))
+	l.root = plain(margin(inReadingOrder(tools, nil, nil, nil, l.list)))
 	return l
 }
 
@@ -146,6 +146,7 @@ func (a *App) showDiagnostics() {
 	l.diag.Show()
 	l.fitDiagnostics()
 	l.checksScroll.ScrollToBottom()
+	focusFirst(a.win)
 }
 
 func (l *logsScreen) hideDiagnostics() {

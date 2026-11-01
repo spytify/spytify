@@ -83,7 +83,7 @@ func newSettingsScreen(a *App) *settingsScreen {
 	// The search is a white field on the page, as the cards are.
 	search := container.NewThemeOverride(container.NewPadded(s.search), cardTheme{input: colorCard})
 	// Lighter shadows at the scrolled edges, as in the cards.
-	s.root = container.NewBorder(search, nil, nil, nil, container.NewThemeOverride(s.scroll, cardTheme{}))
+	s.root = inReadingOrder(search, nil, nil, nil, container.NewThemeOverride(s.scroll, cardTheme{}))
 	return s
 }
 
@@ -352,6 +352,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			if top := s.app.win.Canvas().Overlays().Top(); top != nil {
 				top.Refresh()
 			}
+			focusFirst(s.app.win)
 		})
 		f.set = func(v any) {
 			if str, _ := v.(string); !s.focused(e) {
@@ -670,6 +671,7 @@ func (p *playerCard) restart() {
 				restart()
 			}
 		}, p.app.win)
+		focusFirst(p.app.win)
 		return
 	}
 	restart()

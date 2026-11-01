@@ -70,7 +70,7 @@ func (t *toggle) MouseMoved(*desktop.MouseEvent) {}
 func (t *toggle) MouseOut()                      { t.hovered = false; t.Refresh() }
 
 func (t *toggle) CreateRenderer() fyne.WidgetRenderer {
-	r := &toggleRenderer{t: t, track: canvas.NewRectangle(nil), halo: canvas.NewCircle(nil), knob: canvas.NewCircle(nil)}
+	r := &toggleRenderer{t: t, ring: canvas.NewRectangle(color.Transparent), track: canvas.NewRectangle(nil), halo: canvas.NewCircle(nil), knob: canvas.NewCircle(nil)}
 	r.Refresh()
 	return r
 }
@@ -85,15 +85,23 @@ func toggleSize() fyne.Size {
 // toggleInset is the gap between the track's edge and the knob.
 const toggleInset = 3
 
+// toggleRingGap is the gap between the track and the focus ring around it.
+const toggleRingGap = 3
+
 type toggleRenderer struct {
-	t          *toggle
-	track      *canvas.Rectangle
-	halo, knob *canvas.Circle
+	t *toggle
+	// ring shows the keyboard's focus around the track, apart from it: on
+	// the track itself, the focus colour, a translucent green, vanishes
+	// into the green of a switch that is on.
+	ring, track *canvas.Rectangle
+	halo, knob  *canvas.Circle
 }
 
 func (r *toggleRenderer) Layout(s fyne.Size) {
 	ts := toggleSize()
 	top := (s.Height - ts.Height) / 2
+	r.ring.Move(fyne.NewPos(-toggleRingGap, top-toggleRingGap))
+	r.ring.Resize(ts.AddWidthHeight(2*toggleRingGap, 2*toggleRingGap))
 	r.track.Move(fyne.NewPos(0, top))
 	r.track.Resize(ts)
 	d := ts.Height - 2*toggleInset
@@ -128,22 +136,25 @@ func (r *toggleRenderer) Refresh() {
 		r.track.StrokeColor = theme.Color(theme.ColorNameInputBorder)
 		r.knob.FillColor = theme.Color(theme.ColorNamePlaceHolder)
 	}
+	r.ring.CornerRadius = ts.Height/2 + toggleRingGap
+	r.ring.StrokeWidth = 2
+	r.ring.StrokeColor = color.Transparent
 	if r.t.focused {
-		r.track.StrokeColor = theme.Color(theme.ColorNameFocus)
-		r.track.StrokeWidth = 2
+		r.ring.StrokeColor = theme.Color(theme.ColorNameFocus)
 	}
 	r.halo.FillColor = color.Transparent
 	if r.t.hovered {
 		r.halo.FillColor = theme.Color(theme.ColorNameHover)
 	}
 	r.Layout(r.t.Size())
+	r.ring.Refresh()
 	r.track.Refresh()
 	r.halo.Refresh()
 	r.knob.Refresh()
 }
 
 func (r *toggleRenderer) Objects() []fyne.CanvasObject {
-	return []fyne.CanvasObject{r.track, r.halo, r.knob}
+	return []fyne.CanvasObject{r.ring, r.track, r.halo, r.knob}
 }
 
 func (r *toggleRenderer) Destroy() {}

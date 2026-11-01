@@ -181,7 +181,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.sortBy.SetSelected("Newest")
 	// The search and the sort are white fields on the page, as in Settings.
 	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search), cardTheme{input: colorCard})
-	l.root = container.NewBorder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty))
+	l.root = inReadingOrder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty))
 	return l
 }
 

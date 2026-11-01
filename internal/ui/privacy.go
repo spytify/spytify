@@ -148,6 +148,7 @@ func (a *App) askPrivacy(then func()) {
 	})
 	d.Resize(fyne.NewSize(460, 220))
 	d.Show()
+	focusFirst(a.win)
 }
 
 // trackerCheck is the bug tracker box, as the setting is now.

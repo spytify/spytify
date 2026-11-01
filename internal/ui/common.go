@@ -23,6 +23,7 @@ func showError(w fyne.Window, err error) {
 		err = errors.New(perr.Message)
 	}
 	dialog.ShowError(err, w)
+	focusFirst(w)
 }
 
 func fmtDuration(ms int64) string {

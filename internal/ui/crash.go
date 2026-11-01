@@ -96,6 +96,7 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 	d.Show()
 	// Its text wraps at the dialog's width, known once shown.
 	fit()
+	focusFirst(a.win)
 }
 
 // crashDialogWidth is the crash dialog's width; its height follows what

@@ -215,7 +215,7 @@ func newRecordScreen(a *App) *recordScreen {
 	footer := container.NewBorder(nil, nil, nil, container.NewHBox(r.clear, openFolder), r.totals)
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
 	r.listCard = listCard(r.list)
-	r.session = container.NewBorder(container.NewVBox(r.card, r.waitRow), inset(footer), nil, nil,
+	r.session = inReadingOrder(container.NewVBox(r.card, r.waitRow), inset(footer), nil, nil,
 		container.NewStack(inset(r.listCard), r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
 	return r
