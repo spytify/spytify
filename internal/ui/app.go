@@ -158,6 +158,9 @@ type App struct {
 	// Record or Stop.
 	trayMenu   *fyne.Menu
 	trayAction *fyne.MenuItem
+	// notes is what the notifications sent while the window is hidden in
+	// the tray keep from one event to the next.
+	notes notices
 	// starting is set while spytifyd is being started; startErr is why
 	// the last start failed.
 	starting   bool
@@ -294,6 +297,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	m.OnLevel(a.scheduleLevel)
 	m.OnEvent(a.onEvent)
 	m.OnEvent(a.recheck)
+	m.OnEvent(a.notify)
 	a.render()
 	return a
 }
@@ -696,6 +700,8 @@ func upper(s string) string {
 
 func (a *App) toggleRecording() {
 	s := a.last
+	// A session stopped from here ends with no notification.
+	a.notes.stopAsked = s.Recording()
 	a.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -853,6 +859,7 @@ const trayNoticeKey = "tray-notice-seen"
 // session goes on. The first time, a notification says where the app is.
 func (a *App) hideToTray() {
 	a.win.Hide()
+	a.notes.hidden = true
 	if a.opts.ManualRender {
 		return
 	}
@@ -866,6 +873,7 @@ func (a *App) hideToTray() {
 }
 
 func (a *App) showWindow() {
+	a.notes.hidden = false
 	if !a.opts.ManualRender {
 		showInDock(true)
 	}
