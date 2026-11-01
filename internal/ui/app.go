@@ -137,6 +137,12 @@ type App struct {
 	wasConnected bool
 	checksNoted  string
 	diagNoted    bool
+	// masks are the widgets the window's picture covers (picture.go), true
+	// for those covered whatever they show; unpictured counts the dialogs
+	// open that it could not cover, an error's message or the folder
+	// picker, in Fyne's own widgets: no picture is taken meanwhile.
+	masks      map[fyne.CanvasObject]bool
+	unpictured int
 	// reports are the reports on their way to the bug tracker, and calls
 	// the requests on their way to the recorder, which tests wait for:
 	// one still going must not touch the next test's window.
@@ -156,7 +162,8 @@ type App struct {
 
 // New builds the window; call ShowAndRun to start.
 func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
-	a := &App{fa: fa, m: m, link: l, opts: opts, tel: opts.Telemetry, launch: launchTrace{start: time.Now()}}
+	a := &App{fa: fa, m: m, link: l, opts: opts, tel: opts.Telemetry, launch: launchTrace{start: time.Now()}, masks: map[fyne.CanvasObject]bool{}}
+	a.tel.SetScreenshot(a.screenshot)
 	a.applyTheme("system")
 	a.covers = newCovers(a.scheduleRender)
 	a.win = fa.NewWindow("Spytify")
@@ -208,6 +215,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.banner.Wrapping = fyne.TextWrapWord
 	a.banner.Importance = widget.DangerImportance
 	a.banner.Hide()
+	a.maskPaths(a.banner)
 
 	start := newLitButton("Start the recorder", theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
 	a.player = newPlayerCard(a)
@@ -216,6 +224,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.offlineErr = widget.NewLabel("")
 	a.offlineErr.Wrapping = fyne.TextWrapWord
 	a.offlineErr.Importance = widget.DangerImportance
+	a.maskPaths(a.offlineErr)
 	pad := theme.Padding()
 	a.offline = container.NewVScroll(container.New(layout.NewCustomPaddedLayout(pad, pad*2, pad*2, pad*2), container.NewVBox(
 		heading("The recorder is not running"),
@@ -455,6 +464,10 @@ func (a *App) render() {
 	}
 	if dir, _ := s.Settings[settings.OutputDir.String()].(string); dir != "" && dir != a.outputDir {
 		a.outputDir = dir
+		// The home folder in it leaves as ~ all the same.
+		if settings.IsDefaultOutputDir(dir) {
+			dir = ""
+		}
 		a.tel.SetOutputDir(settings.ExpandHome(dir))
 	}
 	if a.tabs.Items[tabRecord].Text != record {
@@ -712,5 +725,7 @@ func (a *App) do(method string, params any, then func()) {
 }
 
 func (a *App) showError(err error) {
-	showError(a.win, err)
+	d := showError(a.win, err)
+	a.unpictured++
+	d.SetOnClosed(func() { a.unpictured-- })
 }
