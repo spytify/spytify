@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -34,7 +35,10 @@ type recordScreen struct {
 	attention  *fyne.Container
 	openPlayer *litButton
 	diagnose   *litButton
-	session    *fyne.Container
+	// startDaemon, and startAgain in a session, start spytifyd once it
+	// went: Record is off without it.
+	startDaemon *litButton
+	session     *fyne.Container
 
 	card  *fyne.Container
 	cover *canvas.Image
@@ -49,9 +53,10 @@ type recordScreen struct {
 	waiting *widget.Label
 	// launch and play are what a waiting session needs from the player:
 	// to run, then to play.
-	launch  *litButton
-	play    *litButton
-	restart *button
+	launch     *litButton
+	play       *litButton
+	restart    *button
+	startAgain *litButton
 	// blocked leads to the diagnostics once a session ended for want of
 	// an output folder.
 	blocked *litButton
@@ -87,7 +92,8 @@ func newRecordScreen(a *App) *recordScreen {
 	r.diagnose = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
 	diagnose := r.diagnose
 	r.openPlayer = newLitButton("Open the player", theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
-	r.attention = container.NewCenter(container.NewHBox(r.openPlayer.lit, diagnose.lit))
+	r.startDaemon = newLitButton("Start spytifyd", theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
+	r.attention = container.NewCenter(container.NewHBox(r.openPlayer.lit, diagnose.lit, r.startDaemon.lit))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
 		r.idleTitle,
@@ -139,7 +145,8 @@ func newRecordScreen(a *App) *recordScreen {
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
 	r.blocked = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
-	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.launch.lit, r.play.lit, r.restart, r.blocked.lit))
+	r.startAgain = newLitButton("Start spytifyd", theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
+	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.launch.lit, r.play.lit, r.restart, r.blocked.lit, r.startAgain.lit))
 
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
@@ -273,13 +280,28 @@ func (r *recordScreen) render(s model.State) {
 	if player == "" {
 		player = "your player"
 	}
+	// spytifyd went after it answered: Record is off until it runs again,
+	// and what it last said of the session and the player no longer holds.
+	gone := s.Conn != model.Connected && !r.app.starting
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
 		// Until the recorder answers it is starting, with nothing to offer.
-		starting := !s.HaveInfo
+		starting := !s.HaveInfo || (s.Conn != model.Connected && r.app.starting)
 		setLabel(r.idleTitle, map[bool]string{true: startingText, false: "Ready to record"}[starting])
 		show(r.idleText, !starting)
 		if starting {
 			show(r.attention, false)
+			r.idle.Show()
+			r.session.Hide()
+			return
+		}
+		show(r.startDaemon, gone)
+		if gone {
+			setLabel(r.idleTitle, "Record is off")
+			setLabel(r.idleText, cmp.Or(r.app.startErr, "Spytify records through spytifyd, which is not running. Start it to record."))
+			show(r.hint, false)
+			show(r.openPlayer, false)
+			show(r.diagnose, false)
+			show(r.attention, true)
 			r.idle.Show()
 			r.session.Hide()
 			return
@@ -306,7 +328,7 @@ func (r *recordScreen) render(s model.State) {
 	r.idle.Hide()
 	r.session.Show()
 
-	if c := s.Current; c != nil {
+	if c := s.Current; c != nil && !gone {
 		r.card.Show()
 		r.waitRow.Hide()
 		sub := c.Artist
@@ -323,18 +345,20 @@ func (r *recordScreen) render(s model.State) {
 		r.card.Hide()
 		// A session the output folder ended, its drive unplugged: Record
 		// stays off until the folder is back or another one is chosen.
-		blocked := s.Session == proto.StateIdle && checkFails(s.Info.Checks, proto.CheckOutputWritable)
+		blocked := !gone && s.Session == proto.StateIdle && checkFails(s.Info.Checks, proto.CheckOutputWritable)
 		// Nothing is recorded until the player plays, whatever the list
 		// holds: between sessions or while one waits, the row says so and
 		// offers the one next step, to open the player or to play. Waiting
 		// with the player running is also a track that started before the
 		// session, which only a restart records; the session does not tell
 		// it from a stopped player.
-		waits := s.Session == proto.StateIdle || s.Session == proto.StateWaiting || s.Session == proto.StatePaused
+		waits := !gone && (s.Session == proto.StateIdle || s.Session == proto.StateWaiting || s.Session == proto.StatePaused)
 		down := waits && !blocked && !playerRunning(s)
-		paused := s.Session == proto.StatePaused && !down
+		paused := waits && s.Session == proto.StatePaused && !down
 		text := waitingText(s.Session)
 		switch {
+		case gone:
+			text = "Nothing is recorded while spytifyd is not running."
 		case blocked:
 			text = "Session ended: Spytify cannot write to the output folder, so Record is off."
 		case down:
@@ -346,8 +370,9 @@ func (r *recordScreen) render(s model.State) {
 		r.launch.SetText("Open " + player)
 		show(r.launch, down)
 		show(r.play, paused)
-		show(r.restart, s.Session == proto.StateWaiting && !down)
+		show(r.restart, waits && s.Session == proto.StateWaiting && !down)
 		show(r.blocked, blocked)
+		show(r.startAgain, gone)
 		r.waitRow.Show()
 	}
 	r.renderLive(s.Current, s.Session, s.Level)
@@ -391,7 +416,7 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 
 // relayout lays the screen out again when a part appeared or went away.
 func (r *recordScreen) relayout() {
-	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(), len(r.track.Segments), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
+	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.startDaemon.Visible(), r.card.Visible(), len(r.track.Segments), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.startAgain.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()
