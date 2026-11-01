@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -192,14 +193,25 @@ func validTemplate(s string) (string, error) {
 	if strings.ContainsAny(s, `/\`) {
 		return "", fmt.Errorf("folders come from output.group_by; the template cannot contain / or \\")
 	}
-	matches := placeholder.FindAllStringSubmatch(s, -1)
-	if len(matches) == 0 {
+	// An unknown placeholder is left out, not refused, so the rest of the
+	// template is saved.
+	for _, p := range UnknownPlaceholders(s) {
+		s = strings.ReplaceAll(s, p, "")
+	}
+	if !placeholder.MatchString(s) {
 		return "", fmt.Errorf("template needs at least one of {album_artist}, {artists}, {title}, {album}, {track}")
 	}
-	for _, m := range matches {
-		if !templateFields[m[1]] {
-			return "", fmt.Errorf("unknown placeholder {%s}", m[1])
+	return s, nil
+}
+
+// UnknownPlaceholders lists, once each, the {names} in a file name template
+// that are not placeholders: saving the template leaves them out.
+func UnknownPlaceholders(tmpl string) []string {
+	var out []string
+	for _, m := range placeholder.FindAllStringSubmatch(tmpl, -1) {
+		if !templateFields[m[1]] && !slices.Contains(out, m[0]) {
+			out = append(out, m[0])
 		}
 	}
-	return s, nil
+	return out
 }

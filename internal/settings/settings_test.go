@@ -226,8 +226,15 @@ func TestTemplatePlaceholders(t *testing.T) {
 	if _, err := d.Coerce("{track} {album_artist} - {album} - {title} ({artists})"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Coerce("{artist} - {genre}"); err == nil {
-		t.Fatal("unknown placeholder accepted")
+	// An unknown placeholder is left out, and the rest is saved.
+	if v, err := d.Coerce("{album_artist} {discc} - {title}"); err != nil || v != "{album_artist}  - {title}" {
+		t.Fatalf("unknown placeholder: %q, %v", v, err)
+	}
+	if _, err := d.Coerce("{discc} - song"); err == nil {
+		t.Fatal("template with only an unknown placeholder accepted")
+	}
+	if got := UnknownPlaceholders("{discc} {title} {foo_bar} {discc} {Title}"); !slices.Equal(got, []string{"{discc}", "{foo_bar}"}) {
+		t.Fatalf("unknown placeholders %q", got)
 	}
 	if _, err := d.Coerce("no placeholder"); err == nil {
 		t.Fatal("template without placeholder accepted")
