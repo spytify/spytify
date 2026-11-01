@@ -119,7 +119,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	// A select is as wide as its placeholder, which a choice made never
 	// shows: the longest label fits.
 	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality
-	rescan := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() {
+	rescan := newIconButton("", theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
 	})
@@ -136,10 +136,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 			// says which in a chip, as the Record screen's rows say theirs.
 			chip := caption("")
 			chip.Segments[0].(*widget.TextSegment).Style.ColorName = colorSkipped
-			return container.NewStack(trackRow(2, container.NewHBox(
-				container.NewCenter(chip),
-				&widget.Button{Icon: theme.SearchIcon(), Importance: widget.LowImportance},
-				&widget.Button{Icon: theme.MediaPlayIcon(), Importance: widget.LowImportance})), albumHeading())
+			reveal, play := newIconButton("", theme.SearchIcon(), nil), newIconButton("", theme.MediaPlayIcon(), nil)
+			reveal.Importance, play.Importance = widget.LowImportance, widget.LowImportance
+			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(chip), reveal, play)), albumHeading())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.rows) {
@@ -170,8 +169,8 @@ func newLibraryScreen(a *App) *libraryScreen {
 			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
-			after.Objects[1].(*widget.Button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
-			after.Objects[2].(*widget.Button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
+			after.Objects[1].(*button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
+			after.Objects[2].(*button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
 			box.Refresh()
 		},
 	)

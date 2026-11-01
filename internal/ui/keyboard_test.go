@@ -100,8 +100,15 @@ func focusName(a *App, f fyne.Focusable) string {
 			return w.ToolTip()
 		}
 		return w.Text
+	case *tipButton:
+		if w.Text == "" {
+			return w.ToolTip()
+		}
+		return w.Text
 	case *widget.Button:
 		return icon(w)
+	case *button:
+		return icon(&w.Button)
 	case *toggle:
 		return setting(w)
 	case *widget.Select:
@@ -391,7 +398,7 @@ func TestTheKeyboardWorksSettings(t *testing.T) {
 	// The App card's Advanced fold holds the player: open, Tab goes in.
 	tabTo(t, a, "Advanced", 1)
 	pressSpace(c)
-	if !s.advanced["App"].Items[0].Open {
+	if !s.advanced["App"].open {
 		t.Fatal("Space did not open Advanced")
 	}
 	// The window lays the screen out again before it next draws.
@@ -415,6 +422,45 @@ func TestTheKeyboardWorksSettings(t *testing.T) {
 	a.followFocus()
 	if !inSight(a, s.scroll, first) {
 		t.Fatalf("the first card's Reset is out of sight at offset %v", s.scroll.Offset)
+	}
+}
+
+// Space presses a button and leaves the focus on it, for Tab to go on from
+// there: Fyne's button gave the focus to nothing, so opening or closing an
+// Advanced fold, or pressing Reset, sent the next Tab back to Donate.
+func TestSpaceLeavesTheFocusOnTheButtonItPresses(t *testing.T) {
+	a, _, core := connectedApp(t)
+	a.showTab(tabSettings)
+	a.render()
+	c := a.win.Canvas()
+	s := a.screens[tabSettings].(*settingsScreen)
+	closed := settingsOrder(s)
+	after := closed[slices.Index(closed, "Advanced")+1]
+
+	adv := tabTo(t, a, "Advanced", 1)
+	pressSpace(c)
+	if !s.advanced["App"].open || c.Focused() != adv {
+		t.Fatalf("Space on Advanced: open %v, the focus on %v", s.advanced["App"].open, c.Focused())
+	}
+	pressTab(c)
+	if got := focusName(a, c.Focused()); got != "process name, or a comma list" {
+		t.Errorf("Tab after opening Advanced went to %q, want the fold's first field", got)
+	}
+	pressShiftTab(c)
+	pressSpace(c)
+	if s.advanced["App"].open || c.Focused() != adv {
+		t.Fatalf("Space on the open Advanced: open %v, the focus on %v", s.advanced["App"].open, c.Focused())
+	}
+	pressTab(c)
+	if got := focusName(a, c.Focused()); got != after {
+		t.Errorf("Tab after closing Advanced went to %q, want %q", got, after)
+	}
+
+	reset := tabTo(t, a, "Reset", 1)
+	pressSpace(c)
+	waitCall(t, core, proto.MethodSettingsReset)
+	if c.Focused() != reset {
+		t.Errorf("Space on Reset left the focus on %v", c.Focused())
 	}
 }
 

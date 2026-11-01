@@ -187,6 +187,9 @@ func texts(o fyne.CanvasObject) []string {
 		if o == nil || !o.Visible() {
 			return
 		}
+		if b, ok := asButton(o); ok {
+			out = append(out, b.Text)
+		}
 		switch w := o.(type) {
 		case *widget.Label:
 			out = append(out, w.Text)
@@ -199,8 +202,6 @@ func texts(o fyne.CanvasObject) []string {
 		case *canvas.Text:
 			out = append(out, w.Text)
 		case *widget.Hyperlink:
-			out = append(out, w.Text)
-		case *widget.Button:
 			out = append(out, w.Text)
 		case *widget.Card:
 			out = append(out, w.Title)
@@ -682,14 +683,14 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
 	r := a.screens[tabRecord].(*recordScreen)
 	// offers is the wait row's text and the one button it shows.
-	offers := func(text string, button *widget.Button) {
+	offers := func(text string, want *button) {
 		t.Helper()
 		a.render()
 		if !r.waitRow.Visible() || r.waiting.Text != text {
 			t.Errorf("the wait row says %q, want %q", r.waiting.Text, text)
 		}
-		for _, b := range []*widget.Button{r.launch, r.play, r.restart, r.blocked} {
-			if b.Visible() != (b == button) {
+		for _, b := range []*button{r.launch, r.play, r.restart, r.blocked} {
+			if b.Visible() != (b == want) {
 				t.Errorf("%q shown %v", b.Text, b.Visible())
 			}
 		}
@@ -1191,22 +1192,29 @@ func waitCall(t *testing.T, c *recordingCore, method string) {
 
 func buttons(o fyne.CanvasObject, text string) []*widget.Button {
 	var out []*widget.Button
+	for _, o := range buttonObjects(o, text) {
+		b, _ := asButton(o)
+		out = append(out, b)
+	}
+	return out
+}
+
+// buttonObjects are the buttons showing text under o as the window holds
+// them, the app's own included, to find where they are drawn.
+func buttonObjects(o fyne.CanvasObject, text string) []fyne.CanvasObject {
+	var out []fyne.CanvasObject
 	var walk func(fyne.CanvasObject)
 	walk = func(o fyne.CanvasObject) {
 		if o == nil || !o.Visible() {
 			return
 		}
+		if b, ok := asButton(o); ok {
+			if b.Text == text {
+				out = append(out, o)
+			}
+			return
+		}
 		switch w := o.(type) {
-		case *widget.Button:
-			if w.Text == text {
-				out = append(out, w)
-			}
-			return
-		case *ttwidget.Button:
-			if w.Text == text {
-				out = append(out, &w.Button)
-			}
-			return
 		case *fyne.Container:
 			for _, c := range w.Objects {
 				walk(c)
@@ -1221,6 +1229,22 @@ func buttons(o fyne.CanvasObject, text string) []*widget.Button {
 	}
 	walk(o)
 	return out
+}
+
+// asButton is the widget.Button of a button, Fyne's or one of the app's
+// built on it, to read and tap as Fyne's.
+func asButton(o fyne.CanvasObject) (*widget.Button, bool) {
+	switch b := o.(type) {
+	case *widget.Button:
+		return b, true
+	case *button:
+		return &b.Button, true
+	case *ttwidget.Button:
+		return &b.Button, true
+	case *tipButton:
+		return &b.Button.Button, true
+	}
+	return nil, false
 }
 
 func TestLatestReleaseCountsPreReleases(t *testing.T) {

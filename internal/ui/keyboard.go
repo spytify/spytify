@@ -7,7 +7,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
-	"fyne.io/fyne/v2/widget"
 )
 
 // What Tab needs that Fyne 2.8.2 leaves out. Tab and Shift+Tab move the
@@ -122,21 +121,3 @@ func scrollTo(s *container.Scroll, o fyne.CanvasObject) {
 	// The scroll keeps the offset within its content.
 	s.ScrollToOffset(off)
 }
-
-// commentEntry is a field of several lines that Tab leaves, as it leaves
-// the others. Fyne's keeps Tab, and Shift+Tab, to type a tab, so the
-// keyboard could not get past it to the dialog's buttons.
-type commentEntry struct {
-	widget.Entry
-}
-
-func newCommentEntry() *commentEntry {
-	e := &commentEntry{}
-	e.MultiLine = true
-	e.Wrapping = fyne.TextWrapWord
-	e.ExtendBaseWidget(e)
-	return e
-}
-
-// AcceptsTab is false: Tab moves the focus on.
-func (e *commentEntry) AcceptsTab() bool { return false }

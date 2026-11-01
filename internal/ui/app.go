@@ -21,7 +21,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
-	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry"
@@ -92,9 +91,9 @@ type App struct {
 	dot     *widget.Label
 	status  *widget.Label
 	output  *widget.RichText
-	update  *widget.Button
-	donate  *ttwidget.Button
-	action  *widget.Button
+	update  *button
+	donate  *tipButton
+	action  *button
 	banner  *widget.Label
 	bar     *fyne.Container
 	covers  *covers
@@ -188,14 +187,14 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.status = widget.NewLabel("")
 	// Secondary, but readable in both themes, unlike a low-importance label.
 	a.output = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true}})
-	a.update = widget.NewButtonWithIcon("", newReleasesIcon, nil)
+	a.update = newIconButton("", newReleasesIcon, nil)
 	// No fill: the badge's own green says it, as the heart's pink does.
 	a.update.Importance = widget.LowImportance
 	a.update.Hide()
-	a.donate = ttwidget.NewButtonWithIcon("", heartIcon, func() { a.openURL(donateURL) })
+	a.donate = newTipButton("", heartIcon, func() { a.openURL(donateURL) })
 	a.donate.Importance = widget.LowImportance
 	a.donate.SetToolTip("Donate")
-	a.action = widget.NewButtonWithIcon("Record", theme.MediaRecordIcon(), a.toggleRecording)
+	a.action = newIconButton("Record", theme.MediaRecordIcon(), a.toggleRecording)
 	a.action.Importance = widget.HighImportance
 	// The wordmark: the logo with the name in its green.
 	mark := canvas.NewImageFromResource(Wordmark)
@@ -210,7 +209,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.banner.Importance = widget.DangerImportance
 	a.banner.Hide()
 
-	start := widget.NewButtonWithIcon("Start the recorder", theme.MediaPlayIcon(), a.StartDaemon)
+	start := newIconButton("Start the recorder", theme.MediaPlayIcon(), a.StartDaemon)
 	start.Importance = widget.HighImportance
 	a.player = newPlayerCard(a)
 	intro := widget.NewLabel("Spytify records through spytifyd, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set.")
