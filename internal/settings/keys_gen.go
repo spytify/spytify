@@ -6,6 +6,8 @@ package settings
 var (
 	// AppTheme is app.theme, "Theme" in Settings.
 	AppTheme = Key{"app.theme"}
+	// AppNotifications is app.notifications, "Notifications" in Settings.
+	AppNotifications = Key{"app.notifications"}
 	// AppMinimizeToTray is app.minimize_to_tray, "Minimize to tray" in Settings.
 	AppMinimizeToTray = Key{"app.minimize_to_tray"}
 	// AppAutostartRecording is app.autostart_recording, "Start recording on launch" in Settings.
