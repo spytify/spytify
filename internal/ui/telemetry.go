@@ -33,6 +33,7 @@ func (a *App) launchReady(s model.State) {
 		"ms":              now.Sub(a.launch.start).Milliseconds(),
 		"auto_started":    !a.launch.started.IsZero(),
 		"failing":         failingNames(s.Info.Checks),
+		"advice":          adviceNames(s.Info.Checks),
 		"software_opengl": a.opts.SoftwareOpenGL,
 	})
 	var spans []telemetry.Span
@@ -70,7 +71,19 @@ func startErrorKind(err error) string {
 func failingNames(checks []proto.Check) []string {
 	var names []string
 	for _, c := range checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
+			names = append(names, c.Name)
+		}
+	}
+	return names
+}
+
+// adviceNames names the advice checks that fail: recording works, at a
+// lower quality.
+func adviceNames(checks []proto.Check) []string {
+	var names []string
+	for _, c := range checks {
+		if !c.OK && c.Advice {
 			names = append(names, c.Name)
 		}
 	}
@@ -223,7 +236,7 @@ func (a *App) noteTab(i int) {
 func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	var failing []proto.Check
 	for _, c := range s.Info.Checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
 			failing = append(failing, c)
 		}
 	}

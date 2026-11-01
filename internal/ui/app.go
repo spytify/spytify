@@ -557,16 +557,22 @@ func checkOK(checks []proto.Check, name string) bool {
 	return false
 }
 
-// failingChecks counts the failing checks but the player's, which the app
-// bar already shows.
+// failingChecks counts the checks that need attention.
 func failingChecks(checks []proto.Check) int {
 	n := 0
 	for _, c := range checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
 			n++
 		}
 	}
 	return n
+}
+
+// needsAttention says whether a check fails in a way the user must fix: not
+// the player's, which the app bar already shows, nor advice, which only
+// lowers quality.
+func needsAttention(c proto.Check) bool {
+	return !c.OK && !c.Advice && c.Name != "player running"
 }
 
 // checkFails says whether the check named name is there and fails: a
