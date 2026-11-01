@@ -86,8 +86,8 @@ func (s *Store) load() error {
 	// Up to 2.0.0-alpha.4, config.toml held every setting, defaults too, so
 	// its normalize = true was the default of the time, not a choice. A file
 	// saved since holds no default, which tells the two apart.
-	if full && s.values["recorder.normalize"] == true {
-		s.values["recorder.normalize"] = false
+	if full && s.values[RecorderNormalize.name] == true {
+		s.values[RecorderNormalize.name] = false
 	}
 	return nil
 }
@@ -96,7 +96,7 @@ func (s *Store) load() error {
 // goes to the new key, unless the file has it too, or is dropped without a
 // warning when the setting is gone.
 var renamed = map[string]string{
-	"output.counter_start":    "output.counter_next",
+	"output.counter_start":    OutputCounterNext.name,
 	"tags.track_from_counter": "",
 	// Whole tracks of any length are kept and incomplete ones never are,
 	// so a minimum length has nothing left to do.
@@ -325,54 +325,54 @@ type Values struct {
 	m map[string]any
 }
 
-func (v Values) mustDef(key string) *Def {
-	d, ok := Lookup(key)
+func (v Values) mustDef(key Key) *Def {
+	d, ok := Lookup(key.name)
 	if !ok {
-		panic("settings: unknown key " + key)
+		panic("settings: unknown key " + key.name)
 	}
 	return d
 }
 
-func (v Values) raw(key string) any {
+func (v Values) raw(key Key) any {
 	d := v.mustDef(key)
-	if x, ok := v.m[key]; ok {
+	if x, ok := v.m[key.name]; ok {
 		return x
 	}
 	return d.Default
 }
 
-func (v Values) String(key string) string {
+func (v Values) String(key Key) string {
 	s, _ := v.raw(key).(string)
 	return s
 }
 
-func (v Values) Bool(key string) bool {
+func (v Values) Bool(key Key) bool {
 	b, _ := v.raw(key).(bool)
 	return b
 }
 
-func (v Values) Int(key string) int64 {
+func (v Values) Int(key Key) int64 {
 	n, _ := v.raw(key).(int64)
 	return n
 }
 
-func (v Values) Float(key string) float64 {
+func (v Values) Float(key Key) float64 {
 	f, _ := v.raw(key).(float64)
 	return f
 }
 
-func (v Values) Duration(key string) time.Duration {
+func (v Values) Duration(key Key) time.Duration {
 	d, _ := time.ParseDuration(v.String(key))
 	return d
 }
 
 // Path expands a leading ~ to the home directory.
-func (v Values) Path(key string) string {
+func (v Values) Path(key Key) string {
 	return ExpandHome(v.String(key))
 }
 
 // With returns a copy with one key replaced, for tests.
-func (v Values) With(key string, value any) Values {
+func (v Values) With(key Key, value any) Values {
 	d := v.mustDef(key)
 	cv, err := d.Coerce(value)
 	if err != nil {
@@ -382,7 +382,7 @@ func (v Values) With(key string, value any) Values {
 	for k, x := range v.m {
 		m[k] = x
 	}
-	m[key] = cv
+	m[key.name] = cv
 	return Values{m: m}
 }
 

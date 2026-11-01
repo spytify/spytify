@@ -64,7 +64,7 @@ func (r *records) recorded(info meta.TrackInfo, v settings.Values) bool {
 	}
 	o := namingOptions(v)
 	local := tag.FromLocal(info, tagOptions(v))
-	return naming.Recorded(v.Path("output.dir"), naming.Build(namingTrack(local, info), o), o)
+	return naming.Recorded(v.Path(settings.OutputDir), naming.Build(namingTrack(local, info), o), o)
 }
 
 // taken reports whether a file is at path, the name the finisher picked

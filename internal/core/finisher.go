@@ -42,6 +42,9 @@ type finishJob struct {
 	rejected proto.SkipReason
 	// keep saves a held take after all, whatever part of it played.
 	keep bool
+	// suffix ends a kept take's title tag and file name: " (partial)" or
+	// " (low quality)".
+	suffix string
 	// cover is a held take's file cover, read while the file was there.
 	cover     []byte
 	coverMIME string
@@ -82,7 +85,7 @@ func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(str
 		emit:    emit,
 		log:     log,
 		jobs:    make(chan finishJob, 256),
-		records: openRecords(v.Path("output.dir")),
+		records: openRecords(v.Path(settings.OutputDir)),
 	}
 	go func() {
 		for j := range f.jobs {
@@ -138,25 +141,25 @@ func (f *finisher) recorded(info meta.TrackInfo, v settings.Values) bool {
 }
 
 func namingOptions(v settings.Values) naming.Options {
-	p, _ := encode.PresetFor(v.String("encode.format"))
+	p, _ := encode.PresetFor(v.String(settings.EncodeFormat))
 	return naming.Options{
-		GroupBy:         v.String("output.group_by"),
-		Prefix:          v.String("output.prefix"),
-		Underscores:     v.Bool("output.underscores"),
-		Template:        v.String("output.template"),
-		CounterWidth:    int(v.Int("output.counter_width")),
-		ASCII:           v.Bool("output.ascii_filenames"),
-		ArtistSeparator: v.String("tags.artist_separator"),
+		GroupBy:         v.String(settings.OutputGroupBy),
+		Prefix:          v.String(settings.OutputPrefix),
+		Underscores:     v.Bool(settings.OutputUnderscores),
+		Template:        v.String(settings.OutputTemplate),
+		CounterWidth:    int(v.Int(settings.OutputCounterWidth)),
+		ASCII:           v.Bool(settings.OutputAsciiFilenames),
+		ArtistSeparator: v.String(settings.TagsArtistSeparator),
 		Extension:       p.Extension,
 	}
 }
 
 func tagOptions(v settings.Values) tag.Options {
 	return tag.Options{
-		ExtraToSubtitle: v.Bool("tags.extra_to_subtitle"),
-		ArtistSeparator: v.String("tags.artist_separator"),
-		CoverSize:       v.String("tags.cover_size"),
-		Cover:           v.Bool("tags.cover"),
+		ExtraToSubtitle: v.Bool(settings.TagsExtraToSubtitle),
+		ArtistSeparator: v.String(settings.TagsArtistSeparator),
+		CoverSize:       v.String(settings.TagsCoverSize),
+		Cover:           v.Bool(settings.TagsCover),
 	}
 }
 
@@ -224,7 +227,7 @@ func (f *finisher) process(j finishJob) {
 
 	t.began, t.v = time.Now(), f.values()
 	t.o, t.topts = namingOptions(t.v), tagOptions(t.v)
-	t.timings = &proto.FinishTimings{Format: t.v.String("encode.format")}
+	t.timings = &proto.FinishTimings{Format: t.v.String(settings.EncodeFormat)}
 	if !f.complete(t) || !f.trim(t) || !f.goodQuality(t) {
 		return
 	}
@@ -273,11 +276,11 @@ func (f *finisher) complete(t *take) bool {
 // on. What is left may be too short to keep.
 func (f *finisher) trim(t *take) bool {
 	t.keptFrames = t.played
-	if !t.v.Bool("recorder.trim_silence") {
+	if !t.v.Bool(settings.RecorderTrimSilence) {
 		return true
 	}
 	step := time.Now()
-	s, e, ok, err := scanTrim(t.tmp, t.v.Float("recorder.silence_db"))
+	s, e, ok, err := scanTrim(t.tmp, t.v.Float(settings.RecorderSilenceDb))
 	t.timings.TrimMs = msSince(step)
 	if err != nil {
 		f.fail(t.finishJob, "read", err)
@@ -338,7 +341,7 @@ func (f *finisher) takeNumber(t *take) bool {
 	if t.o.Prefix != "counter" {
 		return true
 	}
-	t.counter = t.v.Int("output.counter_next")
+	t.counter = t.v.Int(settings.OutputCounterNext)
 	if limit := naming.CounterLimit(t.o.CounterWidth); t.counter > limit {
 		f.fail(t.finishJob, "counter_full", fmt.Errorf("the counter is past %d, the last number of %d digits: raise Counter digits or set Next counter number back", limit, t.o.CounterWidth))
 		if f.full != nil {
@@ -353,15 +356,20 @@ func (f *finisher) takeNumber(t *take) bool {
 // there takes a suffix, skips the take or is replaced, as
 // recorder.duplicates says.
 func (f *finisher) pickName(t *take) bool {
-	plan := naming.Build(namingTrack(t.tags, t.info), t.o)
-	root := t.v.Path("output.dir")
+	// A kept take's suffix ends its file name, wherever the template puts
+	// the title, and its title tag.
+	nt := namingTrack(t.tags, t.info)
+	nt.Suffix = t.suffix
+	plan := naming.Build(nt, t.o)
+	t.tags.Title += t.suffix
+	root := t.v.Path(settings.OutputDir)
 	dir := filepath.Join(root, plan.Dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		f.fail(t.finishJob, "output_dir", err)
 		return false
 	}
 	name := naming.FileName(plan, t.o, t.counter, t.tags.Track)
-	duplicates := t.v.String("recorder.duplicates")
+	duplicates := t.v.String(settings.RecorderDuplicates)
 	if t.keep {
 		// A partial file never replaces a file, nor is it skipped.
 		duplicates = "suffix"
@@ -388,12 +396,12 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 		In:          t.tmp,
 		Out:         t.part,
 		Format:      t.timings.Format,
-		BitrateKbps: int(t.v.Int("encode.bitrate_kbps")),
+		BitrateKbps: int(t.v.Int(settings.EncodeBitrateKbps)),
 		Source:      t.format,
 		TrimStart:   t.trimStart,
 		TrimEnd:     t.trimEnd,
-		Normalize:   t.v.Bool("recorder.normalize"),
-		TargetLUFS:  t.v.Float("recorder.target_lufs"),
+		Normalize:   t.v.Bool(settings.RecorderNormalize),
+		TargetLUFS:  t.v.Float(settings.RecorderTargetLufs),
 	})
 	t.timings.EncodeMs = msSince(step)
 	if err != nil {
@@ -476,7 +484,7 @@ func (f *finisher) fail(j finishJob, code string, err error) {
 	// Only once a file failed is the output folder looked at: gone with
 	// its drive, nothing more can be saved, and the recording stops.
 	lost := false
-	if _, gone := os.Stat(f.values().Path("output.dir")); gone != nil {
+	if _, gone := os.Stat(f.values().Path(settings.OutputDir)); gone != nil {
 		code, msg, lost = "output_dir", "the output folder cannot be reached, so the recording stopped: "+msg, true
 	}
 	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg})

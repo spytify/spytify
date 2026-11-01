@@ -1,0 +1,26 @@
+# formats/format-change-while-waiting
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > audio silence, 13230(300ms)
+     300ms  > the stream is now s16le 48000 Hz 2ch
+     300ms  > audio silence, 14400(300ms)
+     310ms  log info: stream format changed from s16le 44100 Hz 2ch to s16le 48000 Hz 2ch
+     600ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 14400)
+     600ms  > audio silence, 9600(200ms)
+     800ms  > audio music 2 at 0ms, 144000(3000ms)
+     810ms  log debug: cut for "B" at 500 ms (kind 0, noticed at 300 ms, window 0..0 ms)
+     810ms  started t-001 "B" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=200ms source=48000/2
+     810ms  state recording
+     810ms  take t-001 "B" start=24013(500.27ms) length=144000(3000ms) format=48000/2
+    3800ms  > audio silence, 72000(1500ms)
+    5300ms  > player Stopped pos=-1 (ring at 240000)
+    5300ms  state waiting
+    5300ms  state stopping
+    5300ms  state idle
+    5300ms  take none
+--- jobs
+job t-001 "B" played=144480(3010ms) length=144000(3000ms) wav=144480 crc=b88a7305 format=48000/2
+--- end: idle, 0 skipped, 0 ads, 0 overruns
