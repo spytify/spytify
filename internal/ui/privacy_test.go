@@ -12,7 +12,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
-	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
@@ -88,35 +87,18 @@ func tapButton(t *testing.T, o fyne.CanvasObject, text string) {
 	test.Tap(b[0])
 }
 
-// sendButton is the diagnostics' Send to the developers button, with its
-// tooltip.
-func sendButton(t *testing.T, a *App) *ttwidget.Button {
+// diagnostics opens the diagnostics' dialog and returns it.
+func diagnostics(t *testing.T, a *App) fyne.CanvasObject {
 	t.Helper()
-	var found []*ttwidget.Button
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		switch w := o.(type) {
-		case *ttwidget.Button:
-			if w.Text == "Send to the developers" {
-				found = append(found, w)
-			}
-			return
-		case *fyne.Container:
-			for _, child := range w.Objects {
-				walk(child)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, child := range test.WidgetRenderer(w).Objects() {
-				walk(child)
-			}
-		}
-	}
-	walk(a.win.Content())
+	a.showDiagnostics()
+	return overlay(t, a)
+}
+
+// sendButton is the Send to the developers button of the diagnostics'
+// dialog, which shows.
+func sendButton(t *testing.T, a *App) *widget.Button {
+	t.Helper()
+	found := buttons(overlay(t, a), "Send to the developers")
 	if len(found) != 1 {
 		t.Fatalf("%d Send to the developers buttons", len(found))
 	}
@@ -163,7 +145,7 @@ func quiet(a *App, srv *fakesentry.Server) int {
 
 // With the bug tracker off, the app sends nothing at all, not at launch,
 // not while recording, not on a problem, a failed start or a crash: the
-// crash only shows, and the diagnostics' button says why it is off.
+// crash only shows, and the diagnostics say why their button is off.
 func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	srv := fakesentry.New(t)
 	a, m := privacyApp(t, srv, false)
@@ -184,19 +166,11 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	if a.win.Canvas().Overlays().Top() != nil {
 		t.Error("a dialog shows with the bug tracker off")
 	}
-	send := sendButton(t, a)
-	if !send.Disabled() || send.ToolTip() != optedOut {
-		t.Errorf("Send to the developers: disabled %v, tooltip %q", send.Disabled(), send.ToolTip())
+	diagnostics(t, a)
+	if send := sendButton(t, a); !send.Disabled() || !contains(texts(overlay(t, a)), optedOut) {
+		t.Errorf("Send to the developers: disabled %v, the dialog %v", send.Disabled(), texts(overlay(t, a)))
 	}
 	snapshot(t, a, "privacy-diagnostics-off")
-	// The tooltip shows through fyne.Do, which the test driver runs on the
-	// tooltip's timer goroutine, not a main loop: hovering races here, so
-	// only for the picture, made without -race.
-	if os.Getenv("SPYTIFY_UI_SNAPSHOTS") != "" {
-		test.MoveMouse(a.win.Canvas(), a.fa.Driver().AbsolutePositionForObject(send).AddXY(20, 10))
-		time.Sleep(time.Second)
-		snapshot(t, a, "privacy-diagnostics-off-tooltip")
-	}
 	if n := quiet(a, srv); n != 0 {
 		t.Fatalf("%d requests reached Sentry with the bug tracker off", n)
 	}
@@ -356,18 +330,18 @@ func TestSendToTheDevelopers(t *testing.T) {
 	connect(t, a, m, true)
 	a.showTab(tabLogs)
 	a.render()
-	if b := buttons(a.win.Content(), "Send to the developers"); len(b) != 0 {
+	if b := buttons(diagnostics(t, a), "Send to the developers"); len(b) != 0 {
 		t.Fatal("a Send button while every check passes")
 	}
 	failCheck(a, m)
 	snapshot(t, a, "privacy-diagnostics")
-	if logs := a.screens[tabLogs].(*logsScreen); logs.checksScroll.Offset.Y <= 0 {
+	if s := a.screens[tabLogs].(*logsScreen).checksScroll; s.Content.Size().Height == 0 || s.Offset.Y+s.Size().Height < s.Content.Size().Height {
 		t.Error("the checks are not scrolled down to the one that fails")
 	}
-	if send := sendButton(t, a); send.Disabled() || send.ToolTip() != "" {
-		t.Fatalf("Send to the developers: disabled %v, tooltip %q", send.Disabled(), send.ToolTip())
+	if send := sendButton(t, a); send.Disabled() || contains(texts(overlay(t, a)), optedOut) {
+		t.Fatalf("Send to the developers: disabled %v, the dialog %v", send.Disabled(), texts(overlay(t, a)))
 	}
-	tapButton(t, a.win.Content(), "Send to the developers")
+	tapButton(t, overlay(t, a), "Send to the developers")
 	snapshot(t, a, "privacy-send-checks")
 	tapButton(t, overlay(t, a), "Send")
 	ev := srv.Wait(t, "event", 1)[0].JSON()
@@ -437,7 +411,7 @@ func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	}
 	a.showTab(tabLogs)
 	failCheck(a, m)
-	tapButton(t, a.win.Content(), "Run the checks again")
+	tapButton(t, diagnostics(t, a), "Run the checks again")
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "No audio from the player for 10 s"}))

@@ -845,11 +845,17 @@ func TestOtherScreensRender(t *testing.T) {
 	a.showTab(tabLogs)
 	a.render()
 	all = texts(a.win.Content())
-	for _, want := range []string{"Diagnostics · all 4 checks pass", "already recorded", "session 20261023-120000 started"} {
+	for _, want := range []string{"Diagnostics", "already recorded", "session 20261023-120000 started"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the logs screen", want)
 		}
 	}
+	tapButton(t, a.win.Content(), "Diagnostics")
+	if d := texts(overlay(t, a)); !contains(d, "All 4 checks pass.") || !contains(d, "ffmpeg found") {
+		t.Errorf("the diagnostics: %v", d)
+	}
+	snapshot(t, a, "logs-diagnostics")
+	tapButton(t, overlay(t, a), "Close")
 
 	a.showTab(tabAbout)
 	a.render()
@@ -1642,6 +1648,43 @@ func TestRecordWaitsForThePlayer(t *testing.T) {
 	}
 }
 
+// The diagnostics are a dialog behind a button of the Logs screen, which
+// turns to a warning while a check fails. Opened from another tab, the
+// dialog follows the checks there, and closing it stays on that tab.
+func TestTheDiagnosticsAreADialog(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(defaults())
+	a.showTab(tabLogs)
+	a.render()
+	b := a.screens[tabLogs].(*logsScreen).diagnose
+	if b.Importance != widget.LowImportance {
+		t.Errorf("every check passes: the button's importance is %v", b.Importance)
+	}
+	failCheck(a, m)
+	if b.Importance != widget.WarningImportance {
+		t.Errorf("a check fails: the button's importance is %v", b.Importance)
+	}
+	snapshot(t, a, "logs-check-fails")
+
+	a.showTab(tabRecord)
+	m.SetInfo(info())
+	a.render()
+	d := diagnostics(t, a)
+	if all := texts(d); !contains(all, "All 4 checks pass.") {
+		t.Fatalf("opened from Record: %v", all)
+	}
+	failCheck(a, m)
+	if all := texts(d); !contains(all, "1 of 5 checks need attention.") || !contains(all, "ffmpeg not found") {
+		t.Errorf("a check fails under the dialog: %v", all)
+	}
+	tapButton(t, d, "Close")
+	if a.win.Canvas().Overlays().Top() != nil || a.tabs.SelectedIndex() != tabRecord {
+		t.Errorf("closed: a dialog %v, tab %d", a.win.Canvas().Overlays().Top(), a.tabs.SelectedIndex())
+	}
+}
+
 // A player that is off is in the app bar and offered to open; the
 // diagnostics are not, even while its check still says so.
 func TestNoDiagnosticsForAPlayerThatIsOff(t *testing.T) {
@@ -1681,15 +1724,17 @@ func TestRecordIsOffWithoutAnOutputFolder(t *testing.T) {
 	}
 	snapshot(t, a, "record-no-output")
 	tapButton(t, a.win.Content(), "Open diagnostics")
-	if a.tabs.SelectedIndex() != tabLogs {
+	if a.tabs.SelectedIndex() != tabRecord {
 		t.Fatalf("Open diagnostics shows tab %d", a.tabs.SelectedIndex())
 	}
-	a.render()
 	snapshot(t, a, "diagnostics-no-output")
-	tapButton(t, a.win.Content(), "Choose another folder")
+	tapButton(t, overlay(t, a), "Choose another folder")
 	set := a.screens[tabSettings].(*settingsScreen)
 	if a.tabs.SelectedIndex() != tabSettings || set.search.Text != "Output folder" {
 		t.Fatalf("Choose another folder shows tab %d, searching %q", a.tabs.SelectedIndex(), set.search.Text)
+	}
+	if a.win.Canvas().Overlays().Top() != nil {
+		t.Error("the diagnostics stay over the output folder's setting")
 	}
 	set.search.SetText("")
 
@@ -1734,12 +1779,13 @@ func TestTheOutputFolderIsCheckedAgain(t *testing.T) {
 	core.setNoOutput(true)
 	test.Tap(a.action)
 	// The app shows the diagnostics, then runs the checks: once the model
-	// has them, the tab switched.
+	// has them, the dialog is open and shows the one that fails.
 	eventually(t, "the checks did not run again after the refused start", failing)
 	a.render()
-	if a.tabs.SelectedIndex() != tabLogs || !a.action.Disabled() {
-		t.Fatalf("after the refused start: tab %d, Record disabled %v", a.tabs.SelectedIndex(), a.action.Disabled())
+	if len(buttons(overlay(t, a), "Choose another folder")) != 1 || !a.action.Disabled() {
+		t.Fatalf("after the refused start: diagnostics %v, Record disabled %v", texts(overlay(t, a)), a.action.Disabled())
 	}
+	tapButton(t, overlay(t, a), "Close")
 	// Another folder chosen.
 	core.setNoOutput(false)
 	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{"output.dir": "/Volumes/Other"}}))
