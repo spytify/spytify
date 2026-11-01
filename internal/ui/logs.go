@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -137,7 +138,7 @@ func (a *App) showDiagnostics() {
 	a.noteAction("open diagnostics")
 	if !a.diagNoted && a.tel.Enabled() {
 		a.diagNoted = true
-		a.tel.Log("diagnostics", map[string]any{"failing": failingNames(a.last.Info.Checks)})
+		a.tel.Log("diagnostics", map[string]any{"failing": failingNames(a.diagChecks(a.last))})
 	}
 	l := a.screens[tabLogs].(*logsScreen)
 	l.renderChecks(a.last)
@@ -177,13 +178,36 @@ func (l *logsScreen) render(s model.State) {
 	l.filter()
 }
 
-func (l *logsScreen) renderChecks(s model.State) {
-	failing := failingChecks(s.Info.Checks)
-	summary := fmt.Sprintf("All %d checks pass.", len(s.Info.Checks))
-	if failing > 0 {
-		summary = fmt.Sprintf("%d of %d checks need attention.", failing, len(s.Info.Checks))
+// checkDaemon is the app's own check, that spytifyd answers: it runs the
+// others.
+const checkDaemon = "spytifyd running"
+
+// diagChecks are the checks the diagnostics show: checkDaemon, then
+// spytifyd's. While it is gone its checks are left out, its last answers
+// being no longer true.
+func (a *App) diagChecks(s model.State) []proto.Check {
+	if s.Conn == model.Connected {
+		return append([]proto.Check{{Name: checkDaemon, OK: true, Detail: s.Info.Version}}, s.Info.Checks...)
 	}
-	state := fmt.Sprint(summary, s.Info.Checks, s.Info.Warnings)
+	detail := cmp.Or(a.startErr, s.ConnError)
+	if a.starting {
+		detail = startingText
+	}
+	return []proto.Check{{Name: checkDaemon, Detail: detail}}
+}
+
+func (l *logsScreen) renderChecks(s model.State) {
+	checks := l.app.diagChecks(s)
+	failing := failingChecks(checks)
+	summary := fmt.Sprintf("All %d checks pass.", len(checks))
+	warnings := s.Info.Warnings
+	switch {
+	case s.Conn != model.Connected:
+		summary, warnings = "spytifyd is not running, so nothing else can be checked.", nil
+	case failing > 0:
+		summary = fmt.Sprintf("%d of %d checks need attention.", failing, len(checks))
+	}
+	state := fmt.Sprint(summary, checks, warnings)
 	// The send button follows the bug tracker's switch too.
 	on, _ := l.app.privacy(trackerKey).(bool)
 	redraw := fmt.Sprint(state, on)
@@ -194,12 +218,16 @@ func (l *logsScreen) renderChecks(s model.State) {
 	// What needs attention comes last, the list scrolled to it: the checks
 	// that pass, the advice, then the checks that fail.
 	var failed, advice, passed []fyne.CanvasObject
-	for _, c := range s.Info.Checks {
+	for _, c := range checks {
 		icon := theme.ConfirmIcon()
 		if !c.OK {
 			icon = theme.WarningIcon()
 		}
 		var fix fyne.CanvasObject
+		if c.Name == checkDaemon && !c.OK && !l.app.starting {
+			start := newLitButton("Start spytifyd", theme.MediaPlayIcon(), widget.HighImportance, l.app.StartDaemon)
+			fix = start.lit
+		}
 		if c.Name == "player running" && !c.OK {
 			open := newLitButton("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
 			fix = open.lit
@@ -218,7 +246,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 			failed = append(failed, row)
 		}
 	}
-	for _, w := range s.Info.Warnings {
+	for _, w := range warnings {
 		advice = append(advice, container.NewBorder(nil, nil, widget.NewIcon(theme.InfoIcon()), nil, wrapped(w)))
 	}
 	rows := append(append(passed, advice...), failed...)

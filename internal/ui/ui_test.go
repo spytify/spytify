@@ -851,7 +851,7 @@ func TestOtherScreensRender(t *testing.T) {
 		}
 	}
 	tapButton(t, a.win.Content(), "Diagnostics")
-	if d := texts(overlay(t, a)); !contains(d, "All 4 checks pass.") || !contains(d, "ffmpeg found") {
+	if d := texts(overlay(t, a)); !contains(d, "All 5 checks pass.") || !contains(d, "ffmpeg found") {
 		t.Errorf("the diagnostics: %v", d)
 	}
 	snapshot(t, a, "logs-diagnostics")
@@ -1660,11 +1660,11 @@ func TestTheDiagnosticsAreADialog(t *testing.T) {
 	m.SetInfo(info())
 	a.render()
 	d := diagnostics(t, a)
-	if all := texts(d); !contains(all, "All 4 checks pass.") {
+	if all := texts(d); !contains(all, "All 5 checks pass.") {
 		t.Fatalf("opened from Record: %v", all)
 	}
 	failCheck(a, m)
-	if all := texts(d); !contains(all, "1 of 5 checks need attention.") || !contains(all, "ffmpeg not found") {
+	if all := texts(d); !contains(all, "1 of 6 checks need attention.") || !contains(all, "ffmpeg not found") {
 		t.Errorf("a check fails under the dialog: %v", all)
 	}
 	tapButton(t, d, "Close")

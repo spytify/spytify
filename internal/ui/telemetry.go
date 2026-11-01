@@ -221,7 +221,7 @@ func (a *App) noteTab(i int) {
 // Send.
 func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	var failing []proto.Check
-	for _, c := range s.Info.Checks {
+	for _, c := range a.diagChecks(s) {
 		if !c.OK && c.Name != "player running" {
 			failing = append(failing, c)
 		}
