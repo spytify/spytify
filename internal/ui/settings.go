@@ -182,17 +182,19 @@ func sectionTitle(text string) *widget.RichText {
 	}})
 }
 
-// newCard is a settings section on the page: its title, then its rows.
+// newCard is a settings section on the page, square: its title, then its
+// rows.
 func newCard(objs ...fyne.CanvasObject) fyne.CanvasObject {
 	pad := theme.Padding()
-	box := newPanel(colorCard, colorCardLine, 10, fyne.NewSize(pad*3, pad*2), container.NewVBox(objs...))
+	box := newPanel(colorCard, colorCardLine, 0, fyne.NewSize(pad*3, pad*2), container.NewVBox(objs...))
 	return container.NewThemeOverride(box, cardTheme{input: colorCardInput, surface: colorCard})
 }
 
-// newBlock holds a card's advanced settings: greyer, in smaller text.
+// newBlock holds a card's advanced settings: square too, greyer, in smaller
+// text.
 func newBlock(objs ...fyne.CanvasObject) fyne.CanvasObject {
 	pad := theme.Padding()
-	box := newPanel(colorAdvanced, "", 8, fyne.NewSize(pad*3, pad), container.NewVBox(objs...))
+	box := newPanel(colorAdvanced, "", 0, fyne.NewSize(pad*3, pad), container.NewVBox(objs...))
 	return container.NewThemeOverride(box, cardTheme{input: colorAdvancedInput, surface: colorAdvanced, small: true})
 }
 
