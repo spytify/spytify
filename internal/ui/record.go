@@ -84,7 +84,7 @@ func newRecordScreen(a *App) *recordScreen {
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	r.hint.Wrapping = fyne.TextWrapWord
 	r.hint.SizeName = theme.SizeNameCaptionText
-	r.diagnose = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
+	r.diagnose = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), a.showDiagnostics)
 	r.diagnose.Importance = widget.WarningImportance
 	diagnose := r.diagnose
 	r.openPlayer = widget.NewButtonWithIcon("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
@@ -142,7 +142,7 @@ func newRecordScreen(a *App) *recordScreen {
 		a.noteAction("record this track from the start")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
-	r.blocked = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
+	r.blocked = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), a.showDiagnostics)
 	r.blocked.Importance = widget.WarningImportance
 	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.launch, r.play, r.restart, r.blocked))
 

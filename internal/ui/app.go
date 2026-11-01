@@ -600,6 +600,10 @@ func (a *App) renderCenter(s model.State) {
 		a.center.Refresh()
 	}
 	a.screens[a.tabs.SelectedIndex()].render(s)
+	// The diagnostics' dialog shows over any tab: its checks follow too.
+	if logs := a.screens[tabLogs].(*logsScreen); logs.open && a.tabs.SelectedIndex() != tabLogs {
+		logs.renderChecks(s)
+	}
 }
 
 // scheduleLevel redraws the meter and the progress, at most every 100 ms.
@@ -721,7 +725,7 @@ func (a *App) toggleRecording() {
 		if errors.As(err, &perr) && perr.Code == proto.CodeOutputDir {
 			// The output folder went since the checks ran: the
 			// diagnostics show them, run again.
-			fyne.Do(func() { a.showTab(tabLogs) })
+			fyne.Do(a.showDiagnostics)
 			a.refreshChecks()
 			return
 		}

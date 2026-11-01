@@ -328,17 +328,12 @@ func (a *App) noteAction(what string) {
 	}
 }
 
-// noteTab notes the tab shown; opening Logs, where the diagnostics are,
-// is counted once a launch with the checks that fail then.
+// noteTab notes the tab shown.
 func (a *App) noteTab(i int) {
 	if i < 0 || i >= len(a.tabs.Items) {
 		return
 	}
 	a.tel.Breadcrumb("ui", "tab "+a.tabs.Items[i].Text, nil)
-	if i == tabLogs && !a.diagNoted && a.tel.Enabled() {
-		a.diagNoted = true
-		a.tel.Log("diagnostics", map[string]any{"failing": failingNames(a.last.Info.Checks)})
-	}
 }
 
 // askPrivacy shows, once, the bug tracker choice to someone who saw the
