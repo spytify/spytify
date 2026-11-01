@@ -56,6 +56,18 @@ func (s *Store) keepFormerOutputDir() {
 	s.values[OutputDir.name] = formerOutputDir
 }
 
+// IsDefaultOutputDir says dir is the default output folder or the former
+// one, which name no one past the home folder.
+func IsDefaultOutputDir(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	d, _ := Lookup(OutputDir.name)
+	def, _ := d.Default.(string)
+	dir = filepath.Clean(ExpandHome(dir))
+	return dir == filepath.Clean(ExpandHome(def)) || dir == filepath.Clean(ExpandHome(formerOutputDir))
+}
+
 func isDir(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && fi.IsDir()

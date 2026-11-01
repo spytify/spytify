@@ -53,6 +53,7 @@ func newLogsScreen(a *App) *logsScreen {
 	l := &logsScreen{app: a, path: filepath.Join(a.opts.StateDir, "spytifyd.log")}
 	l.summary = widget.NewLabel("")
 	l.checks = container.NewVBox()
+	a.maskPaths(l.checks)
 	l.checksScroll = container.NewVScroll(l.checks)
 	l.refresh = newIconButton("Run the checks again", theme.ViewRefreshIcon(), func() {
 		a.noteAction("run the checks again")
@@ -77,6 +78,7 @@ func newLogsScreen(a *App) *logsScreen {
 		func() fyne.CanvasObject {
 			msg := widget.NewLabel("message")
 			msg.Wrapping = fyne.TextWrapWord
+			a.maskPaths(msg)
 			prefix := widget.NewLabelWithStyle("00:00:00 info ", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 			prefix.SizeName = theme.SizeNameCaptionText
 			return container.NewBorder(nil, nil, prefix, nil, msg)
@@ -125,10 +127,11 @@ func newLogsScreen(a *App) *logsScreen {
 }
 
 // checksMaxHeight is about seven checks: more scroll. diagWidth leaves a
-// check's detail room beside its name and the button that fixes it.
+// passing check's detail room beside its name, and a failed check's reason
+// few lines under it.
 const (
 	checksMaxHeight = 300
-	diagWidth       = 640
+	diagWidth       = 800
 )
 
 // showDiagnostics opens the checks over the window, from any tab, scrolled
@@ -157,9 +160,15 @@ func (l *logsScreen) hideDiagnostics() {
 // fitDiagnostics sizes the dialog to its checks, centred in the window: the
 // overlay centres it only when it shows.
 func (l *logsScreen) fitDiagnostics() {
-	size := fyne.NewSize(diagWidth, l.diag.MinSize().Height)
-	l.diag.Resize(size)
 	c := l.diag.Canvas.Size()
+	width := max(min(diagWidth, c.Width-8*theme.Padding()), l.diag.MinSize().Width)
+	// Laid out at its width first: a failed check's reason wraps to it, and
+	// only then do the checks know their height. They take it up to
+	// checksMaxHeight, then scroll: the dialog stays inside the window.
+	l.diag.Resize(fyne.NewSize(width, l.diag.MinSize().Height))
+	l.checksScroll.SetMinSize(fyne.NewSize(0, min(l.checks.MinSize().Height, checksMaxHeight)))
+	size := fyne.NewSize(width, l.diag.MinSize().Height)
+	l.diag.Resize(size)
 	l.diag.Move(fyne.NewPos((c.Width-size.Width)/2, (c.Height-size.Height)/2))
 }
 
@@ -199,13 +208,15 @@ func (a *App) diagChecks(s model.State) []proto.Check {
 func (l *logsScreen) renderChecks(s model.State) {
 	checks := l.app.diagChecks(s)
 	failing := failingChecks(checks)
-	summary := fmt.Sprintf("All %d checks pass.", len(checks))
+	// Advice that fails reads with the advice, out of the count.
+	counted := len(checks) - len(adviceNames(checks))
+	summary := fmt.Sprintf("All %d checks pass.", counted)
 	warnings := s.Info.Warnings
 	switch {
 	case s.Conn != model.Connected:
 		summary, warnings = "spytifyd is not running, so nothing else can be checked.", nil
 	case failing > 0:
-		summary = fmt.Sprintf("%d of %d checks need attention.", failing, len(checks))
+		summary = fmt.Sprintf("%d of %d checks need attention.", failing, counted)
 	}
 	state := fmt.Sprint(summary, checks, warnings)
 	// The send button follows the bug tracker's switch too.
@@ -219,6 +230,12 @@ func (l *logsScreen) renderChecks(s model.State) {
 	// that pass, the advice, then the checks that fail.
 	var failed, advice, passed []fyne.CanvasObject
 	for _, c := range checks {
+		if !c.OK && c.Advice {
+			// The name and its icon stay on the first line of the detail.
+			name := container.NewVBox(container.NewHBox(widget.NewIcon(theme.InfoIcon()), widget.NewLabel(c.Name)))
+			advice = append(advice, container.NewBorder(nil, nil, name, nil, wrapped(c.Detail)))
+			continue
+		}
 		icon := theme.ConfirmIcon()
 		if !c.OK {
 			icon = theme.WarningIcon()
@@ -239,7 +256,14 @@ func (l *logsScreen) renderChecks(s model.State) {
 			})
 			fix = choose.lit
 		}
-		row := container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail))
+		name := container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c)))
+		var row fyne.CanvasObject = container.NewBorder(nil, nil, name, fix, clipped(c.Detail))
+		if !c.OK && c.Detail != "" {
+			// Why it failed goes under the name, whole and in line with it:
+			// beside it, cut short, it lost the reason.
+			reason := container.New(layout.NewCustomPaddedLayout(0, 0, theme.IconInlineSize()+theme.Padding(), 0), wrapped(c.Detail))
+			row = container.New(layout.NewCustomPaddedVBoxLayout(0), container.NewBorder(nil, nil, name, fix), reason)
+		}
 		if c.OK {
 			passed = append(passed, row)
 		} else {
@@ -283,9 +307,6 @@ func (l *logsScreen) renderChecks(s model.State) {
 	l.actions.Refresh()
 	l.checks.Objects = lines(rows)
 	l.checks.Refresh()
-	// The checks take what they need up to checksMaxHeight, then scroll:
-	// the dialog stays inside the window.
-	l.checksScroll.SetMinSize(fyne.NewSize(0, min(l.checks.MinSize().Height, checksMaxHeight)))
 	l.summary.SetText(summary)
 	if l.open {
 		l.fitDiagnostics()

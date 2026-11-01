@@ -1,10 +1,12 @@
 package telemetry
 
 import (
+	"cmp"
 	"os"
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -24,13 +26,13 @@ type Scrubber struct {
 }
 
 // SetOutput names the output folder, whose name the user chose and can
-// be their own. A drive's root is left as it is.
+// be their own; "" names none. A drive's root is left as it is.
 func (s *Scrubber) SetOutput(dir string) {
 	if s == nil {
 		return
 	}
 	var output []string
-	if dir = filepath.Clean(dir); filepath.Dir(dir) != dir {
+	if dir = filepath.Clean(dir); dir != "." && filepath.Dir(dir) != dir {
 		output = []string{dir}
 		if slash := filepath.ToSlash(dir); slash != dir {
 			output = append(output, slash)
@@ -90,26 +92,67 @@ func (s *Scrubber) String(in string) string {
 	return out
 }
 
+// Spans are where String scrubs in a text, as byte offsets: in order,
+// those that touch made one.
+func (s *Scrubber) Spans(in string) [][2]int {
+	if s == nil || in == "" {
+		return nil
+	}
+	s.mu.Lock()
+	output := s.output
+	s.mu.Unlock()
+	var spans [][2]int
+	for _, old := range slices.Concat(output, s.home) {
+		spans = append(spans, indexFold(in, old)...)
+	}
+	if s.user != nil {
+		for _, m := range s.user.FindAllStringIndex(in, -1) {
+			spans = append(spans, [2]int{m[0], m[1]})
+		}
+	}
+	slices.SortFunc(spans, func(a, b [2]int) int { return cmp.Compare(a[0], b[0]) })
+	var merged [][2]int
+	for _, sp := range spans {
+		if n := len(merged); n > 0 && sp[0] <= merged[n-1][1] {
+			merged[n-1][1] = max(merged[n-1][1], sp[1])
+			continue
+		}
+		merged = append(merged, sp)
+	}
+	return merged
+}
+
 // replaceFold replaces old in s, ignoring case: Windows paths come in any
 // case.
 func replaceFold(s, old, repl string) string {
+	var b strings.Builder
+	last := 0
+	for _, at := range indexFold(s, old) {
+		b.WriteString(s[last:at[0]])
+		b.WriteString(repl)
+		last = at[1]
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
+// indexFold is where old is in s, ignoring case as replaceFold does.
+func indexFold(s, old string) [][2]int {
 	if old == "" {
-		return s
+		return nil
 	}
 	lower, lowerOld := strings.ToLower(s), strings.ToLower(old)
-	if len(lower) != len(s) {
-		return strings.ReplaceAll(s, old, repl)
+	if len(lower) != len(s) || len(lowerOld) != len(old) {
+		lower, lowerOld = s, old
 	}
-	var b strings.Builder
-	for {
-		i := strings.Index(lower, lowerOld)
-		if i < 0 {
-			b.WriteString(s)
-			return b.String()
+	var at [][2]int
+	for i := 0; ; {
+		j := strings.Index(lower[i:], lowerOld)
+		if j < 0 {
+			return at
 		}
-		b.WriteString(s[:i])
-		b.WriteString(repl)
-		s, lower = s[i+len(old):], lower[i+len(old):]
+		at = append(at, [2]int{i + j, i + j + len(old)})
+		i += j + len(old)
 	}
 }
 

@@ -124,7 +124,7 @@ func (a *App) renderPrivacy(s model.State) {
 	if checks := fmt.Sprint(s.Info.Checks); checks != a.checksNoted {
 		a.checksNoted = checks
 		a.tel.Breadcrumb("checks", fmt.Sprintf("%d of %d pass", len(s.Info.Checks)-len(failingNames(s.Info.Checks)), len(s.Info.Checks)),
-			map[string]any{"failing": strings.Join(failingNames(s.Info.Checks), ", ")})
+			map[string]any{"failing": strings.Join(failingNames(s.Info.Checks), ", "), "advice": strings.Join(adviceNames(s.Info.Checks), ", ")})
 	}
 }
 
@@ -137,7 +137,7 @@ func (a *App) askPrivacy(then func()) {
 		return
 	}
 	tracker := a.trackerCheck()
-	body := widget.NewLabel("Spytify can send its crashes, errors, traces and recording counts to its developers through Sentry, to help them fix issues.")
+	body := widget.NewLabel("Spytify can send its crashes, errors with a picture of its window, traces and recording counts to its developers through Sentry, to help them fix issues.")
 	body.Wrapping = fyne.TextWrapWord
 	showDialog(a.win, "Help fix issues", container.NewVBox(body, tracker), "OK", "", fyne.NewSize(460, 220), func(bool) {
 		prefs.SetBool(privacySeenKey, true)

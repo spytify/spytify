@@ -386,6 +386,26 @@ func TestSendChecks(t *testing.T) {
 	}
 }
 
+// Where an output folder that cannot be written to is leaves as tags,
+// which Sentry counts across an issue's events, and shows in the preview.
+func TestCheckFactsLeaveAsTags(t *testing.T) {
+	srv := fakesentry.New(t)
+	c := newClient(t, srv, Options{})
+	c.SetEnabled(true)
+	r := Checks{Failing: []proto.Check{{Name: proto.CheckOutputWritable, Detail: "mkdir <output>: denied",
+		Facts: map[string]string{"output.cloud": "OneDrive", "output.errno": "2"}}}}
+	if p := c.ChecksPreview(r); !strings.Contains(p, "output.cloud: OneDrive\n") || !strings.Contains(p, "output.errno: 2\n") {
+		t.Errorf("preview %q lacks the facts", p)
+	}
+	if err := c.SendChecks(r, ""); err != nil {
+		t.Fatal(err)
+	}
+	tags, _ := srv.Wait(t, "event", 1)[0].JSON()["tags"].(map[string]any)
+	if tags["output.cloud"] != "OneDrive" || tags["output.errno"] != "2" {
+		t.Errorf("tags %v", tags)
+	}
+}
+
 // A message is cut to the 4096 characters Sentry takes, not bytes, and a
 // blank one is not sent; the fake server holds the rest of the feedback
 // to Sentry's spec.

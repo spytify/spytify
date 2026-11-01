@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
 	"net/http"
 	"runtime"
 	"sort"
@@ -18,10 +19,12 @@ import (
 )
 
 // Checks is what the diagnostics' Send to the developers button sends:
-// the checks that fail and the end of spytifyd's log.
+// the checks that fail, the end of spytifyd's log and the window's
+// picture, when there is one.
 type Checks struct {
-	Failing []proto.Check
-	Log     []string
+	Failing    []proto.Check
+	Log        []string
+	Screenshot image.Image
 }
 
 // failingNames are the names of the checks that fail, sorted, so the same
@@ -35,6 +38,15 @@ func (r Checks) failingNames() []string {
 	return names
 }
 
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // ChecksPreview is the report as it will leave.
 func (c *Client) ChecksPreview(r Checks) string {
 	var b strings.Builder
@@ -42,6 +54,9 @@ func (c *Client) ChecksPreview(r Checks) string {
 		proto.Version, runtime.GOOS, runtime.GOARCH)
 	for _, ch := range r.Failing {
 		fmt.Fprintf(&b, "  %s: %s\n", ch.Name, c.scrub.String(ch.Detail))
+		for _, k := range sortedKeys(ch.Facts) {
+			fmt.Fprintf(&b, "    %s: %s\n", k, c.scrub.String(ch.Facts[k]))
+		}
 	}
 	if len(r.Log) > 0 {
 		b.WriteString("\nEnd of the recorder's log:\n")
@@ -70,10 +85,17 @@ func (c *Client) SendChecks(r Checks, message string) (err error) {
 	details := sentry.Context{}
 	for _, ch := range r.Failing {
 		details[ch.Name] = ch.Detail
+		// As tags, Sentry counts them across the issue's events.
+		for k, v := range ch.Facts {
+			ev.Tags[k] = v
+		}
 	}
 	ev.Contexts["checks"] = details
 	if len(r.Log) > 0 {
 		ev.Attachments = []*sentry.Attachment{{Filename: "spytifyd.log", ContentType: "text/plain", Payload: []byte(c.scrub.String(strings.Join(r.Log, "\n")))}}
+	}
+	if att := screenshot(r.Screenshot); att != nil {
+		ev.Attachments = append(ev.Attachments, att)
 	}
 	id := hub.CaptureEvent(ev)
 	if id == nil || !hub.Flush(10*time.Second) {

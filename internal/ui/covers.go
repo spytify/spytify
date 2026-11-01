@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"image"
+	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
 	"sync"
@@ -17,15 +18,15 @@ import (
 // The sides of a cover in a list row and on the live card.
 const (
 	rowCover  = 40
-	liveCover = 96
+	liveCover = 120
 )
 
 // thumbs is a cover at the sizes the app shows it, twice those in points
 // for HiDPI screens: a cover can be thousands of pixels wide, and Fyne
 // decodes and scales a picture from a resource again on every refresh, as
-// a list row's is each time the list redraws. Both are nil while there is
-// no cover.
-type thumbs struct{ row, live image.Image }
+// a list row's is each time the list redraws. glow is the live card's
+// background. All are nil while there is no cover.
+type thumbs struct{ row, live, glow image.Image }
 
 func newThumbs(data []byte) (thumbs, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
@@ -33,8 +34,39 @@ func newThumbs(data []byte) (thumbs, error) {
 		return thumbs{}, err
 	}
 	live := shrink(img, 2*liveCover)
-	return thumbs{row: shrink(live, 2*rowCover), live: live}, nil
+	return thumbs{row: shrink(live, 2*rowCover), live: live, glow: glow(live)}, nil
 }
+
+// glowSide is the side, in pixels, of the cover behind the live card:
+// stretched over the card with smooth scaling, so few pixels blur into the
+// cover's colours. The graphics card stretches it; nothing is computed
+// again per frame.
+const glowSide = 6
+
+// glow is a cover shrunk to a few pixels and darkened, so white text reads
+// on it.
+func glow(cover image.Image) image.Image {
+	dst := image.NewNRGBA(image.Rect(0, 0, glowSide, glowSide))
+	draw.BiLinear.Scale(dst, dst.Bounds(), cover, cover.Bounds(), draw.Src, nil)
+	for i := 0; i < len(dst.Pix); i += 4 {
+		for c := i; c < i+3; c++ {
+			dst.Pix[c] = uint8(int(dst.Pix[c]) * 55 / 100)
+		}
+		dst.Pix[i+3] = 0xff
+	}
+	return dst
+}
+
+// noCoverGlow is the live card's background while its track has no cover:
+// the app's green, deeper to the right.
+var noCoverGlow = func() image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	img.SetNRGBA(0, 0, color.NRGBA{R: 0x1d, G: 0x7a, B: 0x45, A: 0xff})
+	img.SetNRGBA(1, 0, color.NRGBA{R: 0x0f, G: 0x47, B: 0x29, A: 0xff})
+	img.SetNRGBA(0, 1, color.NRGBA{R: 0x13, G: 0x5a, B: 0x33, A: 0xff})
+	img.SetNRGBA(1, 1, color.NRGBA{R: 0x0b, G: 0x2e, B: 0x1c, A: 0xff})
+	return img
+}()
 
 // shrink scales img down to fit in a square of side px, keeping its shape;
 // a smaller picture stays as it is.
