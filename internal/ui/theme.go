@@ -24,12 +24,8 @@ const (
 	colorOnSkippedBadge fyne.ThemeColorName = "spytifyOnSkippedBadge"
 )
 
-// A screen's footer, on a grey of its own under the list, and the line
-// around a button drawn as an outline.
-const (
-	colorFooter  fyne.ThemeColorName = "spytifyFooter"
-	colorOutline fyne.ThemeColorName = "spytifyOutline"
-)
+// A screen's footer, on a grey of its own under the list.
+const colorFooter fyne.ThemeColorName = "spytifyFooter"
 
 // An info alert's text, in the green of its outline and icon, darker on the
 // light theme and lighter on the dark one, as MUI's outlined Alert does.
@@ -59,7 +55,6 @@ var cardColors = map[fyne.ThemeColorName][2]color.NRGBA{
 	colorSkippedBadge:   {{R: 0xf8, G: 0xec, B: 0xd4, A: 0xff}, {R: 0x3d, G: 0x2f, B: 0x12, A: 0xff}},
 	colorOnSkippedBadge: {{R: 0x5a, G: 0x42, B: 0x12, A: 0xff}, {R: 0xf2, G: 0xd9, B: 0xa6, A: 0xff}},
 	colorFooter:         {{R: 0xeb, G: 0xeb, B: 0xef, A: 0xff}, {R: 0x14, G: 0x14, B: 0x16, A: 0xff}},
-	colorOutline:        {{R: 0xd2, G: 0xd2, B: 0xd8, A: 0xff}, {R: 0x3a, G: 0x3a, B: 0x3e, A: 0xff}},
 	colorPage:           {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x0f, G: 0x0f, B: 0x10, A: 0xff}},
 	colorPlain:          {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x17, G: 0x17, B: 0x18, A: 0xff}},
 	colorCard:           {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x1c, G: 0x1c, B: 0x1e, A: 0xff}},

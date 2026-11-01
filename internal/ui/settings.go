@@ -72,7 +72,10 @@ func newSettingsScreen(a *App) *settingsScreen {
 	s.search.ActionItem = widget.NewIcon(theme.SearchIcon())
 	s.search.OnChanged = func(string) { s.layout() }
 	s.sections = container.New(layout.NewCustomPaddedVBoxLayout(theme.Padding() * 3))
-	s.scroll = container.NewVScroll(container.NewPadded(s.sections))
+	// The cards off the window's sides, the scroll bar at its edge, as the
+	// Record screen's and the Library's.
+	pad := theme.Padding()
+	s.scroll = container.NewVScroll(container.New(layout.NewCustomPaddedLayout(pad, pad*2, pad*2, pad*2), s.sections))
 	s.player = newPlayerCard(a)
 	s.player.relayout = func() { relayout(s.scroll) }
 	for i := range settings.Table {
@@ -81,7 +84,7 @@ func newSettingsScreen(a *App) *settingsScreen {
 	}
 	s.layout()
 	// The search is a white field on the page, as the cards are.
-	search := container.NewThemeOverride(container.NewPadded(s.search), cardTheme{input: colorCard})
+	search := container.NewThemeOverride(container.New(layout.NewCustomPaddedLayout(pad, pad, pad*2, pad*2), s.search), cardTheme{input: colorCard})
 	// Lighter shadows at the scrolled edges, as in the cards.
 	s.root = inReadingOrder(search, nil, nil, nil, container.NewThemeOverride(s.scroll, cardTheme{}))
 	return s

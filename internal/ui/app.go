@@ -165,11 +165,12 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 
 	a.screens = []screen{newRecordScreen(a), newLibraryScreen(a), newSettingsScreen(a), newLogsScreen(a), newAboutScreen(a)}
 	// Record and Library run their cards and lists to the window's sides,
-	// Logs and About their plain colour; Settings is on the page, off them.
+	// Logs and About their plain colour; Settings keeps its cards on the
+	// page, off them, and its scroll bar at the window's edge.
 	a.tabs = container.NewAppTabs(
 		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), a.screens[tabRecord].content()),
 		container.NewTabItemWithIcon("Library", theme.FolderIcon(), a.screens[tabLibrary].content()),
-		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), margin(a.screens[tabSettings].content())),
+		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), a.screens[tabSettings].content()),
 		container.NewTabItemWithIcon("Logs", theme.ListIcon(), a.screens[tabLogs].content()),
 		container.NewTabItemWithIcon("About", theme.InfoIcon(), a.screens[tabAbout].content()),
 	)

@@ -78,7 +78,11 @@ func TestTheListCardScrollsWithThePage(t *testing.T) {
 	if l.scroll.Size() != l.Size() {
 		t.Errorf("the scroll is %v in a list of %v", l.scroll.Size(), l.Size())
 	}
-	l.scroll.Scrolled(&fyne.ScrollEvent{Scrolled: fyne.NewDelta(0, -500)})
+	// A scroll as the wheel makes it, without Scrolled: on macOS it starts a
+	// timer that refreshes the list half a second later, from another
+	// goroutine, while the next test changes the theme.
+	l.scroll.ScrollToOffset(fyne.NewPos(0, 500))
+	l.scroll.OnScrolled(l.scroll.Offset)
 	if top := l.page.Position().Y + l.card.Position().Y; top >= 0 {
 		t.Errorf("the card's top stayed in view at %v after a scroll down", top)
 	}
@@ -89,7 +93,8 @@ func TestTheListCardScrollsWithThePage(t *testing.T) {
 }
 
 // The card is square and white with no outline, from one side of the list
-// to the other; its rows are off the sides only, and see the card's colours:
+// to the other; its rows' content is off the sides, their highlight not, and
+// they see the card's colours:
 // its surface as the background, inputs a shade darker.
 func TestAListCardIsDrawnInTheCardsColours(t *testing.T) {
 	n := 2
@@ -98,8 +103,13 @@ func TestAListCardIsDrawnInTheCardsColours(t *testing.T) {
 		t.Errorf("the card is %v, outlined %v wide, rounded %v, at %v", l.card.FillColor, l.card.StrokeWidth, l.card.CornerRadius, l.card.Position())
 	}
 	first, pad := rowAt(l, 0), theme.Padding()
-	if first.box.Position() != fyne.NewPos(3*pad, 0) || first.box.Size().Width != l.Size().Width-6*pad {
-		t.Errorf("the first row is at %v, %v wide, in a list %v wide", first.box.Position(), first.box.Size().Width, l.Size().Width)
+	if first.content.Position() != fyne.NewPos(3*pad, 0) || first.content.Size().Width != l.Size().Width-6*pad {
+		t.Errorf("the first row's content is at %v, %v wide, in a list %v wide", first.content.Position(), first.content.Size().Width, l.Size().Width)
+	}
+	// The highlight runs from one side of the card to the other, as the
+	// card does; it stopped at the content's sides.
+	if first.box.Position().X != 0 || first.hover.Position().X != 0 || first.hover.Size().Width != l.Size().Width {
+		t.Errorf("the highlight is at %v, %v wide, in a list %v wide", first.hover.Position().X+first.box.Position().X, first.hover.Size().Width, l.Size().Width)
 	}
 	if !first.line.Hidden || rowAt(l, 1).line.Hidden {
 		t.Error("the line is above the first row, or not above the second")
