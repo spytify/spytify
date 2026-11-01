@@ -32,7 +32,7 @@ type logsScreen struct {
 	// diagnose opens diag, and turns to a warning while a check fails.
 	// open is whether diag shows: its checks then follow the model from
 	// any tab.
-	diagnose *widget.Button
+	diagnose *button
 	diag     *widget.PopUp
 	open     bool
 	// summary heads the checks, which scroll past checksMaxHeight, above
@@ -42,7 +42,7 @@ type logsScreen struct {
 	checks       *fyne.Container
 	checksScroll *container.Scroll
 	actions      *fyne.Container
-	refresh      *widget.Button
+	refresh      *button
 	lastState    string
 	// sent is the state of the checks last sent to the developers.
 	sent string
@@ -54,7 +54,7 @@ func newLogsScreen(a *App) *logsScreen {
 	l.checks = container.NewVBox()
 	a.maskPaths(l.checks)
 	l.checksScroll = container.NewVScroll(l.checks)
-	l.refresh = widget.NewButtonWithIcon("Run the checks again", theme.ViewRefreshIcon(), func() {
+	l.refresh = newIconButton("Run the checks again", theme.ViewRefreshIcon(), func() {
 		a.noteAction("run the checks again")
 		go a.refreshChecks()
 	})
@@ -64,11 +64,11 @@ func newLogsScreen(a *App) *logsScreen {
 	// grow, past the window's edge: this pop-up looks like one, and is
 	// centred again.
 	title := widget.NewLabelWithStyle("Diagnostics", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	done := widget.NewButton("Close", l.hideDiagnostics)
+	done := newButton("Close", l.hideDiagnostics)
 	pad := theme.Padding()
 	body := container.NewBorder(container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done), nil, nil, l.checksScroll)
 	l.diag = widget.NewModalPopUp(container.New(layout.NewCustomPaddedLayout(pad*2, pad*2, pad*2, pad*2), body), a.win.Canvas())
-	l.diagnose = widget.NewButtonWithIcon("Diagnostics", theme.ConfirmIcon(), a.showDiagnostics)
+	l.diagnose = newIconButton("Diagnostics", theme.ConfirmIcon(), a.showDiagnostics)
 	l.diagnose.Importance = widget.LowImportance
 
 	l.level = widget.NewCheckGroup(logLevels, func([]string) { l.filter() })
@@ -107,7 +107,7 @@ func newLogsScreen(a *App) *logsScreen {
 	)
 	// SetSelected runs the callback, which needs the list.
 	l.level.SetSelected(logLevels)
-	copyAll := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+	copyAll := newIconButton("Copy", theme.ContentCopyIcon(), func() {
 		a.noteAction("copy the log")
 		var b strings.Builder
 		for _, line := range l.lines {
@@ -116,13 +116,13 @@ func newLogsScreen(a *App) *logsScreen {
 		a.fa.Clipboard().SetContent(b.String())
 	})
 	copyAll.Importance = widget.LowImportance
-	open := widget.NewButtonWithIcon("Open log file", theme.DocumentIcon(), func() {
+	open := newIconButton("Open log file", theme.DocumentIcon(), func() {
 		a.noteAction("open the log file")
 		_ = openPath(l.path)
 	})
 	open.Importance = widget.LowImportance
 	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open, l.diagnose))
-	l.root = plain(margin(container.NewBorder(tools, nil, nil, nil, l.list)))
+	l.root = plain(margin(inReadingOrder(tools, nil, nil, nil, l.list)))
 	return l
 }
 
@@ -148,6 +148,7 @@ func (a *App) showDiagnostics() {
 	l.diag.Show()
 	l.fitDiagnostics()
 	l.checksScroll.ScrollToBottom()
+	focusFirst(a.win)
 }
 
 func (l *logsScreen) hideDiagnostics() {
@@ -203,12 +204,12 @@ func (l *logsScreen) renderChecks(s model.State) {
 		}
 		var fix fyne.CanvasObject
 		if c.Name == "player running" && !c.OK {
-			open := widget.NewButtonWithIcon("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), l.app.launchPlayer)
+			open := newIconButton("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), l.app.launchPlayer)
 			open.Importance = widget.HighImportance
 			fix = open
 		}
 		if c.Name == proto.CheckOutputWritable && !c.OK {
-			choose := widget.NewButtonWithIcon("Choose another folder", theme.FolderOpenIcon(), func() {
+			choose := newIconButton("Choose another folder", theme.FolderOpenIcon(), func() {
 				l.hideDiagnostics()
 				l.app.showOutputSetting()
 			})
@@ -229,7 +230,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 	// Stuck on a check: the user may send it to the developers, once for
 	// these results, unless they opted out of the bug tracker.
 	if failing > 0 && l.app.tel.Available() {
-		send := widget.NewButtonWithIcon("Send to the developers", theme.MailSendIcon(), nil)
+		send := newIconButton("Send to the developers", theme.MailSendIcon(), nil)
 		done := func() {
 			l.sent = state
 			send.SetText("Sent")

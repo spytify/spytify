@@ -274,7 +274,7 @@ func TestTheFilterWorksFromTheKeyboard(t *testing.T) {
 	if c.Overlays().Top() != nil {
 		t.Fatalf("Tab left the dropdown open, the focus on %s", box())
 	}
-	if b, ok := c.Focused().(*widget.Button); !ok || b.Icon != theme.ViewRefreshIcon() {
+	if b, ok := asButton(c.Focused().(fyne.CanvasObject)); !ok || b.Icon != theme.ViewRefreshIcon() {
 		t.Errorf("Tab went to %s, want the rescan after the filter", box())
 	}
 

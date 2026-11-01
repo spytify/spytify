@@ -82,7 +82,7 @@ func richTexts(o fyne.CanvasObject, text string) []*widget.RichText {
 func outputField(t *testing.T, a *App) fyne.CanvasObject {
 	t.Helper()
 	for _, o := range a.screens[tabSettings].(*settingsScreen).fields["output.dir"].input.(*fyne.Container).Objects {
-		if _, ok := o.(*widget.Button); !ok {
+		if _, ok := asButton(o); !ok {
 			return o
 		}
 	}
@@ -187,7 +187,7 @@ func TestNoPictureItCannotCover(t *testing.T) {
 	}
 
 	for _, o := range s.fields["output.dir"].input.(*fyne.Container).Objects {
-		if b, ok := o.(*widget.Button); ok {
+		if b, ok := asButton(o); ok {
 			test.Tap(b)
 		}
 	}
@@ -256,8 +256,8 @@ func sendWithPicture(t *testing.T, hidden bool) {
 		}
 		tapButton(t, overlay(t, a), "Send to the developers")
 		d := overlay(t, a)
-		for _, acc := range visible[*widget.Accordion](d) {
-			acc.OpenAll()
+		for _, f := range visible[*fold](d) {
+			f.setOpen(true)
 		}
 		var pictures int
 		for _, name := range images(d) {
