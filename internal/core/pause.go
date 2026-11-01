@@ -4,13 +4,18 @@ import "github.com/spytify/spytify/internal/pcm"
 
 // pauseExcision cuts a pause out of the stream: while paused, every run of
 // at least pauseRunMs of silent frames is cut out at the sample, so a pause
-// leaves neither a hole nor a seam. The session sets pausing and resumed
-// as the player's status changes; trim and excise do the cutting.
+// leaves no hole. A player that fades out and in leaves its fades on each
+// side of the cut; fadedSeam finds them. The session sets pausing and
+// resumed as the player's status changes; trim and excise do the cutting.
 type pauseExcision struct {
 	pausing  bool
 	excising bool
 	resumed  bool
 	quietRun int64
+	// seam is the ring frame where sound came back after the last cut,
+	// until the session looks at it; 0 when there is none. A cut at the
+	// ring's first frame has nothing before it to look at.
+	seam int64
 }
 
 func quietFrame(f pcm.Format, data []byte, i int, thr float64) bool {
@@ -57,6 +62,7 @@ func (p *pauseExcision) excise(f pcm.Format, data []byte, r *Ring, floor func() 
 				continue
 			}
 			p.excising = false
+			p.seam = r.End() + int64(len(out)/fb)
 			if p.resumed {
 				p.pausing, p.quietRun = false, 0
 				return append(out, data[i*fb:]...)
@@ -81,4 +87,21 @@ func (p *pauseExcision) excise(f pcm.Format, data []byte, r *Ring, floor func() 
 		}
 	}
 	return out
+}
+
+// fadedSeam reports whether the audio falls into seam, where a pause was
+// cut out, and rises out of it, as a player's fade-out and fade-in do: the
+// 10 ms on each side of the cut are fadeDipDB or more under the music on
+// that side, seamSideMs away. The ring must still hold that much on each
+// side.
+func fadedSeam(r *Ring, seam int64) (dipDB float64, faded bool) {
+	ms := r.Format().FramesFromMs
+	side, win := ms(seamSideMs), ms(10)
+	if seam-side < r.Start() || seam+side > r.End() {
+		return 0, false
+	}
+	out := r.MedianRMS(seam-side, seam-side/2, win) - r.RMS(seam-win, seam)
+	in := r.MedianRMS(seam+side/2, seam+side, win) - r.RMS(seam, seam+win)
+	dipDB = min(out, in)
+	return dipDB, dipDB >= fadeDipDB
 }

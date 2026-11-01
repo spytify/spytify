@@ -83,6 +83,8 @@ func reasonText(r proto.SkipReason) string {
 		return "track bar moved"
 	case proto.SkipLowQuality:
 		return "low quality"
+	case proto.SkipPauseFade:
+		return "fade-in/out detected after resume"
 	}
 	return string(r)
 }

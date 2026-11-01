@@ -110,3 +110,79 @@ func TestTrimCutsBackTheSilenceCaptured(t *testing.T) {
 		t.Fatalf("ring ends at %d, want the floor %d", r.End(), ms(700))
 	}
 }
+
+// fading ramps data's gain from full to -60 dB (out) or back, as a player
+// does when it pauses and when it resumes. A real take's fades were
+// straight lines in dB.
+func fading(f pcm.Format, data []byte, out bool) []byte {
+	b := append([]byte(nil), data...)
+	n := len(b) / f.FrameBytes()
+	for i := 0; i < n; i++ {
+		x := float64(i) / float64(n)
+		if !out {
+			x = 1 - x
+		}
+		g := pow10(-60 * x / 20)
+		for c := 0; c < f.Channels; c++ {
+			k := i*f.Channels + c
+			f.PutSample(b, k, f.SampleAt(b, k)*g)
+		}
+	}
+	return b
+}
+
+// The player's fade-out before a pause and its fade-in after it meet where
+// the pause was cut out: the sound falls into the cut and rises out of it.
+func TestFadedSeam(t *testing.T) {
+	f := stereo44
+	music := func(ms int64) []byte { return tone(f, ms, 4) }
+	note := tone(f, 10, 8)
+	for _, c := range []struct {
+		name  string
+		audio [][]byte
+		seam  int64 // ms
+		faded bool
+	}{
+		{"fades meet", [][]byte{music(500), fading(f, music(150), true), fading(f, music(60), false), music(500)}, 650, true},
+		{"cut without fades", [][]byte{music(500), music(500)}, 500, false},
+		{"fade-out only", [][]byte{music(500), fading(f, music(150), true), music(500)}, 650, false},
+		{"fade-in only", [][]byte{music(500), fading(f, music(60), false), music(500)}, 500, false},
+		// Notes while paused, 18 ms of silence between them too short to
+		// cut: the silence is near the cut, but the sound neither falls
+		// into it nor rises out of it.
+		{"silence kept near the cut", [][]byte{music(500), note, hush(f, 18), note, music(500)}, 538, false},
+		{"silence after the fade-out", [][]byte{music(500), fading(f, music(150), true), hush(f, 500)}, 650, false},
+		{"too near the ring's start", [][]byte{fading(f, music(150), true), fading(f, music(60), false), music(500)}, 150, false},
+		{"too near its end", [][]byte{music(500), fading(f, music(150), true), fading(f, music(60), false), music(100)}, 650, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := NewRing(f, ringSeconds)
+			for _, a := range c.audio {
+				r.Append(a)
+			}
+			if dip, faded := fadedSeam(r, f.FramesFromMs(c.seam)); faded != c.faded {
+				t.Fatalf("faded %v (%.1f dB under the music), want %v", faded, dip, c.faded)
+			}
+		})
+	}
+}
+
+// Where sound comes back after a cut, excise marks the seam: the ring
+// frame that sound lands on, whether the player said it resumed or not.
+func TestExciseMarksTheSeam(t *testing.T) {
+	f := stereo44
+	note := tone(f, 10, 4)
+	for _, resumed := range []bool{false, true} {
+		p := &pauseExcision{pausing: true, resumed: resumed}
+		r := NewRing(f, ringSeconds)
+		r.Append(tone(f, 100, 4))
+		data := append(append(append([]byte(nil), note...), hush(f, 50)...), note...)
+		out := p.excise(f, data, r, r.Start, -50)
+		if want := r.End() + frameCount(f, note); p.seam != want {
+			t.Fatalf("resumed %v: seam at %d, want %d", resumed, p.seam, want)
+		}
+		if got := frameCount(f, out); got != 2*frameCount(f, note) {
+			t.Fatalf("resumed %v: kept %d frames", resumed, got)
+		}
+	}
+}

@@ -74,6 +74,11 @@ const (
 	// under 44.1 kHz or in mono, as from a Bluetooth headset in a call. It
 	// can still be saved with track.keep.
 	SkipLowQuality SkipReason = "low_quality"
+	// SkipPauseFade is a track paused and resumed by a player that fades
+	// out and in: the pause is cut out of the take, but the two fades meet
+	// where it was, a dip that is heard. It can still be saved with
+	// track.keep.
+	SkipPauseFade SkipReason = "pause_fade"
 )
 
 // Player transport commands accepted by player.control.
@@ -275,8 +280,8 @@ type TrackSkippedEvent struct {
 
 // TrackKeepableEvent says whether a skipped take can still be saved with
 // track.keep. Only the last take cut short, stopped, moved along its track
-// bar or recorded in low quality can: its audio is let go once another
-// track is saved.
+// bar, recorded in low quality or left with a pause's fades can: its audio
+// is let go once another track is saved.
 type TrackKeepableEvent struct {
 	ID       string `json:"id"`
 	Keepable bool   `json:"keepable"`
