@@ -1,0 +1,11 @@
+# states/output-folder-cannot-be-made
+# option EndOnStop
+# the output folder is a file
+--- trace
+       0ms  error output_dir "mkdir $OUT: …" fatal
+       0ms  state waiting
+       0ms  state stopping
+       0ms  state idle
+       0ms  take none
+--- jobs
+--- end: idle, 0 skipped, 0 ads, 0 overruns

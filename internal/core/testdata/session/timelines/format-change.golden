@@ -1,0 +1,30 @@
+# timelines/format-change
+# option EndOnStop
+# item 0 "Northern Lights - Live at the Harbor Hall" (track, declared 6000ms): audio from 500ms to 6500ms, then 1500ms of silence
+# item 1 "Episode 12: The Sound of Rain" (podcast, declared 7000ms): audio from 8000ms to 15000ms, format 48000/2, notified +400ms, then 1000ms of silence
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Northern Lights - Live at the Harbor Hall" id=/com/fake/track/1 length=6000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Northern Lights - Live at the Harbor Hall" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Northern Lights - Live at the Harbor Hall" artist="Nils Arden" album="Live in Bergen" length=6000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Northern Lights - Live at the Harbor Hall" start=22063(500.29ms) length=264600(6000ms)
+    6510ms  log info: stream format changed from s16le 44100 Hz 2ch to s16le 48000 Hz 2ch
+    6510ms  take t-001+ "Northern Lights - Live at the Harbor Hall" start=0(0ms) length=0(0ms) provisional format=48000/2
+    8400ms  > player TrackChanged "Episode 12: The Sound of Rain" id=/com/fake/episode/2 length=7000ms pos=0 (ring at 91200)
+    8400ms  started t-002 "Episode 12: The Sound of Rain" artist="Morning Wire" album="Morning Wire" length=7000ms source=48000/2 cover
+    8400ms  log debug: "Episode 12: The Sound of Rain" starts at its first sound, 1500 ms
+    8400ms  take t-002 "Episode 12: The Sound of Rain" start=72011(1500.23ms) origin=0(0ms) length=336000(7000ms) format=48000/2
+   16000ms  > player Stopped pos=-1 (ring at 456000)
+   16000ms  state waiting
+   16000ms  state stopping
+   16000ms  state idle
+   16000ms  take none
+--- jobs
+job t-001 "Northern Lights - Live at the Harbor Hall" played=264587(5999.71ms) length=264600(6000ms) wav=264587 crc=681ada9f cover=cover-0.jpg
+job t-002 "Episode 12: The Sound of Rain" played=336469(7009.77ms) length=336000(7000ms) wav=336469 crc=529c5463 format=48000/2 cover=cover-1.jpg
+--- end: idle, 0 skipped, 0 ads, 0 overruns

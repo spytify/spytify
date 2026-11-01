@@ -1,0 +1,30 @@
+# formats/metadata-before-audio-in-another-format
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > the stream is now s16le 48000 Hz 2ch
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 24000(500ms)
+     500ms  > audio music 1 at 0ms, 144000(3000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=48000/2
+     510ms  state recording
+     510ms  take t-001 "A" start=24011(500.23ms) length=144000(3000ms) format=48000/2
+    3500ms  > audio silence, 24000(500ms)
+    4000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 192000)
+    4000ms  log debug: cut for "B" at 3500 ms (kind 1, noticed at 4000 ms, window 3200..3801 ms)
+    4000ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=48000/2
+    4000ms  take t-002 "B" start=168000(3500ms) length=144000(3000ms) format=48000/2
+    4000ms  > audio music 2 at 0ms, 144000(3000ms)
+    7000ms  > audio silence, 72000(1500ms)
+    8500ms  > player Stopped pos=-1 (ring at 408000)
+    8500ms  state waiting
+    8500ms  state stopping
+    8500ms  state idle
+    8500ms  take none
+--- jobs
+job t-001 "A" played=143989(2999.77ms) length=144000(3000ms) wav=143989 crc=c4ac056d format=48000/2
+job t-002 "B" played=168480(3510ms) length=144000(3000ms) wav=168480 crc=7c8f9cdf format=48000/2
+--- end: idle, 0 skipped, 0 ads, 0 overruns

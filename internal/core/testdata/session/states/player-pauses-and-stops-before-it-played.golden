@@ -1,0 +1,31 @@
+# states/player-pauses-and-stops-before-it-played
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Paused pos=-1 (ring at -)
+       0ms  state paused
+       0ms  > audio silence, 13230(300ms)
+     300ms  > player Stopped pos=-1 (ring at 0)
+     300ms  state waiting
+     300ms  > audio silence, 13230(300ms)
+     600ms  > player gone (ring at 13230)
+     600ms  log info: player interface gone
+     600ms  > audio silence, 13230(300ms)
+     900ms  > player Playing pos=-1 (ring at 26460)
+     900ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 26460)
+     900ms  > audio music 1 at 0ms, 132300(3000ms)
+     910ms  log debug: cut for "A" at 600 ms (kind 0, noticed at 600 ms, window 0..0 ms)
+     910ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=0ms source=44100/2
+     910ms  state recording
+     910ms  take t-001 "A" start=26471(600.25ms) length=132300(3000ms)
+    3900ms  > audio silence, 22050(500ms)
+    4400ms  > player Stopped pos=-1 (ring at 180810)
+    4400ms  state waiting
+    4400ms  state stopping
+    4400ms  state idle
+    4400ms  take none
+--- jobs
+job t-001 "A" played=132772(3010.7ms) length=132300(3000ms) wav=132772 crc=79b39a16
+--- end: idle, 0 skipped, 0 ads, 0 overruns
