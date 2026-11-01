@@ -6,7 +6,7 @@ Spytify has one switch for what it sends its developers: the **Sentry bug tracke
 
 Before a report leaves your computer, Spytify removes your computer's name, and turns your user name into `<user>`, your home folder into `~` and your output folder into `<output>` wherever they appear.
 
-In a picture of Spytify's window, a gray box covers the output folder's field and every text where your user name, your home folder or your output folder appears. No picture is taken while the window is hidden in the tray, or while an error message or the folder picker is open.
+In a picture of Spytify's window, a blur covers the output folder's field and every text where your user name, your home folder or your output folder appears. No picture is taken while the window is hidden in the tray, or while an error message or the folder picker is open.
 
 On Sentry's side, the project is set to:
 

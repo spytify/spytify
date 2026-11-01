@@ -5,6 +5,7 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -20,8 +21,8 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// covered says the picture is the mask's colour all over the part of obj
-// on screen.
+// covered says the picture is blurred over the part of obj on screen: each
+// row of it one colour, which no text shown leaves.
 func covered(a *App, img image.Image, obj fyne.CanvasObject) bool {
 	c := a.win.Canvas()
 	at := a.fa.Driver().AbsolutePositionForObject(obj)
@@ -32,13 +33,47 @@ func covered(a *App, img image.Image, obj fyne.CanvasObject) bool {
 		return false
 	}
 	for y := shown.Min.Y; y < shown.Max.Y; y++ {
+		row := color.NRGBAModel.Convert(img.At(shown.Min.X, y))
 		for x := shown.Min.X; x < shown.Max.X; x++ {
-			if color.NRGBAModel.Convert(img.At(x, y)) != maskColor {
+			if color.NRGBAModel.Convert(img.At(x, y)) != row {
 				return false
 			}
 		}
 	}
 	return true
+}
+
+// Two texts with the same ink on each row, in another order, blur the same:
+// what is left cannot be matched against a guess at the text.
+func TestTheBlurKeepsNothingOfTheText(t *testing.T) {
+	box := image.Rect(10, 4, 50, 16)
+	write := func(xs ...int) *image.NRGBA {
+		img := image.NewNRGBA(image.Rect(0, 0, 60, 20))
+		draw.Draw(img, img.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+		for _, x := range append(xs, 5) {
+			draw.Draw(img, image.Rect(x, 8, x+1, 12), image.NewUniform(color.Black), image.Point{}, draw.Src)
+		}
+		return img
+	}
+	one, other := write(12, 13, 20), write(41, 30, 40)
+	blur(one, box)
+	blur(other, box)
+	if !bytes.Equal(one.Pix, other.Pix) {
+		t.Error("two texts blur apart")
+	}
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		for x := box.Min.X; x < box.Max.X; x++ {
+			if one.NRGBAAt(x, y) != one.NRGBAAt(box.Min.X, y) {
+				t.Fatalf("row %d keeps a glyph at %d", y, x)
+			}
+		}
+	}
+	if one.NRGBAAt(box.Min.X, 10) == (color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}) {
+		t.Error("the text's band is gone, not blurred")
+	}
+	if one.NRGBAAt(5, 10) != (color.NRGBA{A: 0xff}) {
+		t.Error("the blur goes past its box")
+	}
 }
 
 // visible are the visible objects of type T under o.

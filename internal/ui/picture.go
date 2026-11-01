@@ -23,9 +23,6 @@ import (
 // picture: a window that does not answer leaves it without one.
 const pictureWait = 2 * time.Second
 
-// maskColor is the box over what the picture leaves out.
-var maskColor = color.NRGBA{R: 0x80, G: 0x80, B: 0x80, A: 0xff}
-
 // maskPaths has the window's picture cover obj's texts that name the
 // user, their home folder or the output folder.
 func (a *App) maskPaths(obj fyne.CanvasObject) { a.masks[obj] = false }
@@ -47,8 +44,8 @@ func (a *App) screenshot() image.Image {
 	}
 }
 
-// picture is the window as it shows, with a box over each masked widget
-// on screen, or nil while the window is hidden in the tray, shows a dialog
+// picture is the window as it shows, each masked widget on screen blurred,
+// or nil while the window is hidden in the tray, shows a dialog
 // it cannot cover or cannot be pictured. It runs on the toolkit's
 // goroutine.
 func (a *App) picture() (img image.Image) {
@@ -68,7 +65,59 @@ func (a *App) picture() (img image.Image) {
 	out := image.NewNRGBA(shot.Bounds())
 	draw.Draw(out, out.Bounds(), shot, shot.Bounds().Min, draw.Src)
 	for _, box := range a.maskBoxes(c) {
-		draw.Draw(out, box, image.NewUniform(maskColor), image.Point{}, draw.Src)
+		blur(out, box)
+	}
+	return out
+}
+
+// blur paints box as each of its rows' mean colour, softened from row to
+// row: a line of text turns into a smudge with none of its glyphs, as a
+// blur that kept them in order could be matched against a guess at the
+// text blurred the same way.
+func blur(img *image.NRGBA, box image.Rectangle) {
+	box = box.Intersect(img.Bounds())
+	if box.Empty() {
+		return
+	}
+	rows := make([][4]float64, box.Dy())
+	for y := range rows {
+		for x := box.Min.X; x < box.Max.X; x++ {
+			p := img.NRGBAAt(x, box.Min.Y+y)
+			rows[y][0] += float64(p.R)
+			rows[y][1] += float64(p.G)
+			rows[y][2] += float64(p.B)
+			rows[y][3] += float64(p.A)
+		}
+		for i := range rows[y] {
+			rows[y][i] /= float64(box.Dx())
+		}
+	}
+	// Three box blurs make about a Gaussian one; an eighth of the box's
+	// height leaves a line of text a band with soft edges.
+	for range 3 {
+		rows = soften(rows, box.Dy()/8)
+	}
+	for y, m := range rows {
+		c := color.NRGBA{R: uint8(m[0] + .5), G: uint8(m[1] + .5), B: uint8(m[2] + .5), A: uint8(m[3] + .5)}
+		row := image.Rect(box.Min.X, box.Min.Y+y, box.Max.X, box.Min.Y+y+1)
+		draw.Draw(img, row, image.NewUniform(c), image.Point{}, draw.Src)
+	}
+}
+
+// soften is rows each the mean of those within r of it, the box's edge
+// row standing for those past it.
+func soften(rows [][4]float64, r int) [][4]float64 {
+	out := make([][4]float64, len(rows))
+	for y := range rows {
+		for d := -r; d <= r; d++ {
+			near := rows[min(max(y+d, 0), len(rows)-1)]
+			for i := range near {
+				out[y][i] += near[i]
+			}
+		}
+		for i := range out[y] {
+			out[y][i] /= float64(2*r + 1)
+		}
 	}
 	return out
 }
