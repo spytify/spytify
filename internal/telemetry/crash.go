@@ -141,7 +141,7 @@ func (c *Client) SendCrash(cr Crash) (err error) {
 // crashEvent turns a Go crash trace into a Sentry exception, so crashes in
 // the same place group into one issue.
 func crashEvent(cr Crash) *sentry.Event {
-	summary, frames := parseTrace(cr.Trace)
+	summary, stacks := parseTrace(cr.Trace)
 	typ, value := "panic", summary
 	for _, p := range []string{"panic: ", "fatal error: "} {
 		if strings.HasPrefix(summary, p) {
@@ -153,39 +153,90 @@ func crashEvent(cr Crash) *sentry.Event {
 	ev.Platform = "go"
 	ev.Timestamp = cr.Time
 	ev.Tags["program"] = cr.Program
-	ev.Exception = []sentry.Exception{{
+	ex := sentry.Exception{
 		Type:       typ,
 		Value:      value,
-		Stacktrace: &sentry.Stacktrace{Frames: frames},
+		Stacktrace: &sentry.Stacktrace{},
 		Mechanism:  &sentry.Mechanism{Type: "go.panic", Handled: new(bool)},
-	}}
+	}
+	// Every stack shows in the event, as a thread to pick, the one that
+	// crashed first and picked.
+	for i, s := range stacks {
+		if i == 0 {
+			ex.Stacktrace.Frames = s.frames
+			ex.ThreadID, _ = strconv.ParseUint(s.id, 10, 64)
+		}
+		ev.Threads = append(ev.Threads, sentry.Thread{ID: s.id, Name: s.name, Stacktrace: &sentry.Stacktrace{Frames: s.frames}, Crashed: i == 0, Current: i == 0})
+	}
+	ev.Exception = []sentry.Exception{ex}
 	return ev
 }
 
 // parseTrace reads the headline of a Go crash trace (crash.Headline) and
-// the frames of the stack that crashed, oldest first as Sentry wants them.
-func parseTrace(trace string) (summary string, frames []sentry.Frame) {
+// its stacks, the one that crashed first.
+func parseTrace(trace string) (summary string, stacks []stack) {
 	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(trace), "\r\n", "\n"), "\n")
 	summary = crash.Headline(trace)
-	start := -1
-	for i, l := range lines {
-		if strings.HasPrefix(l, "goroutine ") && strings.HasSuffix(strings.TrimSpace(l), ":") {
-			start = i + 1
-			break
+	for i := 0; i < len(lines) && len(stacks) < maxStacks; i++ {
+		head := strings.TrimSpace(lines[i])
+		var s stack
+		switch {
+		case i == 0 && head == "runtime stack:":
+			s = stack{id: "runtime", name: "runtime stack"}
+		case strings.HasPrefix(lines[i], "goroutine ") && strings.HasSuffix(head, ":"):
+			s = goroutine(head)
+		default:
+			continue
+		}
+		var end int
+		s.frames, end = framesFrom(lines, i+1)
+		stacks = append(stacks, s)
+		i = end - 1
+	}
+	// The first goroutine crashed, unless a thread that runs only the
+	// runtime, as the one that preempts the others, gave up on its own
+	// stack, which then starts at runtime.mstart: the goroutine after it
+	// may have nothing to do with the crash.
+	if len(stacks) > 1 && stacks[0].id == "runtime" {
+		if f := stacks[0].frames; len(f) == 0 || f[0].Module != "runtime" || f[0].Function != "mstart" {
+			stacks = append(stacks[1:], stacks[0])
 		}
 	}
-	// A thread that runs only the runtime, as the one that preempts the
-	// others, gave up on its own stack: the goroutine after it may have
-	// nothing to do with the crash.
-	if strings.TrimSpace(lines[0]) == "runtime stack:" {
-		if end := slices.Index(lines, ""); end > 1 && strings.HasPrefix(strings.TrimSpace(lines[end-2]), "runtime.mstart(") {
-			start = 1
-		}
+	return summary, stacks
+}
+
+// maxStacks keeps a report with thousands of goroutines under Sentry's
+// size limit; the attachment has them all.
+const maxStacks = 50
+
+// stack is one stack of a crash trace: the runtime's own, or a goroutine's.
+type stack struct {
+	// id is the goroutine's number, or "runtime".
+	id string
+	// name is the goroutine's number and state, such as
+	// "goroutine 1 [syscall, locked to thread]".
+	name   string
+	frames []sentry.Frame
+}
+
+// goroutine reads a goroutine's header, such as "goroutine 1 gp=0x9064e80c000
+// m=0 mp=0x7ff78ccabb40 [syscall, locked to thread]:".
+func goroutine(head string) stack {
+	id := "?"
+	if fields := strings.Fields(head); len(fields) > 1 {
+		id = fields[1]
 	}
-	if start < 0 {
-		return summary, nil
+	name := "goroutine " + id
+	if i, j := strings.Index(head, "["), strings.LastIndex(head, "]"); i >= 0 && j > i {
+		name += " " + head[i:j+1]
 	}
-	for i := start; i+1 < len(lines); i += 2 {
+	return stack{id: id, name: name}
+}
+
+// framesFrom reads the frames of the stack starting at lines[i], oldest
+// first as Sentry wants them, and returns the line after them.
+func framesFrom(lines []string, i int) (frames []sentry.Frame, end int) {
+	for ; i+1 < len(lines); i += 2 {
 		fn, loc := strings.TrimSpace(lines[i]), strings.TrimSpace(lines[i+1])
 		if fn == "" || !strings.HasPrefix(lines[i+1], "\t") {
 			break
@@ -214,10 +265,8 @@ func parseTrace(trace string) (summary string, frames []sentry.Frame) {
 			InApp:    module == "main" || strings.HasPrefix(module, "github.com/spytify/spytify"),
 		})
 	}
-	for i, j := 0, len(frames)-1; i < j; i, j = i+1, j-1 {
-		frames[i], frames[j] = frames[j], frames[i]
-	}
-	return summary, frames
+	slices.Reverse(frames)
+	return frames, i
 }
 
 // splitFunc splits github.com/x/y/pkg.(*T).m into its package and
