@@ -78,7 +78,11 @@ func TestTheListCardScrollsWithThePage(t *testing.T) {
 	if l.scroll.Size() != l.Size() {
 		t.Errorf("the scroll is %v in a list of %v", l.scroll.Size(), l.Size())
 	}
-	l.scroll.Scrolled(&fyne.ScrollEvent{Scrolled: fyne.NewDelta(0, -500)})
+	// A scroll as the wheel makes it, without Scrolled: on macOS it starts a
+	// timer that refreshes the list half a second later, from another
+	// goroutine, while the next test changes the theme.
+	l.scroll.ScrollToOffset(fyne.NewPos(0, 500))
+	l.scroll.OnScrolled(l.scroll.Offset)
 	if top := l.page.Position().Y + l.card.Position().Y; top >= 0 {
 		t.Errorf("the card's top stayed in view at %v after a scroll down", top)
 	}
