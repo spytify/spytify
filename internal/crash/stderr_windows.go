@@ -10,6 +10,8 @@ import (
 
 // captured is the file CaptureStderr gave the runtime, kept so that the
 // garbage collector never closes it.
+//
+//lint:ignore U1000 written only: holding the file is its use
 var captured *os.File
 
 // CaptureStderr has the runtime print to StderrOf(path) when the program
