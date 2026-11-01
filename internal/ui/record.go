@@ -145,12 +145,12 @@ func newRecordScreen(a *App) *recordScreen {
 	r.blocked = widget.NewButtonWithIcon("Open diagnostics", theme.WarningIcon(), func() { a.showTab(tabLogs) })
 	r.blocked.Importance = widget.WarningImportance
 	// What the session waits for is an outlined info alert, as MUI draws
-	// one: a blue outline and icon around blue text, the page showing
-	// through, the next step on the right.
-	infoIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.InfoIcon(), colorInfo)))
+	// one in the app's green: an outline and icon around green text, the
+	// page showing through, the next step on the right.
+	infoIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.InfoIcon(), theme.ColorNamePrimary)))
 	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch, r.play, r.restart, r.blocked),
 		container.NewVBox(layout.NewSpacer(), r.waiting, layout.NewSpacer()))
-	r.waitRow = inset(newPanel("", colorInfo, 8, fyne.NewSize(pad*2, pad*1.5), alert))
+	r.waitRow = inset(newPanel("", theme.ColorNamePrimary, 8, fyne.NewSize(pad*2, pad*1.5), alert))
 
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },
