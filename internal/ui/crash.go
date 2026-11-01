@@ -88,9 +88,8 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 	copyButton := newIconButton("Copy", theme.ContentCopyIcon(), func() {
 		a.fa.Clipboard().SetContent(title + "\n\n" + details)
 	})
-	report := newIconButton("Report on GitHub", openInNewIcon, func() { a.openURL(issueURL(title, details)) })
-	report.Importance = widget.HighImportance
-	d.SetButtons([]fyne.CanvasObject{closeButton, copyButton, report})
+	report := newLitButton("Report on GitHub", openInNewIcon, widget.HighImportance, func() { a.openURL(issueURL(title, details)) })
+	d.SetButtons([]fyne.CanvasObject{closeButton, copyButton, report.lit})
 	d.SetOnClosed(then)
 	d.Resize(fyne.NewSize(crashDialogWidth, 0))
 	d.Show()
