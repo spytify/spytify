@@ -309,6 +309,29 @@ jobs:
           echo "volume $v"
           test "$v" = "0.250"
 
+  # An investigation for player.mute_output on Windows, not a test: what
+  # process loopback records from a muted session, and whether Windows keeps
+  # the mute after the process ends. The step prints the numbers.
+  windows-mute-probe:
+    needs: windows-build
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spytify-windows
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: scripts/ci
+      - name: An audio output for the runner (the Scream virtual driver)
+        shell: pwsh
+        run: src/scripts/ci/windows-audio-device.ps1
+      - name: What process loopback records from a muted session, and whether the mute outlives the process
+        run: bash src/scripts/ci/mute-probe.sh
+
   macos-build:
     runs-on: macos-15
     steps:
