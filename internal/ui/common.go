@@ -617,8 +617,8 @@ func (f fitRows) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 
 func (fitRows) MinSize(objs []fyne.CanvasObject) fyne.Size { return objs[0].MinSize() }
 
-// panel draws its content, inset by pad, on a box of a theme colour with
-// rounded corners and an optional outline.
+// panel draws its content, inset by pad, on a box with rounded corners, an
+// optional fill and an optional outline, both theme colours.
 type panel struct {
 	widget.BaseWidget
 	fill, line fyne.ThemeColorName
@@ -657,7 +657,10 @@ func (r *panelRenderer) MinSize() fyne.Size {
 // Refresh takes the colours from the theme, so a theme change shows, and
 // lays the content out again, as a container's Refresh does.
 func (r *panelRenderer) Refresh() {
-	r.box.FillColor = theme.ColorForWidget(r.p.fill, r.p)
+	r.box.FillColor = color.Transparent
+	if r.p.fill != "" {
+		r.box.FillColor = theme.ColorForWidget(r.p.fill, r.p)
+	}
 	r.box.StrokeColor = color.Transparent
 	r.box.StrokeWidth = 0
 	if r.p.line != "" {
