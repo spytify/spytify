@@ -481,7 +481,7 @@ func TestTheSessionEndsWhenThePlayerQuits(t *testing.T) {
 	s, _, _ := directSession(t)
 	s.opts.EndOnStop = false
 	values := s.deps.values
-	s.deps.values = func() settings.Values { return values().With("recorder.stop_with_player", true) }
+	s.deps.values = func() settings.Values { return values().With(settings.RecorderStopWithPlayer, true) }
 	events := make(chan meta.Event)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

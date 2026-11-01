@@ -180,9 +180,8 @@ type App struct {
 	// heard is the link goroutine's: the first sound.
 	heard bool
 
-	pending     sync.Mutex
-	queued      bool
-	levelQueued bool
+	renderQueue throttle
+	levelQueue  throttle
 	barKey      string
 	last        model.State
 }
@@ -379,7 +378,7 @@ func (a *App) quit() {
 // and a tray to go to, the window hides there and the recording goes on;
 // otherwise the app quits, which stops the recorder too.
 func (a *App) closeWindow() {
-	if a.hasTray() && a.last.Settings["app.minimize_to_tray"] == true {
+	if a.hasTray() && a.last.Settings[settings.AppMinimizeToTray.String()] == true {
 		a.hideToTray()
 		return
 	}
@@ -396,7 +395,7 @@ func (a *App) trayNote(s model.State) string {
 	switch {
 	case a.noTrayHost:
 		return noTrayNote
-	case a.trayLate && s.Settings["app.minimize_to_tray"] == true:
+	case a.trayLate && s.Settings[settings.AppMinimizeToTray.String()] == true:
 		return lateTrayNote
 	}
 	return ""
@@ -464,19 +463,7 @@ func (a *App) scheduleRender() {
 	if a.opts.ManualRender {
 		return
 	}
-	a.pending.Lock()
-	if a.queued {
-		a.pending.Unlock()
-		return
-	}
-	a.queued = true
-	a.pending.Unlock()
-	time.AfterFunc(100*time.Millisecond, func() {
-		a.pending.Lock()
-		a.queued = false
-		a.pending.Unlock()
-		fyne.Do(a.render)
-	})
+	a.renderQueue.schedule(a.render)
 }
 
 func (a *App) render() {
@@ -529,7 +516,7 @@ func (a *App) render() {
 	// The tray icon comes with Minimize to tray; the toolkit cannot take
 	// it away, so turned off, it goes when Spytify restarts. On Linux,
 	// turned on, it comes then too: see setupTray.
-	if a.hasTray() && a.trayMenu == nil && s.Settings["app.minimize_to_tray"] == true {
+	if a.hasTray() && a.trayMenu == nil && s.Settings[settings.AppMinimizeToTray.String()] == true {
 		a.setupTray()
 	}
 	a.syncTray()
@@ -546,10 +533,10 @@ func (a *App) render() {
 	if connected {
 		a.replaceOtherBuild(s)
 	}
-	if mode, _ := s.Settings["app.theme"].(string); mode != "" && mode != a.themeMode {
+	if mode, _ := s.Settings[settings.AppTheme.String()].(string); mode != "" && mode != a.themeMode {
 		a.applyTheme(mode)
 	}
-	if dir, _ := s.Settings["output.dir"].(string); dir != "" && dir != a.outputDir {
+	if dir, _ := s.Settings[settings.OutputDir.String()].(string); dir != "" && dir != a.outputDir {
 		a.outputDir = dir
 		a.tel.SetOutputDir(settings.ExpandHome(dir))
 	}
@@ -558,7 +545,7 @@ func (a *App) render() {
 		a.tabs.Refresh()
 	}
 	if connected && !a.checked && !a.opts.NoUpdateCheck {
-		if v, ok := s.Settings["app.check_updates"].(bool); ok {
+		if v, ok := s.Settings[settings.AppCheckUpdates.String()].(bool); ok {
 			a.checked = true
 			if v {
 				go a.checkUpdate()
@@ -616,19 +603,7 @@ func (a *App) scheduleLevel() {
 	if a.opts.ManualRender {
 		return
 	}
-	a.pending.Lock()
-	if a.levelQueued {
-		a.pending.Unlock()
-		return
-	}
-	a.levelQueued = true
-	a.pending.Unlock()
-	time.AfterFunc(100*time.Millisecond, func() {
-		a.pending.Lock()
-		a.levelQueued = false
-		a.pending.Unlock()
-		fyne.Do(a.renderLevel)
-	})
+	a.levelQueue.schedule(a.renderLevel)
 }
 
 func (a *App) renderLevel() {
@@ -698,13 +673,13 @@ func checkFails(checks []proto.Check, name string) bool {
 	return false
 }
 
-func outputText(settings map[string]any) string {
-	format, _ := settings["encode.format"].(string)
+func outputText(values map[string]any) string {
+	format, _ := values[settings.EncodeFormat.String()].(string)
 	switch format {
 	case "":
 		return ""
 	case "mp3", "aac":
-		return fmt.Sprintf("%s %v kbps", upper(format), number(settings["encode.bitrate_kbps"]))
+		return fmt.Sprintf("%s %v kbps", upper(format), number(values[settings.EncodeBitrateKbps.String()]))
 	}
 	return upper(format)
 }
@@ -772,7 +747,7 @@ func (a *App) recheck(ev proto.Event) {
 		if ev.Decode(&e) != nil {
 			return
 		}
-		if _, ok := e.Values["output.dir"]; !ok {
+		if _, ok := e.Values[settings.OutputDir.String()]; !ok {
 			return
 		}
 	default:
