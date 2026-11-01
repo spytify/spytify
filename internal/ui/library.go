@@ -41,8 +41,7 @@ type libraryScreen struct {
 	root   fyne.CanvasObject
 	search *widget.Entry
 	sortBy *widget.Select
-	list   *widget.List
-	card   fyne.CanvasObject
+	list   *cardList
 	count  *widget.RichText
 	empty  fyne.CanvasObject
 	hint   *widget.Label
@@ -120,26 +119,35 @@ func newLibraryScreen(a *App) *libraryScreen {
 	// A select is as wide as its placeholder, which a choice made never
 	// shows: the longest label fits.
 	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality
-	rescan := newIconButton("", theme.ViewRefreshIcon(), func() {
+	rescan := newIconButton(lang.Rescan, theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
 	})
-	// What follows the sort: the filter, then the rescan.
-	refresh := container.NewHBox(l.kinds, rescan)
-	l.count = caption("")
+	rescan.Importance = widget.LowImportance
+	openFolder := newIconButton(lang.OpenFolder, theme.FolderOpenIcon(), func() {
+		a.noteAction("open the library's folder")
+		if l.folder != "" {
+			_ = openPath(l.folder)
+		}
+	})
+	openFolder.Importance = widget.LowImportance
+	// The count names the folder, a long path: it gives way to the footer's
+	// buttons as the window narrows.
+	l.count = clipped("")
+	l.count.Segments[0].(*widget.TextSegment).Style.ColorName = colorLabel
+	a.maskPaths(l.count)
 	l.hint = widget.NewLabel("")
+	a.maskPaths(l.hint)
 	l.empty = emptyState(lang.NoRecordingsYet, l.hint)
-	l.list = widget.NewList(
+	l.list = newCardList(
 		func() int { return len(l.rows) },
 		func() fyne.CanvasObject {
 			// The title and the artists, as the player lists a track; or in
 			// the Album view, an album's heading. A take Keep anyway saved
-			// says which in a chip, as the Record screen's rows say theirs.
-			chip := caption("")
-			chip.Segments[0].(*widget.TextSegment).Style.ColorName = colorSkipped
+			// says which in a badge, as the Record screen's rows say theirs.
 			reveal, play := newIconButton("", theme.SearchIcon(), nil), newIconButton("", theme.MediaPlayIcon(), nil)
 			reveal.Importance, play.Importance = widget.LowImportance, widget.LowImportance
-			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(chip), reveal, play)), albumHeading())
+			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(newBadge("", colorSkippedBadge, "", colorOnSkippedBadge)), reveal, play)), albumHeading())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.rows) {
@@ -158,15 +166,11 @@ func newLibraryScreen(a *App) *libraryScreen {
 			// Border layout: center first, then the leading and trailing parts.
 			after := box.Objects[2].(*fyne.Container)
 			title, artist := l.tags(f)
-			kind, chipBox := takeKind(f.rel), after.Objects[0].(*fyne.Container)
-			show(chipBox, kind != takeComplete)
+			kind, badgeBox := takeKind(f.rel), after.Objects[0].(*fyne.Container)
+			show(badgeBox, kind != takeComplete)
 			if kind != takeComplete {
 				title = takeMarker.ReplaceAllString(title, "")
-				chip := chipBox.Objects[0].(*widget.RichText)
-				if seg := chip.Segments[0].(*widget.TextSegment); seg.Text != kind {
-					seg.Text = kind
-					chip.Refresh()
-				}
+				badgeBox.Objects[0].(*badge).set(kind, colorSkippedBadge, colorOnSkippedBadge)
 			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
@@ -175,13 +179,13 @@ func newLibraryScreen(a *App) *libraryScreen {
 			box.Refresh()
 		},
 	)
-	l.card = listCard(l.list)
-	// SetSelected runs the callback, which needs the list, its card and the
-	// count.
+	// SetSelected runs the callback, which needs the list and the count.
 	l.sortBy.SetSelected(lang.Newest)
 	// The search and the sort are white fields on the page, as in Settings.
-	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search), cardTheme{input: colorCard})
-	l.root = inReadingOrder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty))
+	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, l.kinds), l.search), cardTheme{input: colorCard})
+	// The files from one side of the window to the other, their count and
+	// folder at the bottom, as the Record screen's session.
+	l.root = inReadingOrder(inset(top), footerBar(l.count, container.NewHBox(rescan, openFolder)), nil, nil, container.NewStack(l.list, l.empty))
 	return l
 }
 
@@ -312,7 +316,7 @@ func (l *libraryScreen) filter() {
 		l.kinds.Refresh()
 	}
 	setCaption(l.count, pluralFiles(len(shown), len(l.all), l.folder))
-	l.card.Refresh()
+	l.list.Refresh()
 	switch {
 	case len(l.all) == 0:
 		l.hint.SetText(fmt.Sprintf(lang.LibraryEmpty, l.folder))
@@ -332,7 +336,7 @@ func (l *libraryScreen) filter() {
 	default:
 		l.empty.Hide()
 	}
-	show(l.card, !l.empty.Visible())
+	show(l.list, !l.empty.Visible())
 }
 
 // kept tells whether the filter keeps f: its kind is ticked.

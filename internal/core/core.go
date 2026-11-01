@@ -343,10 +343,13 @@ func (c *Core) Info() proto.CoreInfoResult {
 	}
 	info.Checks = append(info.Checks, c.backends.Probe()...)
 	dir := v.Path(settings.OutputDir)
-	if err := outputWritable(dir); err != nil {
-		add(proto.CheckOutputWritable, false, err.Error())
+	err := outputWritable(dir)
+	facts := outputFacts(dir, err, v.String(settings.OutputDir) == settings.Defaults().String(settings.OutputDir))
+	if err != nil {
+		info.Checks = append(info.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: err.Error(), Facts: facts})
+		c.log.Infof("output folder not writable: %v (%s)", err, formatFacts(facts))
 	} else {
-		add(proto.CheckOutputWritable, true, dir)
+		info.Checks = append(info.Checks, proto.Check{Name: proto.CheckOutputWritable, OK: true, Detail: dir, Facts: facts})
 	}
 	if c.crashed != "" {
 		info.Warnings = append(info.Warnings, c.crashed)

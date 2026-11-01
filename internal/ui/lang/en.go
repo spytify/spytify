@@ -54,8 +54,6 @@ const (
 	OpenDiagnostics           = "Open diagnostics"
 	Play                      = "Play"
 	Skip                      = "Skip"
-	Length                    = "Length"
-	Level                     = "Level"
 	RecordFromStart           = "Record this track from the start"
 	KeepAnyway                = "Keep anyway"
 	OpenFolder                = "Open folder"
@@ -71,23 +69,22 @@ const (
 	SessionTotals             = "%d saved · %d skipped · %d ads · %s"
 )
 
-// The track being recorded, over its title. StateNotRecorded takes why, in
-// capitals.
+// The badge over the track being recorded's title, when it does not say
+// Recording. StateNotRecorded takes why.
 const (
-	StateRecording   = "● RECORDING"
-	StatePaused      = "PAUSED"
-	StateStopping    = "RECORDING · STOPS AFTER THIS TRACK"
-	StateAdvert      = "ADVERT, NOT RECORDED"
-	StateNotRecorded = "PLAYING, NOT RECORDED: %s"
+	StatePaused      = "Paused"
+	StateStopping    = "Recording · stops after this track"
+	StateAdvert      = "Advert, not recorded"
+	StateNotRecorded = "Playing, not recorded: %s"
 )
 
-// The captured stream after its rate, then the file's rate when lower:
-// "44.1 kHz stereo", "96 kHz stereo, 48 kHz file".
+// The captured stream's badges after its rate, then the file's rate when
+// lower: "44.1 kHz", "Stereo", "48 kHz file".
 const (
-	Mono     = "%s mono"
-	Stereo   = "%s stereo"
-	Channels = "%s %d channels"
-	FileRate = "%s, %s file"
+	Mono     = "Mono"
+	Stereo   = "Stereo"
+	Channels = "%d channels"
+	FileRate = "%s file"
 )
 
 // A track's chip in the session list, and why a track was skipped.
@@ -117,6 +114,7 @@ const (
 	Partial         = "Partial"
 	LowQuality      = "Low quality"
 	NoFiles         = "No files"
+	Rescan          = "Rescan"
 	AllFiles        = "All files"
 	NoRecordingsYet = "No recordings yet"
 	LibraryEmpty    = "Recorded tracks land in %s."
@@ -173,6 +171,8 @@ const (
 	PID                 = "pid %d"
 	SendToDevelopers    = "Send to the developers"
 	SendChecksText      = "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
+	SendChecksPicture   = "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
+	SendPicture         = "Send the picture of the window"
 	WhatWillBeSent      = "What will be sent"
 	Comment             = "Comment (optional)"
 	Send                = "Send"
@@ -204,7 +204,7 @@ const (
 	FirstRunText     = "Spytify records the audio the player sends to your speakers. Streaming services send compressed audio, so a FLAC or WAV file avoids a second lossy pass but adds no quality."
 	DontShowAgain    = "Don't show this again"
 	HelpFixIssues    = "Help fix issues"
-	TrackerExplained = "Spytify can send its crashes, errors, traces and recording counts to its developers through Sentry, to help them fix issues."
+	TrackerExplained = "Spytify can send its crashes, errors with a picture of its window, traces and recording counts to its developers through Sentry, to help them fix issues."
 	TrackerSwitch    = "Sentry bug tracker: send crashes, errors, traces and recording counts"
 	TrackerOptedOut  = "You opted out of the Sentry bug tracker"
 )

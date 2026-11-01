@@ -131,6 +131,12 @@ type App struct {
 	wasConnected bool
 	checksNoted  string
 	diagNoted    bool
+	// masks are the widgets the window's picture covers (picture.go), true
+	// for those covered whatever they show; unpictured counts the dialogs
+	// open that it could not cover, an error's message or the folder
+	// picker, in Fyne's own widgets: no picture is taken meanwhile.
+	masks      map[fyne.CanvasObject]bool
+	unpictured int
 	// reports are the reports on their way to the bug tracker, and calls
 	// the requests on their way to the recorder, which tests wait for:
 	// one still going must not touch the next test's window.
@@ -150,7 +156,8 @@ type App struct {
 
 // New builds the window; call ShowAndRun to start.
 func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
-	a := &App{fa: fa, m: m, link: l, opts: opts, tel: opts.Telemetry, launch: launchTrace{start: time.Now()}}
+	a := &App{fa: fa, m: m, link: l, opts: opts, tel: opts.Telemetry, launch: launchTrace{start: time.Now()}, masks: map[fyne.CanvasObject]bool{}}
+	a.tel.SetScreenshot(a.screenshot)
 	a.applyTheme("system")
 	a.covers = newCovers(a.scheduleRender)
 	a.win = fa.NewWindow(lang.Spytify)
@@ -158,11 +165,11 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.win.Resize(fyne.NewSize(920, 640))
 
 	a.screens = []screen{newRecordScreen(a), newLibraryScreen(a), newSettingsScreen(a), newLogsScreen(a), newAboutScreen(a)}
-	// Logs and About have the plain colour to the window's sides; the other
-	// screens are on the page, off them.
+	// Record and Library run their cards and lists to the window's sides,
+	// Logs and About their plain colour; Settings is on the page, off them.
 	a.tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon(lang.Record, theme.MediaRecordIcon(), margin(a.screens[tabRecord].content())),
-		container.NewTabItemWithIcon(lang.Library, theme.FolderIcon(), margin(a.screens[tabLibrary].content())),
+		container.NewTabItemWithIcon(lang.Record, theme.MediaRecordIcon(), a.screens[tabRecord].content()),
+		container.NewTabItemWithIcon(lang.Library, theme.FolderIcon(), a.screens[tabLibrary].content()),
 		container.NewTabItemWithIcon(lang.Settings, theme.SettingsIcon(), margin(a.screens[tabSettings].content())),
 		container.NewTabItemWithIcon(lang.Logs, theme.ListIcon(), a.screens[tabLogs].content()),
 		container.NewTabItemWithIcon(lang.About, theme.InfoIcon(), a.screens[tabAbout].content()),
@@ -201,6 +208,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.banner.Wrapping = fyne.TextWrapWord
 	a.banner.Importance = widget.DangerImportance
 	a.banner.Hide()
+	a.maskPaths(a.banner)
 
 	start := newLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
 	a.player = newPlayerCard(a)
@@ -209,6 +217,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.offlineErr = widget.NewLabel("")
 	a.offlineErr.Wrapping = fyne.TextWrapWord
 	a.offlineErr.Importance = widget.DangerImportance
+	a.maskPaths(a.offlineErr)
 	pad := theme.Padding()
 	a.offline = container.NewVScroll(container.New(layout.NewCustomPaddedLayout(pad, pad*2, pad*2, pad*2), container.NewVBox(
 		heading(lang.RecorderNotRunning),
@@ -266,6 +275,9 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	m.OnEvent(a.feedTracker)
 	m.OnEvent(a.recheck)
 	m.OnEvent(a.notify)
+	if !opts.ManualRender {
+		go a.clockAds()
+	}
 	a.render()
 	return a
 }
@@ -441,6 +453,10 @@ func (a *App) render() {
 	}
 	if dir, _ := s.Settings[settings.OutputDir.String()].(string); dir != "" && dir != a.outputDir {
 		a.outputDir = dir
+		// The home folder in it leaves as ~ all the same.
+		if settings.IsDefaultOutputDir(dir) {
+			dir = ""
+		}
 		a.tel.SetOutputDir(settings.ExpandHome(dir))
 	}
 	if a.tabs.Items[tabRecord].Text != record {
@@ -523,6 +539,16 @@ func (a *App) renderLevel() {
 		return
 	}
 	a.screens[tabRecord].(*recordScreen).renderLive(a.m.Live())
+}
+
+// clockAds moves the progress once a second while an ad plays: the
+// recorder sends level events, which move it, only while it records.
+func (a *App) clockAds() {
+	for range time.Tick(time.Second) {
+		if c, session, _ := a.m.Live(); c != nil && session == proto.StateAd {
+			a.scheduleLevel()
+		}
+	}
 }
 
 func (a *App) checkUpdate() {
@@ -687,5 +713,7 @@ func (a *App) do(method string, params any, then func()) {
 }
 
 func (a *App) showError(err error) {
-	showError(a.win, err)
+	d := showError(a.win, err)
+	a.unpictured++
+	d.SetOnClosed(func() { a.unpictured-- })
 }

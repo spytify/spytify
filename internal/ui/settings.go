@@ -348,6 +348,8 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 				pick.SetLocation(start)
 			}
 			pick.Resize(pickerSize)
+			s.app.unpictured++
+			pick.SetOnClosed(func() { s.app.unpictured-- })
 			pick.Show()
 			// Fyne centres the picker at its own size before growing it.
 			if top := s.app.win.Canvas().Overlays().Top(); top != nil {
@@ -355,6 +357,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			}
 			closesOnEscape(s.app.win, pick.Hide)
 		})
+		s.app.maskAlways(e)
 		f.set = func(v any) {
 			if str, _ := v.(string); !s.focused(e) {
 				e.show(str)

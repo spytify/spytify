@@ -239,7 +239,7 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	feedSession(t, m)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{lang.StateRecording, "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", lang.Saved, fmt.Sprintf(lang.SkippedFor, proto.SkipDuplicate),
+	for _, want := range []string{lang.Recording, "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", lang.Saved, fmt.Sprintf(lang.SkippedFor, proto.SkipDuplicate),
 		fmt.Sprintf(lang.SessionTotals, 2, 1, 0, ""), lang.Stop, fmt.Sprintf(lang.PlayerRunning, "Player"), "FLAC", lang.Skip} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
@@ -264,10 +264,11 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 		t.Errorf("app bar action %q", a.action.Text)
 	}
 	snapshot(t, a, "record")
-	// The picture carries art: the card's cover and one on every row.
+	// The picture carries art: the card's cover, blurred behind it too, and
+	// one on every row.
 	pictures := slices.DeleteFunc(images(a.win.Content()), func(s string) bool { return !strings.HasPrefix(s, "picture ") })
-	if len(pictures) != 4 {
-		t.Errorf("%d covers on the Record screen, want the card's and three rows': %v", len(pictures), images(a.win.Content()))
+	if len(pictures) != 5 {
+		t.Errorf("%d pictures on the Record screen, want the card's cover and its glow, and three rows': %v", len(pictures), images(a.win.Content()))
 	}
 
 	test.Tap(r.clear)
@@ -280,42 +281,37 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	}
 }
 
-// A device above 48 kHz is written at a lower rate, and the card says so on
-// a line of its own, under the artist and album.
+// A device above 48 kHz is written at a lower rate, and the card says so in
+// a badge of its own, after the stream's rate and channels.
 func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	a.render()
 	r := a.screens[tabRecord].(*recordScreen)
-	// lines is the card's text, one entry per line as drawn, top to bottom.
-	lines := func() []string {
+	// badges is what the card's badges shown say, left to right.
+	badges := func() []string {
 		var out []string
-		y := float32(-1)
-		for _, o := range test.WidgetRenderer(r.track).Objects() {
-			if txt, ok := o.(*canvas.Text); ok && txt.Text != "" {
-				if txt.Position().Y <= y {
-					t.Errorf("%q is not on a line of its own", txt.Text)
-				}
-				y = txt.Position().Y
-				out = append(out, txt.Text)
+		for _, b := range []*badge{r.state, r.rate, r.channels, r.fileRate} {
+			if b.Visible() {
+				out = append(out, b.text)
 			}
 		}
 		return out
 	}
-	// No format known, no line for it.
-	if got, want := lines(), []string{lang.StateRecording, "Midnight City", "M83 · Hurry Up, We're Dreaming"}; !slices.Equal(got, want) {
-		t.Errorf("card lines %q, want %q", got, want)
+	// No format known, no badge for it.
+	if got, want := badges(), []string{lang.Recording}; !slices.Equal(got, want) {
+		t.Errorf("card badges %q, want %q", got, want)
 	}
 
 	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-004", Path: "/Users/listener/Music/Spytify/M83/Midnight City.flac", DurationMs: 243000, Bytes: 31_400_000, Tagged: true, TaggedBy: "lastfm"}))
 	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000},
 		Source: &proto.AudioSource{SampleRate: 96000, Channels: 2}}))
 	a.render()
-	if got, want := lines(), []string{lang.StateRecording, "Outro", "M83 · Hurry Up, We're Dreaming", "96 kHz stereo, 48 kHz file"}; !slices.Equal(got, want) {
-		t.Errorf("card lines %q, want %q", got, want)
+	if got, want := badges(), []string{lang.Recording, "96 kHz", lang.Stereo, "48 kHz file"}; !slices.Equal(got, want) {
+		t.Errorf("card badges %q, want %q", got, want)
 	}
-	if all := texts(r.card); !contains(all, lang.Length) || !contains(all, lang.Level) || !contains(all, "0:00 / 4:07") {
-		t.Errorf("no Length and Level rows on the card: %q", all)
+	if all := texts(r.card); !contains(all, "Outro") || !contains(all, "M83 · Hurry Up, We're Dreaming") || !contains(all, "0:00 / 4:07") {
+		t.Errorf("the card does not show the track and its time: %q", all)
 	}
 	snapshot(t, a, "record-96khz-layout")
 
@@ -347,6 +343,37 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	}
 	inside(panel)
 	snapshot(t, a, "record-96khz-narrow")
+}
+
+// A player paused mid-track keeps the track's card, its badge saying so,
+// with the info bar above it offering to play.
+func TestAPausedTrackHasTheInfoBarAboveItsCard(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StatePaused}))
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	if !r.card.Visible() || r.state.text != lang.StatePaused || r.meter.Visible() {
+		t.Errorf("paused card: shown %v, badge %q, meter shown %v", r.card.Visible(), r.state.text, r.meter.Visible())
+	}
+	if !r.waitRow.Visible() || r.waiting.String() != fmt.Sprintf(lang.NothingRecordedPaused, "Player") || !r.play.Visible() || r.restart.Visible() {
+		t.Errorf("info bar shown %v, says %q, Play %v, restart %v", r.waitRow.Visible(), r.waiting.String(), r.play.Visible(), r.restart.Visible())
+	}
+	if d := fyne.CurrentApp().Driver(); d.AbsolutePositionForObject(r.waitRow).Y >= d.AbsolutePositionForObject(r.card).Y {
+		t.Error("the info bar is not above the card")
+	}
+	snapshot(t, a, "record-paused")
+	light := defaults()
+	light["app.theme"] = "light"
+	m.SetSettings(light)
+	a.render()
+	snapshot(t, a, "record-paused-light")
+
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	a.render()
+	if r.waitRow.Visible() || r.state.text != lang.Recording || !r.meter.Visible() {
+		t.Errorf("playing again: info bar %v, badge %q, meter %v", r.waitRow.Visible(), r.state.text, r.meter.Visible())
+	}
 }
 
 // drawnRow is a track's row in a list as drawn: the row, and its lines of
@@ -487,7 +514,7 @@ func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
 	snapshot(t, a, "history-rows")
 
 	longArtist := "M83 with The Hurry Up Orchestra, The Choir of the Night, The Second Night Strings and The Brass of the Rain"
-	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra)"
+	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra and the Choir)"
 	play(proto.Track{ID: "s-007", Artist: longArtist, Title: "Splendor", LengthMs: 313000},
 		proto.Track{ID: "s-008", Artist: "M83", Title: longTitle, LengthMs: 247000},
 		proto.Track{ID: "s-009", Artist: "M83", Title: "Year One, One UFO", Album: "Hurry Up, We're Dreaming", LengthMs: 194000})
@@ -687,8 +714,8 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	offers := func(text string, want fyne.CanvasObject) {
 		t.Helper()
 		a.render()
-		if !r.waitRow.Visible() || r.waiting.Text != text {
-			t.Errorf("the wait row says %q, want %q", r.waiting.Text, text)
+		if !r.waitRow.Visible() || r.waiting.String() != text {
+			t.Errorf("the wait row says %q, want %q", r.waiting.String(), text)
 		}
 		for _, o := range []fyne.CanvasObject{r.launch, r.play, r.restart, r.blocked} {
 			if b, _ := asButton(o); o.Visible() != (o == want) {
@@ -1393,8 +1420,8 @@ func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
 		t.Fatalf("%d files listed", len(lib.shown))
 	}
 	drawn := map[widget.ListItemID]bool{}
-	update := lib.list.UpdateItem
-	lib.list.UpdateItem = func(id widget.ListItemID, o fyne.CanvasObject) {
+	update := lib.list.update
+	lib.list.update = func(id widget.ListItemID, o fyne.CanvasObject) {
 		drawn[id] = true
 		update(id, o)
 	}
@@ -1423,14 +1450,15 @@ func TestHoverAndSelectionAreTranslucent(t *testing.T) {
 	}
 }
 
-func TestSourceText(t *testing.T) {
+func TestSourceParts(t *testing.T) {
 	for _, c := range []struct {
 		rate, ch int
-		want     string
-	}{{44100, 2, "44.1 kHz stereo"}, {48000, 2, "48 kHz stereo"}, {48000, 1, "48 kHz mono"}, {96000, 2, "96 kHz stereo, 48 kHz file"},
-		{88200, 2, "88.2 kHz stereo, 44.1 kHz file"}, {96000, 6, "96 kHz 6 channels, 48 kHz file"}, {0, 2, ""}} {
-		if got := sourceText(c.rate, c.ch); got != c.want {
-			t.Errorf("sourceText(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
+		want     []string
+	}{{44100, 2, []string{"44.1 kHz", lang.Stereo}}, {48000, 2, []string{"48 kHz", lang.Stereo}}, {48000, 1, []string{"48 kHz", lang.Mono}},
+		{96000, 2, []string{"96 kHz", lang.Stereo, "48 kHz file"}}, {88200, 2, []string{"88.2 kHz", lang.Stereo, "44.1 kHz file"}},
+		{96000, 6, []string{"96 kHz", "6 channels", "48 kHz file"}}, {0, 2, nil}} {
+		if got := sourceParts(c.rate, c.ch); !slices.Equal(got, c.want) {
+			t.Errorf("sourceParts(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
 		}
 	}
 }
@@ -1491,18 +1519,18 @@ func TestTheMeterWaitsUnderADialog(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	a.render()
-	meter := a.screens[tabRecord].(*recordScreen).level
-	before := meter.value
+	meter := a.screens[tabRecord].(*recordScreen).meter
+	before := meter.lit
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -3}))
 	d := dialog.NewInformation("A dialog", "covering the meter", a.win)
 	d.Show()
 	a.renderLevel()
-	if meter.value != before {
-		t.Fatalf("the meter moved under a dialog: %v to %v", before, meter.value)
+	if meter.lit != before {
+		t.Fatalf("the meter moved under a dialog: %v to %v bars", before, meter.lit)
 	}
 	d.Hide()
 	a.renderLevel()
-	if meter.value == before {
+	if meter.lit == before {
 		t.Fatal("the meter did not move once the dialog closed")
 	}
 }
@@ -1672,6 +1700,88 @@ func TestTheDiagnosticsAreADialog(t *testing.T) {
 	if a.win.Canvas().Overlays().Top() != nil || a.tabs.SelectedIndex() != tabRecord {
 		t.Errorf("closed: a dialog %v, tab %d", a.win.Canvas().Overlays().Top(), a.tabs.SelectedIndex())
 	}
+}
+
+// A failed check's reason shows whole, on its own lines under the name:
+// beside it, it was cut short with "…".
+func TestAFailedChecksReasonShowsWholeUnderItsName(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	reason := `mkdir \\nas\shared\Music\Recordings from the radio, every Saturday night since the spring of 2019\Spytify: The system cannot find the path specified.`
+	in := info()
+	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: reason})
+	m.SetInfo(in)
+	m.SetSettings(defaults())
+	a.render()
+	d := diagnostics(t, a)
+	l := a.screens[tabLogs].(*logsScreen)
+	if w := l.diag.Size().Width; w != diagWidth {
+		t.Errorf("the dialog is %v wide, want %v", w, diagWidth)
+	}
+
+	name := labels(d, "output folder not writable")
+	var detail *widget.RichText
+	for _, rt := range richTextsOf(d) {
+		if rt.String() == reason {
+			detail = rt
+		}
+	}
+	if len(name) != 1 || detail == nil {
+		t.Fatalf("%d names, the reason found %v: %v", len(name), detail != nil, texts(d))
+	}
+	at := a.fa.Driver().AbsolutePositionForObject
+	if n, r := at(name[0]), at(detail); r.Y < n.Y+name[0].Size().Height || r.X != n.X {
+		t.Errorf("the reason at %v, the name at %v and %v tall: not under it", r, n, name[0].Size().Height)
+	}
+	var drawn []string
+	for _, o := range test.WidgetRenderer(detail).Objects() {
+		if tx, ok := o.(*canvas.Text); ok && tx.Text != "" {
+			drawn = append(drawn, tx.Text)
+		}
+	}
+	if shown := strings.Join(drawn, " "); len(drawn) < 2 || strings.Contains(shown, "…") || !slices.Equal(strings.Fields(shown), strings.Fields(reason)) {
+		t.Errorf("the reason shows as %q", drawn)
+	}
+	// The dialog is as tall as the reason's lines: the checks do not scroll.
+	if got, want := l.checksScroll.Size().Height, l.checks.MinSize().Height; got < want {
+		t.Errorf("the checks show %v of their %v", got, want)
+	}
+	snapshot(t, a, "diagnostics-reason-under-the-name")
+
+	// A narrower window narrows the dialog.
+	a.win.Resize(fyne.NewSize(700, 640))
+	l.fitDiagnostics()
+	if w := l.diag.Size().Width; w >= 700 {
+		t.Errorf("in a window 700 wide, the dialog is %v", w)
+	}
+}
+
+// richTextsOf are the rich texts shown in o.
+func richTextsOf(o fyne.CanvasObject) []*widget.RichText {
+	var out []*widget.RichText
+	var walk func(fyne.CanvasObject)
+	walk = func(o fyne.CanvasObject) {
+		if o == nil || !o.Visible() {
+			return
+		}
+		switch w := o.(type) {
+		case *widget.RichText:
+			out = append(out, w)
+			return
+		case *fyne.Container:
+			for _, child := range w.Objects {
+				walk(child)
+			}
+			return
+		}
+		if w, ok := o.(fyne.Widget); ok {
+			for _, child := range test.WidgetRenderer(w).Objects() {
+				walk(child)
+			}
+		}
+	}
+	walk(o)
+	return out
 }
 
 // A player that is off is in the app bar and offered to open; the

@@ -90,6 +90,8 @@ func focusName(a *App, f fyne.Focusable) string {
 			return "Play"
 		case theme.ViewRefreshIcon().Name():
 			return "Rescan"
+		case theme.MediaSkipNextIcon().Name():
+			return "Skip"
 		case theme.FolderOpenIcon().Name():
 			return "Choose folder"
 		}
@@ -129,7 +131,7 @@ func focusName(a *App, f fyne.Focusable) string {
 		return w.Text
 	case *widget.Hyperlink:
 		return w.Text
-	case *widget.List:
+	case *widget.List, *cardList:
 		return "list"
 	}
 	if key := setting(f.(fyne.CanvasObject)); key != "" {
@@ -242,8 +244,8 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	// A session: two files saved, one skipped, whose buttons are off.
 	feedSession(t, m)
 	a.render()
-	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", lang.Skip, "list", "Show in folder", "Play", "Show in folder", "Play", lang.ClearList, lang.OpenFolder)
-	tabTo(t, a, lang.Skip, 1)
+	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", "Skip", "list", "Show in folder", "Play", "Show in folder", "Play", lang.ClearList, lang.OpenFolder)
+	tabTo(t, a, "Skip", 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodPlayerControl)
 	for n := range 2 {
@@ -273,8 +275,8 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	}
 }
 
-// Library: the search, the sort, the filter and the rescan above the files,
-// then each file's buttons.
+// Library: the search, the sort and the filter above the files, then each
+// file's buttons, then Rescan and Open folder in the footer.
 func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	revealed, opened := fakeOS(t)
 	a, _, file, _ := recorded(t)
@@ -282,7 +284,7 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	a.render()
 	c := a.win.Canvas()
 	lib := a.screens[tabLibrary].(*libraryScreen)
-	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", lang.SearchLibrary, "Sort", "Filter", "Rescan", "list", "Show in folder", "Play")
+	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", lang.SearchLibrary, "Sort", "Filter", "list", "Show in folder", "Play", lang.Rescan, lang.OpenFolder)
 
 	test.Type(tabTo(t, a, lang.SearchLibrary, 1), "nothing like it")
 	if len(lib.shown) != 0 {
@@ -311,7 +313,7 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	if err := os.WriteFile(other, []byte("fLaC"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tabTo(t, a, "Rescan", 1)
+	tabTo(t, a, lang.Rescan, 1)
 	pressSpace(c)
 	if len(lib.shown) != 2 {
 		t.Fatalf("%d files after the rescan", len(lib.shown))
@@ -711,6 +713,10 @@ func TestTabLeavesTheComment(t *testing.T) {
 	pressSpace(c)
 	if got := focusName(a, c.Focused()); got != lang.WhatWillBeSent {
 		t.Fatalf("the dialog opens with %q focused", got)
+	}
+	pressTab(c)
+	if got := focusName(a, c.Focused()); got != lang.SendPicture {
+		t.Fatalf("Tab from the fold: %q focused, want the picture's tick box", got)
 	}
 	pressTab(c)
 	comment := c.Focused()
