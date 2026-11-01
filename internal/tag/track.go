@@ -17,7 +17,6 @@ type Track struct {
 	Performers   []string `json:"performers,omitempty"`
 	AlbumArtists []string `json:"album_artists,omitempty"`
 	Album        string   `json:"album,omitempty"`
-	Genres       []string `json:"genres,omitempty"`
 	Disc         int      `json:"disc,omitempty"`
 	Track        int      `json:"track,omitempty"`
 	Year         int      `json:"year,omitempty"`

@@ -540,7 +540,7 @@ func (c *Core) Keep(id string) error {
 		suffix = " (low quality)"
 	}
 	j.keep, j.partial, j.rejected = true, true, ""
-	j.info.Title += suffix
+	j.suffix = suffix
 	if c.fin != nil {
 		c.fin.enqueue(j)
 		return nil

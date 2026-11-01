@@ -1,0 +1,30 @@
+# timelines/control
+# option EndOnStop
+# item 0 "Fast Forward" (track, declared 30000ms): audio from 500ms to 30500ms
+# item 1 "Stay Awhile (Radio Edit)" (track, declared 20000ms): audio from 30500ms to 50500ms, notified +400ms, then 1000ms of silence
+# player.control next at 10000ms
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged none pos=-1 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+     500ms  > player Playing pos=-1 (ring at 22050)
+     500ms  > player TrackChanged "Fast Forward" id=/com/fake/track/1 length=30000ms pos=0 (ring at 22050)
+     510ms  log debug: cut for "Fast Forward" at 500 ms (kind 0, noticed at 500 ms, window 0..0 ms)
+     510ms  started t-001 "Fast Forward" artist="Ada Okoro" album="Queue Up" length=30000ms cut=first/first_sound offset=0ms source=44100/2 cover
+     510ms  state recording
+     510ms  take t-001 "Fast Forward" start=22065(500.34ms) length=1323000(30000ms)
+   10000ms  > player.control next
+   10410ms  > player TrackChanged "Stay Awhile (Radio Edit)" id=/com/fake/track/2 length=20000ms pos=0 (ring at 459081)
+   10730ms  log debug: cut for "Stay Awhile (Radio Edit)" at 10010 ms (kind 2, noticed at 10410 ms, window 9410..10710 ms)
+   10730ms  started t-002 "Stay Awhile (Radio Edit)" artist="Ada Okoro" album="Queue Up" length=20000ms cut=interrupt/edge offset=-400ms source=44100/2 cover
+   10730ms  take t-002 "Stay Awhile (Radio Edit)" start=441441(10010ms) length=882000(20000ms)
+   31010ms  > player Stopped pos=-1 (ring at 1367541)
+   31010ms  state waiting
+   31010ms  state stopping
+   31010ms  state idle
+   31010ms  take none
+--- jobs
+job t-001 "Fast Forward" played=419376(9509.66ms) length=1323000(30000ms) wav=419376 crc=70f980db cover=cover-0.jpg
+job t-002 "Stay Awhile (Radio Edit)" played=882472(20010.7ms) length=882000(20000ms) wav=882472 crc=92fb9f26 cover=cover-1.jpg
+--- end: idle, 0 skipped, 0 ads, 0 overruns

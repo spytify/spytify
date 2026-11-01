@@ -16,6 +16,8 @@ permissions:
 # source names none (Settings > Secrets and variables > Actions > Variables).
 env:
   SPYTIFY_DEFAULT_PROCESS: ${{ vars.SPYTIFY_DEFAULT_PROCESS }}
+  # staticcheck 2026.2.2, which works with Go 1.26 and 1.27.
+  STATICCHECK: honnef.co/go/tools/cmd/staticcheck@v0.8.2
 
 jobs:
   unit:
@@ -36,6 +38,10 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - name: go vet
         run: go vet ./...
+      # Natively, so that cgo type-checks the desktop UI too;
+      # windows-staticcheck covers Windows.
+      - name: staticcheck
+        run: go run "$STATICCHECK" ./...
       - name: Schema is generated
         run: go generate ./pkg/proto && git diff --exit-code pkg/proto/schema.json
       - name: Setting keys are generated
@@ -131,6 +137,23 @@ jobs:
           cygpath -w "$RUNNER_TEMP/ffmpeg" >> "$GITHUB_PATH"
       - name: Unit tests (all but the desktop UI, which windows-build cross-compiles)
         run: CGO_ENABLED=0 go test $(go list ./... | grep -v -e /internal/ui$ -e /cmd/spytify-ui)
+
+  # staticcheck for Windows, from Linux with MinGW-w64, as windows-build
+  # compiles: the desktop UI needs cgo, which the windows job goes without.
+  windows-staticcheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install MinGW-w64
+        run: scripts/ci/apt-install.sh mingw-w64
+      - name: staticcheck
+        run: |
+          # Built for Linux, where it runs, then pointed at Windows.
+          GOBIN="$RUNNER_TEMP" go install "$STATICCHECK"
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc "$RUNNER_TEMP/staticcheck" ./...
 
   windows-build:
     runs-on: ubuntu-24.04
@@ -296,10 +319,32 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Spytify.app and universal spytifyd, spytify-cli, spytify-tap
+      - name: Install nasm, and Homebrew's ffmpeg for ffprobe
+        run: brew install nasm ffmpeg
+      # ffmpeg takes minutes to build: it is built again when its script
+      # changes.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/spytify/ffmpeg-*
+          key: ffmpeg-macos-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - name: Spytify.app, with ffmpeg, and universal spytifyd, spytify-cli, spytify-tap
         run: scripts/build-macos.sh dist
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
+      - name: The encode and tag tests with the app's ffmpeg, on each processor
+        run: |
+          # It has only what Spytify runs: a test that needs more fails.
+          # Homebrew's stays for ffprobe, which some tests read files with.
+          # The x86_64 half runs under Rosetta.
+          f=dist/Spytify.app/Contents/MacOS/ffmpeg
+          for arch in arm64 x86_64; do
+            # From macOS 14.2, as the app, loading nothing but libSystem.
+            vtool -arch $arch -show-build "$f" | grep -E '^ *minos 14\.2$'
+            test "$(otool -arch $arch -L "$f" | tail -n +2 | awk '{ print $1 }')" = /usr/lib/libSystem.B.dylib
+            mkdir -p "$RUNNER_TEMP/ffmpeg-$arch"
+            lipo -thin $arch -output "$RUNNER_TEMP/ffmpeg-$arch/ffmpeg" "$f"
+            PATH="$RUNNER_TEMP/ffmpeg-$arch:$PATH" go test -count=1 ./internal/encode/... ./internal/tag/...
+          done
       # A disk image keeps the app's executable bits, which an artifact's zip
       # drops.
       - name: Disk image and command-line zip

@@ -43,6 +43,9 @@ type settingsScreen struct {
 	// file a sample track gets with the output settings as they are.
 	example  *widget.RichText
 	template *settings.Def
+	// unknown names, under the template as it is typed, the {names} that
+	// are not placeholders: saving leaves them out.
+	unknown *widget.RichText
 	// trayNote is Minimize to tray's note, which says why instead while
 	// closing quits with it on (App.trayNote).
 	trayNote *widget.RichText
@@ -360,6 +363,10 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			s.example = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
 			s.example.Truncation = fyne.TextTruncateEllipsis
 			s.template = d
+			s.unknown = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameError, SizeName: theme.SizeNameCaptionText, Inline: true}})
+			s.unknown.Truncation = fyne.TextTruncateEllipsis
+			s.unknown.Hide()
+			e.OnChanged = s.showUnknown
 		}
 		f.set = func(v any) {
 			if !s.focused(e) {
@@ -368,6 +375,10 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		f.input = e
 	}
+	control := f.input
+	if d.Kind == settings.KindTemplate {
+		control = container.New(layout.NewCustomPaddedVBoxLayout(0), f.input, s.unknown)
+	}
 	if d.Note != "" {
 		under = settingNote(d.Note)
 	}
@@ -375,7 +386,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		s.tray, s.trayNote = d, settingNote(d.Note)
 		under = s.trayNote
 	}
-	f.row = settingRow(d.Label, f.input, under)
+	f.row = settingRow(d.Label, control, under)
 	return f
 }
 
@@ -384,6 +395,34 @@ func settingNote(text string) *widget.RichText {
 	note := widget.NewRichText(&widget.TextSegment{Text: text, Style: widget.RichTextStyle{ColorName: colorSubtle, SizeName: theme.SizeNameCaptionText, Inline: true}})
 	note.Truncation = fyne.TextTruncateEllipsis
 	return note
+}
+
+// showUnknown names, under the template, the {names} in text that are not
+// placeholders, or hides the line when there are none.
+func (s *settingsScreen) showUnknown(text string) {
+	names := settings.UnknownPlaceholders(text)
+	if len(names) > 0 {
+		lead := "Not a placeholder, left out when saved: "
+		if len(names) > 1 {
+			lead = "Not placeholders, left out when saved: "
+		}
+		setCaption(s.unknown, lead+strings.Join(names, ", "))
+	}
+	if shown := len(names) > 0; shown != s.unknown.Visible() {
+		if shown {
+			s.unknown.Show()
+		} else {
+			s.unknown.Hide()
+		}
+		// The row lays the line out under the template, though its height
+		// may not change; the screen follows if it does.
+		if f, ok := s.fields[s.template.Key]; ok {
+			f.row.Refresh()
+		}
+		if s.scroll != nil {
+			relayout(s.scroll)
+		}
+	}
 }
 
 // applyEntry sends its text on Enter or when it loses focus, if it changed.

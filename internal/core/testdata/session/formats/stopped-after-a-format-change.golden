@@ -1,0 +1,25 @@
+# formats/stopped-after-a-format-change
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=8000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 176400(4000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=8000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=352800(8000ms)
+    4500ms  > the stream is now s16le 48000 Hz 2ch
+    4500ms  > audio music 1 at 4000ms, 48000(1000ms)
+    4510ms  log info: stream format changed from s16le 44100 Hz 2ch to s16le 48000 Hz 2ch
+    4510ms  take t-001+ "A" start=0(0ms) length=192000(4000ms) provisional format=48000/2
+    5500ms  > player Stopped pos=-1 (ring at 48000)
+    5500ms  state waiting
+    5500ms  state stopping
+    5500ms  state idle
+    5500ms  take none
+--- jobs
+job t-001 "A" played=176389(3999.75ms) length=352800(8000ms) wav=176389 crc=8c370f66 partial
+--- end: idle, 0 skipped, 0 ads, 0 overruns
