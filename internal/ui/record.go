@@ -32,8 +32,8 @@ type recordScreen struct {
 	idleText   *widget.Label
 	hint       *widget.Label
 	attention  *fyne.Container
-	openPlayer *button
-	diagnose   *button
+	openPlayer *litButton
+	diagnose   *litButton
 	session    *fyne.Container
 
 	card  *fyne.Container
@@ -49,12 +49,12 @@ type recordScreen struct {
 	waiting *widget.Label
 	// launch and play are what a waiting session needs from the player:
 	// to run, then to play.
-	launch  *button
-	play    *button
+	launch  *litButton
+	play    *litButton
 	restart *button
 	// blocked leads to the diagnostics once a session ended for want of
 	// an output folder.
-	blocked *button
+	blocked *litButton
 
 	rows     []model.Row
 	list     *widget.List
@@ -84,12 +84,10 @@ func newRecordScreen(a *App) *recordScreen {
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	r.hint.Wrapping = fyne.TextWrapWord
 	r.hint.SizeName = theme.SizeNameCaptionText
-	r.diagnose = newIconButton("Open diagnostics", theme.WarningIcon(), a.showDiagnostics)
-	r.diagnose.Importance = widget.WarningImportance
+	r.diagnose = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
 	diagnose := r.diagnose
-	r.openPlayer = newIconButton("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
-	r.openPlayer.Importance = widget.HighImportance
-	r.attention = container.NewCenter(container.NewHBox(r.openPlayer, diagnose))
+	r.openPlayer = newLitButton("Open the player", theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
+	r.attention = container.NewCenter(container.NewHBox(r.openPlayer.lit, diagnose.lit))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
 		r.idleTitle,
@@ -130,22 +128,19 @@ func newRecordScreen(a *App) *recordScreen {
 	r.card = inset(newPanel(colorLive, colorCardLine, 16, fyne.NewSize(pad*2, pad*2), live))
 
 	r.waiting = widget.NewLabel("")
-	r.launch = newIconButton("Open the player", theme.MediaPlayIcon(), a.launchPlayer)
-	r.launch.Importance = widget.HighImportance
-	r.play = newIconButton("Play", theme.MediaPlayIcon(), func() {
+	r.launch = newLitButton("Open the player", theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
+	r.play = newLitButton("Play", theme.MediaPlayIcon(), widget.HighImportance, func() {
 		a.noteAction("play in the player")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdPlay}, nil)
 	})
-	r.play.Importance = widget.HighImportance
 	// A track already playing when the session starts is not recorded;
 	// playing it again from 0:00 makes it the next track.
 	r.restart = newIconButton("Record this track from the start", theme.MediaReplayIcon(), func() {
 		a.noteAction("record this track from the start")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
-	r.blocked = newIconButton("Open diagnostics", theme.WarningIcon(), a.showDiagnostics)
-	r.blocked.Importance = widget.WarningImportance
-	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.launch, r.play, r.restart, r.blocked))
+	r.blocked = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
+	r.waitRow = inset(container.NewHBox(r.waiting, layout.NewSpacer(), r.launch.lit, r.play.lit, r.restart, r.blocked.lit))
 
 	r.list = widget.NewList(
 		func() int { return len(r.rows) },

@@ -354,7 +354,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			if top := s.app.win.Canvas().Overlays().Top(); top != nil {
 				top.Refresh()
 			}
-			focusFirst(s.app.win)
+			closesOnEscape(s.app.win, pick.Hide)
 		})
 		s.app.maskAlways(e)
 		f.set = func(v any) {
@@ -493,7 +493,7 @@ func (s *settingsScreen) render(st model.State) {
 	prefix, _ := st.Settings[settings.OutputPrefix.String()].(string)
 	s.enable(settings.OutputCounterNext, prefix == "counter")
 	s.enable(settings.OutputCounterWidth, prefix == "counter")
-	note := s.app.trayNote(st)
+	note := s.app.trayNote()
 	if note == "" {
 		note = s.tray.Note
 	}
@@ -669,12 +669,11 @@ func (p *playerCard) restart() {
 		})
 	}
 	if p.app.last.Recording() {
-		dialog.ShowConfirm("Restart spytifyd?", "A session is recording; restarting stops it now.", func(ok bool) {
+		ask(p.app.win, "Restart spytifyd?", "A session is recording; restarting stops it now.", func(ok bool) {
 			if ok {
 				restart()
 			}
-		}, p.app.win)
-		focusFirst(p.app.win)
+		})
 		return
 	}
 	restart()

@@ -22,10 +22,7 @@ func showError(w fyne.Window, err error) dialog.Dialog {
 	if errors.As(err, &perr) {
 		err = errors.New(perr.Message)
 	}
-	d := dialog.NewError(err, w)
-	d.Show()
-	focusFirst(w)
-	return d
+	return showText(w, "Error", capitalized(err.Error()), "OK", "", nil)
 }
 
 func fmtDuration(ms int64) string {

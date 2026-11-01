@@ -109,8 +109,12 @@ func focusName(a *App, f fyne.Focusable) string {
 		return icon(w)
 	case *button:
 		return icon(&w.Button)
+	case *litButton:
+		return icon(&w.Button)
 	case *toggle:
 		return setting(w)
+	case *tabKeys:
+		return "Tabs"
 	case *widget.Select:
 		if key := setting(w); key != "" {
 			return key
@@ -119,6 +123,8 @@ func focusName(a *App, f fyne.Focusable) string {
 	case *checkSelect:
 		return "Filter"
 	case *widget.Check:
+		return w.Text
+	case *check:
 		return w.Text
 	case *widget.Hyperlink:
 		return w.Text
@@ -219,7 +225,7 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	revealed, opened := fakeOS(t)
 	a, m, core := connectedApp(t)
 	c := a.win.Canvas()
-	wantOrder(t, a, "Donate", "Record")
+	wantOrder(t, a, "Donate", "Record", "Tabs")
 	tabTo(t, a, "Record", 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodSessionStart)
@@ -227,7 +233,7 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	// With the player closed, Record is off and the screen offers to open it.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
 	a.render()
-	wantOrder(t, a, "Donate", "Open Player")
+	wantOrder(t, a, "Donate", "Tabs", "Open Player")
 	tabTo(t, a, "Open Player", 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodPlayerLaunch)
@@ -235,7 +241,7 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	// A session: two files saved, one skipped, whose buttons are off.
 	feedSession(t, m)
 	a.render()
-	wantOrder(t, a, "Donate", "Stop", "Skip", "list", "Show in folder", "Play", "Show in folder", "Play", "Clear list", "Open folder")
+	wantOrder(t, a, "Donate", "Stop", "Tabs", "Skip", "list", "Show in folder", "Play", "Show in folder", "Play", "Clear list", "Open folder")
 	tabTo(t, a, "Skip", 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodPlayerControl)
@@ -275,7 +281,7 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	a.render()
 	c := a.win.Canvas()
 	lib := a.screens[tabLibrary].(*libraryScreen)
-	wantOrder(t, a, "Donate", "Stop", "Search artist, title or album", "Sort", "Filter", "Rescan", "list", "Show in folder", "Play")
+	wantOrder(t, a, "Donate", "Stop", "Tabs", "Search artist, title or album", "Sort", "Filter", "Rescan", "list", "Show in folder", "Play")
 
 	test.Type(tabTo(t, a, "Search artist, title or album", 1), "nothing like it")
 	if len(lib.shown) != 0 {
@@ -324,7 +330,7 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 // settings in the table's order but those turned off, then its Advanced
 // fold.
 func settingsOrder(s *settingsScreen) []string {
-	want := []string{"Donate", "Record", "Search settings"}
+	want := []string{"Donate", "Record", "Tabs", "Search settings"}
 	for _, g := range groups() {
 		var main []string
 		advanced := g == "App"
@@ -513,7 +519,7 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 	a.render()
 	c := a.win.Canvas()
 	l := a.screens[tabLogs].(*logsScreen)
-	wantOrder(t, a, "Donate", "Record", "error", "info", "debug", "Copy", "Open log file", "Diagnostics", "list")
+	wantOrder(t, a, "Donate", "Record", "Tabs", "error", "info", "debug", "Copy", "Open log file", "Diagnostics", "list")
 
 	// Diagnostics opens its dialog with the focus on its first control.
 	tabTo(t, a, "Diagnostics", 1)
@@ -566,7 +572,7 @@ func TestTheKeyboardWorksAbout(t *testing.T) {
 	a.showTab(tabAbout)
 	a.render()
 	c := a.win.Canvas()
-	wantOrder(t, a, "Donate", "Record", "Source code on GitHub", "Project page", "Check for updates", "♥ Donate")
+	wantOrder(t, a, "Donate", "Record", "Tabs", "Source code on GitHub", "Project page", "Check for updates", "♥ Donate")
 	// Check for updates asks GitHub: not pressed here.
 	for _, name := range []string{"Donate", "Source code on GitHub", "Project page", "♥ Donate"} {
 		tabTo(t, a, name, 1)

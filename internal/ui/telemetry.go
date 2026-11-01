@@ -9,7 +9,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
@@ -253,7 +252,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	preview := container.NewVBox()
 	// keep, ticked, sends the picture; unticked, the dialog and the
 	// report leave it out.
-	var keep *widget.Check
+	var keep *check
 	if shot := report.Screenshot; shot != nil {
 		with := "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
 		img := canvas.NewImageFromImage(shot)
@@ -263,7 +262,8 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 		// At the left, as the log's long lines widen what scrolls.
 		pic := container.NewHBox(img)
 		preview.Add(pic)
-		keep = widget.NewCheck(pictureLabel, func(on bool) {
+		keep = newCheck(pictureLabel)
+		keep.OnChanged = func(on bool) {
 			if on {
 				body.SetText(with)
 				pic.Show()
@@ -271,7 +271,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 				body.SetText(without)
 				pic.Hide()
 			}
-		})
+		}
 		keep.SetChecked(true)
 	}
 	preview.Add(widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}))
@@ -284,7 +284,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	message := newCommentEntry()
 	message.SetPlaceHolder("Comment (optional)")
 	content.Add(message)
-	d := dialog.NewCustomConfirm("Send to the developers", "Send", "Cancel", content, func(send bool) {
+	showDialog(a.win, "Send to the developers", content, "Cancel", "Send", fyne.NewSize(560, 420), func(send bool) {
 		if !send {
 			return
 		}
@@ -298,8 +298,5 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 			err := a.tel.SendChecks(report, text)
 			fyne.Do(func() { sent(err == nil) })
 		})
-	}, a.win)
-	d.Resize(fyne.NewSize(560, 420))
-	d.Show()
-	focusFirst(a.win)
+	})
 }

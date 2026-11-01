@@ -32,7 +32,7 @@ type logsScreen struct {
 	// diagnose opens diag, and turns to a warning while a check fails.
 	// open is whether diag shows: its checks then follow the model from
 	// any tab.
-	diagnose *button
+	diagnose *litButton
 	diag     *widget.PopUp
 	open     bool
 	// summary heads the checks, which scroll past checksMaxHeight, above
@@ -68,8 +68,7 @@ func newLogsScreen(a *App) *logsScreen {
 	pad := theme.Padding()
 	body := container.NewBorder(container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done), nil, nil, l.checksScroll)
 	l.diag = widget.NewModalPopUp(container.New(layout.NewCustomPaddedLayout(pad*2, pad*2, pad*2, pad*2), body), a.win.Canvas())
-	l.diagnose = newIconButton("Diagnostics", theme.ConfirmIcon(), a.showDiagnostics)
-	l.diagnose.Importance = widget.LowImportance
+	l.diagnose = newLitButton("Diagnostics", theme.ConfirmIcon(), widget.LowImportance, a.showDiagnostics)
 
 	l.level = widget.NewCheckGroup(logLevels, func([]string) { l.filter() })
 	l.level.Horizontal = true
@@ -121,7 +120,7 @@ func newLogsScreen(a *App) *logsScreen {
 		_ = openPath(l.path)
 	})
 	open.Importance = widget.LowImportance
-	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open, l.diagnose))
+	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
 	l.root = plain(margin(inReadingOrder(tools, nil, nil, nil, l.list)))
 	return l
 }
@@ -148,7 +147,7 @@ func (a *App) showDiagnostics() {
 	l.diag.Show()
 	l.fitDiagnostics()
 	l.checksScroll.ScrollToBottom()
-	focusFirst(a.win)
+	closesOnEscape(a.win, l.hideDiagnostics)
 }
 
 func (l *logsScreen) hideDiagnostics() {
@@ -204,17 +203,15 @@ func (l *logsScreen) renderChecks(s model.State) {
 		}
 		var fix fyne.CanvasObject
 		if c.Name == "player running" && !c.OK {
-			open := newIconButton("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), l.app.launchPlayer)
-			open.Importance = widget.HighImportance
-			fix = open
+			open := newLitButton("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
+			fix = open.lit
 		}
 		if c.Name == proto.CheckOutputWritable && !c.OK {
-			choose := newIconButton("Choose another folder", theme.FolderOpenIcon(), func() {
+			choose := newLitButton("Choose another folder", theme.FolderOpenIcon(), widget.HighImportance, func() {
 				l.hideDiagnostics()
 				l.app.showOutputSetting()
 			})
-			choose.Importance = widget.HighImportance
-			fix = choose
+			fix = choose.lit
 		}
 		row := container.NewBorder(nil, nil, container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c))), fix, clipped(c.Detail))
 		if c.OK {

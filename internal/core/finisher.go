@@ -1,9 +1,7 @@
 package core
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -63,10 +61,11 @@ type finisher struct {
 	jobs chan finishJob
 	wg   sync.WaitGroup
 
-	mu     sync.Mutex
-	cnt    proto.Counters
-	claims map[string]bool
-	index  *recordIndex
+	mu  sync.Mutex
+	cnt proto.Counters
+	// records tells whether a track is recorded, and keeps the claims of
+	// the jobs handed over and the index of the files saved.
+	records *records
 	// advance stores the counter's next number once a file took one; full
 	// stops the recording when the counter has no number left, and lost
 	// when the output folder cannot be reached.
@@ -81,13 +80,12 @@ type finisher struct {
 func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(string, any), log *Logger) *finisher {
 	v := values()
 	f := &finisher{
-		values: values,
-		ffmpeg: ff,
-		emit:   emit,
-		log:    log,
-		jobs:   make(chan finishJob, 256),
-		claims: map[string]bool{},
-		index:  openIndex(filepath.Join(v.Path(settings.OutputDir), ".spytify", "recorded.jsonl")),
+		values:  values,
+		ffmpeg:  ff,
+		emit:    emit,
+		log:     log,
+		jobs:    make(chan finishJob, 256),
+		records: openRecords(v.Path(settings.OutputDir)),
 	}
 	go func() {
 		for j := range f.jobs {
@@ -101,9 +99,7 @@ func (f *finisher) enqueue(j finishJob) {
 	// A partial take is discarded, so it does not make the track a
 	// duplicate of itself.
 	if !j.partial && j.rejected == "" {
-		f.mu.Lock()
-		f.claims[trackKey(j.info.Artist(), j.info.Title)] = true
-		f.mu.Unlock()
+		f.records.claim(j.info)
 	}
 	f.wg.Add(1)
 	f.jobs <- j
@@ -138,22 +134,10 @@ func (f *finisher) skip(id string, reason proto.SkipReason) {
 	f.emit(proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: id, Reason: reason})
 }
 
-// recorded reports whether a track is already saved or being saved.
+// recorded reports whether a track is already saved or being saved: the
+// session asks before it records one.
 func (f *finisher) recorded(info meta.TrackInfo, v settings.Values) bool {
-	key := trackKey(info.Artist(), info.Title)
-	f.mu.Lock()
-	claimed := f.claims[key]
-	f.mu.Unlock()
-	if claimed || f.index.has(key) {
-		return true
-	}
-	o := namingOptions(v)
-	local := tag.FromLocal(info, tagOptions(v))
-	return naming.Recorded(v.Path(settings.OutputDir), naming.Build(namingTrack(local, info), o), o)
-}
-
-func trackKey(artist, title string) string {
-	return strings.ToLower(strings.TrimSpace(artist)) + "\x1f" + strings.ToLower(strings.TrimSpace(title))
+	return f.records.recorded(info, v)
 }
 
 func namingOptions(v settings.Values) naming.Options {
@@ -203,215 +187,294 @@ func namingTrack(t tag.Track, info meta.TrackInfo) naming.Track {
 	}
 }
 
+// take is a job on its way to its file: what a step of process finds, for
+// the steps after it.
+type take struct {
+	finishJob
+	v       settings.Values
+	o       naming.Options
+	topts   tag.Options
+	began   time.Time
+	timings *proto.FinishTimings
+	// held is set once the audio is held for track.keep, which then owns
+	// the temp WAV.
+	held bool
+
+	trimStart, trimEnd int64
+	keptFrames         int64
+	tags               tag.Track
+	counter            int64
+	final, part        string
+	tagged             bool
+}
+
+// process makes j's file, one step after the other. A step that reports
+// false ended the job: it skipped, held or failed the take.
 func (f *finisher) process(j finishJob) {
 	defer f.wg.Done()
 	defer func() {
 		if j.partial || j.rejected != "" {
 			return
 		}
-		f.mu.Lock()
-		delete(f.claims, trackKey(j.info.Artist(), j.info.Title))
-		f.mu.Unlock()
+		f.records.release(j.info)
 	}()
-	held := false
+	t := &take{finishJob: j}
 	defer func() {
-		if !held {
+		if !t.held {
 			os.Remove(j.tmp)
 		}
 	}()
 
-	began := time.Now()
-	since := func(t time.Time) int64 { return time.Since(t).Milliseconds() }
-	v := f.values()
-	playedMs := j.format.MsFromFrames(j.played)
-	if j.rejected != "" {
-		held = f.keep.hold(j, j.rejected)
+	t.began, t.v = time.Now(), f.values()
+	t.o, t.topts = namingOptions(t.v), tagOptions(t.v)
+	t.timings = &proto.FinishTimings{Format: t.v.String(settings.EncodeFormat)}
+	if !f.complete(t) || !f.trim(t) || !f.goodQuality(t) {
 		return
 	}
-	if !j.keep && (j.partial || (j.length > 0 && j.played < j.length-j.format.FramesFromMs(completeToleranceMs))) {
-		f.log.Infof("%q: only %d of %d ms played, not kept", j.info.Title, playedMs, j.format.MsFromFrames(j.length))
-		f.skip(j.id, proto.SkipIncomplete)
-		held = f.keep.hold(j, proto.SkipIncomplete)
-		return
-	}
-	tooShort := func(frames int64) bool {
-		return j.length == 0 && !j.keep && j.format.MsFromFrames(frames) < minUnknownLengthMs
-	}
-	if tooShort(j.played) {
-		f.log.Infof("%q: %d ms of an item with no length, under %d s", j.info.Title, playedMs, minUnknownLengthMs/1000)
-		f.skip(j.id, proto.SkipTooShort)
-		return
-	}
-
-	var trimStart, trimEnd int64
-	keptFrames := j.played
-	timings := &proto.FinishTimings{Format: v.String(settings.EncodeFormat)}
-	if v.Bool(settings.RecorderTrimSilence) {
-		step := time.Now()
-		s, e, ok, err := scanTrim(j.tmp, v.Float(settings.RecorderSilenceDb))
-		timings.TrimMs = since(step)
-		if err != nil {
-			f.fail(j, "read", err)
-			return
-		}
-		if !ok {
-			f.skip(j.id, proto.SkipTooShort)
-			return
-		}
-		trimStart, trimEnd, keptFrames = s, e, e-s
-		if tooShort(keptFrames) {
-			f.skip(j.id, proto.SkipTooShort)
-			return
-		}
-	}
-	// Low quality skips a take that nothing above skipped, before it takes
-	// a cover, a counter number or a name.
-	if !j.keep && poorFormat(j.format) {
-		f.log.Infof("%q: recorded at %s, too poor for music, not kept", j.info.Title, j.format)
-		f.skip(j.id, proto.SkipLowQuality)
-		held = f.keep.hold(j, proto.SkipLowQuality)
-		return
-	}
-
-	topts := tagOptions(v)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	tags := tag.FromLocal(j.info, topts)
-	if topts.Cover && tags.CoverURL != "" {
-		step := time.Now()
-		data, mime := j.cover, j.coverMIME
-		var err error
-		if data == nil {
-			data, mime, err = tag.FetchCover(ctx, nil, tags.CoverURL)
-		}
-		timings.CoverMs = since(step)
-		if err == nil {
-			tags.Cover, tags.CoverMIME = data, mime
-		} else {
-			f.log.Infof("%q: cover not embedded: %v", j.info.Title, err)
-		}
-	}
-
-	o := namingOptions(v)
-	// The counter numbers the saved files in the order they play, from one
-	// recording to the next: it is a setting, which each file moves on. Past
-	// the last number its digits allow, the file is not saved and the
-	// recording stops, as v1's did.
-	var counter int64
-	if o.Prefix == "counter" {
-		counter = v.Int(settings.OutputCounterNext)
-		if limit := naming.CounterLimit(o.CounterWidth); counter > limit {
-			f.fail(j, "counter_full", fmt.Errorf("the counter is past %d, the last number of %d digits: raise Counter digits or set Next counter number back", limit, o.CounterWidth))
-			if f.full != nil {
-				f.full()
-			}
-			return
-		}
-	}
-	// A kept take's suffix ends its file name, wherever the template puts
-	// the title, and its title tag.
-	nt := namingTrack(tags, j.info)
-	nt.Suffix = j.suffix
-	plan := naming.Build(nt, o)
-	tags.Title += j.suffix
-	root := v.Path(settings.OutputDir)
-	dir := filepath.Join(root, plan.Dir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		f.fail(j, "output_dir", err)
+	f.fetchCover(ctx, t)
+	if !f.takeNumber(t) || !f.pickName(t) || !f.encode(ctx, t) {
 		return
 	}
-	name := naming.FileName(plan, o, counter, tags.Track)
-	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
-	duplicates := v.String(settings.RecorderDuplicates)
-	if j.keep {
+	f.writeTags(ctx, t)
+	f.save(t)
+}
+
+func msSince(t time.Time) int64 { return time.Since(t).Milliseconds() }
+
+// tooShort reports whether frames of an item with no declared length are
+// too few to be taken for a whole track.
+func (t *take) tooShort(frames int64) bool {
+	return t.length == 0 && !t.keep && t.format.MsFromFrames(frames) < minUnknownLengthMs
+}
+
+// complete reports whether the take is to be saved. One the session
+// rejected is held for track.keep, one cut short is skipped and held, and
+// one too short is skipped.
+func (f *finisher) complete(t *take) bool {
+	playedMs := t.format.MsFromFrames(t.played)
+	if t.rejected != "" {
+		t.held = f.keep.hold(t.finishJob, t.rejected)
+		return false
+	}
+	if !t.keep && (t.partial || (t.length > 0 && t.played < t.length-t.format.FramesFromMs(completeToleranceMs))) {
+		f.log.Infof("%q: only %d of %d ms played, not kept", t.info.Title, playedMs, t.format.MsFromFrames(t.length))
+		f.skip(t.id, proto.SkipIncomplete)
+		t.held = f.keep.hold(t.finishJob, proto.SkipIncomplete)
+		return false
+	}
+	if t.tooShort(t.played) {
+		f.log.Infof("%q: %d ms of an item with no length, under %d s", t.info.Title, playedMs, minUnknownLengthMs/1000)
+		f.skip(t.id, proto.SkipTooShort)
+		return false
+	}
+	return true
+}
+
+// trim finds where the sound starts and ends, when recorder.trim_silence is
+// on. What is left may be too short to keep.
+func (f *finisher) trim(t *take) bool {
+	t.keptFrames = t.played
+	if !t.v.Bool(settings.RecorderTrimSilence) {
+		return true
+	}
+	step := time.Now()
+	s, e, ok, err := scanTrim(t.tmp, t.v.Float(settings.RecorderSilenceDb))
+	t.timings.TrimMs = msSince(step)
+	if err != nil {
+		f.fail(t.finishJob, "read", err)
+		return false
+	}
+	if !ok {
+		f.skip(t.id, proto.SkipTooShort)
+		return false
+	}
+	t.trimStart, t.trimEnd, t.keptFrames = s, e, e-s
+	if t.tooShort(t.keptFrames) {
+		f.skip(t.id, proto.SkipTooShort)
+		return false
+	}
+	return true
+}
+
+// goodQuality skips a take recorded too poorly for music, and holds it for
+// track.keep. Low quality skips a take that nothing before skipped, before
+// it takes a cover, a counter number or a name.
+func (f *finisher) goodQuality(t *take) bool {
+	if !t.keep && poorFormat(t.format) {
+		f.log.Infof("%q: recorded at %s, too poor for music, not kept", t.info.Title, t.format)
+		f.skip(t.id, proto.SkipLowQuality)
+		t.held = f.keep.hold(t.finishJob, proto.SkipLowQuality)
+		return false
+	}
+	return true
+}
+
+// fetchCover makes the take's tags, with the cover when tags.cover is on. A
+// cover that cannot be had is left out.
+func (f *finisher) fetchCover(ctx context.Context, t *take) {
+	t.tags = tag.FromLocal(t.info, t.topts)
+	if !t.topts.Cover || t.tags.CoverURL == "" {
+		return
+	}
+	step := time.Now()
+	data, mime := t.cover, t.coverMIME
+	var err error
+	if data == nil {
+		data, mime, err = tag.FetchCover(ctx, nil, t.tags.CoverURL)
+	}
+	t.timings.CoverMs = msSince(step)
+	if err == nil {
+		t.tags.Cover, t.tags.CoverMIME = data, mime
+	} else {
+		f.log.Infof("%q: cover not embedded: %v", t.info.Title, err)
+	}
+}
+
+// takeNumber gives the take the counter's next number, when file names
+// start with it. The counter numbers the saved files in the order they
+// play, from one recording to the next: it is a setting, which each file
+// moves on. Past the last number its digits allow, the file is not saved
+// and the recording stops, as v1's did.
+func (f *finisher) takeNumber(t *take) bool {
+	if t.o.Prefix != "counter" {
+		return true
+	}
+	t.counter = t.v.Int(settings.OutputCounterNext)
+	if limit := naming.CounterLimit(t.o.CounterWidth); t.counter > limit {
+		f.fail(t.finishJob, "counter_full", fmt.Errorf("the counter is past %d, the last number of %d digits: raise Counter digits or set Next counter number back", limit, t.o.CounterWidth))
+		if f.full != nil {
+			f.full()
+		}
+		return false
+	}
+	return true
+}
+
+// pickName makes the file's folder and picks its name. A file already
+// there takes a suffix, skips the take or is replaced, as
+// recorder.duplicates says.
+func (f *finisher) pickName(t *take) bool {
+	// A kept take's suffix ends its file name, wherever the template puts
+	// the title, and its title tag.
+	nt := namingTrack(t.tags, t.info)
+	nt.Suffix = t.suffix
+	plan := naming.Build(nt, t.o)
+	t.tags.Title += t.suffix
+	root := t.v.Path(settings.OutputDir)
+	dir := filepath.Join(root, plan.Dir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		f.fail(t.finishJob, "output_dir", err)
+		return false
+	}
+	name := naming.FileName(plan, t.o, t.counter, t.tags.Track)
+	duplicates := t.v.String(settings.RecorderDuplicates)
+	if t.keep {
 		// A partial file never replaces a file, nor is it skipped.
 		duplicates = "suffix"
 	}
 	switch duplicates {
 	case "suffix":
-		name = naming.FreeSuffix(dir, name, o.Underscores, exists)
+		name = naming.FreeSuffix(dir, name, t.o.Underscores, f.records.taken)
 	case "skip":
-		if exists(filepath.Join(dir, name)) {
-			f.skip(j.id, proto.SkipDuplicate)
-			return
+		if f.records.taken(filepath.Join(dir, name)) {
+			f.skip(t.id, proto.SkipDuplicate)
+			return false
 		}
 	}
-	final := filepath.Join(dir, name)
-	part := final + ".part"
-	format := timings.Format
+	t.final = filepath.Join(dir, name)
+	t.part = t.final + ".part"
+	return true
+}
+
+// encode writes the take to the .part file in the output format, trimmed
+// and normalized as set.
+func (f *finisher) encode(ctx context.Context, t *take) bool {
 	step := time.Now()
 	short, err := f.ffmpeg.Encode(ctx, encode.Job{
-		In:          j.tmp,
-		Out:         part,
-		Format:      format,
-		BitrateKbps: int(v.Int(settings.EncodeBitrateKbps)),
-		Source:      j.format,
-		TrimStart:   trimStart,
-		TrimEnd:     trimEnd,
-		Normalize:   v.Bool(settings.RecorderNormalize),
-		TargetLUFS:  v.Float(settings.RecorderTargetLufs),
+		In:          t.tmp,
+		Out:         t.part,
+		Format:      t.timings.Format,
+		BitrateKbps: int(t.v.Int(settings.EncodeBitrateKbps)),
+		Source:      t.format,
+		TrimStart:   t.trimStart,
+		TrimEnd:     t.trimEnd,
+		Normalize:   t.v.Bool(settings.RecorderNormalize),
+		TargetLUFS:  t.v.Float(settings.RecorderTargetLufs),
 	})
-	timings.EncodeMs = since(step)
+	t.timings.EncodeMs = msSince(step)
 	if err != nil {
-		os.Remove(part)
-		f.fail(j, "encode", err)
-		return
+		os.Remove(t.part)
+		f.fail(t.finishJob, "encode", err)
+		return false
 	}
 	if short != nil {
 		// A gain that shows as +0.0 dB left the track at its level.
 		if math.Round(short.GainDB*10) > 0 {
-			f.log.Infof("%q: normalized %+.1f dB; its peaks kept it %.1f dB under %g LUFS", j.info.Title, short.GainDB, short.Under(), short.TargetLUFS)
+			f.log.Infof("%q: normalized %+.1f dB; its peaks kept it %.1f dB under %g LUFS", t.info.Title, short.GainDB, short.Under(), short.TargetLUFS)
 		} else {
-			f.log.Infof("%q: left at its level; its peaks already reach %g dBTP, %.1f dB under %g LUFS", j.info.Title, encode.TruePeak, short.Under(), short.TargetLUFS)
+			f.log.Infof("%q: left at its level; its peaks already reach %g dBTP, %.1f dB under %g LUFS", t.info.Title, encode.TruePeak, short.Under(), short.TargetLUFS)
 		}
 	}
-	tagged := true
-	step = time.Now()
-	err = (tag.Writer{FFmpeg: f.ffmpeg.Path}).Write(ctx, part, format, tags, topts)
-	timings.TagMs = since(step)
+	return true
+}
+
+// writeTags tags the .part file. A file whose tags could not be written is
+// saved all the same.
+func (f *finisher) writeTags(ctx context.Context, t *take) {
+	t.tagged = true
+	step := time.Now()
+	err := (tag.Writer{FFmpeg: f.ffmpeg.Path}).Write(ctx, t.part, t.timings.Format, t.tags, t.topts)
+	t.timings.TagMs = msSince(step)
 	if err != nil {
-		f.log.Errorf("%q: tags not written: %v", j.info.Title, err)
-		tagged = false
+		f.log.Errorf("%q: tags not written: %v", t.info.Title, err)
+		t.tagged = false
 	}
-	if format == "wav" {
-		if err := os.Rename(part+".json", final+".json"); err != nil && !os.IsNotExist(err) {
-			f.log.Errorf("%q: sidecar: %v", j.info.Title, err)
+}
+
+// save renames the .part file, and a WAV's sidecar, to the final name, then
+// counts the file and reports it saved.
+func (f *finisher) save(t *take) {
+	if t.timings.Format == "wav" {
+		if err := os.Rename(t.part+".json", t.final+".json"); err != nil && !os.IsNotExist(err) {
+			f.log.Errorf("%q: sidecar: %v", t.info.Title, err)
 		}
 	}
-	if err := os.Rename(part, final); err != nil {
-		os.Remove(part)
-		f.fail(j, "rename", err)
+	if err := os.Rename(t.part, t.final); err != nil {
+		os.Remove(t.part)
+		f.fail(t.finishJob, "rename", err)
 		return
 	}
 	var size int64
-	if st, err := os.Stat(final); err == nil {
+	if st, err := os.Stat(t.final); err == nil {
 		size = st.Size()
 	}
 	f.mu.Lock()
 	f.cnt.Recorded++
 	f.cnt.Bytes += size
 	f.mu.Unlock()
-	if o.Prefix == "counter" && f.advance != nil {
-		f.advance(counter + 1)
+	if t.o.Prefix == "counter" && f.advance != nil {
+		f.advance(t.counter + 1)
 	}
-	if !j.keep {
+	if !t.keep {
 		// A partial file does not make the whole track a duplicate.
-		f.index.add(trackKey(j.info.Artist(), j.info.Title), final)
+		f.records.saved(t.info, t.final)
 		// The take held for track.keep goes once the next track is saved.
 		f.keep.drop()
 	}
-	timings.TotalMs = since(began)
-	f.log.Infof("saved %s", final)
+	t.timings.TotalMs = msSince(t.began)
+	f.log.Infof("saved %s", t.final)
 	f.emit(proto.EventTrackFinished, proto.TrackFinishedEvent{
-		ID:         j.id,
-		Counter:    counter,
-		Path:       final,
-		DurationMs: j.format.MsFromFrames(keptFrames),
+		ID:         t.id,
+		Counter:    t.counter,
+		Path:       t.final,
+		DurationMs: t.format.MsFromFrames(t.keptFrames),
 		Bytes:      size,
-		Tagged:     tagged,
-		TaggedBy:   tags.Source,
-		Timings:    timings,
-		Partial:    j.keep,
+		Tagged:     t.tagged,
+		TaggedBy:   t.tags.Source,
+		Timings:    t.timings,
+		Partial:    t.keep,
 	})
 }
 
@@ -541,56 +604,4 @@ func (fw *frameWindow) frames(from, to int64) []byte {
 		fw.from, fw.data = lo, data
 	}
 	return fw.data[(from-fw.from)*fb : (to-fw.from)*fb]
-}
-
-// recordIndex remembers which artist and title went to which file, so a
-// duplicate is found even when tags moved it to another folder.
-type recordIndex struct {
-	mu   sync.Mutex
-	path string
-	m    map[string]string
-}
-
-func openIndex(path string) *recordIndex {
-	idx := &recordIndex{path: path, m: map[string]string{}}
-	f, err := os.Open(path)
-	if err != nil {
-		return idx
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		var e struct{ Key, Path string }
-		if json.Unmarshal(sc.Bytes(), &e) == nil {
-			idx.m[e.Key] = e.Path
-		}
-	}
-	return idx
-}
-
-func (i *recordIndex) has(key string) bool {
-	i.mu.Lock()
-	p, ok := i.m[key]
-	i.mu.Unlock()
-	if !ok {
-		return false
-	}
-	_, err := os.Stat(p)
-	return err == nil
-}
-
-func (i *recordIndex) add(key, path string) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	i.m[key] = path
-	if err := os.MkdirAll(filepath.Dir(i.path), 0o755); err != nil {
-		return
-	}
-	f, err := os.OpenFile(i.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	b, _ := json.Marshal(struct{ Key, Path string }{key, path})
-	f.Write(append(b, '\n'))
 }
