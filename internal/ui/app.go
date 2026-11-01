@@ -93,7 +93,7 @@ type App struct {
 	output  *widget.RichText
 	update  *button
 	donate  *tipButton
-	action  *button
+	action  *litButton
 	banner  *widget.Label
 	bar     *fyne.Container
 	covers  *covers
@@ -194,23 +194,21 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.donate = newTipButton("", heartIcon, func() { a.openURL(donateURL) })
 	a.donate.Importance = widget.LowImportance
 	a.donate.SetToolTip("Donate")
-	a.action = newIconButton("Record", theme.MediaRecordIcon(), a.toggleRecording)
-	a.action.Importance = widget.HighImportance
+	a.action = newLitButton("Record", theme.MediaRecordIcon(), widget.HighImportance, a.toggleRecording)
 	// The wordmark: the logo with the name in its green.
 	mark := canvas.NewImageFromResource(Wordmark)
 	mark.FillMode = canvas.ImageFillContain
 	mark.SetMinSize(fyne.NewSize(26*622/204, 26))
 	brand := container.NewCenter(mark)
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
-	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.donate, a.action))
+	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.donate, a.action.lit))
 
 	a.banner = widget.NewLabel("")
 	a.banner.Wrapping = fyne.TextWrapWord
 	a.banner.Importance = widget.DangerImportance
 	a.banner.Hide()
 
-	start := newIconButton("Start the recorder", theme.MediaPlayIcon(), a.StartDaemon)
-	start.Importance = widget.HighImportance
+	start := newLitButton("Start the recorder", theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
 	a.player = newPlayerCard(a)
 	intro := widget.NewLabel("Spytify records through spytifyd, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set.")
 	intro.Wrapping = fyne.TextWrapWord
@@ -222,7 +220,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 		heading("The recorder is not running"),
 		a.offlineErr,
 		intro,
-		container.NewHBox(start),
+		container.NewHBox(start.lit),
 		caption(opts.Socket),
 		widget.NewSeparator(),
 		newCard(sectionTitle("Player"), indent(a.player.box)),

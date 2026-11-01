@@ -34,8 +34,7 @@ func newAboutScreen(a *App) *aboutScreen {
 	source := widget.NewHyperlink("Source code on GitHub", nil)
 	source.OnTapped = func() { a.openURL(sourceURL) }
 	project := newIconButton("Project page", theme.HomeIcon(), func() { a.openURL(siteURL) })
-	donate := newButton("♥ Donate", func() { a.openURL(donateURL) })
-	donate.Importance = widget.HighImportance
+	donate := newLitButton("♥ Donate", nil, widget.HighImportance, func() { a.openURL(donateURL) })
 	updates := newIconButton("Check for updates", theme.DownloadIcon(), s.checkNow)
 	legal := widget.NewLabelWithStyle(disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	legal.Wrapping = fyne.TextWrapWord
@@ -45,7 +44,7 @@ func newAboutScreen(a *App) *aboutScreen {
 		tagline,
 		container.NewCenter(s.versions),
 		container.NewCenter(source),
-		container.NewCenter(container.NewHBox(project, updates, donate)),
+		container.NewCenter(container.NewHBox(project, updates, donate.lit)),
 		layout.NewSpacer(),
 		legal,
 	))))
