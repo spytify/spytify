@@ -49,10 +49,6 @@ type Options struct {
 	// Privacy are the privacy.* settings read at launch, used until the
 	// recorder answers.
 	Privacy map[string]any
-	// MinimizeToTray is app.minimize_to_tray read at launch: its tray is
-	// set up before the toolkit's loop runs, the only time Linux starts
-	// one.
-	MinimizeToTray bool
 	// SoftwareOpenGL says the window is drawn with Mesa's OpenGL, no
 	// graphics driver offering any (package opengl).
 	SoftwareOpenGL bool
@@ -107,13 +103,9 @@ type App struct {
 	replaced bool
 	// tray says the platform has a system tray (menu bar on macOS);
 	// noTrayHost, that this Linux desktop draws no tray icons
-	// (watchTrayHost); trayLate, that the tray was set up once the
-	// toolkit's loop ran, which Linux never shows (lateTrayShows);
-	// running, that the loop runs. quitApp quits, replaced by tests.
+	// (watchTrayHost). quitApp quits, replaced by tests.
 	tray       bool
 	noTrayHost bool
-	trayLate   bool
-	running    bool
 	quitApp    func()
 	// fyneStop is Fyne's stop hook, which ShowAndRun runs (see New).
 	fyneStop func()
@@ -252,7 +244,10 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	if a.tray && !opts.ManualRender {
 		watchTrayHost(func(present bool) { fyne.Do(func() { a.setTrayHost(present) }) })
 	}
-	if a.tray && opts.MinimizeToTray {
+	// The toolkit starts a tray with its loop and never after, macOS's
+	// menu bar item included: the icon is there from launch, and
+	// Minimize to tray only says whether closing hides the window to it.
+	if a.tray {
 		a.setupTray()
 	}
 	a.quitApp = fa.Quit
@@ -287,7 +282,6 @@ func (a *App) ShowAndRun() {
 		a.tel.Breadcrumb("app", "launched", nil)
 		a.checkCrashes()
 	})
-	a.running = true
 	a.fa.Run()
 	// Every way out (this window, the tray's Quit, Cmd+Q, a signal) ends
 	// here.
@@ -425,12 +419,6 @@ func (a *App) render() {
 	default:
 		a.action.Enable()
 		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
-	}
-	// The tray icon comes with Minimize to tray; the toolkit cannot take
-	// it away, so turned off, it goes when Spytify restarts. On Linux,
-	// turned on, it comes then too: see setupTray.
-	if a.hasTray() && a.trayMenu == nil && s.Settings[settings.AppMinimizeToTray.String()] == true {
-		a.setupTray()
 	}
 	a.syncTray()
 	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {

@@ -1,11 +1,8 @@
 package ui
 
-// Minimize to tray says under its label why closing quits: the desktop
-// shows no tray icons, or, on Linux, it was turned on once the app ran.
-const (
-	noTrayNote   = "This desktop shows no tray icons: closing quits. On GNOME, the AppIndicator and KStatusNotifierItem Support extension adds them."
-	lateTrayNote = "The tray icon comes when Spytify restarts: until then, closing quits."
-)
+// noTrayNote is what Minimize to tray says under its label where closing
+// quits with it on: the desktop shows no tray icons.
+const noTrayNote = "This desktop shows no tray icons: closing quits. On GNOME, the AppIndicator and KStatusNotifierItem Support extension adds them."
 
 // trayBus is what hasTrayHost asks the session bus; tests answer for it.
 type trayBus interface {

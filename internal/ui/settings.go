@@ -490,7 +490,7 @@ func (s *settingsScreen) render(st model.State) {
 	prefix, _ := st.Settings[settings.OutputPrefix.String()].(string)
 	s.enable(settings.OutputCounterNext, prefix == "counter")
 	s.enable(settings.OutputCounterWidth, prefix == "counter")
-	note := s.app.trayNote(st)
+	note := s.app.trayNote()
 	if note == "" {
 		note = s.tray.Note
 	}
