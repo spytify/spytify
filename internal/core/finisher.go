@@ -1,9 +1,7 @@
 package core
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -63,10 +61,11 @@ type finisher struct {
 	jobs chan finishJob
 	wg   sync.WaitGroup
 
-	mu     sync.Mutex
-	cnt    proto.Counters
-	claims map[string]bool
-	index  *recordIndex
+	mu  sync.Mutex
+	cnt proto.Counters
+	// records tells whether a track is recorded, and keeps the claims of
+	// the jobs handed over and the index of the files saved.
+	records *records
 	// advance stores the counter's next number once a file took one; full
 	// stops the recording when the counter has no number left, and lost
 	// when the output folder cannot be reached.
@@ -81,13 +80,12 @@ type finisher struct {
 func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(string, any), log *Logger) *finisher {
 	v := values()
 	f := &finisher{
-		values: values,
-		ffmpeg: ff,
-		emit:   emit,
-		log:    log,
-		jobs:   make(chan finishJob, 256),
-		claims: map[string]bool{},
-		index:  openIndex(filepath.Join(v.Path(settings.OutputDir), ".spytify", "recorded.jsonl")),
+		values:  values,
+		ffmpeg:  ff,
+		emit:    emit,
+		log:     log,
+		jobs:    make(chan finishJob, 256),
+		records: openRecords(v.Path(settings.OutputDir)),
 	}
 	go func() {
 		for j := range f.jobs {
@@ -101,9 +99,7 @@ func (f *finisher) enqueue(j finishJob) {
 	// A partial take is discarded, so it does not make the track a
 	// duplicate of itself.
 	if !j.partial && j.rejected == "" {
-		f.mu.Lock()
-		f.claims[trackKey(j.info.Artist(), j.info.Title)] = true
-		f.mu.Unlock()
+		f.records.claim(j.info)
 	}
 	f.wg.Add(1)
 	f.jobs <- j
@@ -138,22 +134,10 @@ func (f *finisher) skip(id string, reason proto.SkipReason) {
 	f.emit(proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: id, Reason: reason})
 }
 
-// recorded reports whether a track is already saved or being saved.
+// recorded reports whether a track is already saved or being saved: the
+// session asks before it records one.
 func (f *finisher) recorded(info meta.TrackInfo, v settings.Values) bool {
-	key := trackKey(info.Artist(), info.Title)
-	f.mu.Lock()
-	claimed := f.claims[key]
-	f.mu.Unlock()
-	if claimed || f.index.has(key) {
-		return true
-	}
-	o := namingOptions(v)
-	local := tag.FromLocal(info, tagOptions(v))
-	return naming.Recorded(v.Path(settings.OutputDir), naming.Build(namingTrack(local, info), o), o)
-}
-
-func trackKey(artist, title string) string {
-	return strings.ToLower(strings.TrimSpace(artist)) + "\x1f" + strings.ToLower(strings.TrimSpace(title))
+	return f.records.recorded(info, v)
 }
 
 func namingOptions(v settings.Values) naming.Options {
@@ -232,9 +216,7 @@ func (f *finisher) process(j finishJob) {
 		if j.partial || j.rejected != "" {
 			return
 		}
-		f.mu.Lock()
-		delete(f.claims, trackKey(j.info.Artist(), j.info.Title))
-		f.mu.Unlock()
+		f.records.release(j.info)
 	}()
 	t := &take{finishJob: j}
 	defer func() {
@@ -387,7 +369,6 @@ func (f *finisher) pickName(t *take) bool {
 		return false
 	}
 	name := naming.FileName(plan, t.o, t.counter, t.tags.Track)
-	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
 	duplicates := t.v.String(settings.RecorderDuplicates)
 	if t.keep {
 		// A partial file never replaces a file, nor is it skipped.
@@ -395,9 +376,9 @@ func (f *finisher) pickName(t *take) bool {
 	}
 	switch duplicates {
 	case "suffix":
-		name = naming.FreeSuffix(dir, name, t.o.Underscores, exists)
+		name = naming.FreeSuffix(dir, name, t.o.Underscores, f.records.taken)
 	case "skip":
-		if exists(filepath.Join(dir, name)) {
+		if f.records.taken(filepath.Join(dir, name)) {
 			f.skip(t.id, proto.SkipDuplicate)
 			return false
 		}
@@ -478,7 +459,7 @@ func (f *finisher) save(t *take) {
 	}
 	if !t.keep {
 		// A partial file does not make the whole track a duplicate.
-		f.index.add(trackKey(t.info.Artist(), t.info.Title), t.final)
+		f.records.saved(t.info, t.final)
 		// The take held for track.keep goes once the next track is saved.
 		f.keep.drop()
 	}
@@ -623,56 +604,4 @@ func (fw *frameWindow) frames(from, to int64) []byte {
 		fw.from, fw.data = lo, data
 	}
 	return fw.data[(from-fw.from)*fb : (to-fw.from)*fb]
-}
-
-// recordIndex remembers which artist and title went to which file, so a
-// duplicate is found even when tags moved it to another folder.
-type recordIndex struct {
-	mu   sync.Mutex
-	path string
-	m    map[string]string
-}
-
-func openIndex(path string) *recordIndex {
-	idx := &recordIndex{path: path, m: map[string]string{}}
-	f, err := os.Open(path)
-	if err != nil {
-		return idx
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		var e struct{ Key, Path string }
-		if json.Unmarshal(sc.Bytes(), &e) == nil {
-			idx.m[e.Key] = e.Path
-		}
-	}
-	return idx
-}
-
-func (i *recordIndex) has(key string) bool {
-	i.mu.Lock()
-	p, ok := i.m[key]
-	i.mu.Unlock()
-	if !ok {
-		return false
-	}
-	_, err := os.Stat(p)
-	return err == nil
-}
-
-func (i *recordIndex) add(key, path string) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	i.m[key] = path
-	if err := os.MkdirAll(filepath.Dir(i.path), 0o755); err != nil {
-		return
-	}
-	f, err := os.OpenFile(i.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	b, _ := json.Marshal(struct{ Key, Path string }{key, path})
-	f.Write(append(b, '\n'))
 }
