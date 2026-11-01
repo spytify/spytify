@@ -13,6 +13,7 @@ import (
 
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -126,7 +127,7 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	leaveACrash(t, a, "boom")
 	connect(t, a, m, false)
 	a.checkCrashes()
-	tapButton(t, overlay(t, a), "Close")
+	tapButton(t, overlay(t, a), lang.Close)
 	a.launchFailed(errors.New("spytifyd started but does not answer; see its log in Logs"))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -12}))
@@ -141,7 +142,7 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 		t.Error("a dialog shows with the bug tracker off")
 	}
 	diagnostics(t, a)
-	if send := sendButton(t, a); !send.Disabled() || !contains(texts(overlay(t, a)), optedOut) {
+	if send := sendButton(t, a); !send.Disabled() || !contains(texts(overlay(t, a)), lang.TrackerOptedOut) {
 		t.Errorf("Send to the developers: disabled %v, the dialog %v", send.Disabled(), texts(overlay(t, a)))
 	}
 	snapshot(t, a, "privacy-diagnostics-off")
@@ -169,7 +170,7 @@ func TestFirstRunShowsTheBugTrackerTicked(t *testing.T) {
 	})
 	d := overlay(t, a)
 	snapshot(t, a, "privacy-first-run")
-	box := checkBoxes(d, trackerLabel)
+	box := checkBoxes(d, lang.TrackerSwitch)
 	if len(box) != 1 || !box[0].Checked {
 		t.Fatalf("the notice has %d bug tracker boxes, ticked %v", len(box), len(box) == 1 && box[0].Checked)
 	}
@@ -177,7 +178,7 @@ func TestFirstRunShowsTheBugTrackerTicked(t *testing.T) {
 		t.Fatal("the bug tracker started before the notice closed")
 	}
 	box[0].SetChecked(false)
-	tapButton(t, d, "OK")
+	tapButton(t, d, lang.OK)
 	if !closed || a.tel.Enabled() {
 		t.Fatalf("closed %v, bug tracker on %v", closed, a.tel.Enabled())
 	}
@@ -202,7 +203,7 @@ func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	a.render()
 	set := a.screens[tabSettings].(*settingsScreen)
 	set.search.SetText("privacy")
-	if all := texts(set.root); !contains(all, trackerLabel) {
+	if all := texts(set.root); !contains(all, lang.TrackerSwitch) {
 		t.Errorf("the Privacy section shows %v", all)
 	}
 	snapshot(t, a, "privacy-settings")
@@ -214,7 +215,7 @@ func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	}
 	a.showTab(tabLogs)
 	failCheck(a, m)
-	tapButton(t, diagnostics(t, a), "Run the checks again")
+	tapButton(t, diagnostics(t, a), lang.RunChecksAgain)
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "No audio from the player for 10 s"}))

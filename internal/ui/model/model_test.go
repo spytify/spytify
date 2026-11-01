@@ -2,9 +2,11 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -47,10 +49,10 @@ func TestSessionList(t *testing.T) {
 	if s.Rows[0].Status != Saved || s.Rows[0].Path != "/m/One.flac" {
 		t.Fatalf("finished row: %+v", s.Rows[0])
 	}
-	if got := s.Rows[0].StatusText(); got != "Saved" {
+	if got := s.Rows[0].StatusText(); got != lang.Saved {
 		t.Fatalf("a track tagged online shows %q, want Saved", got)
 	}
-	if s.Current == nil || s.Current.StatusText() != "Skipped: ad" {
+	if s.Current == nil || s.Current.StatusText() != fmt.Sprintf(lang.SkippedFor, proto.SkipAd) {
 		t.Fatalf("a skipped current track stays current: %+v", s.Current)
 	}
 
@@ -99,7 +101,7 @@ func TestReplayRebuildsTheSessionForALateClient(t *testing.T) {
 		ev(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: "replayed logs are ignored"}),
 	})
 	s := m.Snapshot()
-	if s.Current == nil || s.Current.Title != "Second" || len(s.Rows) != 1 || s.Rows[0].StatusText() != "Skipped: too short" {
+	if s.Current == nil || s.Current.Title != "Second" || len(s.Rows) != 1 || s.Rows[0].StatusText() != fmt.Sprintf(lang.SkippedFor, lang.ReasonTooShort) {
 		t.Fatalf("state %+v", s)
 	}
 	if len(s.Logs) != 0 {
@@ -125,14 +127,14 @@ func TestKeepableTakes(t *testing.T) {
 		t.Fatalf("keeping %+v", r)
 	}
 	m.Keeping("a", false)
-	if r := m.Snapshot().Rows[0]; r.Status != Skipped || r.StatusText() != "Skipped: incomplete" {
+	if r := m.Snapshot().Rows[0]; r.Status != Skipped || r.StatusText() != fmt.Sprintf(lang.SkippedFor, lang.ReasonIncomplete) {
 		t.Fatalf("not kept %+v", r)
 	}
 
 	m.Keeping("a", true)
 	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a"}))
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (partial).flac", Partial: true}))
-	if r := m.Snapshot().Rows[0]; r.Keepable || r.StatusText() != "Saved: partial" {
+	if r := m.Snapshot().Rows[0]; r.Keepable || r.StatusText() != lang.SavedPartial {
 		t.Fatalf("kept %+v", r)
 	}
 
@@ -142,7 +144,7 @@ func TestKeepableTakes(t *testing.T) {
 	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "b", Keepable: true}))
 	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "b"}))
 	for _, r := range m.Snapshot().Rows {
-		if r.ID == "b" && (r.Keepable || r.StatusText() != "Skipped: track bar moved") {
+		if r.ID == "b" && (r.Keepable || r.StatusText() != fmt.Sprintf(lang.SkippedFor, lang.ReasonSeeked)) {
 			t.Fatalf("let go %+v", r)
 		}
 	}
@@ -157,13 +159,13 @@ func TestALowQualityTakeSaysSo(t *testing.T) {
 	m.Apply(started(t, "b", "Second"))
 	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "a", Reason: proto.SkipLowQuality}))
 	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a", Keepable: true}))
-	if r := m.Snapshot().Rows[0]; !r.Keepable || r.StatusText() != "Skipped: low quality" {
+	if r := m.Snapshot().Rows[0]; !r.Keepable || r.StatusText() != fmt.Sprintf(lang.SkippedFor, lang.ReasonLowQuality) {
 		t.Fatalf("skipped %+v, %q", r, r.StatusText())
 	}
 	m.Keeping("a", true)
 	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a"}))
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (low quality).flac", Partial: true}))
-	if r := m.Snapshot().Rows[0]; r.StatusText() != "Saved: low quality" {
+	if r := m.Snapshot().Rows[0]; r.StatusText() != lang.SavedLowQuality {
 		t.Fatalf("kept %+v, %q", r, r.StatusText())
 	}
 }

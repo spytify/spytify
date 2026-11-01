@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 )
 
@@ -138,10 +139,10 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 		want   []string
 		count  string
 	}{
-		{[]string{takeComplete, takePartial, takeLowQuality}, "All files", order, "5 files in"},
-		{[]string{takeComplete}, "Complete", []string{"M83 - Midnight City.flac", "M83 - Outro.flac"}, "2 of 5 files in"},
-		{[]string{takePartial, takeLowQuality}, "Partial, Low quality", []string{"M83 - Wait (partial).flac", "M83 - Reunion (low quality).mp3", "M83 - Wait (partial) 2.flac"}, "3 of 5 files in"},
-		{[]string{takeLowQuality}, "Low quality", []string{"M83 - Reunion (low quality).mp3"}, "1 of 5 files in"},
+		{[]string{takeComplete, takePartial, takeLowQuality}, lang.AllFiles, order, fmt.Sprintf(lang.FilesIn, 5, "")},
+		{[]string{takeComplete}, lang.Complete, []string{"M83 - Midnight City.flac", "M83 - Outro.flac"}, fmt.Sprintf(lang.SomeFilesIn, 2, 5, "")},
+		{[]string{takePartial, takeLowQuality}, lang.Partial + ", " + lang.LowQuality, []string{"M83 - Wait (partial).flac", "M83 - Reunion (low quality).mp3", "M83 - Wait (partial) 2.flac"}, fmt.Sprintf(lang.SomeFilesIn, 3, 5, "")},
+		{[]string{takeLowQuality}, lang.LowQuality, []string{"M83 - Reunion (low quality).mp3"}, fmt.Sprintf(lang.SomeFilesIn, 1, 5, "")},
 	} {
 		tick(lib, c.ticked...)
 		if got := lib.kinds.Selected; got != c.label {
@@ -185,7 +186,7 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	if a.win.Canvas().Overlays().Top() != top {
 		t.Error("the dropdown closed on the first box")
 	}
-	if got := lib.kinds.Selected; got != "Partial, Low quality" || len(lib.rows) != 3 {
+	if got := lib.kinds.Selected; got != lang.Partial+", "+lang.LowQuality || len(lib.rows) != 3 {
 		t.Errorf("Complete unticked in the dropdown: the filter says %q, %d rows", got, len(lib.rows))
 	}
 	setCaption(lib.count, pluralFiles(3, 5, "/Users/listener/Music/Spytify"))
@@ -193,7 +194,7 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	a.win.Canvas().Overlays().Remove(top)
 
 	tick(lib)
-	if !lib.empty.Visible() || lib.hint.Text != "Tick a kind of file to show." || lib.kinds.Selected != "No files" {
+	if !lib.empty.Visible() || lib.hint.Text != lang.TickAKind || lib.kinds.Selected != lang.NoFiles {
 		t.Errorf("no box ticked: empty state shown %v, %q, the filter says %q", lib.empty.Visible(), lib.hint.Text, lib.kinds.Selected)
 	}
 	// Every file a partial take, the list hiding them says so.
@@ -204,7 +205,7 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	}
 	tick(lib, takeComplete)
 	lib.scan()
-	if !lib.empty.Visible() || lib.hint.Text != "Every file here is a take cut short or in low quality." {
+	if !lib.empty.Visible() || lib.hint.Text != lang.OnlyTakes {
 		t.Errorf("no file left: empty state shown %v, %q", lib.empty.Visible(), lib.hint.Text)
 	}
 }

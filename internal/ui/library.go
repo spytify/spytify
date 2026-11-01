@@ -21,6 +21,7 @@ import (
 
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 )
 
@@ -76,11 +77,11 @@ type libraryRow struct {
 // The Album sort, the kinds of file the filter ticks, and the heading of
 // the files with no album.
 const (
-	byAlbum        = "Album"
-	takeComplete   = "Complete"
-	takePartial    = "Partial"
-	takeLowQuality = "Low quality"
-	noAlbum        = "No album"
+	byAlbum        = lang.Album
+	takeComplete   = lang.Complete
+	takePartial    = lang.Partial
+	takeLowQuality = lang.LowQuality
+	noAlbum        = lang.NoAlbum
 )
 
 var takeKinds = []string{takeComplete, takePartial, takeLowQuality}
@@ -99,9 +100,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.covers = newCovers(loaded)
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 	l.search = widget.NewEntry()
-	l.search.SetPlaceHolder("Search artist, title or album")
+	l.search.SetPlaceHolder(lang.SearchLibrary)
 	l.search.OnChanged = func(string) { l.filter() }
-	l.sortBy = widget.NewSelect([]string{"Newest", "Name", byAlbum}, func(string) { l.filter() })
+	l.sortBy = widget.NewSelect([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
 	// Keep anyway saves a take cut short or in low quality: the filter hides
 	// those files, or shows them alone to clean them up, a box per kind of
 	// file in its dropdown. They start ticked without their callback, which
@@ -127,7 +128,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	refresh := container.NewHBox(l.kinds, rescan)
 	l.count = caption("")
 	l.hint = widget.NewLabel("")
-	l.empty = emptyState("No recordings yet", l.hint)
+	l.empty = emptyState(lang.NoRecordingsYet, l.hint)
 	l.list = widget.NewList(
 		func() int { return len(l.rows) },
 		func() fyne.CanvasObject {
@@ -177,7 +178,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.card = listCard(l.list)
 	// SetSelected runs the callback, which needs the list, its card and the
 	// count.
-	l.sortBy.SetSelected("Newest")
+	l.sortBy.SetSelected(lang.Newest)
 	// The search and the sort are white fields on the page, as in Settings.
 	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search), cardTheme{input: colorCard})
 	l.root = inReadingOrder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty))
@@ -285,7 +286,7 @@ func (l *libraryScreen) filter() {
 		}
 	}
 	// The Album view keeps this order within each album.
-	if l.sortBy.Selected == "Name" || l.sortBy.Selected == byAlbum {
+	if l.sortBy.Selected == lang.Name || l.sortBy.Selected == byAlbum {
 		sort.Slice(shown, func(i, j int) bool { return strings.ToLower(shown[i].rel) < strings.ToLower(shown[j].rel) })
 	} else {
 		sort.Slice(shown, func(i, j int) bool { return shown[i].modTime.After(shown[j].modTime) })
@@ -314,19 +315,19 @@ func (l *libraryScreen) filter() {
 	l.card.Refresh()
 	switch {
 	case len(l.all) == 0:
-		l.hint.SetText("Recorded tracks land in " + l.folder + ".")
+		l.hint.SetText(fmt.Sprintf(lang.LibraryEmpty, l.folder))
 		l.empty.Show()
 	case len(shown) == 0 && q == "" && !slices.ContainsFunc(takeKinds, func(k string) bool { return l.takes[k].Checked }):
-		l.hint.SetText("Tick a kind of file to show.")
+		l.hint.SetText(lang.TickAKind)
 		l.empty.Show()
 	case len(shown) == 0 && q == "" && !l.takes[takeComplete].Checked:
-		l.hint.SetText("None yet: Keep anyway saves a take cut short or in low quality.")
+		l.hint.SetText(lang.NoTakesYet)
 		l.empty.Show()
 	case len(shown) == 0 && q == "":
-		l.hint.SetText("Every file here is a take cut short or in low quality.")
+		l.hint.SetText(lang.OnlyTakes)
 		l.empty.Show()
 	case len(shown) == 0:
-		l.hint.SetText("Nothing matches \"" + l.search.Text + "\".")
+		l.hint.SetText(fmt.Sprintf(lang.NothingMatches, l.search.Text))
 		l.empty.Show()
 	default:
 		l.empty.Hide()
@@ -371,18 +372,18 @@ func (l *libraryScreen) takesLabel() string {
 	}
 	switch len(ticked) {
 	case 0:
-		return "No files"
+		return lang.NoFiles
 	case len(takeKinds):
-		return "All files"
+		return lang.AllFiles
 	}
 	return strings.Join(ticked, ", ")
 }
 
 func countFiles(n int) string {
 	if n == 1 {
-		return "1 file"
+		return lang.OneFile
 	}
-	return itoa(n) + " files"
+	return fmt.Sprintf(lang.Files, n)
 }
 
 // loaded draws the rows again once covers or tags came in. In the Album
@@ -405,18 +406,7 @@ func pluralFiles(shown, all int, folder string) string {
 		return ""
 	}
 	if shown == all {
-		return itoa(all) + " files in " + folder
+		return fmt.Sprintf(lang.FilesIn, all, folder)
 	}
-	return itoa(shown) + " of " + itoa(all) + " files in " + folder
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for ; n > 0; n /= 10 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-	}
-	return string(b)
+	return fmt.Sprintf(lang.SomeFilesIn, shown, all, folder)
 }

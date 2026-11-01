@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -30,8 +31,6 @@ const (
 	pendingKey = "privacy-pending"
 	// privacySeenKey is set once the bug tracker choice was shown.
 	privacySeenKey = "bug-tracker-choice-seen"
-	trackerLabel   = "Sentry bug tracker: send crashes, errors, traces and recording counts"
-	optedOut       = "You opted out of the Sentry bug tracker"
 )
 
 // privacy is a privacy setting as the app knows it: a choice not sent to
@@ -137,9 +136,9 @@ func (a *App) askPrivacy(then func()) {
 		return
 	}
 	tracker := a.trackerCheck()
-	body := widget.NewLabel("Spytify can send its crashes, errors, traces and recording counts to its developers through Sentry, to help them fix issues.")
+	body := widget.NewLabel(lang.TrackerExplained)
 	body.Wrapping = fyne.TextWrapWord
-	showDialog(a.win, "Help fix issues", container.NewVBox(body, tracker), "OK", "", fyne.NewSize(460, 220), func(bool) {
+	showDialog(a.win, lang.HelpFixIssues, container.NewVBox(body, tracker), lang.OK, "", fyne.NewSize(460, 220), func(bool) {
 		prefs.SetBool(privacySeenKey, true)
 		a.setPrivacy(trackerKey, tracker.Checked)
 		then()
@@ -148,7 +147,7 @@ func (a *App) askPrivacy(then func()) {
 
 // trackerCheck is the bug tracker box, as the setting is now.
 func (a *App) trackerCheck() *check {
-	c := newCheck(trackerLabel)
+	c := newCheck(lang.TrackerSwitch)
 	on, _ := a.privacy(trackerKey).(bool)
 	c.SetChecked(on)
 	return c

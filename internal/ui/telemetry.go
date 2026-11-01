@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -235,15 +236,15 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 		log = append(log, l.TS+" "+l.Level+" "+l.Msg)
 	}
 	report := telemetry.Checks{Failing: failing, Log: log}
-	body := widget.NewLabel("Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded.")
+	body := widget.NewLabel(lang.SendChecksText)
 	body.Wrapping = fyne.TextWrapWord
 	preview := widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	scroll := container.NewScroll(preview)
 	scroll.SetMinSize(fyne.NewSize(0, 160))
-	what := newFold("What will be sent", scroll)
+	what := newFold(lang.WhatWillBeSent, scroll)
 	message := newCommentEntry()
-	message.SetPlaceHolder("Comment (optional)")
-	showDialog(a.win, "Send to the developers", container.NewVBox(body, what, message), "Cancel", "Send", fyne.NewSize(560, 420), func(send bool) {
+	message.SetPlaceHolder(lang.Comment)
+	showDialog(a.win, lang.SendToDevelopers, container.NewVBox(body, what, message), lang.Cancel, lang.Send, fyne.NewSize(560, 420), func(send bool) {
 		if !send {
 			return
 		}

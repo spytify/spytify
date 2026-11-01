@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -25,10 +26,10 @@ const (
 type RowStatus string
 
 const (
-	Recording RowStatus = "Recording"
-	Saving    RowStatus = "Saving"
-	Saved     RowStatus = "Saved"
-	Skipped   RowStatus = "Skipped"
+	Recording RowStatus = lang.Recording
+	Saving    RowStatus = lang.Saving
+	Saved     RowStatus = lang.Saved
+	Skipped   RowStatus = lang.Skipped
 )
 
 // Row is one track of the session list.
@@ -58,27 +59,28 @@ type Row struct {
 // StatusText is the chip label: "Saved", "Skipped: duplicate".
 func (r Row) StatusText() string {
 	if r.Status == Skipped && r.Reason != "" {
-		return "Skipped: " + reasonText(r.Reason)
+		return fmt.Sprintf(lang.SkippedFor, ReasonText(r.Reason))
 	}
 	if r.Partial && r.Status == Saved {
 		if r.Reason == proto.SkipLowQuality {
-			return "Saved: low quality"
+			return lang.SavedLowQuality
 		}
-		return "Saved: partial"
+		return lang.SavedPartial
 	}
 	return string(r.Status)
 }
 
-func reasonText(r proto.SkipReason) string {
+// ReasonText says why a track was skipped: "too short", "duplicate".
+func ReasonText(r proto.SkipReason) string {
 	switch r {
 	case proto.SkipTooShort:
-		return "too short"
+		return lang.ReasonTooShort
 	case proto.SkipIncomplete:
-		return "incomplete"
+		return lang.ReasonIncomplete
 	case proto.SkipSeeked:
-		return "track bar moved"
+		return lang.ReasonSeeked
 	case proto.SkipLowQuality:
-		return "low quality"
+		return lang.ReasonLowQuality
 	}
 	return string(r)
 }
@@ -410,9 +412,9 @@ func (m *Model) apply(s *State, ev proto.Event) {
 			for i := range s.Info.Checks {
 				if s.Info.Checks[i].Name == "player running" {
 					s.Info.Checks[i].OK = s.Target.Running
-					s.Info.Checks[i].Detail = "not running"
+					s.Info.Checks[i].Detail = lang.NotRunning
 					if s.Target.Running {
-						s.Info.Checks[i].Detail = fmt.Sprintf("pid %d", s.Target.PID)
+						s.Info.Checks[i].Detail = fmt.Sprintf(lang.PID, s.Target.PID)
 					}
 				}
 			}

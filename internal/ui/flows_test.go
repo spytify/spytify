@@ -19,6 +19,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/bus"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -84,7 +85,7 @@ func TestStopThenStopNow(t *testing.T) {
 	a, m, core := connectedApp(t)
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	a.render()
-	if a.action.Text != "Stop" {
+	if a.action.Text != lang.Stop {
 		t.Fatalf("while recording the button reads %q", a.action.Text)
 	}
 	test.Tap(a.action)
@@ -93,7 +94,7 @@ func TestStopThenStopNow(t *testing.T) {
 	}
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateStopping}))
 	a.render()
-	if a.action.Text != "Stop now" || a.action.Disabled() {
+	if a.action.Text != lang.StopNow || a.action.Disabled() {
 		t.Fatalf("while stopping the button reads %q (disabled %v)", a.action.Text, a.action.Disabled())
 	}
 	test.Tap(a.action)
@@ -153,7 +154,7 @@ func recorded(t *testing.T) (a *App, m *model.Model, file, coverURL string) {
 func TestASavedTrackGoesToTheHistoryWithItsCoverAndToTheLibrary(t *testing.T) {
 	a, _, file, coverURL := recorded(t)
 	content := a.win.Content()
-	if all := texts(content); !contains(all, "Midnight City") || !contains(all, "Saved") {
+	if all := texts(content); !contains(all, "Midnight City") || !contains(all, lang.Saved) {
 		t.Fatalf("history: %v", all)
 	}
 	if row := a.covers.get(coverURL).row; row == nil || !contains(images(content), picture(row)) {
@@ -170,7 +171,7 @@ func TestASavedTrackGoesToTheHistoryWithItsCoverAndToTheLibrary(t *testing.T) {
 // Clear list empties the session's history; the Library keeps every file.
 func TestClearListEmptiesTheHistoryButNotTheLibrary(t *testing.T) {
 	a, m, file, _ := recorded(t)
-	clear := buttons(a.win.Content(), "Clear list")
+	clear := buttons(a.win.Content(), lang.ClearList)
 	if len(clear) != 1 {
 		t.Fatalf("%d Clear list buttons", len(clear))
 	}
@@ -258,11 +259,11 @@ func TestClosingToTheTrayKeepsSpytifyThere(t *testing.T) {
 	var open *fyne.MenuItem
 	for _, it := range tray.menu.Items {
 		labels = append(labels, it.Label)
-		if it.Label == "Open window" {
+		if it.Label == lang.OpenWindow {
 			open = it
 		}
 	}
-	if len(labels) != 3 || labels[0] != "Record" || labels[2] != "Open window" {
+	if len(labels) != 3 || labels[0] != lang.Record || labels[2] != lang.OpenWindow {
 		t.Errorf("tray menu %v, want Record, a separator and Open window", labels)
 	}
 	// The tray's action follows the session, as the app bar's does.
@@ -270,7 +271,7 @@ func TestClosingToTheTrayKeepsSpytifyThere(t *testing.T) {
 	for _, step := range []struct {
 		state proto.SessionState
 		want  string
-	}{{proto.StateIdle, "Record"}, {proto.StateRecording, "Stop"}, {proto.StateStopping, "Stop now"}, {proto.StateIdle, "Record"}} {
+	}{{proto.StateIdle, lang.Record}, {proto.StateRecording, lang.Stop}, {proto.StateStopping, lang.StopNow}, {proto.StateIdle, lang.Record}} {
 		m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: step.state}))
 		a.render()
 		if action.Label != step.want || action.Disabled || action.Label != a.action.Text {
@@ -307,7 +308,7 @@ func TestTheTrayIconComesWithMinimizeToTray(t *testing.T) {
 	values["app.minimize_to_tray"] = true
 	m.SetSettings(values)
 	a.render()
-	if tray.menu == nil || tray.menu.Items[0].Label != "Record" {
+	if tray.menu == nil || tray.menu.Items[0].Label != lang.Record {
 		t.Fatalf("tray menu %v once Minimize to tray is on", tray.menu)
 	}
 }
@@ -344,7 +345,7 @@ func TestClosingQuitsWhereTheDesktopDrawsNoTray(t *testing.T) {
 	if tray.menu != nil {
 		t.Error("a tray menu with nothing to draw it")
 	}
-	if !contains(texts(s.sections), noTrayNote) {
+	if !contains(texts(s.sections), lang.NoTrayIcons) {
 		t.Error("Minimize to tray does not say the desktop draws no tray icons")
 	}
 	a.win.Resize(fyne.NewSize(920, 620))
@@ -355,7 +356,7 @@ func TestClosingQuitsWhereTheDesktopDrawsNoTray(t *testing.T) {
 	if tray.menu == nil {
 		t.Fatal("no tray menu once a host came")
 	}
-	if contains(texts(s.sections), noTrayNote) {
+	if contains(texts(s.sections), lang.NoTrayIcons) {
 		t.Error("Minimize to tray still says there is no tray")
 	}
 	closing("a host", 0)
@@ -395,7 +396,7 @@ func TestTheTrayIconComesAtLaunchOrOnLinuxAtTheNext(t *testing.T) {
 	a.quitApp = func() { quits++ }
 	a.closeWindow()
 	s := a.screens[tabSettings].(*settingsScreen)
-	noted := contains(texts(s.sections), lateTrayNote)
+	noted := contains(texts(s.sections), lang.TrayIconLater)
 	if lateTrayShows {
 		if tray.menu == nil || quits != 0 || noted {
 			t.Errorf("turned on: tray menu %v, closing quit %d times, restart noted %v; want a menu, no quit, no note", tray.menu != nil, quits, noted)
@@ -408,7 +409,7 @@ func TestTheTrayIconComesAtLaunchOrOnLinuxAtTheNext(t *testing.T) {
 	values["app.minimize_to_tray"] = false
 	m.SetSettings(values)
 	a.render()
-	if contains(texts(s.sections), lateTrayNote) {
+	if contains(texts(s.sections), lang.TrayIconLater) {
 		t.Error("the restart is noted with Minimize to tray off")
 	}
 }

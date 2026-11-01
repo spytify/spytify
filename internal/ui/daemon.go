@@ -64,9 +64,6 @@ func (a *App) StartDaemon() {
 	}()
 }
 
-// startingText is what the app bar and Record say while spytifyd starts.
-const startingText = "Starting the recorder…"
-
 // startAnswerTimeout is how long a started spytifyd has to answer.
 const startAnswerTimeout = 15 * time.Second
 
