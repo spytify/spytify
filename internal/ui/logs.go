@@ -181,9 +181,11 @@ func (l *logsScreen) render(s model.State) {
 
 func (l *logsScreen) renderChecks(s model.State) {
 	failing := failingChecks(s.Info.Checks)
-	summary := fmt.Sprintf("All %d checks pass.", len(s.Info.Checks))
+	// Advice that fails reads with the advice, out of the count.
+	counted := len(s.Info.Checks) - len(adviceNames(s.Info.Checks))
+	summary := fmt.Sprintf("All %d checks pass.", counted)
 	if failing > 0 {
-		summary = fmt.Sprintf("%d of %d checks need attention.", failing, len(s.Info.Checks))
+		summary = fmt.Sprintf("%d of %d checks need attention.", failing, counted)
 	}
 	state := fmt.Sprint(summary, s.Info.Checks, s.Info.Warnings)
 	// The send button follows the bug tracker's switch too.
@@ -197,6 +199,12 @@ func (l *logsScreen) renderChecks(s model.State) {
 	// that pass, the advice, then the checks that fail.
 	var failed, advice, passed []fyne.CanvasObject
 	for _, c := range s.Info.Checks {
+		if !c.OK && c.Advice {
+			// The name and its icon stay on the first line of the detail.
+			name := container.NewVBox(container.NewHBox(widget.NewIcon(theme.InfoIcon()), widget.NewLabel(c.Name)))
+			advice = append(advice, container.NewBorder(nil, nil, name, nil, wrapped(c.Detail)))
+			continue
+		}
 		icon := theme.ConfirmIcon()
 		if !c.OK {
 			icon = theme.WarningIcon()

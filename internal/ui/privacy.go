@@ -124,7 +124,7 @@ func (a *App) renderPrivacy(s model.State) {
 	if checks := fmt.Sprint(s.Info.Checks); checks != a.checksNoted {
 		a.checksNoted = checks
 		a.tel.Breadcrumb("checks", fmt.Sprintf("%d of %d pass", len(s.Info.Checks)-len(failingNames(s.Info.Checks)), len(s.Info.Checks)),
-			map[string]any{"failing": strings.Join(failingNames(s.Info.Checks), ", ")})
+			map[string]any{"failing": strings.Join(failingNames(s.Info.Checks), ", "), "advice": strings.Join(adviceNames(s.Info.Checks), ", ")})
 	}
 }
 

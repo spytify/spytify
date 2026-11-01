@@ -301,6 +301,37 @@ func TestThePictureCoversThePaths(t *testing.T) {
 	}
 }
 
+// The Record screen's text before a session and the Library's when it is
+// empty name the output folder.
+func TestThePictureCoversTheFolderTheScreensName(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
+	a.win.Resize(fyne.NewSize(920, 900))
+	out := defaults()["output.dir"].(string)
+
+	rec := a.screens[tabRecord].(*recordScreen)
+	a.showTab(tabRecord)
+	a.render()
+	if !strings.Contains(rec.idleText.Text, out) {
+		t.Fatalf("the Record screen says %q", rec.idleText.Text)
+	}
+	if img := a.picture(); img == nil || !blurs(a, img, rec.idleText) {
+		t.Error("the Record screen's text naming the output folder shows")
+	}
+
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	a.showTab(tabLibrary)
+	a.render()
+	lib.scan()
+	if !lib.empty.Visible() || !strings.Contains(lib.hint.Text, out) {
+		t.Fatalf("the empty Library says %q", lib.hint.Text)
+	}
+	if img := a.picture(); img == nil || !blurs(a, img, lib.hint) {
+		t.Error("the empty Library's text naming the output folder shows")
+	}
+}
+
 // The default output folders name no one: a path in one is blurred up to
 // the home folder, and the rest shows. A folder the user chose is blurred
 // whole, in the home folder or out of it.

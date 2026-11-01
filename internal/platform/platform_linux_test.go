@@ -14,3 +14,19 @@ func TestAllowedRatesPattern(t *testing.T) {
 		t.Fatalf("match = %q", m)
 	}
 }
+
+// PipeWire's default, 48 kHz only, fails as advice: recording still works.
+func TestRatesCheckIsAdvice(t *testing.T) {
+	for _, c := range []struct {
+		name, settings string
+		ok             bool
+	}{
+		{"48 kHz only", "update: id:0 key:'clock.allowed-rates' value:'[ 48000 ]' type:''", false},
+		{"44.1 kHz allowed", "update: id:0 key:'clock.allowed-rates' value:'[ 44100, 48000 ]' type:''", true},
+		{"no settings", "", true},
+	} {
+		if got := ratesCheck([]byte(c.settings)); got.OK != c.ok || !got.Advice {
+			t.Errorf("%s: %+v", c.name, got)
+		}
+	}
+}

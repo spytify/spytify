@@ -165,13 +165,6 @@ func setTrackRow(row *fyne.Container, cover image.Image, title string, lines ...
 	setCover(row.Objects[1].(*canvas.Image), cover)
 }
 
-// tight takes a caption's padding off above and below it, so that rows of
-// captions sit as close as the lines of a paragraph.
-func tight(o fyne.CanvasObject) *fyne.Container {
-	p := -theme.InnerPadding()
-	return container.New(layout.NewCustomPaddedLayout(p, p, 0, 0), o)
-}
-
 // wrapped is a caption that breaks into lines.
 func wrapped(text string) *widget.RichText {
 	rt := caption(text)
@@ -223,4 +216,20 @@ func margin(o fyne.CanvasObject) *fyne.Container {
 func inset(o fyne.CanvasObject) *fyne.Container {
 	pad := theme.Padding()
 	return container.New(layout.NewCustomPaddedLayout(pad, pad, pad*2, pad*2), o)
+}
+
+// footerBar is a screen's bottom bar, on a grey of its own under a line:
+// what the screen holds on the left, its actions on the right.
+func footerBar(left, actions fyne.CanvasObject) fyne.CanvasObject {
+	pad := theme.Padding()
+	row := container.New(layout.NewCustomPaddedLayout(pad/2, pad/2, pad*2, pad),
+		container.NewBorder(nil, nil, nil, actions, container.NewVBox(layout.NewSpacer(), left, layout.NewSpacer())))
+	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, newPanel(colorFooter, "", 0, fyne.Size{}, row))
+}
+
+// outlined draws a line around a button without a fill of its own, for a
+// secondary action on a list row.
+func outlined(b *button) *panel {
+	b.Importance = widget.LowImportance
+	return newPanel("", colorOutline, 8, fyne.Size{}, b)
 }

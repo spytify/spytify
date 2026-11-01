@@ -11,7 +11,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/ui/model"
@@ -274,8 +273,8 @@ func TestTheFilterWorksFromTheKeyboard(t *testing.T) {
 	if c.Overlays().Top() != nil {
 		t.Fatalf("Tab left the dropdown open, the focus on %s", box())
 	}
-	if b, ok := asButton(c.Focused().(fyne.CanvasObject)); !ok || b.Icon != theme.ViewRefreshIcon() {
-		t.Errorf("Tab went to %s, want the rescan after the filter", box())
+	if c.Focused() != lib.list {
+		t.Errorf("Tab went to %s, want the list after the filter", box())
 	}
 
 	for _, k := range []fyne.KeyName{fyne.KeyEscape, fyne.KeyReturn, fyne.KeyEnter} {

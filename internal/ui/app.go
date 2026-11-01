@@ -164,11 +164,11 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.win.Resize(fyne.NewSize(920, 640))
 
 	a.screens = []screen{newRecordScreen(a), newLibraryScreen(a), newSettingsScreen(a), newLogsScreen(a), newAboutScreen(a)}
-	// Logs and About have the plain colour to the window's sides; the other
-	// screens are on the page, off them.
+	// Record and Library run their cards and lists to the window's sides,
+	// Logs and About their plain colour; Settings is on the page, off them.
 	a.tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), margin(a.screens[tabRecord].content())),
-		container.NewTabItemWithIcon("Library", theme.FolderIcon(), margin(a.screens[tabLibrary].content())),
+		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), a.screens[tabRecord].content()),
+		container.NewTabItemWithIcon("Library", theme.FolderIcon(), a.screens[tabLibrary].content()),
 		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), margin(a.screens[tabSettings].content())),
 		container.NewTabItemWithIcon("Logs", theme.ListIcon(), a.screens[tabLogs].content()),
 		container.NewTabItemWithIcon("About", theme.InfoIcon(), a.screens[tabAbout].content()),
@@ -568,16 +568,22 @@ func checkOK(checks []proto.Check, name string) bool {
 	return false
 }
 
-// failingChecks counts the failing checks but the player's, which the app
-// bar already shows.
+// failingChecks counts the checks that need attention.
 func failingChecks(checks []proto.Check) int {
 	n := 0
 	for _, c := range checks {
-		if !c.OK && c.Name != "player running" {
+		if needsAttention(c) {
 			n++
 		}
 	}
 	return n
+}
+
+// needsAttention says whether a check fails in a way the user must fix: not
+// the player's, which the app bar already shows, nor advice, which only
+// lowers quality.
+func needsAttention(c proto.Check) bool {
+	return !c.OK && !c.Advice && c.Name != "player running"
 }
 
 // checkFails says whether the check named name is there and fails: a
