@@ -60,7 +60,7 @@ var Table = []Def{
 
 	{Key: "output.dir", Tab: "Recorder", Group: "Output", Label: "Output folder", Kind: KindPath, Default: "~/Music/Spytify"},
 	{Key: "output.group_by", Tab: "Recorder", Group: "Output", Label: "Group by folders", Kind: KindEnum, Enum: []string{"none", "artist", "artist/album", "artists", "artists/album"}, Choices: []string{"No folders", "Main artist", "Main artist / Album", "All artists", "All artists / Album"}, Default: "artist/album", Note: "Main artist: the album's artist, so collaborations share one folder."},
-	{Key: "output.template", Tab: "Recorder", Group: "Output", Label: "File name template", Kind: KindTemplate, Default: "{album_artist} - {title}", Note: "Placeholders: {album_artist}, {artists}, {title}, {album}, {track}, {year}", Advanced: true},
+	{Key: "output.template", Tab: "Recorder", Group: "Output", Label: "File name template", Kind: KindTemplate, Default: "{album_artist} - {title}", Note: "Placeholders: {album_artist}, {artists}, {title}, {album}, {track}", Advanced: true},
 	{Key: "output.underscores", Tab: "Recorder", Group: "Output", Label: "Underscores instead of spaces", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "output.ascii_filenames", Tab: "Recorder", Group: "Output", Label: "Remove diacritics from file names", Kind: KindBool, Default: false, Advanced: true},
 	{Key: "output.prefix", Tab: "Recorder", Group: "Output", Label: "File name prefix", Kind: KindEnum, Enum: []string{"none", "counter", "album_track"}, Choices: []string{"None", "Counter (001)", "Album track number (04)"}, Default: "none", Advanced: true},
