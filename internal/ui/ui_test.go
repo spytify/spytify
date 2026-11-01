@@ -683,15 +683,15 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
 	r := a.screens[tabRecord].(*recordScreen)
 	// offers is the wait row's text and the one button it shows.
-	offers := func(text string, want *button) {
+	offers := func(text string, want fyne.CanvasObject) {
 		t.Helper()
 		a.render()
 		if !r.waitRow.Visible() || r.waiting.Text != text {
 			t.Errorf("the wait row says %q, want %q", r.waiting.Text, text)
 		}
-		for _, b := range []*button{r.launch, r.play, r.restart, r.blocked} {
-			if b.Visible() != (b == want) {
-				t.Errorf("%q shown %v", b.Text, b.Visible())
+		for _, o := range []fyne.CanvasObject{r.launch, r.play, r.restart, r.blocked} {
+			if b, _ := asButton(o); o.Visible() != (o == want) {
+				t.Errorf("%q shown %v", b.Text, o.Visible())
 			}
 		}
 	}
@@ -1243,6 +1243,8 @@ func asButton(o fyne.CanvasObject) (*widget.Button, bool) {
 		return &b.Button, true
 	case *tipButton:
 		return &b.Button.Button, true
+	case *litButton:
+		return &b.Button, true
 	}
 	return nil, false
 }
