@@ -12,6 +12,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/ui/model"
@@ -209,6 +210,88 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	}
 }
 
+// The filter's dropdown takes the keys a select's list does: Space or an
+// arrow opens it on its first box, the arrows go from box to box, Space
+// ticks the box focused, Enter and Escape close it. Tab closes it and goes
+// on: it went round the boxes, and the keyboard never got out.
+func TestTheFilterWorksFromTheKeyboard(t *testing.T) {
+	order := []string{"M83 - Midnight City.flac", "M83 - Wait (partial).flac"}
+	files := map[string]string{}
+	for _, name := range order {
+		files[name] = ""
+	}
+	a, lib, _, _ := libraryOf(t, files, order...)
+	c := a.win.Canvas()
+	// The keys as Fyne 2.8.2's window sends them: Tab goes to a control
+	// that takes it, else moves the focus; Space is the key, then its
+	// character, to whatever has the focus by then.
+	key := func(k fyne.KeyName) {
+		if f, ok := c.Focused().(fyne.Tabbable); k == fyne.KeyTab && (!ok || !f.AcceptsTab()) {
+			c.FocusNext()
+			return
+		}
+		if f := c.Focused(); f != nil {
+			f.TypedKey(&fyne.KeyEvent{Name: k})
+		}
+	}
+	space := func() {
+		key(fyne.KeySpace)
+		if f := c.Focused(); f != nil {
+			f.TypedRune(' ')
+		}
+	}
+	box := func() string {
+		if b, ok := c.Focused().(*menuBox); ok {
+			return b.Text
+		}
+		return fmt.Sprintf("%T", c.Focused())
+	}
+
+	c.Focus(lib.kinds)
+	space()
+	if c.Overlays().Top() == nil || box() != takeComplete || !lib.takes[takeComplete].Checked {
+		t.Fatalf("Space: dropdown shown %v, the focus on %s, Complete ticked %v", c.Overlays().Top() != nil, box(), lib.takes[takeComplete].Checked)
+	}
+	for _, step := range []struct {
+		key  fyne.KeyName
+		want string
+	}{
+		{fyne.KeyDown, takePartial},
+		{fyne.KeyDown, takeLowQuality},
+		{fyne.KeyDown, takeLowQuality},
+		{fyne.KeyUp, takePartial},
+	} {
+		key(step.key)
+		if box() != step.want {
+			t.Fatalf("%s: the focus is on %s, want %s", step.key, box(), step.want)
+		}
+	}
+	space()
+	if lib.takes[takePartial].Checked || lib.kinds.Selected != takeComplete+", "+takeLowQuality || len(lib.rows) != 1 {
+		t.Errorf("Space on Partial: ticked %v, the filter says %q, %d rows", lib.takes[takePartial].Checked, lib.kinds.Selected, len(lib.rows))
+	}
+
+	key(fyne.KeyTab)
+	if c.Overlays().Top() != nil {
+		t.Fatalf("Tab left the dropdown open, the focus on %s", box())
+	}
+	if b, ok := asButton(c.Focused().(fyne.CanvasObject)); !ok || b.Icon != theme.ViewRefreshIcon() {
+		t.Errorf("Tab went to %s, want the rescan after the filter", box())
+	}
+
+	for _, k := range []fyne.KeyName{fyne.KeyEscape, fyne.KeyReturn, fyne.KeyEnter} {
+		c.Focus(lib.kinds)
+		key(fyne.KeyDown)
+		if box() != takeComplete {
+			t.Fatalf("Down on the filter: the focus is on %s", box())
+		}
+		key(k)
+		if c.Overlays().Top() != nil || c.Focused() != lib.kinds {
+			t.Errorf("%s: dropdown shown %v, the focus on %s", k, c.Overlays().Top() != nil, box())
+		}
+	}
+}
+
 // The Album view puts the files under their albums: the album folders the
 // recorder files them in, under the artists' folders, at once; a file in no
 // such folder, under the album its tags name once its row has read them.
@@ -372,21 +455,21 @@ func TestTheTrashButtonMovesAFileToTheTrash(t *testing.T) {
 		moved = append(moved, path)
 		return os.Rename(path, filepath.Join(bin, filepath.Base(path)))
 	}
-	trashButton := func(title string) *widget.Button {
+	trashButton := func(title string) *button {
 		t.Helper()
 		a.render()
 		row, ok := drawnRows(t, lib.list)[title]
 		if !ok {
 			t.Fatalf("no row for %s", title)
 		}
-		return row.row.Objects[2].(*fyne.Container).Objects[3].(*widget.Button)
+		return row.row.Objects[2].(*fyne.Container).Objects[3].(*button)
 	}
 
-	button := trashButton("Splendor")
-	test.MoveMouse(a.win.Canvas(), fyne.CurrentApp().Driver().AbsolutePositionForObject(button).AddXY(8, 8))
+	first := trashButton("Splendor")
+	test.MoveMouse(a.win.Canvas(), fyne.CurrentApp().Driver().AbsolutePositionForObject(first).AddXY(8, 8))
 	setCaption(lib.count, pluralFiles(3, 3, "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-trash")
-	test.Tap(button)
+	test.Tap(first)
 	wav := filepath.Join(dir, order[0])
 	if !slices.Equal(moved, []string{wav, wav + ".json"}) {
 		t.Fatalf("moved %q to the trash", moved)

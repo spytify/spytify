@@ -109,7 +109,11 @@ func (a *app) infoCmd() *cobra.Command {
 			fmt.Fprintln(a.out)
 			for _, c := range info.Checks {
 				mark := "ok  "
-				if !c.OK {
+				switch {
+				case c.OK:
+				case c.Advice:
+					mark = "note"
+				default:
 					mark = "FAIL"
 				}
 				fmt.Fprintf(a.out, "  [%s] %s", mark, c.Name)

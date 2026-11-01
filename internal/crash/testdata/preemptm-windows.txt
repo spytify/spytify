@@ -1,0 +1,29 @@
+runtime stack:
+runtime.throw({0x7ff78c5643a2?, 0xe56a7ffc40?})
+	runtime/panic.go:1229 +0x4d fp=0xe56a7ff720 sp=0xe56a7ff6f0 pc=0x7ff78b3e546d
+runtime.preemptM(0x9064e80c5a0?)
+	runtime/os_windows.go:1177 +0x525 fp=0xe56a7ffcc0 sp=0xe56a7ff720 pc=0x7ff78b3ad745
+runtime.preemptone(0x90600000001?)
+	runtime/proc.go:6891 +0x71 fp=0xe56a7ffcd8 sp=0xe56a7ffcc0 pc=0x7ff78b3c00f1
+runtime.retake(0xf9ab584b3b30)
+	runtime/proc.go:6665 +0xb8 fp=0xe56a7ffd48 sp=0xe56a7ffcd8 pc=0x7ff78b3bfab8
+runtime.sysmon()
+	runtime/proc.go:6597 +0x3fa fp=0xe56a7ffde0 sp=0xe56a7ffd48 pc=0x7ff78b3bf81a
+runtime.mstart1()
+	runtime/proc.go:1935 +0x9d fp=0xe56a7ffe08 sp=0xe56a7ffde0 pc=0x7ff78b3b5e5d
+runtime.mstart0()
+	runtime/proc.go:1888 +0x6a fp=0xe56a7ffe30 sp=0xe56a7ffe08 pc=0x7ff78b3b5daa
+runtime.mstart()
+	runtime/asm_amd64.s:426 +0xc fp=0xe56a7ffe38 sp=0xe56a7ffe30 pc=0x7ff78b3eaeec
+
+goroutine 1 gp=0x9064e80c000 m=0 mp=0x7ff78ccabb40 [syscall, locked to thread]:
+runtime.cgocall(0x7ff78bb84bb0, 0x90ba3981098)
+	runtime/cgocall.go:167 +0x3e fp=0x90ba3981070 sp=0x90ba3981008 pc=0x7ff78b3e235e
+github.com/go-gl/gl/v2.1/gl._Cfunc_glowUseProgram(0x18048a230, 0xc)
+	_cgo_gotypes.go:45632 +0x48 fp=0x90ba3981098 sp=0x90ba3981070 pc=0x7ff78b96ca48
+github.com/go-gl/gl/v2.1/gl.UseProgram(...)
+	github.com/go-gl/gl@v0.0.0-20260331235117-4566fea9a276/v2.1/gl/package.go:27552
+fyne.io/fyne/v2/internal/painter/gl.(*coreContext).UseProgram(0x7ff78ccf0f00?, 0xc?)
+	fyne.io/fyne/v2@v2.8.2/internal/painter/gl/gl_core.go:399 +0x25 fp=0x90ba39810b8 sp=0x90ba3981098 pc=0x7ff78b9a9405
+fyne.io/fyne/v2/internal/painter/gl.(*painter).drawOblong(0x90650fdb800, {0x7ff78c5aa000, 0x90650e70630}, {0x7ff78c5980a0, 0x9065027fd30}, {0x7ff78c5980c0, 0x7ff78c5be9e0}, 0x0, 0x0, 0x0, ...)
+	fyne.io/fyne/v2@v2.8.2/internal/painter/gl/draw.go:560 +0x603 fp=0x90ba39811f0 sp=0x90ba39810b8 pc=0x7ff78b9a2723

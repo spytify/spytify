@@ -288,34 +288,48 @@ func TestClosingToTheTrayKeepsSpytifyThere(t *testing.T) {
 	open.Action()
 }
 
-// With Minimize to tray off, the default, Spytify puts nothing in the tray;
-// turned on, its icon and menu come at once.
-func TestTheTrayIconComesWithMinimizeToTray(t *testing.T) {
+// The tray icon is there from launch, Minimize to tray on or off: the
+// toolkit starts a tray only before its loop runs, macOS's menu bar item
+// included, so one set up later never shows. Turned on while the app runs,
+// closing hides the window to that icon at once; off, closing quits and
+// the icon goes with the app.
+func TestTheTrayIconIsThereFromLaunch(t *testing.T) {
 	tray := &trayApp{App: test.NewTempApp(t)}
 	tray.Preferences().SetBool(firstRunKey, true)
 	m := model.New()
 	l := link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
 	a := New(tray, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true})
+	launched := tray.menu
+	if launched == nil {
+		t.Fatal("no tray at launch with Minimize to tray off")
+	}
 	m.SetConn(model.Connected, "")
 	m.SetInfo(info())
 	values := defaults()
 	m.SetSettings(values)
 	a.render()
-	if tray.menu != nil {
-		t.Fatal("a tray menu with Minimize to tray off")
+	quits := 0
+	a.quitApp = func() { quits++ }
+	a.closeWindow()
+	if quits != 1 {
+		t.Fatalf("Minimize to tray off: closing quit %d times, want once", quits)
 	}
 	values["app.minimize_to_tray"] = true
 	m.SetSettings(values)
 	a.render()
-	if tray.menu == nil || tray.menu.Items[0].Label != "Record" {
-		t.Fatalf("tray menu %v once Minimize to tray is on", tray.menu)
+	a.closeWindow()
+	if quits != 1 {
+		t.Error("turned on while the app runs, closing quit")
+	}
+	if tray.menu != launched {
+		t.Error("a tray set up once the app ran: it would never show")
 	}
 }
 
 // On a Linux desktop that draws no tray icons, closing the window quits
 // even with Minimize to tray on, and Settings says why; a tray host coming
-// (the AppIndicator extension turned on) brings the icon, and closing
-// hides the window there again until the host goes.
+// (the AppIndicator extension turned on) draws the icon set up at launch,
+// and closing hides the window there again until the host goes.
 func TestClosingQuitsWhereTheDesktopDrawsNoTray(t *testing.T) {
 	tray := &trayApp{App: test.NewTempApp(t)}
 	tray.Preferences().SetBool(firstRunKey, true)
@@ -341,8 +355,8 @@ func TestClosingQuitsWhereTheDesktopDrawsNoTray(t *testing.T) {
 			t.Errorf("%s: closing quit %d times, want %d", host, quits-before, want)
 		}
 	}
-	if tray.menu != nil {
-		t.Error("a tray menu with nothing to draw it")
+	if tray.menu == nil {
+		t.Error("no tray set up for a host to draw once it comes")
 	}
 	if !contains(texts(s.sections), noTrayNote) {
 		t.Error("Minimize to tray does not say the desktop draws no tray icons")
@@ -352,9 +366,6 @@ func TestClosingQuitsWhereTheDesktopDrawsNoTray(t *testing.T) {
 	closing("no host", 1)
 
 	a.setTrayHost(true)
-	if tray.menu == nil {
-		t.Fatal("no tray menu once a host came")
-	}
 	if contains(texts(s.sections), noTrayNote) {
 		t.Error("Minimize to tray still says there is no tray")
 	}
@@ -362,55 +373,6 @@ func TestClosingQuitsWhereTheDesktopDrawsNoTray(t *testing.T) {
 
 	a.setTrayHost(false)
 	closing("the host gone", 1)
-}
-
-// On at launch, Minimize to tray sets its tray up before the toolkit's
-// loop runs, the only time Linux starts one. Turned on while the app runs,
-// the icon shows at once on macOS and Windows; on Linux, it comes when
-// Spytify restarts, closing quits until then, and Settings says so.
-func TestTheTrayIconComesAtLaunchOrOnLinuxAtTheNext(t *testing.T) {
-	tray := &trayApp{App: test.NewTempApp(t)}
-	tray.Preferences().SetBool(firstRunKey, true)
-	m := model.New()
-	l := link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
-	a := New(tray, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, MinimizeToTray: true})
-	if tray.menu == nil || !a.hasTray() {
-		t.Fatal("no tray at launch with Minimize to tray on")
-	}
-
-	tray = &trayApp{App: test.NewTempApp(t)}
-	tray.Preferences().SetBool(firstRunKey, true)
-	m = model.New()
-	l = link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
-	a = New(tray, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true})
-	a.running = true
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	values := defaults()
-	values["app.minimize_to_tray"] = true
-	m.SetSettings(values)
-	a.showTab(tabSettings)
-	a.render()
-	quits := 0
-	a.quitApp = func() { quits++ }
-	a.closeWindow()
-	s := a.screens[tabSettings].(*settingsScreen)
-	noted := contains(texts(s.sections), lateTrayNote)
-	if lateTrayShows {
-		if tray.menu == nil || quits != 0 || noted {
-			t.Errorf("turned on: tray menu %v, closing quit %d times, restart noted %v; want a menu, no quit, no note", tray.menu != nil, quits, noted)
-		}
-		return
-	}
-	if quits != 1 || !noted {
-		t.Errorf("turned on, on Linux: closing quit %d times, restart noted %v; want once, noted", quits, noted)
-	}
-	values["app.minimize_to_tray"] = false
-	m.SetSettings(values)
-	a.render()
-	if contains(texts(s.sections), lateTrayNote) {
-		t.Error("the restart is noted with Minimize to tray off")
-	}
 }
 
 // iconButtons are the visible buttons that show only icon.
@@ -421,7 +383,7 @@ func iconButtons(o fyne.CanvasObject, icon fyne.Resource) []*widget.Button {
 		if o == nil || !o.Visible() {
 			return
 		}
-		if b, ok := o.(*widget.Button); ok {
+		if b, ok := asButton(o); ok {
 			if b.Text == "" && b.Icon != nil && b.Icon.Name() == icon.Name() && !b.Disabled() {
 				out = append(out, b)
 			}

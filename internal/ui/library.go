@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,13 +18,11 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
-	"github.com/spytify/spytify/internal/tag"
 	"github.com/spytify/spytify/internal/ui/model"
 )
 
@@ -114,9 +111,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.takes = map[string]*widget.Check{}
 	boxes := container.NewVBox()
 	for _, kind := range takeKinds {
-		box := widget.NewCheck(kind, func(bool) { l.filter() })
+		box := newMenuBox(kind, func(bool) { l.filter() })
 		box.Checked = true
-		l.takes[kind] = box
+		l.takes[kind] = &box.Check
 		boxes.Add(box)
 	}
 	l.kinds = newCheckSelect(boxes)
@@ -124,7 +121,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	// A select is as wide as its placeholder, which a choice made never
 	// shows: the longest label fits.
 	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality
-	rescan := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() {
+	rescan := newIconButton("", theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
 	})
@@ -141,11 +138,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 			// says which in a chip, as the Record screen's rows say theirs.
 			chip := caption("")
 			chip.Segments[0].(*widget.TextSegment).Style.ColorName = colorSkipped
-			return container.NewStack(trackRow(2, container.NewHBox(
-				container.NewCenter(chip),
-				&widget.Button{Icon: theme.SearchIcon(), Importance: widget.LowImportance},
-				&widget.Button{Icon: theme.MediaPlayIcon(), Importance: widget.LowImportance},
-				&widget.Button{Icon: theme.DeleteIcon(), Importance: widget.LowImportance})), albumHeading())
+			reveal, play, bin := newIconButton("", theme.SearchIcon(), nil), newIconButton("", theme.MediaPlayIcon(), nil), newIconButton("", theme.DeleteIcon(), nil)
+			reveal.Importance, play.Importance, bin.Importance = widget.LowImportance, widget.LowImportance, widget.LowImportance
+			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(chip), reveal, play, bin)), albumHeading())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.rows) {
@@ -176,9 +171,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
-			after.Objects[1].(*widget.Button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
-			after.Objects[2].(*widget.Button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
-			after.Objects[3].(*widget.Button).OnTapped = func() { l.app.noteAction("move a file to the trash"); l.trash(f) }
+			after.Objects[1].(*button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
+			after.Objects[2].(*button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
+			after.Objects[3].(*button).OnTapped = func() { l.app.noteAction("move a file to the trash"); l.trash(f) }
 			box.Refresh()
 		},
 	)
@@ -188,7 +183,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.sortBy.SetSelected("Newest")
 	// The search and the sort are white fields on the page, as in Settings.
 	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, refresh), l.search), cardTheme{input: colorCard})
-	l.root = container.NewBorder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty))
+	l.root = inReadingOrder(inset(top), inset(l.count), nil, nil, container.NewStack(inset(l.card), l.empty))
 	return l
 }
 
@@ -229,99 +224,10 @@ func (f libraryFile) key() string {
 	return fmt.Sprintf("%s\x00%d\x00%d", f.path, f.size, f.modTime.UnixNano())
 }
 
-// tags is a file's title and artists, as its tags say once they are read,
-// or for WAV, which has no tags, the .json beside it. Until then, and for a
-// file without them, they are its name's, "Artist - Title" as the naming
-// template writes it by default.
-func (l *libraryScreen) tags(f libraryFile) (title, artist string) {
-	path := f.path
-	if t := l.tagged.get(f.key(), func(ctx context.Context) trackTags { return l.readTags(ctx, path) }); t.title != "" {
-		return t.title, t.artist
-	}
-	name := strings.TrimSuffix(filepath.Base(f.rel), filepath.Ext(f.rel))
-	if artist, title, ok := tag.SplitArtistTitle(name); ok {
-		return title, artist
-	}
-	return name, ""
-}
-
-func (l *libraryScreen) readTags(ctx context.Context, path string) trackTags {
-	if strings.EqualFold(filepath.Ext(path), ".wav") {
-		var side tag.Track
-		if b, err := os.ReadFile(path + ".json"); err == nil && json.Unmarshal(b, &side) == nil {
-			artist := strings.Join(side.Performers, ", ")
-			return trackTags{title: side.Title, artist: artist, album: side.Album, albumArtist: cmp.Or(strings.Join(side.AlbumArtists, ", "), artist)}
-		}
-		return trackTags{}
-	}
-	ff := l.ffmpeg()
-	if ff == nil {
-		return trackTags{}
-	}
-	tags, err := ff.Tags(ctx, path)
-	if err != nil {
-		return trackTags{}
-	}
-	return trackTags{title: tags["title"], artist: tags["artist"], album: tags["album"], albumArtist: cmp.Or(tags["album_artist"], tags["artist"])}
-}
-
-// trackTags is a file's title and artists, and its album and the album's
-// artist, its own artists when the album has none; none for a file without
-// tags.
-type trackTags struct{ title, artist, album, albumArtist string }
-
-// tagCache reads each file's tags once, off the toolkit's goroutine and two
-// at a time: a library holds thousands of files, and only the rows in view
-// ask for theirs.
-type tagCache struct {
-	mu      sync.Mutex
-	read    map[string]trackTags
-	pending map[string]bool
-	loaded  func()
-	slots   chan struct{}
-}
-
-// get returns the tags read under key, or starts read and returns none until
-// it is done; loaded runs then, so the screen can draw them.
-func (c *tagCache) get(key string, read func(context.Context) trackTags) trackTags {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if t, ok := c.read[key]; ok {
-		return t
-	}
-	if !c.pending[key] {
-		c.pending[key] = true
-		go func() {
-			c.slots <- struct{}{}
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			t := read(ctx)
-			cancel()
-			<-c.slots
-			c.mu.Lock()
-			delete(c.pending, key)
-			c.read[key] = t
-			c.mu.Unlock()
-			if c.loaded != nil {
-				c.loaded()
-			}
-		}()
-	}
-	return trackTags{}
-}
-
-// known returns the tags read under key, and whether they are; it starts no
-// read.
-func (c *tagCache) known(key string) (trackTags, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	t, ok := c.read[key]
-	return t, ok
-}
-
 func (l *libraryScreen) content() fyne.CanvasObject { return l.root }
 
 func (l *libraryScreen) render(s model.State) {
-	dir, _ := s.Settings["output.dir"].(string)
+	dir, _ := s.Settings[settings.OutputDir.String()].(string)
 	dir = settings.ExpandHome(dir)
 	if dir != l.folder {
 		l.folder = dir
@@ -475,125 +381,6 @@ func (l *libraryScreen) takesLabel() string {
 	return strings.Join(ticked, ", ")
 }
 
-// checkSelect looks like a select, but its dropdown holds boxes to tick,
-// and stays open while they are ticked: a select's list closes on the first
-// choice. Its text is whatever Selected is set to.
-type checkSelect struct {
-	widget.Select
-	boxes fyne.CanvasObject
-	pop   *widget.PopUp
-}
-
-func newCheckSelect(boxes fyne.CanvasObject) *checkSelect {
-	s := &checkSelect{boxes: boxes}
-	s.ExtendBaseWidget(s)
-	return s
-}
-
-func (s *checkSelect) Tapped(*fyne.PointEvent) {
-	if c := fyne.CurrentApp().Driver().CanvasForObject(s); c != nil {
-		c.Focus(s)
-	}
-	s.open()
-}
-
-// TypedKey opens the dropdown on the keys that open a select's.
-func (s *checkSelect) TypedKey(e *fyne.KeyEvent) {
-	switch e.Name {
-	case fyne.KeySpace, fyne.KeyUp, fyne.KeyDown:
-		s.open()
-	}
-}
-
-func (s *checkSelect) open() {
-	c := fyne.CurrentApp().Driver().CanvasForObject(s)
-	if c == nil || s.Disabled() {
-		return
-	}
-	if s.pop == nil {
-		s.pop = widget.NewPopUp(s.boxes, c)
-	}
-	s.pop.ShowAtPosition(fyne.CurrentApp().Driver().AbsolutePositionForObject(s).AddXY(0, s.Size().Height))
-	s.pop.Resize(fyne.NewSize(max(s.Size().Width, s.pop.MinSize().Width), s.pop.MinSize().Height))
-}
-
-// untitled is the folder the recorder files an album with no name in, with
-// its year when the year is known.
-var untitled = regexp.MustCompile(`(?i)^untitled(?:[ _]\(\d+\))?$`)
-
-// albumOf is the album f is filed under: the album folder the recorder puts
-// it in, under its artist's, as the Group by folders setting does by
-// default; else the album its tags name. key is empty for no album, and
-// read false while the tags that may name it are not read.
-func (l *libraryScreen) albumOf(f libraryFile) (key, name, artist string, read bool) {
-	dir := filepath.Dir(f.rel)
-	if up := filepath.Dir(dir); dir != "." && up != "." {
-		if name := filepath.Base(dir); !untitled.MatchString(name) {
-			return dir, name, filepath.Base(up), true
-		}
-		return "", "", "", true
-	}
-	t, read := l.tagged.known(f.key())
-	if strings.TrimSpace(t.album) == "" {
-		return "", "", "", read
-	}
-	// A NUL starts no folder's name: an album from tags never takes a
-	// folder's files.
-	return "\x00" + strings.ToLower(t.album+"\x1f"+t.albumArtist), t.album, t.albumArtist, true
-}
-
-// albums puts files under a heading per album, the albums in order of name
-// and the files with none last, under a heading of their own; each album
-// keeps its files in the order they come. It reads no tags: ffmpeg takes
-// tens of milliseconds for each file, and a library holds thousands. unread
-// is the keys of the files whose tags, not read yet, may name their album.
-func (l *libraryScreen) albums(files []libraryFile) (rows []libraryRow, unread []string) {
-	type album struct {
-		key, name, artist string
-		files             []libraryFile
-	}
-	byKey := map[string]*album{}
-	var all []*album
-	for _, f := range files {
-		key, name, artist, read := l.albumOf(f)
-		if !read {
-			unread = append(unread, f.key())
-		}
-		a := byKey[key]
-		if a == nil {
-			a = &album{key: key, name: name, artist: artist}
-			byKey[key] = a
-			all = append(all, a)
-		}
-		a.files = append(a.files, f)
-	}
-	slices.SortFunc(all, func(a, b *album) int {
-		if (a.key == "") != (b.key == "") {
-			if a.key == "" {
-				return 1
-			}
-			return -1
-		}
-		return cmp.Or(cmp.Compare(strings.ToLower(a.name), strings.ToLower(b.name)),
-			cmp.Compare(strings.ToLower(a.artist), strings.ToLower(b.artist)), cmp.Compare(a.key, b.key))
-	})
-	rows = make([]libraryRow, 0, len(files)+len(all))
-	for _, a := range all {
-		heading, note := a.name, countFiles(len(a.files))
-		if a.key == "" {
-			heading = noAlbum
-		}
-		if a.artist != "" {
-			note = a.artist + " · " + note
-		}
-		rows = append(rows, libraryRow{heading: heading, note: note})
-		for _, f := range a.files {
-			rows = append(rows, libraryRow{file: f})
-		}
-	}
-	return rows, unread
-}
-
 func countFiles(n int) string {
 	if n == 1 {
 		return "1 file"
@@ -653,27 +440,6 @@ func (l *libraryScreen) trash(f libraryFile) {
 		err := move()
 		fyne.Do(func() { done(err) })
 	}()
-}
-
-// albumHeading is the row over an album's files: its name, then its artist
-// and how many files it has, at the foot of a row as tall as a file's, the
-// space above setting the albums apart.
-func albumHeading() *fyne.Container {
-	text := widget.NewRichText(
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNameForeground, SizeName: theme.SizeNameText, TextStyle: fyne.TextStyle{Bold: true}, Inline: true}},
-		&widget.TextSegment{Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, SizeName: theme.SizeNameCaptionText, Inline: true}},
-	)
-	text.Truncation = fyne.TextTruncateEllipsis
-	return container.NewVBox(layout.NewSpacer(), text)
-}
-
-func setAlbumHeading(heading *fyne.Container, name, note string) {
-	text := heading.Objects[1].(*widget.RichText)
-	nameSeg, noteSeg := text.Segments[0].(*widget.TextSegment), text.Segments[1].(*widget.TextSegment)
-	if nameSeg.Text != name || noteSeg.Text != "   "+note {
-		nameSeg.Text, noteSeg.Text = name, "   "+note
-		text.Refresh()
-	}
 }
 
 func pluralFiles(shown, all int, folder string) string {

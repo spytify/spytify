@@ -48,6 +48,10 @@ Build variables, read from the environment or an untracked `build.env`; CI takes
 
 A version with `dev` or `+` in it, such as CI's, reports as the `development` environment. Run-time variables (`SPYTIFY_TARGET_*`, `SPYTIFY_FFMPEG`, `SPYTIFY_SOCKET`…) are on the [Advanced](https://spytify.github.io/spytify/v2/advanced.html#configuration) page.
 
+## Settings
+
+Every setting is a row of [`internal/settings/table.go`](internal/settings/table.go). Code reads one through its generated `settings.Key`, such as `v.Bool(settings.RecorderTrimSilence)`, never through a string, so a misspelt or removed setting does not build. A change to the table runs `go generate ./internal/settings` too; CI checks it did.
+
 ## Protocol
 
 Clients speak newline-delimited JSON-RPC 2.0 on the socket, or on TCP with `spytifyd --listen 127.0.0.1:7811`. Actions are requests; events are notifications sent to every client. Go clients import `github.com/spytify/spytify/pkg/proto`; others use [`pkg/proto/schema.json`](pkg/proto/schema.json), generated from the same types (`go generate ./pkg/proto`). The [Advanced](https://spytify.github.io/spytify/v2/advanced.html#protocol) page lists every method and event.
