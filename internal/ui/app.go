@@ -6,12 +6,9 @@ package ui
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"runtime"
 	"sync"
 	"time"
 
@@ -26,46 +23,12 @@ import (
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
-	"github.com/spytify/spytify/internal/service"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
-
-//go:embed assets/logo.png
-var logoPNG []byte
-
-// Logo is the app and tray icon.
-var Logo = fyne.NewStaticResource("logo.png", logoPNG)
-
-//go:embed assets/logo-wordmark.png
-var wordmarkPNG []byte
-
-// Wordmark is the logo with the name beside it, for the app bar and the About screen.
-var Wordmark = fyne.NewStaticResource("logo-wordmark.png", wordmarkPNG)
-
-//go:embed assets/open-in-new.svg
-var openInNewSVG []byte
-
-// openInNewIcon marks a button that opens a page in the browser: Material
-// Design's open_in_new, like Fyne's own icons, in the button's colour.
-var openInNewIcon = theme.NewThemedResource(fyne.NewStaticResource("open-in-new.svg", openInNewSVG))
-
-//go:embed assets/heart.png
-var heartPNG []byte
-
-// heartIcon is the app bar's way to Donate: v1's heart, from its icons, in
-// its pink in both themes.
-var heartIcon = fyne.NewStaticResource("heart.png", heartPNG)
-
-//go:embed assets/new-releases.png
-var newReleasesPNG []byte
-
-// newReleasesIcon marks a newer release: v1's badge, from its icons, in its
-// green with the mark cut out.
-var newReleasesIcon = fyne.NewStaticResource("new-releases.png", newReleasesPNG)
 
 // Options are what the UI needs from its environment.
 type Options struct {
@@ -376,69 +339,6 @@ func (a *App) quit() {
 			a.quitApp()
 		}
 	}, a.win)
-}
-
-// closeWindow answers the window's close button: with Minimize to tray on
-// and a tray to go to, the window hides there and the recording goes on;
-// otherwise the app quits, which stops the recorder too.
-func (a *App) closeWindow() {
-	if a.hasTray() && a.last.Settings[settings.AppMinimizeToTray.String()] == true {
-		a.hideToTray()
-		return
-	}
-	a.quit()
-}
-
-// hasTray says whether the tray icon shows, or would: the platform has a
-// tray and, on Linux, the desktop draws it and the toolkit started it.
-func (a *App) hasTray() bool { return a.tray && !a.noTrayHost && !a.trayLate }
-
-// trayNote is what Minimize to tray says under its label: why closing
-// quits even with it on.
-func (a *App) trayNote(s model.State) string {
-	switch {
-	case a.noTrayHost:
-		return noTrayNote
-	case a.trayLate && s.Settings[settings.AppMinimizeToTray.String()] == true:
-		return lateTrayNote
-	}
-	return ""
-}
-
-// setTrayHost takes watchTrayHost's word: with a tray host, closing hides
-// to the tray, whose icon registers with it by itself; with none, closing
-// quits and Settings says why.
-func (a *App) setTrayHost(present bool) {
-	if a.noTrayHost == !present {
-		return
-	}
-	a.noTrayHost = !present
-	a.render()
-}
-
-// stopDaemon shuts spytifyd down as the app quits, unless it runs as a
-// login service (spytify-cli service install), which keeps it alive.
-func (a *App) stopDaemon() {
-	if daemonIsService() {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	_ = a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil)
-}
-
-// daemonIsService reports whether spytifyd is installed as a login service.
-func daemonIsService() bool {
-	daemon, err := link.FindDaemon()
-	if err != nil {
-		return false
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	p, err := service.For(runtime.GOOS, daemon, home, os.Getuid())
-	return err == nil && service.Installed(p)
 }
 
 // applyTheme switches to the Spytify theme in the given app.theme mode.
@@ -783,110 +683,4 @@ func (a *App) do(method string, params any, then func()) {
 
 func (a *App) showError(err error) {
 	showError(a.win, err)
-}
-
-// StartDaemon starts spytifyd and reports why when it stops at once.
-func (a *App) StartDaemon() {
-	fyne.Do(func() {
-		a.starting, a.startErr = true, ""
-		a.tel.Breadcrumb("app", "starting the recorder", nil)
-		if a.launch.started.IsZero() {
-			a.launch.started = time.Now()
-		}
-		a.render()
-	})
-	go func() {
-		err := a.link.StartDaemon()
-		if err == nil {
-			// Started: it answers in a moment, or this says it did not.
-			time.Sleep(startAnswerTimeout)
-			err = errors.New("spytifyd started but does not answer; see its log in Logs")
-			if a.m.Snapshot().Conn == model.Connected {
-				return
-			}
-		}
-		fyne.Do(func() { a.startFailed(err) })
-	}()
-}
-
-// startingText is what the app bar and Record say while spytifyd starts.
-const startingText = "Starting the recorder…"
-
-// startAnswerTimeout is how long a started spytifyd has to answer.
-const startAnswerTimeout = 15 * time.Second
-
-// startFailed shows the offline screen with why the recorder did not start.
-func (a *App) startFailed(err error) {
-	a.starting, a.startErr = false, err.Error()
-	a.launchFailed(err)
-	a.render()
-}
-
-func (a *App) setupTray() {
-	desk, ok := a.fa.(desktop.App)
-	if !ok {
-		return
-	}
-	// The toolkit starts Linux's tray with its loop: one set up later
-	// never shows, and closing quits until Spytify restarts.
-	a.trayLate = a.running && !lateTrayShows
-	desk.SetSystemTrayIcon(Logo)
-	// The tray's action is the app bar's, which render copies there:
-	// Record, Stop, or Stop now while the last track is being saved.
-	a.trayAction = fyne.NewMenuItem("Record", a.toggleRecording)
-	a.trayAction.Disabled = true
-	a.trayMenu = fyne.NewMenu("Spytify",
-		a.trayAction,
-		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Open window", a.showWindow),
-	)
-	desk.SetSystemTrayMenu(a.trayMenu)
-}
-
-// syncTray gives the tray the app bar's action, rebuilding the tray menu
-// only when it changes.
-func (a *App) syncTray() {
-	if a.trayMenu == nil {
-		return
-	}
-	label, off := a.action.Text, a.action.Disabled()
-	if a.trayAction.Label == label && a.trayAction.Disabled == off {
-		return
-	}
-	a.trayAction.Label, a.trayAction.Disabled = label, off
-	a.trayMenu.Refresh()
-}
-
-const trayNoticeKey = "tray-notice-seen"
-
-// hideToTray hides the window, and on macOS the Dock icon with it; the
-// session goes on. The first time, a notification says where the app is.
-func (a *App) hideToTray() {
-	a.win.Hide()
-	a.notes.hidden = true
-	if a.opts.ManualRender {
-		return
-	}
-	showInDock(false)
-	prefs := a.fa.Preferences()
-	if !prefs.Bool(trayNoticeKey) {
-		prefs.SetBool(trayNoticeKey, true)
-		a.fa.SendNotification(fyne.NewNotification("Spytify is still running",
-			"It records from the menu bar. Quit it from there, or turn off Minimize to tray in Settings."))
-	}
-}
-
-func (a *App) showWindow() {
-	a.notes.hidden = false
-	if !a.opts.ManualRender {
-		showInDock(true)
-	}
-	a.win.Show()
-	a.win.RequestFocus()
-}
-
-// Reopen brings the window back, hidden to the tray or not: Spytify was
-// opened again while it runs. It may be called from any goroutine.
-func (a *App) Reopen() {
-	fyne.Do(a.showWindow)
 }
