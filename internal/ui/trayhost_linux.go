@@ -14,9 +14,6 @@ const (
 	// trayBusTimeout bounds each question: a watcher that hangs must not
 	// hold the answer back.
 	trayBusTimeout = 2 * time.Second
-	// lateTrayShows is false: the toolkit starts Linux's tray, a
-	// StatusNotifierItem on the bus, with its loop, and never after.
-	lateTrayShows = false
 )
 
 // watchTrayHost tells changed, from its own goroutine, whether the desktop

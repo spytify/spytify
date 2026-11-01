@@ -9,7 +9,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -22,8 +21,7 @@ func showError(w fyne.Window, err error) {
 	if errors.As(err, &perr) {
 		err = errors.New(perr.Message)
 	}
-	dialog.ShowError(err, w)
-	focusFirst(w)
+	showText(w, "Error", capitalized(err.Error()), "OK", "", nil)
 }
 
 func fmtDuration(ms int64) string {

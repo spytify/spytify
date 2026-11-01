@@ -31,6 +31,13 @@ func newLitButton(text string, icon fyne.Resource, imp widget.Importance, tapped
 	return b
 }
 
+// TypedKey is button's, for the lit button: Fyne finds the window of the
+// widget it holds, not of the button inside.
+func (b *litButton) TypedKey(e *fyne.KeyEvent) {
+	pressOnSpace(&b.Button, e)
+	escapeFrom(b, e)
+}
+
 func (b *litButton) FocusGained() {
 	b.focused = true
 	b.Button.FocusGained()
