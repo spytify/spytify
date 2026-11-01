@@ -12,6 +12,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -540,4 +541,17 @@ func TestTheFolderPickerIsLargerAndCentred(t *testing.T) {
 		t.Errorf("the picker does not show the output folder: %v", texts(top))
 	}
 	snapshot(t, a, "folder-picker")
+}
+
+// A settings card and the advanced block in it are square, with no
+// rounded corners.
+func TestTheSettingsCardsAreSquare(t *testing.T) {
+	test.NewTempApp(t).Settings().SetTheme(spytifyTheme{mode: "light"})
+	for name, o := range map[string]fyne.CanvasObject{"card": newCard(widget.NewLabel("card")), "advanced block": newBlock(widget.NewLabel("block"))} {
+		test.NewTempWindow(t, o)
+		p := o.(*container.ThemeOverride).Content.(*panel)
+		if r := test.TempWidgetRenderer(t, p).(*panelRenderer).box.CornerRadius; r != 0 {
+			t.Errorf("the %s is rounded %v", name, r)
+		}
+	}
 }
