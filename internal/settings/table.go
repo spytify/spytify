@@ -54,8 +54,8 @@ type Def struct {
 // providers' settings are gone, and the UI is English only.
 var Table = []Def{
 	{Key: "app.theme", Tab: "App", Group: "App", Label: "Theme", Kind: KindEnum, Enum: []string{"system", "light", "dark"}, Choices: []string{"System", "Light", "Dark"}, Default: "system"},
-	{Key: "app.minimize_to_tray", Tab: "App", Group: "App", Label: "Minimize to tray", Kind: KindBool, Default: false, Note: "Closing the window keeps Spytify running in the tray."},
 	{Key: "app.notifications", Tab: "App", Group: "App", Label: "Notifications", Kind: KindEnum, Enum: []string{"problems", "tracks", "off"}, Choices: []string{"Problems only", "Every saved track", "Off"}, Default: "problems", Note: "Only while the window is hidden in the tray."},
+	{Key: "app.minimize_to_tray", Tab: "App", Group: "App", Label: "Minimize to tray", Kind: KindBool, Default: false, Note: "Closing the window keeps Spytify running in the tray."},
 	{Key: "app.autostart_recording", Tab: "App", Group: "App", Label: "Start recording on launch", Kind: KindBool, Default: false},
 	{Key: "app.check_updates", Tab: "App", Group: "App", Label: "Check for updates", Kind: KindBool, Default: true},
 
