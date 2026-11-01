@@ -35,7 +35,30 @@ func Open(path string) (*Store, error) {
 	if err := s.load(); err != nil {
 		return nil, err
 	}
+	s.keepFormerOutputDir()
 	return s, nil
+}
+
+// formerOutputDir was the default output folder up to 2.0.0-alpha.7. On
+// Windows, the Music folder is often synced by OneDrive, or kept from
+// unknown apps by Controlled folder access.
+const formerOutputDir = "~/Music/Spytify"
+
+// keepFormerOutputDir leaves an install that recorded in the former
+// default folder there, until the new one is made: a default changed
+// under it would hide its tracks from the Library.
+func (s *Store) keepFormerOutputDir() {
+	d, _ := Lookup(OutputDir.name)
+	def, _ := d.Default.(string)
+	if s.values[OutputDir.name] != def || !isDir(ExpandHome(formerOutputDir)) || isDir(ExpandHome(def)) {
+		return
+	}
+	s.values[OutputDir.name] = formerOutputDir
+}
+
+func isDir(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
 }
 
 func defaults() map[string]any {
@@ -88,6 +111,11 @@ func (s *Store) load() error {
 	// saved since holds no default, which tells the two apart.
 	if full && s.values[RecorderNormalize.name] == true {
 		s.values[RecorderNormalize.name] = false
+	}
+	// The former default output folder, written there the same way, is
+	// kept only where it holds recordings (keepFormerOutputDir).
+	if d, _ := Lookup(OutputDir.name); full && s.values[OutputDir.name] == formerOutputDir {
+		s.values[OutputDir.name] = d.Default
 	}
 	return nil
 }
