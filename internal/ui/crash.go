@@ -70,7 +70,7 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 			top.Refresh()
 		}
 	}
-	fold := widget.NewButtonWithIcon("Error and stack trace", theme.MenuExpandIcon(), nil)
+	fold := newIconButton("Error and stack trace", theme.MenuExpandIcon(), nil)
 	fold.Importance = widget.LowImportance
 	fold.Alignment = widget.ButtonAlignLeading
 	fold.OnTapped = func() {
@@ -84,11 +84,11 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 		fit()
 	}
 	d = dialog.NewCustomWithoutButtons(who+" stopped unexpectedly", container.NewVBox(body, fold, fault), a.win)
-	closeButton := widget.NewButton("Close", d.Hide)
-	copyButton := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+	closeButton := newButton("Close", d.Hide)
+	copyButton := newIconButton("Copy", theme.ContentCopyIcon(), func() {
 		a.fa.Clipboard().SetContent(title + "\n\n" + details)
 	})
-	report := widget.NewButtonWithIcon("Report on GitHub", openInNewIcon, func() { a.openURL(issueURL(title, details)) })
+	report := newIconButton("Report on GitHub", openInNewIcon, func() { a.openURL(issueURL(title, details)) })
 	report.Importance = widget.HighImportance
 	d.SetButtons([]fyne.CanvasObject{closeButton, copyButton, report})
 	d.SetOnClosed(then)
@@ -96,6 +96,7 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 	d.Show()
 	// Its text wraps at the dialog's width, known once shown.
 	fit()
+	focusFirst(a.win)
 }
 
 // crashDialogWidth is the crash dialog's width; its height follows what

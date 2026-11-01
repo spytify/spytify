@@ -241,10 +241,9 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	preview := widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	scroll := container.NewScroll(preview)
 	scroll.SetMinSize(fyne.NewSize(0, 160))
-	what := widget.NewAccordion(widget.NewAccordionItem("What will be sent", scroll))
-	message := widget.NewMultiLineEntry()
+	what := newFold("What will be sent", scroll)
+	message := newCommentEntry()
 	message.SetPlaceHolder("Comment (optional)")
-	message.Wrapping = fyne.TextWrapWord
 	d := dialog.NewCustomConfirm("Send to the developers", "Send", "Cancel", container.NewVBox(body, what, message), func(send bool) {
 		if !send {
 			return
@@ -259,4 +258,5 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	}, a.win)
 	d.Resize(fyne.NewSize(560, 420))
 	d.Show()
+	focusFirst(a.win)
 }

@@ -51,7 +51,7 @@ func TestACrashNotSentShowsItsTrace(t *testing.T) {
 	// The dialog's height, from its title to its buttons.
 	height := func() float32 {
 		top := a.fa.Driver().AbsolutePositionForObject(labels(d, "Spytify stopped unexpectedly")[0])
-		return a.fa.Driver().AbsolutePositionForObject(buttons(d, "Close")[0]).Y - top.Y
+		return a.fa.Driver().AbsolutePositionForObject(buttonObjects(d, "Close")[0]).Y - top.Y
 	}
 	folded := height()
 	tapButton(t, d, "Error and stack trace")
