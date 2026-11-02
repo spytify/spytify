@@ -18,6 +18,13 @@ import (
 // 10 Hz level event rebuilt the window. Measured here, with software
 // rendering on a virtual display, the app used 17 % before that fix and
 // 6 to 7 % after it: the meter still repaints ten times a second.
+//
+// The limit is for CI's runner. A virtual machine on a busy host, such as
+// podman's on a Mac, reports no stolen time: the guest charges the time
+// the host takes back to whatever runs, the app included. There the same
+// app read 11 to 12 % with the Mac at its usual load, and 18 to 65 % with
+// its cores busy. Compare two builds there instead (SPYTIFY_UI_BINARY),
+// in turn, with the host otherwise quiet.
 const maxUICPU = 12.0
 
 // TestUIStaysIdleWhileRecording runs the real app on an X display (CI uses

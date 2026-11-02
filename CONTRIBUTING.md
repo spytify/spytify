@@ -72,6 +72,8 @@ go test -race -timeout 20m ./...    # unit tests, the fake-player scenarios, the
   go test -tags integration -v ./test/integration/
   ```
 
+  `TestUIStaysIdleWhileRecording`'s 12 % limit is for CI's runner. In a virtual machine on a busy host, such as podman's on a Mac, the app is charged the time the host takes back: the same app read 11 to 12 % with the Mac at its usual load, 18 to 65 % with its cores busy. There, compare two builds with `SPYTIFY_UI_BINARY`, in turn, rather than reading the limit.
+
 - **macOS capture**, against what `afplay` plays. It needs the System Audio Recording permission, so not in CI: `go test -tags macos_capture -v ./test/macos/`.
 - **AppleScript**, against FakePlayer ([`macos/fakeplayer`](macos/fakeplayer)), a scriptable app that plays a timeline: `scripts/build-fakeplayer-macos.sh && SPYTIFY_FAKE_APP=$PWD/bin/FakePlayer.app go test -run TestJXAWithTheFakePlayer -v ./internal/meta/`.
 - **Sentry**, against a fake server ([`internal/telemetry/fakesentry`](internal/telemetry/fakesentry)): with the bug tracker off, nothing may reach it; with Sentry out of reach, every call must return. Against a real test project: `SPYTIFY_SENTRY_LIVE_DSN=<dsn> go test -run TestLiveSentry -v ./internal/telemetry/`.
