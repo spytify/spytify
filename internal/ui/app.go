@@ -548,10 +548,17 @@ func (a *App) renderLevel() {
 // recorder sends level events, which move it, only while it records.
 func (a *App) clockAds() {
 	for range time.Tick(time.Second) {
-		if c, session, _ := a.m.Live(); c != nil && session == proto.StateAd {
+		if a.adPlaying() {
 			a.scheduleLevel()
 		}
 	}
+}
+
+// adPlaying is whether an ad plays: clockAds moves its progress, which no
+// level event does.
+func (a *App) adPlaying() bool {
+	c, session, _ := a.m.Live()
+	return c != nil && session == proto.StateAd
 }
 
 func (a *App) checkUpdate() {
