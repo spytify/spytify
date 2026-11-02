@@ -111,6 +111,12 @@ type Check struct {
 // to: without it, no recording starts (CodeOutputDir).
 const CheckOutputWritable = "output folder writable"
 
+// CheckPlayerHeard is the check that the capture did not hear only silence
+// while the player played: the player muted in its own volume or in the
+// system's mixer, or, on macOS, a refused System Audio Recording
+// permission.
+const CheckPlayerHeard = "player heard"
+
 type CoreInfoResult struct {
 	Version  string     `json:"version"`
 	Protocol int        `json:"protocol"`

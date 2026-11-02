@@ -122,6 +122,13 @@ type sessionDeps struct {
 	control func(cmd string) error
 	// mute silences the player (true) or gives it back its volume.
 	mute func(on bool) error
+	// silentHint is the warning for a capture that delivers only silence
+	// while the player plays; empty, as in tests, the session does not
+	// watch for it.
+	silentHint string
+	// silence tells that the capture hears only silence while the player
+	// plays (true), or sound (false).
+	silence func(on bool)
 }
 
 // Session turns a stream of frames and now-playing events into track files.
@@ -162,6 +169,9 @@ type Session struct {
 	started   time.Time
 	lastChunk time.Time
 	stalled   bool
+	// silent is set once a capture that delivers only silence while the
+	// player plays was reported; heard once the capture brought sound.
+	silent, heard bool
 	// lowFormat is set while the capture's format is too poor for music.
 	lowFormat bool
 	// peak and sum are each channel's since the last level reported, over
@@ -213,10 +223,15 @@ func (s *Session) Stop(now bool) {
 
 func (s *Session) setState(st proto.SessionState) {
 	s.mu.Lock()
-	changed := s.snap.State != st
+	prev := s.snap.State
+	changed := prev != st
 	s.snap.State = st
 	s.mu.Unlock()
 	if changed {
+		if prev == proto.StateAd {
+			// The player's sound is due from now, not from before the ad.
+			s.lastSound = time.Now()
+		}
 		s.deps.emit(proto.EventSessionState, proto.SessionStateEvent{State: st})
 		s.muteAds(st)
 	}
@@ -341,6 +356,10 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 // before the session says so.
 var captureStall = 10 * time.Second
 
+// captureSilent is how long the player may play with only silence arriving
+// before the session says so.
+var captureSilent = 10 * time.Second
+
 // diskFree reports the free space of a folder's disk; tests replace it.
 var diskFree = freeBytes
 
@@ -353,6 +372,33 @@ func stallHint(goos string) string {
 		return "No audio from the player for 10 s. Check that the Windows Audio service runs and that the player plays on an output device."
 	}
 	return "No audio from the player for 10 s. Check that PipeWire runs: systemctl --user restart pipewire."
+}
+
+// silentHint is what to look at when only silence arrives while the player
+// plays: the player muted somewhere, unless the track is silent there. The
+// capture hears the player's own volume, and its slider in the Volume mixer
+// on Windows or in the sound settings on Linux, but not the output
+// device's. On macOS a tap that System Audio Recording was refused to
+// records silence too, not nothing. The window shows it as the player
+// heard check's detail.
+func silentHint(goos string) string {
+	const lead = "Only silence from the player for 10 s while it plays. Check that the player is not muted in its own volume"
+	switch goos {
+	case "darwin":
+		return lead + "; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
+	case "windows":
+		return lead + ", nor in the Volume mixer."
+	}
+	return lead + ", nor in the system's sound settings."
+}
+
+// playerHeardCheck is the check that the capture did not hear only silence
+// while the player played, until it heard sound again.
+func playerHeardCheck(goos string, silent bool) proto.Check {
+	if silent {
+		return proto.Check{Name: proto.CheckPlayerHeard, Detail: silentHint(goos)}
+	}
+	return proto.Check{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"}
 }
 
 // lowQualityHint is what to change when the capture is too poor for
@@ -381,6 +427,15 @@ func (s *Session) onTick() {
 		s.stalled = true
 		s.deps.log.Errorf("no audio from the capture for %s while the player plays", captureStall)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: stallHint(runtime.GOOS)})
+	}
+	// An ad may be silent, muted by the session or not.
+	if s.deps.silentHint != "" && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
+		s.silent = true
+		s.deps.log.Errorf("only silence from the capture for %s while the player plays", captureSilent)
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: s.deps.silentHint})
+		if s.deps.silence != nil {
+			s.deps.silence(true)
+		}
 	}
 	if s.opts.IdleExit > 0 && s.seen && (s.status != meta.Playing) && time.Since(s.lastSound) > s.opts.IdleExit {
 		s.deps.log.Infof("player idle for %s, ending the session", s.opts.IdleExit)
@@ -414,6 +469,7 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	peaks, rms := ch.Format.ChannelLevels(ch.Data)
 	if slices.Max(peaks) > s.silenceDB {
 		s.lastSound = time.Now()
+		s.hear()
 	}
 	data := ch.Data
 	if s.pausing {
@@ -433,6 +489,23 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	s.checkSeam()
 	s.meter(peaks, rms, len(ch.Data)/ch.Format.FrameBytes())
 	s.progress()
+}
+
+// hear notes sound from the capture, the session's first or the first
+// after a silence was reported, which it withdraws.
+func (s *Session) hear() {
+	if s.heard && !s.silent {
+		return
+	}
+	s.heard = true
+	if s.silent {
+		s.silent = false
+		s.deps.log.Infof("sound from the capture again")
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent"})
+	}
+	if s.deps.silence != nil {
+		s.deps.silence(false)
+	}
 }
 
 // poorFormat is a format too poor for music, under 44.1 kHz or in mono:

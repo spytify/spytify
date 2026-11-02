@@ -66,6 +66,8 @@ func hiddenSession(t *testing.T, mode string, back bool) []string {
 		event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}),
 		event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: "the player's output device runs at 16 kHz mono"}),
 		event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}),
+		event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: "the recorder's own words"}),
+		event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent"}),
 		event(t, proto.EventError, proto.ErrorEvent{Code: "ring_overflow", Msg: "12 frames lost"}),
 		event(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 80 MB free in the output folder"}),
 		event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateStopping}),
@@ -77,18 +79,20 @@ func hiddenSession(t *testing.T, mode string, back bool) []string {
 }
 
 // Problems only, the default, tells of a session that stopped on its own and
-// of one recording in low quality; Every saved track adds each saved track;
-// Off tells nothing. Skips, the player closing and lost frames are routine.
+// of one recording in low quality or only silence, the silence in the
+// window's words; Every saved track adds each saved track; Off tells
+// nothing. Skips, the player closing and lost frames are routine.
 func TestNotificationsFollowTheSetting(t *testing.T) {
 	low := lang.RecordingLowQuality + ": The player's output device runs at 16 kHz mono"
+	silent := lang.NothingRecorded + ": " + fmt.Sprintf(lang.OnlySilenceHeard, "Player")
 	stopped := lang.RecordingStopped + ": Only 80 MB free in the output folder"
 	saved := lang.TrackSaved + ": Midnight City · M83"
 	for _, c := range []struct {
 		mode string
 		want []string
 	}{
-		{"problems", []string{low, stopped}},
-		{"tracks", []string{saved, low, stopped}},
+		{"problems", []string{low, silent, stopped}},
+		{"tracks", []string{saved, low, silent, stopped}},
 		{"off", nil},
 	} {
 		if got := hiddenSession(t, c.mode, false); !slices.Equal(got, c.want) {

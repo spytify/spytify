@@ -64,6 +64,126 @@ func TestPinnedStallAndRecovery(t *testing.T) {
 	}
 }
 
+// A capture that delivers frames, all silent, while the player plays is
+// reported once, on the tick after captureSilent, and withdrawn at the
+// first sound, on every system: a player muted in its own volume or in the
+// system's mixer gives silence, as macOS does when System Audio Recording
+// was refused. Not while the player is paused, nor while the session mutes
+// an ad. The clock is moved by setting when the last sound came.
+func TestPinnedSilentCapture(t *testing.T) {
+	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
+	loud := capture.Chunk{Data: slices.Repeat([]byte{0x00, 0x40}, len(silent.Data)/2), Format: f44}
+	reported := []string{
+		"log error: only silence from the capture for 10s while the player plays",
+		`error capture_silent "Only silence from the player for 10 s while it plays. …"`,
+		"log info: sound from the capture again",
+		`error capture_silent ""`,
+	}
+	for _, goos := range []string{"darwin", "windows", "linux"} {
+		t.Run(goos, func(t *testing.T) {
+			r := bareRig(t, map[string]any{"recorder.mute_ads": true}, endOnStop)
+			s := r.s
+			s.deps.silentHint = silentHint(goos)
+			s.deps.mute = func(bool) error { return nil }
+			var told []bool
+			s.deps.silence = func(on bool) { told = append(told, on) }
+			ctx := context.Background()
+			long := time.Now().Add(-time.Hour)
+			s.onMeta(ctx, statusEvent(meta.Playing))
+			s.onChunk(silent)
+			s.onTick()
+			s.lastSound = long
+			s.onTick()
+			s.onChunk(silent)
+			s.onTick()
+			s.onChunk(loud)
+			s.onMeta(ctx, statusEvent(meta.Paused))
+			s.lastSound = long
+			s.onTick()
+			s.onMeta(ctx, statusEvent(meta.Playing))
+			s.setState(proto.StateAd)
+			s.lastSound = long
+			s.onTick()
+			s.setState(proto.StateRecording)
+			s.onTick()
+			s.onChunk(loud)
+			// The player heard check is told of the silence, and of the
+			// first sound; a later sound tells it nothing new.
+			want := append(append([]string{"state waiting"}, reported...), "state paused", "state waiting", "state ad", "state recording")
+			wantTold := []bool{true, false}
+			if got := r.lines(); !slices.Equal(got, want) {
+				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
+			}
+			if !slices.Equal(told, wantTold) {
+				t.Fatalf("player heard check told %v, want %v", told, wantTold)
+			}
+		})
+	}
+}
+
+// An ad brings no silence warning, muted by the session or not: it may be
+// silent, as when the player mutes it. The 10 s start again when it ends.
+func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
+	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
+	for _, muted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("mute_ads=%v", muted), func(t *testing.T) {
+			r := bareRig(t, map[string]any{"recorder.mute_ads": muted}, endOnStop)
+			s := r.s
+			s.deps.silentHint = silentHint("darwin")
+			s.deps.mute = func(bool) error { return nil }
+			long := time.Now().Add(-time.Hour)
+			s.onMeta(context.Background(), statusEvent(meta.Playing))
+			s.setState(proto.StateAd)
+			s.onChunk(silent)
+			s.lastSound = long
+			s.onTick()
+			s.setState(proto.StateRecording)
+			s.onChunk(silent)
+			s.onTick()
+			afterAd := []string{"state waiting", "state ad", "state recording"}
+			if got := r.lines(); !slices.Equal(got, afterAd) {
+				t.Fatalf("over the ad and just after:\n%q\nwant:\n%q", got, afterAd)
+			}
+			s.lastSound = long
+			s.onTick()
+			want := []string{"state waiting", "state ad", "state recording",
+				"log error: only silence from the capture for 10s while the player plays",
+				`error capture_silent "Only silence from the player for 10 s while it plays. …"`}
+			if got := r.lines(); !slices.Equal(got, want) {
+				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
+			}
+		})
+	}
+}
+
+// The player heard check fails with the silence's warning while the
+// capture hears only silence, on every system. The warning says to check
+// the player's own volume first, then the system's: its mixer, or on macOS
+// the System Audio Recording permission.
+func TestPlayerHeardCheck(t *testing.T) {
+	same := func(a, b proto.Check) bool { return a.Name == b.Name && a.OK == b.OK && a.Detail == b.Detail }
+	for _, goos := range []string{"darwin", "windows", "linux"} {
+		if got, want := playerHeardCheck(goos, false), (proto.Check{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"}); !same(got, want) {
+			t.Errorf("%s with sound: %+v, want %+v", goos, got, want)
+		}
+		if got, want := playerHeardCheck(goos, true), (proto.Check{Name: proto.CheckPlayerHeard, Detail: silentHint(goos)}); !same(got, want) {
+			t.Errorf("%s with only silence: %+v, want %+v", goos, got, want)
+		}
+		if hint := silentHint(goos); !strings.Contains(hint, "the player is not muted in its own volume") {
+			t.Errorf("%s: the warning does not say to check the player's own volume first: %q", goos, hint)
+		}
+	}
+	for goos, then := range map[string]string{
+		"darwin":  "Screen & System Audio Recording",
+		"windows": "Volume mixer",
+		"linux":   "sound settings",
+	} {
+		if hint := silentHint(goos); !strings.Contains(hint, then) {
+			t.Errorf("%s: the warning does not name %q: %q", goos, then, hint)
+		}
+	}
+}
+
 // The level meter reports the highest peak and the RMS of every sample
 // since its last report, at most every 100 ms, and only while recording.
 // The clock is moved by setting when the last report went.
@@ -381,14 +501,15 @@ func TestPinnedDiskFull(t *testing.T) {
 	}
 }
 
-// What the session says when no audio comes, or the capture is too poor
-// for music, on each system.
+// What the session says when no audio comes, only silence comes, or the
+// capture is too poor for music, on each system.
 func TestPinnedHints(t *testing.T) {
 	call := pcm.Format{Rate: 16000, Channels: 1, Sample: pcm.S16LE}
 	f8 := pcm.Format{Rate: 8000, Channels: 2, Sample: pcm.S16LE}
 	var b strings.Builder
 	for _, goos := range []string{"darwin", "windows", "linux"} {
 		fmt.Fprintf(&b, "%s stall: %s\n", goos, stallHint(goos))
+		fmt.Fprintf(&b, "%s silent: %s\n", goos, silentHint(goos))
 		fmt.Fprintf(&b, "%s call: %s\n", goos, lowQualityHint(goos, call))
 		fmt.Fprintf(&b, "%s 8 kHz: %s\n", goos, lowQualityHint(goos, f8))
 	}

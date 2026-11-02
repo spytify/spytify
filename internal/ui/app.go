@@ -92,7 +92,6 @@ type App struct {
 	update  *button
 	donate  *tipButton
 	action  *litButton
-	banner  *widget.Label
 	bar     *fyne.Container
 	covers  *covers
 	checked bool
@@ -213,12 +212,6 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
 	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.donate, a.action.lit))
 
-	a.banner = widget.NewLabel("")
-	a.banner.Wrapping = fyne.TextWrapWord
-	a.banner.Importance = widget.DangerImportance
-	a.banner.Hide()
-	a.maskPaths(a.banner)
-
 	start := newLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
 	a.player = newPlayerCard(a)
 	intro := widget.NewLabel(lang.RecorderExplained)
@@ -244,7 +237,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.center = container.NewStack(a.tabsView)
 	// The window has no padding of its own, so the bars' plain colour goes
 	// to its edges; the page's grey is the window's background.
-	top := plain(container.New(layout.NewCustomPaddedLayout(pad, 0, pad, pad), container.NewVBox(container.NewPadded(a.bar), a.banner)))
+	top := plain(container.New(layout.NewCustomPaddedLayout(pad, 0, pad, pad), container.NewPadded(a.bar)))
 	body := inReadingOrder(top, nil, nil, nil, a.center)
 	a.win.SetPadded(false)
 	a.hints = a.newHints()
@@ -449,12 +442,6 @@ func (a *App) render() {
 		a.setAction(lang.Record, theme.MediaRecordIcon(), widget.HighImportance)
 	}
 	a.syncTray()
-	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {
-		a.banner.SetText(s.LastError.Msg)
-		a.banner.Show()
-	} else {
-		a.banner.Hide()
-	}
 	record := lang.Record
 	if n := s.Totals().Saved; s.Recording() && n > 0 {
 		record = fmt.Sprintf(lang.RecordCount, n)
@@ -694,13 +681,14 @@ func (a *App) refreshChecks() {
 }
 
 // recheck runs the checks again when what they test may have changed:
-// the output folder lost during a recording, or another one chosen. It
-// runs on the link's goroutine.
+// the output folder lost during a recording, or another one chosen, or the
+// capture hearing only silence, or sound again. It runs on the link's
+// goroutine.
 func (a *App) recheck(ev proto.Event) {
 	switch ev.Method {
 	case proto.EventError:
 		var e proto.ErrorEvent
-		if ev.Decode(&e) != nil || e.Code != "output_dir" {
+		if ev.Decode(&e) != nil || (e.Code != "output_dir" && e.Code != "capture_silent") {
 			return
 		}
 	case proto.EventSettingsChanged:

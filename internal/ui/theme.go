@@ -35,6 +35,9 @@ const (
 // light theme and lighter on the dark one, as MUI's outlined Alert does.
 const colorInfoText fyne.ThemeColorName = "spytifyInfoText"
 
+// An error alert's text, in the same way in the red of its outline.
+const colorErrorText fyne.ThemeColorName = "spytifyErrorText"
+
 // Cards on a darker page, a settings card's advanced settings in a greyer
 // block, and text in three steps, a card's title strongest. The bars at
 // the top, the log and About stay on Fyne's plain window colour.
@@ -120,6 +123,11 @@ func (t spytifyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color
 			return color.NRGBA{R: 0x08, G: 0x37, B: 0x19, A: 0xff}
 		}
 		return color.NRGBA{R: 0xa5, G: 0xef, B: 0xbe, A: 0xff}
+	case colorErrorText:
+		if light {
+			return color.NRGBA{R: 0x5f, G: 0x21, B: 0x20, A: 0xff}
+		}
+		return color.NRGBA{R: 0xf4, G: 0xc7, B: 0xc7, A: 0xff}
 	case theme.ColorNamePrimary, theme.ColorNameHyperlink:
 		return green
 	case theme.ColorNameFocus:
