@@ -121,6 +121,13 @@ type App struct {
 	starting   bool
 	startErr   string
 	offlineErr *widget.Label
+	// actionKeyAt is when the Record/Stop shortcut last came: see
+	// pressAction.
+	actionKeyAt time.Time
+	// hints show each shortcut's key under what it acts on, once the
+	// shortcut key has been held alone since keysHeld: see watchKeys.
+	hints    *fyne.Container
+	keysHeld time.Time
 
 	// tel is the Sentry bug tracker; launch times the way to a recorder
 	// that answers; checksNoted are the checks last left as a breadcrumb.
@@ -196,6 +203,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.donate.Importance = widget.LowImportance
 	a.donate.SetToolTip("Donate")
 	a.action = newLitButton("Record", theme.MediaRecordIcon(), widget.HighImportance, a.toggleRecording)
+	a.action.SetToolTip(shortcutTip("Record", actionKey))
 	// The wordmark: the logo with the name in its green.
 	mark := canvas.NewImageFromResource(Wordmark)
 	mark.FillMode = canvas.ImageFillContain
@@ -238,17 +246,22 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	top := plain(container.New(layout.NewCustomPaddedLayout(pad, 0, pad, pad), container.NewVBox(container.NewPadded(a.bar), a.banner)))
 	body := inReadingOrder(top, nil, nil, nil, a.center)
 	a.win.SetPadded(false)
-	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.win.Canvas()))
+	a.hints = a.newHints()
+	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewStack(body, a.hints), a.win.Canvas()))
 	// With nothing focused, Escape comes to the window.
 	a.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
 		if e.Name == fyne.KeyEscape {
 			escape(a.win.Canvas())
 		}
 	})
+	a.addShortcuts()
 
 	if !opts.ManualRender {
 		onReopen(a.Reopen)
 		a.watchFocus()
+	}
+	if d, ok := fa.Driver().(desktop.Driver); ok && !opts.ManualRender {
+		go a.pollKeys(d)
 	}
 	_, a.tray = fa.(desktop.App)
 	if a.tray && !opts.ManualRender {
@@ -485,6 +498,7 @@ func (a *App) setAction(text string, icon fyne.Resource, imp widget.Importance) 
 		return
 	}
 	a.action.SetText(text)
+	a.action.SetToolTip(shortcutTip(text, actionKey))
 	a.action.SetIcon(icon)
 	a.action.Importance = imp
 	a.action.Refresh()

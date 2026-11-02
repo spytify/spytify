@@ -140,14 +140,12 @@ func (spytifyTheme) Icon(n fyne.ThemeIconName) fyne.Resource { return theme.Defa
 func (spytifyTheme) Size(n fyne.ThemeSizeName) float32       { return theme.DefaultTheme().Size(n) }
 
 // cardTheme is the app's theme on a card or another surface: its inputs and
-// lines in the card's colours, a ticked check box showing the surface it is
-// on, a light shadow at a scrolled list's edges, and in the advanced block,
-// smaller text.
+// lines in the card's colours, square fields, a ticked check box showing
+// the surface it is on, a light shadow at a scrolled list's edges, and in
+// the advanced block, smaller text.
 type cardTheme struct {
 	input, surface fyne.ThemeColorName
-	// small shrinks the text and its padding; square takes the round off
-	// the fields' corners.
-	small, square bool
+	small          bool
 }
 
 func (cardTheme) base() fyne.Theme { return fyne.CurrentApp().Settings().Theme() }
@@ -171,7 +169,7 @@ func (c cardTheme) Icon(n fyne.ThemeIconName) fyne.Resource { return c.base().Ic
 
 func (c cardTheme) Size(n fyne.ThemeSizeName) float32 {
 	s := c.base().Size(n)
-	if c.square && n == theme.SizeNameInputRadius {
+	if n == theme.SizeNameInputRadius {
 		return 0
 	}
 	if c.small {
