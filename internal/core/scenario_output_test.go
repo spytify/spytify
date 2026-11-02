@@ -14,7 +14,6 @@ import (
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/pcm"
-	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -124,17 +123,7 @@ func TestASaveWithTheOutputFolderGoneStopsTheRecording(t *testing.T) {
 	if err := os.WriteFile(drive, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	overrides := map[string]any{"output.dir": filepath.Join(drive, "Music")}
-	for k, v := range baseSettings {
-		overrides[k] = v
-	}
-	if rej := store.Override(overrides); len(rej) > 0 {
-		t.Fatalf("settings rejected: %v", rej)
-	}
+	store := testStore(t, dir, map[string]any{"output.dir": filepath.Join(drive, "Music")}, baseSettings)
 	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	log, _ := NewLogger("", testWriter{t})
 	rec := &recorder{}

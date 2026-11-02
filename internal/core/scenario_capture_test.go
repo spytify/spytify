@@ -14,7 +14,6 @@ import (
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/pcm"
-	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -24,15 +23,7 @@ import (
 func directSession(t *testing.T) (*Session, *recorder) {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	overrides := map[string]any{"output.dir": filepath.Join(dir, "out")}
-	for k, v := range baseSettings {
-		overrides[k] = v
-	}
-	store.Override(overrides)
+	store := testStore(t, dir, map[string]any{"output.dir": filepath.Join(dir, "out")}, baseSettings)
 	log, _ := NewLogger("", testWriter{t})
 	rec := &recorder{}
 	ff := testkit.Need(t, "ffmpeg", encode.Find)

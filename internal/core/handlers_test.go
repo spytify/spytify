@@ -28,13 +28,7 @@ func newTestCore(t *testing.T, running bool) (*Core, *recorder) {
 func newTestCoreAt(t *testing.T, running, realtime bool) (*Core, *recorder) {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rej := store.Override(map[string]any{"output.dir": filepath.Join(dir, "out")}); len(rej) > 0 {
-		t.Fatal(rej)
-	}
+	store := testStore(t, dir, map[string]any{"output.dir": filepath.Join(dir, "out")})
 	tl := loadTimeline(t, "basic")
 	player, err := fake.NewPlayer(tl, realtime)
 	if err != nil {

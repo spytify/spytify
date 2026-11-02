@@ -31,6 +31,20 @@ var baseSettings = map[string]any{
 	"output.group_by":    "none",
 }
 
+// testStore is a settings store in dir, values laid over the defaults, a
+// later map over an earlier one.
+func testStore(t *testing.T, dir string, values ...map[string]any) *settings.Store {
+	t.Helper()
+	store, err := settings.Open(filepath.Join(dir, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rej := store.Override(mergeSettings(values...)); len(rej) > 0 {
+		t.Fatalf("settings rejected: %v", rej)
+	}
+	return store
+}
+
 type fakeBackends struct{ b *fake.Backend }
 
 func (f fakeBackends) New(target.Target) (capture.Capture, meta.NowPlaying, error) {
@@ -82,19 +96,7 @@ func newScenarioAt(t *testing.T, tl *fake.Timeline, extra map[string]any, realti
 	testkit.Need(t, "ffmpeg", encode.Find)
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	overrides := map[string]any{"output.dir": out}
-	for _, m := range []map[string]any{baseSettings, tl.Settings, extra} {
-		for k, v := range m {
-			overrides[k] = v
-		}
-	}
-	if rej := store.Override(overrides); len(rej) > 0 {
-		t.Fatalf("settings rejected: %v", rej)
-	}
+	store := testStore(t, dir, map[string]any{"output.dir": out}, baseSettings, tl.Settings, extra)
 	player, err := fake.NewPlayer(tl, realtime)
 	if err != nil {
 		t.Fatal(err)

@@ -55,14 +55,8 @@ type bench struct {
 func newBench(t *testing.T, extra map[string]any) *bench {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	out := filepath.Join(dir, "out")
-	if rej := store.Override(mergeSettings(baseSettings, extra, map[string]any{"output.dir": out})); len(rej) > 0 {
-		t.Fatalf("settings rejected: %v", rej)
-	}
+	store := testStore(t, dir, baseSettings, extra, map[string]any{"output.dir": out})
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		t.Fatal(err)
 	}
