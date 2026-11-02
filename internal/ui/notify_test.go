@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -79,9 +81,9 @@ func hiddenSession(t *testing.T, mode string, back bool) []string {
 // of one recording in low quality; Every saved track adds each saved track;
 // Off tells nothing. Skips, the player closing and lost frames are routine.
 func TestNotificationsFollowTheSetting(t *testing.T) {
-	low := "Recording in low quality: The player's output device runs at 16 kHz mono"
-	stopped := "Recording stopped: Only 80 MB free in the output folder"
-	saved := "Track saved: Midnight City · M83"
+	low := lang.RecordingLowQuality + ": The player's output device runs at 16 kHz mono"
+	stopped := lang.RecordingStopped + ": Only 80 MB free in the output folder"
+	saved := lang.TrackSaved + ": Midnight City · M83"
 	for _, c := range []struct {
 		mode string
 		want []string
@@ -130,7 +132,7 @@ func TestOnlyASessionThatEndsOnItsOwnIsNews(t *testing.T) {
 	} {
 		m.Apply(ev)
 	}
-	if got, want := sink.noticed(), []string{"Recording stopped: 1 saved · 0 skipped"}; !slices.Equal(got, want) {
+	if got, want := sink.noticed(), []string{lang.RecordingStopped + ": " + fmt.Sprintf(lang.SavedSkipped, 1, 0)}; !slices.Equal(got, want) {
 		t.Errorf("sent %q, want %q", got, want)
 	}
 }

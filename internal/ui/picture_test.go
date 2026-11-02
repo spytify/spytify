@@ -22,6 +22,7 @@ import (
 
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -384,7 +385,7 @@ func TestNoPictureItCannotCover(t *testing.T) {
 	if a.picture() != nil {
 		t.Error("a picture under an error")
 	}
-	tapButton(t, overlay(t, a), "OK")
+	tapButton(t, overlay(t, a), lang.OK)
 	if a.picture() == nil {
 		t.Error("no picture once the error closed")
 	}
@@ -454,12 +455,12 @@ func TestSendToTheDevelopersShowsThePicture(t *testing.T) {
 			if c.hidden {
 				a.hideToTray()
 			}
-			tapButton(t, overlay(t, a), "Send to the developers")
+			tapButton(t, overlay(t, a), lang.SendToDevelopers)
 			d := overlay(t, a)
 			for _, f := range visible[*fold](d) {
 				f.setOpen(true)
 			}
-			keep := checkBoxes(d, pictureLabel)
+			keep := checkBoxes(d, lang.SendPicture)
 			if len(keep) != 1 && !c.hidden || len(keep) != 0 && c.hidden {
 				t.Fatalf("%d tick boxes for the picture", len(keep))
 			}
@@ -474,11 +475,11 @@ func TestSendToTheDevelopersShowsThePicture(t *testing.T) {
 				}
 			}
 			asked := strings.Join(texts(d), " ")
-			asks := strings.Contains(asked, "a picture of the window to the developers")
+			asks := strings.Contains(asked, lang.SendChecksPicture)
 			if (pictures == 1) != want || pictures > 1 || asks != want {
 				t.Errorf("%d pictures shown, asked %q; want the picture %v", pictures, asked, want)
 			}
-			tapButton(t, d, "Send")
+			tapButton(t, d, lang.Send)
 			srv.Wait(t, "event", 1)
 			if sent := sentScreenshot(t, srv) != nil; sent != want {
 				t.Errorf("screenshot sent %v, want %v", sent, want)

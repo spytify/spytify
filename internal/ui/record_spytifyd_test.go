@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 )
 
@@ -19,12 +21,12 @@ func TestRecordSaysSpytifydIsGone(t *testing.T) {
 	m.SetConn(model.Disconnected, "spytifyd closed the connection")
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"Record is off", "spytifyd, which is not running", "Start spytifyd"} {
+	for _, want := range []string{lang.RecordIsOff, lang.RecordNeedsRecorder, lang.StartRecorder} {
 		if !contains(all, want) {
 			t.Errorf("%q not on Record once spytifyd is gone: %v", want, all)
 		}
 	}
-	for _, stale := range []string{"Ready to record", "Press Record", "Open Player"} {
+	for _, stale := range []string{lang.ReadyToRecord, "Press Record", "Open Player"} {
 		if contains(all, stale) {
 			t.Errorf("%q still on Record once spytifyd is gone", stale)
 		}
@@ -37,7 +39,7 @@ func TestRecordSaysSpytifydIsGone(t *testing.T) {
 	// A start that failed says why.
 	a.startErr = "spytifyd stopped: listen: address already in use"
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, a.startErr) || !contains(all, "Start spytifyd") {
+	if all := texts(a.win.Content()); !contains(all, a.startErr) || !contains(all, lang.StartRecorder) {
 		t.Errorf("failed start: %v", all)
 	}
 	a.startErr = ""
@@ -45,14 +47,14 @@ func TestRecordSaysSpytifydIsGone(t *testing.T) {
 	// Being started, it is no longer offered to start.
 	a.starting = true
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, startingText) || contains(all, "Start spytifyd") {
+	if all := texts(a.win.Content()); !contains(all, lang.StartingRecorder) || contains(all, lang.StartRecorder) {
 		t.Errorf("spytifyd starting: %v", all)
 	}
 	a.starting = false
 
 	m.SetConn(model.Connected, "")
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, "Ready to record") || contains(all, "Start spytifyd") {
+	if all := texts(a.win.Content()); !contains(all, lang.ReadyToRecord) || contains(all, lang.StartRecorder) {
 		t.Errorf("spytifyd back: %v", all)
 	}
 }
@@ -74,7 +76,7 @@ func TestRecordSaysSpytifydIsGoneDuringASession(t *testing.T) {
 		t.Error("spytifyd is gone: the track still shows as being recorded")
 	}
 	all := texts(a.win.Content())
-	for _, want := range []string{"Nothing is recorded while spytifyd is not running.", "Start spytifyd", "Reunion"} {
+	for _, want := range []string{fmt.Sprintf(lang.NothingRecordedNotRunning, "spytifyd"), lang.StartRecorder, "Reunion"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on Record once spytifyd is gone: %v", want, all)
 		}

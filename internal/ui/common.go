@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -22,7 +23,7 @@ func showError(w fyne.Window, err error) dialog.Dialog {
 	if errors.As(err, &perr) {
 		err = errors.New(perr.Message)
 	}
-	return showText(w, "Error", capitalized(err.Error()), "OK", "", nil)
+	return showText(w, lang.Error, capitalized(err.Error()), lang.OK, "", nil)
 }
 
 func fmtDuration(ms int64) string {
@@ -225,11 +226,4 @@ func footerBar(left, actions fyne.CanvasObject) fyne.CanvasObject {
 	row := container.New(layout.NewCustomPaddedLayout(pad/2, pad/2, pad*2, pad),
 		container.NewBorder(nil, nil, nil, actions, container.NewVBox(layout.NewSpacer(), left, layout.NewSpacer())))
 	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, newPanel(colorFooter, "", 0, fyne.Size{}, row))
-}
-
-// outlined draws a line around a button without a fill of its own, for a
-// secondary action on a list row.
-func outlined(b *button) *panel {
-	b.Importance = widget.LowImportance
-	return newPanel("", colorOutline, 8, fyne.Size{}, b)
 }
