@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -123,9 +124,8 @@ func TestSettingsActions(t *testing.T) {
 }
 
 func TestSessionErrors(t *testing.T) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not installed: session.start refuses before it looks for the player")
-	}
+	// Without ffmpeg, session.start refuses before it looks for the player.
+	testkit.Need(t, "ffmpeg", encode.Find)
 	c, _ := newTestCore(t, false)
 	if err := call(t, c, proto.MethodSessionStart, nil, nil); code(err) != proto.CodeTargetNotRunning {
 		t.Fatalf("start without player: %v", err)

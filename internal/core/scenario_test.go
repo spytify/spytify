@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -79,9 +79,7 @@ func newScenario(t *testing.T, tl *fake.Timeline, extra map[string]any) *scenari
 // what depends on the clock, such as the session timer.
 func newScenarioAt(t *testing.T, tl *fake.Timeline, extra map[string]any, realtime bool) *scenario {
 	t.Helper()
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not installed")
-	}
+	testkit.Need(t, "ffmpeg", encode.Find)
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
 	store, err := settings.Open(filepath.Join(dir, "config.toml"))
@@ -223,10 +221,7 @@ func TestRecordingRaisesThePlayerVolumeAndPutsItBack(t *testing.T) {
 // in track.started and embedded in the saved file, whose track.finished
 // says how long each step took.
 func TestTheCoverGoesIntoTheFile(t *testing.T) {
-	ff, err := encode.Find("ffmpeg")
-	if err != nil {
-		t.Skip(err)
-	}
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	tl := loadTimeline(t, "basic")
 	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
 	s.run(t, tl)
@@ -349,10 +344,7 @@ func TestTheRecordingStopsWhenTheCounterIsFull(t *testing.T) {
 // A cover the watcher deletes when the next track's comes out still goes
 // into its own track's file.
 func TestACoverFileGoneAtTheNextTrackStillGoesIntoItsFile(t *testing.T) {
-	ff, err := encode.Find("ffmpeg")
-	if err != nil {
-		t.Skip(err)
-	}
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	tl := loadTimeline(t, "basic")
 	dir := t.TempDir()
 	covers := map[string][]byte{}

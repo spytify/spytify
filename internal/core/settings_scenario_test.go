@@ -20,6 +20,7 @@ import (
 	"github.com/spytify/spytify/internal/openfiles"
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/tag"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -280,9 +281,7 @@ func (p probed) stream(kind string) (codec string, bitRate int, width int, ok bo
 // joined with the separator, the track number and year from the player,
 // and the cover at its size.
 func TestEncodingSettingsReachTheFiles(t *testing.T) {
-	if _, err := exec.LookPath("ffprobe"); err != nil {
-		t.Skip("ffprobe not installed")
-	}
+	testkit.Need(t, "ffprobe", exec.LookPath)
 	tagged := map[string]any{"tags.extra_to_subtitle": true, "tags.artist_separator": " & ", "tags.cover": true, "tags.cover_size": "small"}
 	for _, c := range []struct {
 		format  string
@@ -360,18 +359,6 @@ func TestEncodingSettingsReachTheFiles(t *testing.T) {
 	})
 }
 
-// loudness is the integrated loudness of a file, in LUFS.
-func loudness(t *testing.T, path string) float64 {
-	t.Helper()
-	out, _ := exec.Command("ffmpeg", "-nostats", "-hide_banner", "-i", path, "-af", "ebur128", "-f", "null", "-").CombinedOutput()
-	m := regexp.MustCompile(`(?s)Integrated loudness:\s*I:\s*(-?[\d.]+) LUFS`).FindSubmatch(out)
-	if m == nil {
-		t.Fatalf("no loudness for %s:\n%s", path, out)
-	}
-	v, _ := strconv.ParseFloat(string(m[1]), 64)
-	return v
-}
-
 // Normalizing brings a track to the target loudness; off, the track keeps
 // the loudness it played at.
 func TestLoudnessSettings(t *testing.T) {
@@ -380,24 +367,18 @@ func TestLoudnessSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := filepath.Join(t.TempDir(), "source.wav")
-	w, err := pcm.CreateWAV(src, f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.Write(audio)
-	w.Close()
-	source := loudness(t, src)
+	src := testkit.WriteWAV(t, filepath.Join(t.TempDir(), "source.wav"), f, audio)
+	source := testkit.Loudness(t, "ffmpeg", src)
 
 	off := runSettings(t, map[string]any{"encode.format": "flac"})
 	saved, _ := off.results()
-	if got := loudness(t, saved[slash]); math.Abs(got-source) > 0.5 {
+	if got := testkit.Loudness(t, "ffmpeg", saved[slash]); math.Abs(got-source) > 0.5 {
 		t.Errorf("normalize off: %.1f LUFS, the source is %.1f", got, source)
 	}
 	for _, target := range []float64{-20, -10} {
 		on := runSettings(t, map[string]any{"encode.format": "flac", "recorder.normalize": true, "recorder.target_lufs": target})
 		saved, _ := on.results()
-		if got := loudness(t, saved[slash]); math.Abs(got-target) > 1 {
+		if got := testkit.Loudness(t, "ffmpeg", saved[slash]); math.Abs(got-target) > 1 {
 			t.Errorf("normalize to %.0f: %.1f LUFS (source %.1f)", target, got, source)
 		}
 	}
@@ -412,17 +393,7 @@ func TestNormalizeSaysWhenItLeavesATrackUnderTheTarget(t *testing.T) {
 	tl := loadTimeline(t, "basic")
 	// The last track peaks at -0.5 dBFS, some 7 dB over its loudness.
 	f, last := tl.Format(), &tl.Items[len(tl.Items)-1]
-	last.WAV = filepath.Join(t.TempDir(), "peaks.wav")
-	w, err := pcm.CreateWAV(last.WAV, f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Write(pcm.Synth{LevelDB: -0.5, FadeInMs: 30, FadeOut: 30}.Render(f, f.FramesFromMs(last.LengthMs))); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	last.WAV = testkit.WriteWAV(t, filepath.Join(t.TempDir(), "peaks.wav"), f, pcm.Synth{LevelDB: -0.5, FadeInMs: 30, FadeOut: 30}.Render(f, f.FramesFromMs(last.LengthMs)))
 	line := regexp.MustCompile(`^"(.+)": (normalized \+\d+\.\d dB; its peaks kept it|left at its level; its peaks already reach -1\.5 dBTP,) \d+\.\d dB under (-\d+) LUFS$`)
 	for _, c := range []struct {
 		target float64
@@ -586,28 +557,12 @@ func TestTheOutputFolderIsLetGoWhenNotRecording(t *testing.T) {
 	heldUnder(t, "with a take kept for track.keep", s.out)
 }
 
-// decoded is a file decoded back to 16-bit PCM by ffmpeg, at its own rate.
-func decoded(t *testing.T, path string) (pcm.Format, []byte) {
-	t.Helper()
-	wav := filepath.Join(t.TempDir(), "decoded.wav")
-	if out, err := exec.Command("ffmpeg", "-v", "error", "-y", "-i", path, "-c:a", "pcm_s16le", wav).CombinedOutput(); err != nil {
-		t.Fatalf("decode %s: %v %s", path, err, out)
-	}
-	f, data, err := pcm.ReadWAV(wav)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return f, data
-}
-
 // The bitrate setting is the bitrate of the file whatever the player
 // delivers (rate, channels, 16-bit or float), a take in low quality kept
 // after all included; the file keeps the source's rate up to 48 kHz; and a
 // higher bitrate is closer to the source once decoded.
 func TestBitrateWithEverySource(t *testing.T) {
-	if _, err := exec.LookPath("ffprobe"); err != nil {
-		t.Skip("ffprobe not installed")
-	}
+	testkit.Need(t, "ffprobe", exec.LookPath)
 	type source struct {
 		rate, channels int
 		sample         string
@@ -650,7 +605,7 @@ func TestBitrateWithEverySource(t *testing.T) {
 				if kbps := float64(br) / 1000; kbps < low*float64(c.bitrate) || kbps > high*float64(c.bitrate) {
 					t.Errorf("%s: %.0f kb/s", enc, kbps)
 				}
-				gotF, got := decoded(t, path)
+				gotF, got := testkit.Decode(t, "ffmpeg", path, pcm.S16LE)
 				wantRate := src.rate
 				if src.rate > 48000 {
 					wantRate = map[int]int{88200: 44100, 96000: 48000}[src.rate]

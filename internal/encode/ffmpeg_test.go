@@ -17,62 +17,21 @@ import (
 	"testing"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/testkit"
 )
 
-func ffmpegOrSkip(t *testing.T) *FFmpeg {
-	t.Helper()
-	f, err := Find("ffmpeg")
-	if err != nil {
-		t.Skip(err)
-	}
-	return f
-}
-
-func writeWAV(t *testing.T, dir string, f pcm.Format, data []byte) string {
-	t.Helper()
-	path := filepath.Join(dir, "in.wav")
-	w, err := pcm.CreateWAV(path, f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Write(data); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
-func decode(t *testing.T, ff *FFmpeg, path string, f pcm.Format) []byte {
-	t.Helper()
-	codec := "pcm_s16le"
-	if f.Sample == pcm.F32LE {
-		codec = "pcm_f32le"
-	}
-	out, err := exec.Command(ff.Path, "-nostdin", "-loglevel", "error", "-i", path, "-c:a", codec, "-f", "wav", "-").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, data, err := pcm.DecodeWAV(bytes.NewReader(out))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return data
-}
-
 func TestFLACIsLosslessAndTrimIsSampleAccurate(t *testing.T) {
-	ff := ffmpegOrSkip(t)
+	ff := testkit.Need(t, "ffmpeg", Find)
 	dir := t.TempDir()
 	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
 	src := pcm.Synth{Seed: 9}.Render(f, 44100)
-	in := writeWAV(t, dir, f, src)
+	in := testkit.WriteWAV(t, filepath.Join(dir, "in.wav"), f, src)
 
 	out := filepath.Join(dir, "out.flac.part")
 	if _, err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: "flac", Source: f}); err != nil {
 		t.Fatal(err)
 	}
-	if got := decode(t, ff, out, f); !bytes.Equal(got, src) {
+	if _, got := testkit.Decode(t, ff.Path, out, f.Sample); !bytes.Equal(got, src) {
 		t.Fatalf("flac round trip differs: %d bytes vs %d", len(got), len(src))
 	}
 
@@ -81,7 +40,7 @@ func TestFLACIsLosslessAndTrimIsSampleAccurate(t *testing.T) {
 		t.Fatal(err)
 	}
 	fb := f.FrameBytes()
-	if got := decode(t, ff, trimmed, f); !bytes.Equal(got, src[1000*fb:30000*fb]) {
+	if _, got := testkit.Decode(t, ff.Path, trimmed, f.Sample); !bytes.Equal(got, src[1000*fb:30000*fb]) {
 		t.Fatalf("trim is not sample accurate: %d bytes, want %d", len(got), (30000-1000)*fb)
 	}
 }
@@ -98,31 +57,6 @@ func rateOf(t *testing.T, ff *FFmpeg, path string) int {
 		t.Fatal(err)
 	}
 	return f.Rate
-}
-
-// loudnessOf is path's integrated loudness in LUFS, from the summary of
-// ffmpeg's EBU R128 meter.
-func loudnessOf(t *testing.T, ff *FFmpeg, path string) float64 {
-	t.Helper()
-	out, err := exec.Command(ff.Path, "-nostdin", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128", "-f", "null", "-").CombinedOutput()
-	if err != nil {
-		t.Fatalf("ebur128: %v: %s", err, tail(string(out)))
-	}
-	_, summary, ok := strings.Cut(string(out), "Summary:")
-	if !ok {
-		t.Fatalf("no ebur128 summary: %s", tail(string(out)))
-	}
-	for _, line := range strings.Split(summary, "\n") {
-		if f := strings.Fields(line); len(f) == 3 && f[0] == "I:" && f[2] == "LUFS" {
-			v, err := strconv.ParseFloat(f[1], 64)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return v
-		}
-	}
-	t.Fatalf("no integrated loudness in the ebur128 summary: %s", summary)
-	return 0
 }
 
 // loudnormOf is path's integrated loudness in LUFS and true peak in dBTP,
@@ -220,11 +154,11 @@ func oneGain(src, out []float64, channels int) (gainDB, restDB float64) {
 // 48 kHz, so there the file is checked against the one Normalize off
 // writes: the gain and the resampling together.
 func TestNormalizeAppliesOneGainAndNeverCompresses(t *testing.T) {
-	ff := ffmpegOrSkip(t)
+	ff := testkit.Need(t, "ffmpeg", Find)
 	for _, rate := range []int{48000, 96000} {
 		f := pcm.Format{Rate: rate, Channels: 2, Sample: pcm.F32LE}
 		src := spiky(f, int64(6*rate), -24, -6)
-		in := writeWAV(t, t.TempDir(), f, src)
+		in := testkit.WriteWAV(t, filepath.Join(t.TempDir(), "in.wav"), f, src)
 		for _, format := range []string{"flac", "wav"} {
 			t.Run(fmt.Sprintf("%s from %d Hz", format, rate), func(t *testing.T) {
 				encode := func(normalize bool) []float64 {
@@ -232,7 +166,8 @@ func TestNormalizeAppliesOneGainAndNeverCompresses(t *testing.T) {
 					if _, err := ff.Encode(context.Background(), Job{In: in, Out: out, Format: format, Source: f, Normalize: normalize, TargetLUFS: -14}); err != nil {
 						t.Fatal(err)
 					}
-					return samples(f, decode(t, ff, out, f))
+					_, data := testkit.Decode(t, ff.Path, out, f.Sample)
+					return samples(f, data)
 				}
 				want := samples(f, src)
 				if FileRate(rate) != rate {
@@ -258,7 +193,7 @@ func TestNormalizeAppliesOneGainAndNeverCompresses(t *testing.T) {
 // -1.5 dBTP already is not lowered. Encode reports the gain of a track its
 // peaks keep under the target, and nothing for one that reaches it.
 func TestNormalizeLowersToTheTargetAndRaisesAsFarAsThePeaksAllow(t *testing.T) {
-	ff := ffmpegOrSkip(t)
+	ff := testkit.Need(t, "ffmpeg", Find)
 	f := pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE}
 	const target, limit = -14.0, -1.5
 	frames := int64(5 * f.Rate)
@@ -295,7 +230,7 @@ func TestNormalizeLowersToTheTargetAndRaisesAsFarAsThePeaksAllow(t *testing.T) {
 		short: true,
 	}} {
 		t.Run(c.name, func(t *testing.T) {
-			in := writeWAV(t, t.TempDir(), f, c.data)
+			in := testkit.WriteWAV(t, filepath.Join(t.TempDir(), "in.wav"), f, c.data)
 			i, tp := loudnormOf(t, ff, in)
 			wantI, wantTP := c.want(i, tp)
 			t.Logf("source %.2f LUFS, %.2f dBTP; want %.2f LUFS, %.2f dBTP", i, tp, wantI, wantTP)
@@ -362,10 +297,10 @@ func TestNormalizeGain(t *testing.T) {
 // on brings it to the target, up to -14 or down to -20 from the source's
 // -17.5 LUFS.
 func TestNormalizeOffKeepsTheLoudnessAndOnReachesTheTarget(t *testing.T) {
-	ff := ffmpegOrSkip(t)
+	ff := testkit.Need(t, "ffmpeg", Find)
 	f := pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE}
-	in := writeWAV(t, t.TempDir(), f, pcm.Synth{Seed: 4, LevelDB: -10, FadeInMs: 1500}.Render(f, 5*48000))
-	source := loudnessOf(t, ff, in)
+	in := testkit.WriteWAV(t, filepath.Join(t.TempDir(), "in.wav"), f, pcm.Synth{Seed: 4, LevelDB: -10, FadeInMs: 1500}.Render(f, 5*48000))
+	source := testkit.Loudness(t, ff.Path, in)
 	t.Logf("source %.1f LUFS", source)
 	for _, format := range slices.Sorted(maps.Keys(presets)) {
 		p := presets[format]
@@ -385,7 +320,7 @@ func TestNormalizeOffKeepsTheLoudnessAndOnReachesTheTarget(t *testing.T) {
 				if rate := rateOf(t, ff, out); rate != f.Rate {
 					t.Errorf("sample rate %d, want the source's %d", rate, f.Rate)
 				}
-				lufs := loudnessOf(t, ff, out)
+				lufs := testkit.Loudness(t, ff.Path, out)
 				t.Logf("%.1f LUFS", lufs)
 				return lufs
 			}
@@ -408,7 +343,7 @@ func TestNormalizeOffKeepsTheLoudnessAndOnReachesTheTarget(t *testing.T) {
 // Up to 48 kHz, the file keeps the source's rate; above, it is written at
 // the rate the source's divides into. In every format, normalized or not.
 func TestAFileAbove48kHzIsWrittenAtHalfOrAQuarterOfTheRate(t *testing.T) {
-	ff := ffmpegOrSkip(t)
+	ff := testkit.Need(t, "ffmpeg", Find)
 	for _, format := range slices.Sorted(maps.Keys(presets)) {
 		p := presets[format]
 		t.Run(format, func(t *testing.T) {
@@ -418,7 +353,7 @@ func TestAFileAbove48kHzIsWrittenAtHalfOrAQuarterOfTheRate(t *testing.T) {
 			}
 			for _, c := range []struct{ source, want int }{{44100, 44100}, {48000, 48000}, {88200, 44100}, {96000, 48000}, {176400, 44100}, {192000, 48000}} {
 				f := pcm.Format{Rate: c.source, Channels: 2, Sample: pcm.F32LE}
-				in := writeWAV(t, t.TempDir(), f, pcm.Synth{Seed: 2}.Render(f, int64(c.source/2)))
+				in := testkit.WriteWAV(t, filepath.Join(t.TempDir(), "in.wav"), f, pcm.Synth{Seed: 2}.Render(f, int64(c.source/2)))
 				for _, normalize := range []bool{false, true} {
 					out := filepath.Join(t.TempDir(), "out."+p.Extension+".part")
 					j := Job{In: in, Out: out, Format: format, BitrateKbps: 320, Source: f, Normalize: normalize, TargetLUFS: -14}
@@ -516,14 +451,14 @@ func decodeAt(t *testing.T, ff *FFmpeg, path string, rate int) []float64 {
 // back to 96 kHz, the file differs from the source by 100 dB under it, or
 // more. With ffmpeg's default resampler, it is only about 67 dB.
 func TestA96kHzSourceWrittenAt48kHzKeepsEverythingUpTo20kHz(t *testing.T) {
-	ff := ffmpegOrSkip(t)
+	ff := testkit.Need(t, "ffmpeg", Find)
 	f := pcm.Format{Rate: 96000, Channels: 2, Sample: pcm.F32LE}
 	want := bandNoise(f.Rate, 1<<19)
 	src := make([]byte, len(want)*4)
 	for i, v := range want {
 		f.PutSample(src, i, v)
 	}
-	in := writeWAV(t, t.TempDir(), f, src)
+	in := testkit.WriteWAV(t, filepath.Join(t.TempDir(), "in.wav"), f, src)
 	for _, normalize := range []bool{false, true} {
 		t.Run(map[bool]string{false: "as recorded", true: "normalized"}[normalize], func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out.flac.part")

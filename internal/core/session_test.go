@@ -20,6 +20,7 @@ import (
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -234,10 +235,7 @@ func TestASaveWithTheOutputFolderGoneStopsTheRecording(t *testing.T) {
 	if rej := store.Override(overrides); len(rej) > 0 {
 		t.Fatalf("settings rejected: %v", rej)
 	}
-	ff, err := encode.Find("ffmpeg")
-	if err != nil {
-		t.Skip(err)
-	}
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	log, _ := NewLogger("", testWriter{t})
 	rec := &recorder{}
 	emit := func(method string, payload any) {
@@ -249,18 +247,8 @@ func TestASaveWithTheOutputFolderGoneStopsTheRecording(t *testing.T) {
 	fin.lost = func() { lost.Store(true) }
 
 	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
-	take := filepath.Join(dir, "take.wav")
-	w, err := pcm.CreateWAV(take, f)
-	if err != nil {
-		t.Fatal(err)
-	}
 	frames := f.FramesFromMs(3000)
-	if _, err := w.Write(pcm.Synth{Seed: 1}.Render(f, frames)); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	take := testkit.WriteWAV(t, filepath.Join(dir, "take.wav"), f, pcm.Synth{Seed: 1}.Render(f, frames))
 	fin.enqueue(finishJob{id: "s-1", info: meta.TrackInfo{Title: "Midnight Ferry", Artists: []string{"Neon Harbor"}, Album: "Harbor Lights", LengthMs: 3000},
 		tmp: take, format: f, played: frames, length: frames})
 	fin.close()
@@ -353,10 +341,7 @@ func TestStopNowTakeCanBeKept(t *testing.T) {
 // A take kept once its session ended still gets its cover, though the
 // session removed its copies of the player's cover files as it ended.
 func TestATakeKeptAfterTheSessionHasItsCover(t *testing.T) {
-	ff, err := encode.Find("ffmpeg")
-	if err != nil {
-		t.Skip(err)
-	}
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	tl := loadTimeline(t, "basic")
 	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
 	// Paper Lanterns starts at 6.5 s: stop 2 s into it.
@@ -669,10 +654,7 @@ func directSession(t *testing.T) (*Session, *recorder, string) {
 	store.Override(overrides)
 	log, _ := NewLogger("", testWriter{t})
 	rec := &recorder{}
-	ff, ffErr := encode.Find("ffmpeg")
-	if ffErr != nil {
-		t.Skip(ffErr)
-	}
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	// Core.emit hands the broadcaster marshalled payloads; do the same.
 	emit := func(method string, payload any) {
 		raw, _ := json.Marshal(payload)

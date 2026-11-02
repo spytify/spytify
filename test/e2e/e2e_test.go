@@ -3,9 +3,7 @@
 package e2e
 
 import (
-	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,9 +14,9 @@ import (
 	"time"
 
 	"github.com/spytify/spytify/internal/fake"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
-	"github.com/spytify/spytify/pkg/proto"
 )
 
 var bin string
@@ -66,9 +64,7 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not installed")
-	}
+	testkit.Need(t, "ffmpeg", exec.LookPath)
 	dir, err := os.MkdirTemp("", "spy")
 	if err != nil {
 		t.Fatal(err)
@@ -220,31 +216,11 @@ func TestOnceWritesEventsForTheVerifier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if problems := fake.Verify(tl, tl.Expect, -1, e.out, readEvents(t, events)); len(problems) > 0 {
+			if problems := fake.Verify(tl, tl.Expect, -1, e.out, testkit.ReadEvents(t, events)); len(problems) > 0 {
 				t.Fatal(strings.Join(problems, "\n"))
 			}
 		})
 	}
-}
-
-func readEvents(t *testing.T, path string) []proto.Event {
-	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	var out []proto.Event
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 1<<20), 1<<20)
-	for sc.Scan() {
-		var ev proto.Event
-		if err := json.Unmarshal(sc.Bytes(), &ev); err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, ev)
-	}
-	return out
 }
 
 func TestDaemonRefusesWithoutTarget(t *testing.T) {

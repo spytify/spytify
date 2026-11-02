@@ -10,15 +10,13 @@ import (
 
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/fake"
+	"github.com/spytify/spytify/internal/testkit"
 )
 
 // Recordings that are the tracks, late and quieter, pass; a recording that
 // ends with the next track's first 200 ms fails.
 func TestCheckFindsANeighbourInARecording(t *testing.T) {
-	ff, err := encode.Find(ffmpegName())
-	if err != nil {
-		t.Skip(err)
-	}
+	ff := testkit.Need(t, ffmpegName(), encode.Find)
 	tl, err := fake.Load(filepath.Join("..", "..", "..", "testdata", "timelines", "jitter.json"))
 	if err != nil {
 		t.Fatal(err)

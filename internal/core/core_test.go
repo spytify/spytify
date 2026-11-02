@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -70,9 +71,7 @@ func TestWatchTargetStopsWithItsContext(t *testing.T) {
 
 // core.shutdown stops the recording before the daemon goes.
 func TestShutdownStopsTheSessionThenCallsTheHook(t *testing.T) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not installed")
-	}
+	testkit.Need(t, "ffmpeg", encode.Find)
 	c, _ := newTestCoreAt(t, true, true)
 	if _, err := c.StartSession(SessionOptions{}); err != nil {
 		t.Fatal(err)
