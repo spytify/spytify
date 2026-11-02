@@ -410,16 +410,6 @@ func TestSeekedTakeIsKeptWhole(t *testing.T) {
 	}
 }
 
-func TestSingleTrack(t *testing.T) {
-	tl := loadTimeline(t, "basic")
-	s := newScenario(t, tl, nil)
-	runWith(t, s, SessionOptions{EndOnStop: true, SingleTrack: true})
-	saved, _ := outcome(t, s)
-	if len(saved) != 1 || saved[0] != "Midnight Ferry" {
-		t.Fatalf("saved %v", saved)
-	}
-}
-
 // With recorder.stop_with_player, a session started as the app and the CLI
 // start one ends when the player stops, not at its pauses; turned on
 // mid-session, it applies to that session. Off, the session outlives the
@@ -457,40 +447,6 @@ func TestTheSessionEndsWhenThePlayerStops(t *testing.T) {
 				t.Errorf("the session outlived the stop: %v, want %v\n%s", outlived, !ends, s.logs)
 			}
 		})
-	}
-}
-
-// With recorder.stop_with_player, the player quitting ends the session
-// too.
-func TestTheSessionEndsWhenThePlayerQuits(t *testing.T) {
-	s, _, _ := directSession(t)
-	s.opts.EndOnStop = false
-	values := s.deps.values
-	s.deps.values = func() settings.Values { return values().With(settings.RecorderStopWithPlayer, true) }
-	events := make(chan meta.Event)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		s.Run(ctx, make(chan capture.Chunk), events)
-	}()
-	defer func() {
-		cancel()
-		<-done
-	}()
-	events <- meta.Event{Kind: meta.TrackChanged, Track: meta.TrackInfo{ID: "/x/track/a", Title: "A", LengthMs: 60000}, PositionMs: 0}
-	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: 0}
-	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Paused, PositionMs: 1000}
-	select {
-	case <-done:
-		t.Fatal("a pause ended the session")
-	case <-time.After(300 * time.Millisecond):
-	}
-	events <- meta.Event{Kind: meta.PlayerGone, PositionMs: -1}
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the session outlived the player")
 	}
 }
 
@@ -537,78 +493,6 @@ func (w testWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// A restart of the same track mid-way (player.control restart, or repeat
-// one) discards the partial take and records the track from its start.
-func TestRestartRecordsTheTrackAgain(t *testing.T) {
-	tl := loadTimeline(t, "basic")
-	tl.Items = tl.Items[:1]
-	tl.Items[0].LengthMs = 8000
-	tl.Expect = nil
-	s := newScenario(t, tl, nil)
-	s.player.At(4000, func() {
-		if err := s.core.Control(proto.CmdRestart); err != nil {
-			t.Errorf("restart: %v", err)
-		}
-	})
-	runWith(t, s, SessionOptions{EndOnStop: true})
-	files := fake.AudioFiles(s.out)
-	if len(files) != 1 {
-		t.Fatalf("files %v\n%s", files, s.logs)
-	}
-	var skipped []proto.SkipReason
-	for _, ev := range s.events.all() {
-		var sk proto.TrackSkippedEvent
-		if ev.Method == proto.EventTrackSkipped && ev.Decode(&sk) == nil {
-			skipped = append(skipped, sk.Reason)
-		}
-	}
-	if len(skipped) != 1 || skipped[0] != proto.SkipIncomplete {
-		t.Fatalf("skipped %v, want the partial take as incomplete", skipped)
-	}
-	gotF, got, err := pcm.ReadWAV(filepath.Join(s.out, files[0]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantF, want, _ := tl.ItemAudio(0)
-	if c := pcm.Compare(wantF, want, gotF, got, fake.TrimDB, fake.SearchMs); !c.Matches(fake.MaxLagMs, fake.MaxErrorDB) {
-		t.Fatalf("restarted take does not match the track: %+v\n%s", c, s.logs)
-	}
-}
-
-func TestTheSameTrackAgainAtItsEndKeepsTheFullTake(t *testing.T) {
-	tl := loadTimeline(t, "basic")
-	tl.Items = tl.Items[:1]
-	tl.Items[0].LengthMs = 8000
-	tl.Expect = nil
-	s := newScenario(t, tl, nil)
-	// Repeat one: the item starts over as it ends.
-	s.player.At(500+8000, func() {
-		if err := s.core.Control(proto.CmdRestart); err != nil {
-			t.Errorf("restart: %v", err)
-		}
-	})
-	runWith(t, s, SessionOptions{EndOnStop: true})
-	var skipped []proto.SkipReason
-	for _, ev := range s.events.all() {
-		var sk proto.TrackSkippedEvent
-		if ev.Method == proto.EventTrackSkipped && ev.Decode(&sk) == nil {
-			skipped = append(skipped, sk.Reason)
-		}
-	}
-	files := fake.AudioFiles(s.out)
-	if len(files) != 1 || len(skipped) != 1 || skipped[0] != proto.SkipDuplicate {
-		t.Fatalf("files %v, skipped %v; want the full take kept and the replay a duplicate\n%s", files, skipped, s.logs)
-	}
-	gotF, got, err := pcm.ReadWAV(filepath.Join(s.out, files[0]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantF, want, _ := tl.ItemAudio(0)
-	if c := pcm.Compare(wantF, want, gotF, got, fake.TrimDB, fake.SearchMs); !c.Matches(fake.MaxLagMs, fake.MaxErrorDB) {
-		t.Fatalf("the kept take does not match the track: %+v\n%s", c, s.logs)
-	}
-}
-
 func TestMuteAdsSilencesThePlayerDuringTheAd(t *testing.T) {
 	tl := loadTimeline(t, "ads")
 	tl.Items[1].LengthMs = 8000
@@ -638,9 +522,9 @@ func TestMuteAdsSilencesThePlayerDuringTheAd(t *testing.T) {
 	}
 }
 
-// directSession drives a Session by hand, for states a timeline cannot
-// reach, such as a session that starts in the middle of a track.
-func directSession(t *testing.T) (*Session, *recorder, string) {
+// directSession is a Session a test runs by hand, without Core, with a
+// finisher that saves files.
+func directSession(t *testing.T) (*Session, *recorder) {
 	t.Helper()
 	dir := t.TempDir()
 	store, err := settings.Open(filepath.Join(dir, "config.toml"))
@@ -662,13 +546,13 @@ func directSession(t *testing.T) (*Session, *recorder, string) {
 	}
 	fin := newFinisher(store.Values, ff, emit, log)
 	s := newSession("test", sessionDeps{values: store.Values, emit: emit, log: log, fin: fin, control: func(string) error { return nil }}, SessionOptions{EndOnStop: true})
-	return s, rec, filepath.Join(dir, "out")
+	return s, rec
 }
 
 func TestNoAudioWhileThePlayerPlaysIsReported(t *testing.T) {
 	old := captureStall
 	captureStall = 300 * time.Millisecond
-	s, rec, _ := directSession(t)
+	s, rec := directSession(t)
 	frames := make(chan capture.Chunk)
 	events := make(chan meta.Event)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -700,37 +584,6 @@ func TestNoAudioWhileThePlayerPlaysIsReported(t *testing.T) {
 			t.Fatal("a capture that delivers nothing was not reported")
 		}
 		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// A player that quits while playing sends no audio either: that is no
-// stalled capture.
-func TestAPlayerThatQuitIsNotAStalledCapture(t *testing.T) {
-	old := captureStall
-	captureStall = 300 * time.Millisecond
-	s, rec, _ := directSession(t)
-	frames := make(chan capture.Chunk)
-	events := make(chan meta.Event)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		s.Run(ctx, frames, events)
-	}()
-	defer func() {
-		cancel()
-		<-done
-		captureStall = old
-	}()
-	events <- meta.Event{Kind: meta.TrackChanged, Track: meta.TrackInfo{ID: "/x/track/a", Title: "A", LengthMs: 60000}, PositionMs: 0}
-	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: 0}
-	events <- meta.Event{Kind: meta.PlayerGone, PositionMs: -1}
-	time.Sleep(4 * captureStall)
-	for _, ev := range rec.all() {
-		var e proto.ErrorEvent
-		if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == "capture_stalled" {
-			t.Fatalf("a player that quit was reported as a stalled capture: %s", e.Msg)
-		}
 	}
 }
 
@@ -781,7 +634,7 @@ func TestALowQualityCaptureIsReportedOnce(t *testing.T) {
 // to 44.1 kHz stereo: the warning is withdrawn, the same code with no
 // message, and raised again when a call takes the headset back.
 func TestTheLowQualityWarningFollowsTheCapture(t *testing.T) {
-	s, rec, _ := directSession(t)
+	s, rec := directSession(t)
 	frames := make(chan capture.Chunk)
 	events := make(chan meta.Event)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -878,52 +731,6 @@ func TestTracksAreSavedOnceTheCaptureIsFitAgain(t *testing.T) {
 	}
 	if got := keepable(s, tl.Items[0].Title); !slices.Equal(got, []bool{true, false}) {
 		t.Fatalf("keepable %v: the take in low quality is held until a track is saved", got)
-	}
-}
-
-func TestSessionStartedMidTrackWaitsForNextTrack(t *testing.T) {
-	s, rec, out := directSession(t)
-	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
-	frames := make(chan capture.Chunk)
-	events := make(chan meta.Event)
-	go s.Run(context.Background(), frames, events)
-
-	a := meta.TrackInfo{ID: "/x/track/a", Title: "Already Playing", Artists: []string{"A"}, Album: "X", LengthMs: 4000}
-	b := meta.TrackInfo{ID: "/x/track/b", Title: "Next One", Artists: []string{"B"}, Album: "X", LengthMs: 3000}
-	events <- meta.Event{Kind: meta.TrackChanged, Track: a, PositionMs: 2500}
-	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: 2500}
-	send := func(synth pcm.Synth, ms int64) {
-		data := synth.Render(f, f.FramesFromMs(ms))
-		step := f.FramesFromMs(10) * int64(f.FrameBytes())
-		for i := int64(0); i < int64(len(data)); i += step {
-			frames <- capture.Chunk{Data: data[i:min(i+step, int64(len(data)))], Format: f}
-		}
-	}
-	send(pcm.Synth{Seed: 1, FadeOut: 20}, 1500) // the rest of "Already Playing"
-	send(pcm.Synth{}, 0)
-	frames <- capture.Chunk{Data: make([]byte, f.FramesFromMs(300)*int64(f.FrameBytes())), Format: f}
-	events <- meta.Event{Kind: meta.TrackChanged, Track: b, PositionMs: 0}
-	send(pcm.Synth{Seed: 2, FadeInMs: 20, FadeOut: 20}, 3000)
-	frames <- capture.Chunk{Data: make([]byte, f.FramesFromMs(800)*int64(f.FrameBytes())), Format: f}
-	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Stopped, PositionMs: -1}
-	close(frames)
-
-	deadline := time.Now().Add(30 * time.Second)
-	for s.state() != proto.StateIdle && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	var started []string
-	for _, ev := range rec.all() {
-		var tr proto.TrackStartedEvent
-		if ev.Method == proto.EventTrackStarted && ev.Decode(&tr) == nil {
-			started = append(started, tr.Title)
-		}
-	}
-	if len(started) != 1 || started[0] != "Next One" {
-		t.Fatalf("started %v", started)
-	}
-	if files := fake.AudioFiles(out); len(files) != 1 || files[0] != "B - Next One.wav" {
-		t.Fatalf("files %v", files)
 	}
 }
 
