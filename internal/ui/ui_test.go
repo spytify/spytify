@@ -1419,8 +1419,8 @@ func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
 		t.Fatalf("%d files listed", len(lib.shown))
 	}
 	drawn := map[widget.ListItemID]bool{}
-	update := lib.list.UpdateItem
-	lib.list.UpdateItem = func(id widget.ListItemID, o fyne.CanvasObject) {
+	update := lib.list.update
+	lib.list.update = func(id widget.ListItemID, o fyne.CanvasObject) {
 		drawn[id] = true
 		update(id, o)
 	}
@@ -1699,6 +1699,88 @@ func TestTheDiagnosticsAreADialog(t *testing.T) {
 	if a.win.Canvas().Overlays().Top() != nil || a.tabs.SelectedIndex() != tabRecord {
 		t.Errorf("closed: a dialog %v, tab %d", a.win.Canvas().Overlays().Top(), a.tabs.SelectedIndex())
 	}
+}
+
+// A failed check's reason shows whole, on its own lines under the name:
+// beside it, it was cut short with "…".
+func TestAFailedChecksReasonShowsWholeUnderItsName(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	reason := `mkdir \\nas\shared\Music\Recordings from the radio, every Saturday night since the spring of 2019\Spytify: The system cannot find the path specified.`
+	in := info()
+	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: reason})
+	m.SetInfo(in)
+	m.SetSettings(defaults())
+	a.render()
+	d := diagnostics(t, a)
+	l := a.screens[tabLogs].(*logsScreen)
+	if w := l.diag.Size().Width; w != diagWidth {
+		t.Errorf("the dialog is %v wide, want %v", w, diagWidth)
+	}
+
+	name := labels(d, "output folder not writable")
+	var detail *widget.RichText
+	for _, rt := range richTextsOf(d) {
+		if rt.String() == reason {
+			detail = rt
+		}
+	}
+	if len(name) != 1 || detail == nil {
+		t.Fatalf("%d names, the reason found %v: %v", len(name), detail != nil, texts(d))
+	}
+	at := a.fa.Driver().AbsolutePositionForObject
+	if n, r := at(name[0]), at(detail); r.Y < n.Y+name[0].Size().Height || r.X != n.X {
+		t.Errorf("the reason at %v, the name at %v and %v tall: not under it", r, n, name[0].Size().Height)
+	}
+	var drawn []string
+	for _, o := range test.WidgetRenderer(detail).Objects() {
+		if tx, ok := o.(*canvas.Text); ok && tx.Text != "" {
+			drawn = append(drawn, tx.Text)
+		}
+	}
+	if shown := strings.Join(drawn, " "); len(drawn) < 2 || strings.Contains(shown, "…") || !slices.Equal(strings.Fields(shown), strings.Fields(reason)) {
+		t.Errorf("the reason shows as %q", drawn)
+	}
+	// The dialog is as tall as the reason's lines: the checks do not scroll.
+	if got, want := l.checksScroll.Size().Height, l.checks.MinSize().Height; got < want {
+		t.Errorf("the checks show %v of their %v", got, want)
+	}
+	snapshot(t, a, "diagnostics-reason-under-the-name")
+
+	// A narrower window narrows the dialog.
+	a.win.Resize(fyne.NewSize(700, 640))
+	l.fitDiagnostics()
+	if w := l.diag.Size().Width; w >= 700 {
+		t.Errorf("in a window 700 wide, the dialog is %v", w)
+	}
+}
+
+// richTextsOf are the rich texts shown in o.
+func richTextsOf(o fyne.CanvasObject) []*widget.RichText {
+	var out []*widget.RichText
+	var walk func(fyne.CanvasObject)
+	walk = func(o fyne.CanvasObject) {
+		if o == nil || !o.Visible() {
+			return
+		}
+		switch w := o.(type) {
+		case *widget.RichText:
+			out = append(out, w)
+			return
+		case *fyne.Container:
+			for _, child := range w.Objects {
+				walk(child)
+			}
+			return
+		}
+		if w, ok := o.(fyne.Widget); ok {
+			for _, child := range test.WidgetRenderer(w).Objects() {
+				walk(child)
+			}
+		}
+	}
+	walk(o)
+	return out
 }
 
 // A player that is off is in the app bar and offered to open; the

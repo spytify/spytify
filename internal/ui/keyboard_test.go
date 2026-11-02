@@ -130,7 +130,7 @@ func focusName(a *App, f fyne.Focusable) string {
 		return w.Text
 	case *widget.Hyperlink:
 		return w.Text
-	case *widget.List:
+	case *widget.List, *cardList:
 		return "list"
 	}
 	if key := setting(f.(fyne.CanvasObject)); key != "" {
@@ -712,6 +712,10 @@ func TestTabLeavesTheComment(t *testing.T) {
 	pressSpace(c)
 	if got := focusName(a, c.Focused()); got != "What will be sent" {
 		t.Fatalf("the dialog opens with %q focused", got)
+	}
+	pressTab(c)
+	if got := focusName(a, c.Focused()); got != pictureLabel {
+		t.Fatalf("Tab from the fold: %q focused, want the picture's tick box", got)
 	}
 	pressTab(c)
 	comment := c.Focused()

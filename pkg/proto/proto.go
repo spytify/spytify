@@ -102,6 +102,9 @@ type Check struct {
 	OK     bool   `json:"ok"`
 	Detail string `json:"detail,omitempty"`
 	Advice bool   `json:"advice,omitempty"`
+	// Facts say what the check found, without a name or a path, for the
+	// bug tracker: where the output folder is, say.
+	Facts map[string]string `json:"facts,omitempty"`
 }
 
 // CheckOutputWritable is the check that the output folder can be written

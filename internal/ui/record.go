@@ -62,14 +62,13 @@ type recordScreen struct {
 	// an output folder.
 	blocked *litButton
 
-	rows     []model.Row
-	list     *widget.List
-	listCard fyne.CanvasObject
+	rows []model.Row
+	list *cardList
 	// shape is which parts the screen last showed; it is laid out again
 	// only when that changes.
 	shape string
-	// shown is what the list last drew; refreshing it on every level event
-	// would clear the row the pointer hovers.
+	// shown is what the list last drew; it is not refreshed on every level
+	// event, ten times a second.
 	shown  string
 	noRows fyne.CanvasObject
 	clear  *button
@@ -86,6 +85,7 @@ func newRecordScreen(a *App) *recordScreen {
 	r.idleTitle = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	r.idleText = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{})
 	r.idleText.Wrapping = fyne.TextWrapWord
+	a.maskPaths(r.idleText)
 	r.hint = widget.NewLabelWithStyle("A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start.",
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	r.hint.Wrapping = fyne.TextWrapWord
@@ -164,7 +164,7 @@ func newRecordScreen(a *App) *recordScreen {
 		container.NewVBox(layout.NewSpacer(), r.waiting, layout.NewSpacer()))
 	r.waitRow = inset(newPanel("", theme.ColorNamePrimary, 8, fyne.NewSize(pad*2, pad*1.5), alert))
 
-	r.list = widget.NewList(
+	r.list = newCardList(
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
 			status := newBadge("Skipped: duplicate", colorSkippedBadge, "", colorOnSkippedBadge)
@@ -229,11 +229,10 @@ func newRecordScreen(a *App) *recordScreen {
 	})
 	r.clear.Importance = widget.LowImportance
 	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
-	r.listCard = listCard(r.list)
 	// The info bar over the track being recorded, the session's files under
 	// them and its totals at the bottom.
 	r.session = inReadingOrder(container.NewVBox(r.waitRow, r.card), footerBar(r.totals, container.NewHBox(r.clear, openFolder)), nil, nil,
-		container.NewStack(r.listCard, r.noRows))
+		container.NewStack(r.list, r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
 	return r
 }
@@ -367,10 +366,10 @@ func (r *recordScreen) render(s model.State) {
 	r.rows = s.Rows
 	if shown := fmt.Sprint(r.rows, r.app.covers.loads()); shown != r.shown {
 		r.shown = shown
-		r.listCard.Refresh()
+		r.list.Refresh()
 	}
 	show(r.noRows, len(r.rows) == 0)
-	show(r.listCard, len(r.rows) > 0)
+	show(r.list, len(r.rows) > 0)
 	if len(r.rows) == 0 {
 		r.clear.Disable()
 	} else {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 
@@ -27,14 +28,22 @@ func (a *App) launchReady(s model.State) {
 	now := time.Now()
 	a.tel.Step("ready")
 	a.tel.Breadcrumb("app", "recorder ready", nil)
-	a.tel.Log("launch", map[string]any{
+	attrs := map[string]any{
 		"ready":           true,
 		"ms":              now.Sub(a.launch.start).Milliseconds(),
 		"auto_started":    !a.launch.started.IsZero(),
 		"failing":         failingNames(s.Info.Checks),
 		"advice":          adviceNames(s.Info.Checks),
 		"software_opengl": a.opts.SoftwareOpenGL,
-	})
+	}
+	// Where the output folder is, say, written to or not, for every
+	// launch: what share of them a fix would reach.
+	for _, c := range s.Info.Checks {
+		for k, v := range c.Facts {
+			attrs[k] = v
+		}
+	}
+	a.tel.Log("launch", attrs)
 	var spans []telemetry.Span
 	if !a.launch.started.IsZero() && a.launch.connected.After(a.launch.started) {
 		spans = append(spans, telemetry.Span{Op: "recorder.start", Start: a.launch.started, End: a.launch.connected})
@@ -49,7 +58,9 @@ func (a *App) launchReady(s model.State) {
 func (a *App) launchFailed(err error) {
 	kind := startErrorKind(err)
 	a.tel.Log("launch", map[string]any{"ready": false, "start_error": kind, "software_opengl": a.opts.SoftwareOpenGL})
-	a.tel.Problem("recorder_start", kind)
+	// Not on the toolkit's goroutine, which this is: the report waits for
+	// the window's picture, taken there.
+	a.reports.Go(func() { a.tel.Problem("recorder_start", kind) })
 }
 
 func startErrorKind(err error) string {
@@ -230,6 +241,13 @@ func (a *App) noteTab(i int) {
 	a.tel.Breadcrumb("ui", "tab "+a.tabs.Items[i].Text, nil)
 }
 
+// screenshotWidth is the width of the window's picture in Send to the
+// developers, which fits the dialog.
+const screenshotWidth = 480
+
+// pictureLabel is Send to the developers' tick box for the picture.
+const pictureLabel = "Send the picture of the window"
+
 // sendChecks shows what the diagnostics' report holds, and sends it on
 // Send.
 func (a *App) sendChecks(s model.State, sent func(ok bool)) {
@@ -247,18 +265,52 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	for _, l := range lines {
 		log = append(log, l.TS+" "+l.Level+" "+l.Msg)
 	}
-	report := telemetry.Checks{Failing: failing, Log: log}
-	body := widget.NewLabel("Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded.")
+	// The window as it shows under this dialog, which is not open yet.
+	report := telemetry.Checks{Failing: failing, Log: log, Screenshot: a.picture()}
+	without := "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
+	body := widget.NewLabel(without)
 	body.Wrapping = fyne.TextWrapWord
-	preview := widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
+	preview := container.NewVBox()
+	// keep, ticked, sends the picture; unticked, the dialog and the
+	// report leave it out.
+	var keep *check
+	if shot := report.Screenshot; shot != nil {
+		with := "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
+		img := canvas.NewImageFromImage(shot)
+		img.FillMode = canvas.ImageFillContain
+		b := shot.Bounds()
+		img.SetMinSize(fyne.NewSize(screenshotWidth, screenshotWidth*float32(b.Dy())/float32(b.Dx())))
+		// At the left, as the log's long lines widen what scrolls.
+		pic := container.NewHBox(img)
+		preview.Add(pic)
+		keep = newCheck(pictureLabel)
+		keep.OnChanged = func(on bool) {
+			if on {
+				body.SetText(with)
+				pic.Show()
+			} else {
+				body.SetText(without)
+				pic.Hide()
+			}
+		}
+		keep.SetChecked(true)
+	}
+	preview.Add(widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}))
 	scroll := container.NewScroll(preview)
 	scroll.SetMinSize(fyne.NewSize(0, 160))
-	what := newFold("What will be sent", scroll)
+	content := container.NewVBox(body, newFold("What will be sent", scroll))
+	if keep != nil {
+		content.Add(keep)
+	}
 	message := newCommentEntry()
 	message.SetPlaceHolder("Comment (optional)")
-	showDialog(a.win, "Send to the developers", container.NewVBox(body, what, message), "Cancel", "Send", fyne.NewSize(560, 420), func(send bool) {
+	content.Add(message)
+	showDialog(a.win, "Send to the developers", content, "Cancel", "Send", fyne.NewSize(560, 420), func(send bool) {
 		if !send {
 			return
+		}
+		if keep != nil && !keep.Checked {
+			report.Screenshot = nil
 		}
 		text := message.Text
 		// A report that does not leave is no error to show: the button
