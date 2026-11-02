@@ -226,10 +226,3 @@ func footerBar(left, actions fyne.CanvasObject) fyne.CanvasObject {
 		container.NewBorder(nil, nil, nil, actions, container.NewVBox(layout.NewSpacer(), left, layout.NewSpacer())))
 	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, newPanel(colorFooter, "", 0, fyne.Size{}, row))
 }
-
-// outlined draws a line around a button without a fill of its own, for a
-// secondary action on a list row.
-func outlined(b *button) *panel {
-	b.Importance = widget.LowImportance
-	return newPanel("", colorOutline, 8, fyne.Size{}, b)
-}

@@ -676,6 +676,15 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	if !contains(all, "Skipped: incomplete") || !contains(all, "Keep anyway") {
 		t.Errorf("no Keep anyway on the take cut short: %v", all)
 	}
+	// Keep anyway looks like the screen's other buttons: the save icon
+	// before its words, and no outline around them.
+	i := slices.IndexFunc(r.rows, func(row model.Row) bool { return row.ID == "s-004" })
+	right := rowAt(r.list, i).content.(*fyne.Container).Objects[2].(*fyne.Container)
+	if keep, ok := right.Objects[1].(*fyne.Container).Objects[0].(*button); !ok {
+		t.Errorf("Keep anyway is a %T", right.Objects[1].(*fyne.Container).Objects[0])
+	} else if keep.Icon != theme.DocumentSaveIcon() || keep.Importance != widget.LowImportance {
+		t.Errorf("Keep anyway has the icon %v, importance %v", keep.Icon, keep.Importance)
+	}
 	snapshot(t, a, "record-keep")
 
 	m.Apply(event(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "s-004"}))
