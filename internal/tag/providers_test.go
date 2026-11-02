@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/testkit"
 )
 
 func TestFetchCoverCapsSize(t *testing.T) {
@@ -44,20 +45,11 @@ func TestFetchCoverCapsSize(t *testing.T) {
 // Every format gets its tags back from ffprobe, the track and disc numbers
 // the player gave included.
 func TestWriterTagsEveryFormat(t *testing.T) {
-	ffmpeg, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		t.Skip("ffmpeg not installed")
-	}
-	ffprobe, err := exec.LookPath("ffprobe")
-	if err != nil {
-		t.Skip("ffprobe not installed")
-	}
+	ffmpeg := testkit.Need(t, "ffmpeg", exec.LookPath)
+	ffprobe := testkit.Need(t, "ffprobe", exec.LookPath)
 	dir := t.TempDir()
 	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
-	in := filepath.Join(dir, "in.wav")
-	w, _ := pcm.CreateWAV(in, f)
-	w.Write(pcm.Synth{Seed: 1}.Render(f, 22050))
-	w.Close()
+	in := testkit.WriteWAV(t, filepath.Join(dir, "in.wav"), f, pcm.Synth{Seed: 1}.Render(f, 22050))
 
 	var cover bytes.Buffer
 	png.Encode(&cover, image.NewRGBA(image.Rect(0, 0, 4, 4)))

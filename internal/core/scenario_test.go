@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -29,6 +29,20 @@ var baseSettings = map[string]any{
 	"recorder.normalize": false,
 	"tags.cover":         false,
 	"output.group_by":    "none",
+}
+
+// testStore is a settings store in dir, values laid over the defaults, a
+// later map over an earlier one.
+func testStore(t *testing.T, dir string, values ...map[string]any) *settings.Store {
+	t.Helper()
+	store, err := settings.Open(filepath.Join(dir, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rej := store.Override(mergeSettings(values...)); len(rej) > 0 {
+		t.Fatalf("settings rejected: %v", rej)
+	}
+	return store
 }
 
 type fakeBackends struct{ b *fake.Backend }
@@ -79,24 +93,10 @@ func newScenario(t *testing.T, tl *fake.Timeline, extra map[string]any) *scenari
 // what depends on the clock, such as the session timer.
 func newScenarioAt(t *testing.T, tl *fake.Timeline, extra map[string]any, realtime bool) *scenario {
 	t.Helper()
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not installed")
-	}
+	testkit.Need(t, "ffmpeg", encode.Find)
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	overrides := map[string]any{"output.dir": out}
-	for _, m := range []map[string]any{baseSettings, tl.Settings, extra} {
-		for k, v := range m {
-			overrides[k] = v
-		}
-	}
-	if rej := store.Override(overrides); len(rej) > 0 {
-		t.Fatalf("settings rejected: %v", rej)
-	}
+	store := testStore(t, dir, map[string]any{"output.dir": out}, baseSettings, tl.Settings, extra)
 	player, err := fake.NewPlayer(tl, realtime)
 	if err != nil {
 		t.Fatal(err)
@@ -124,6 +124,13 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.w.Write(p)
+}
+
+type testWriter struct{ t *testing.T }
+
+func (w testWriter) Write(p []byte) (int, error) {
+	w.t.Log(string(p))
+	return len(p), nil
 }
 
 func (s *scenario) run(t *testing.T, tl *fake.Timeline) {
@@ -155,6 +162,82 @@ func loadTimeline(t *testing.T, name string) *fake.Timeline {
 		t.Fatal(err)
 	}
 	return tl
+}
+
+func outcome(t *testing.T, s *scenario) (saved []string, skipped map[string]proto.SkipReason) {
+	t.Helper()
+	titles := map[string]string{}
+	skipped = map[string]proto.SkipReason{}
+	for _, ev := range s.events.all() {
+		switch ev.Method {
+		case proto.EventTrackStarted:
+			var tr proto.TrackStartedEvent
+			_ = ev.Decode(&tr)
+			titles[tr.ID] = tr.Title
+		case proto.EventTrackFinished:
+			var f proto.TrackFinishedEvent
+			_ = ev.Decode(&f)
+			saved = append(saved, titles[f.ID])
+		case proto.EventTrackSkipped:
+			var sk proto.TrackSkippedEvent
+			_ = ev.Decode(&sk)
+			skipped[titles[sk.ID]] = sk.Reason
+		}
+	}
+	return saved, skipped
+}
+
+func runWith(t *testing.T, s *scenario, opts SessionOptions) {
+	t.Helper()
+	if _, err := s.core.StartSession(opts); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { s.core.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		t.Fatalf("session did not end; log:\n%s", s.logs)
+	}
+}
+
+// idOf is the id of the take of title.
+func idOf(s *scenario, title string) string {
+	for _, ev := range s.events.all() {
+		var tr proto.TrackStartedEvent
+		if ev.Method == proto.EventTrackStarted && ev.Decode(&tr) == nil && tr.Title == title {
+			return tr.ID
+		}
+	}
+	return ""
+}
+
+// keepable is every track.keepable the take of title got, in order.
+func keepable(s *scenario, title string) []bool {
+	id := idOf(s, title)
+	var out []bool
+	for _, ev := range s.events.all() {
+		var k proto.TrackKeepableEvent
+		if ev.Method == proto.EventTrackKeepable && ev.Decode(&k) == nil && k.ID == id {
+			out = append(out, k.Keepable)
+		}
+	}
+	return out
+}
+
+// finished waits for the file of take id.
+func finished(t *testing.T, s *scenario, id string) proto.TrackFinishedEvent {
+	t.Helper()
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		for _, ev := range s.events.all() {
+			var f proto.TrackFinishedEvent
+			if ev.Method == proto.EventTrackFinished && ev.Decode(&f) == nil && f.ID == id {
+				return f
+			}
+		}
+	}
+	t.Fatalf("no file for %s; log:\n%s", id, s.logs)
+	return proto.TrackFinishedEvent{}
 }
 
 func TestScenarios(t *testing.T) {
@@ -223,10 +306,7 @@ func TestRecordingRaisesThePlayerVolumeAndPutsItBack(t *testing.T) {
 // in track.started and embedded in the saved file, whose track.finished
 // says how long each step took.
 func TestTheCoverGoesIntoTheFile(t *testing.T) {
-	ff, err := encode.Find("ffmpeg")
-	if err != nil {
-		t.Skip(err)
-	}
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	tl := loadTimeline(t, "basic")
 	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
 	s.run(t, tl)
@@ -349,10 +429,7 @@ func TestTheRecordingStopsWhenTheCounterIsFull(t *testing.T) {
 // A cover the watcher deletes when the next track's comes out still goes
 // into its own track's file.
 func TestACoverFileGoneAtTheNextTrackStillGoesIntoItsFile(t *testing.T) {
-	ff, err := encode.Find("ffmpeg")
-	if err != nil {
-		t.Skip(err)
-	}
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	tl := loadTimeline(t, "basic")
 	dir := t.TempDir()
 	covers := map[string][]byte{}
