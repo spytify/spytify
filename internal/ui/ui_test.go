@@ -240,7 +240,7 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	feedSession(t, m)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{lang.Recording, "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", lang.Saved, fmt.Sprintf(lang.SkippedFor, proto.SkipDuplicate),
+	for _, want := range []string{lang.Recording, "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", lang.Saved, fmt.Sprintf(lang.SkippedFor, lang.ReasonDuplicate),
 		fmt.Sprintf(lang.SessionTotals, 2, 1, 0, ""), lang.Stop, fmt.Sprintf(lang.PlayerRunning, "Player"), "FLAC", lang.Skip} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
