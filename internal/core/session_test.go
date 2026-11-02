@@ -464,8 +464,10 @@ func TestTheSessionEndsWhenThePlayerStops(t *testing.T) {
 			case <-time.After(time.Minute):
 				t.Fatalf("session did not end; log:\n%s", s.logs)
 			}
-			if saved, skipped := outcome(t, s); len(saved) != len(tl.Items) {
-				t.Errorf("saved %v skipped %v, want every track", saved, skipped)
+			// Every track ends as the timeline expects: the paused ones
+			// skipped, the last one saved.
+			for _, p := range fake.Verify(tl, tl.Expect, -1, s.out, s.events.all()) {
+				t.Error(p)
 			}
 			ends := c.on || c.midway
 			if outlived := strings.Contains(s.logs.String(), "capture stream ended"); outlived == ends {

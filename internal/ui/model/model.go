@@ -85,8 +85,8 @@ func ReasonText(r proto.SkipReason) string {
 		return lang.ReasonSeeked
 	case proto.SkipLowQuality:
 		return lang.ReasonLowQuality
-	case proto.SkipPauseFade:
-		return lang.ReasonPauseFade
+	case proto.SkipPaused:
+		return lang.ReasonPaused
 	}
 	return string(r)
 }

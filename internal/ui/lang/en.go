@@ -100,7 +100,7 @@ const (
 	ReasonIncomplete = "incomplete"
 	ReasonSeeked     = "track bar moved"
 	ReasonLowQuality = "low quality"
-	ReasonPauseFade  = "fade-in/out detected after resume"
+	ReasonPaused     = "paused mid-track"
 )
 
 // The Library: its search, whose ✕ Settings' search shares, its sorts, the

@@ -695,27 +695,27 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	}
 }
 
-// A take with a pause's fades in it says so on the card while it plays,
-// then offers Keep anyway in the list.
-func TestRecordScreenSaysAPauseLeftItsFades(t *testing.T) {
+// A take paused mid-track says so on the card while it plays, then offers
+// Keep anyway in the list.
+func TestRecordScreenSaysATakeWasPaused(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	// s-004 is the track playing.
-	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipPauseFade}))
+	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipPaused}))
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.StateNotRecorded, lang.ReasonPauseFade)) {
+	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.StateNotRecorded, lang.ReasonPaused)) {
 		t.Errorf("the card does not say why: %v", all)
 	}
-	snapshot(t, a, "record-pause-fade-playing")
+	snapshot(t, a, "record-paused-playing")
 
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
 	m.Apply(event(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "s-004", Keepable: true}))
 	a.render()
 	a.screens[tabRecord].(*recordScreen).list.ScrollToBottom()
-	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.SkippedFor, lang.ReasonPauseFade)) || !contains(all, lang.KeepAnyway) {
+	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.SkippedFor, lang.ReasonPaused)) || !contains(all, lang.KeepAnyway) {
 		t.Errorf("no Keep anyway on the take: %v", all)
 	}
-	snapshot(t, a, "record-pause-fade-keep")
+	snapshot(t, a, "record-paused-keep")
 }
 
 func TestWaitingOffersToRestartTheTrack(t *testing.T) {

@@ -20,7 +20,9 @@
  2535.01ms  > player Playing pos=-1 (ring at 88200)
  2535.01ms  state recording
  2535.01ms  > audio music 1 at 1500ms, 66150(1500ms)
- 2835.01ms  log debug: "A": a pause was cut out at 2000 ms, -1 dB under the music
+ 2545.01ms  log info: "A": paused mid-track, so the player's fades around the pause are in the take; it is not saved
+ 2545.01ms  skipped t-001 paused
+ 2545.01ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms) reason=paused
  4035.01ms  > audio silence, 22050(500ms)
  4535.01ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 176400)
  4535.01ms  log debug: cut for "B" at 3500 ms (kind 1, noticed at 4000 ms, window 3200..3801 ms)
@@ -34,6 +36,6 @@
  9035.01ms  state idle
  9035.01ms  take none
 --- jobs
-job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060
+job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060 rejected=paused
 job t-002 "B" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=c244853d
---- end: idle, 0 skipped, 0 ads, 0 overruns
+--- end: idle, 1 skipped, 0 ads, 0 overruns
