@@ -111,6 +111,12 @@ type Check struct {
 // to: without it, no recording starts (CodeOutputDir).
 const CheckOutputWritable = "output folder writable"
 
+// CheckPlayerHeard is the check that the capture did not hear only silence
+// while the player played: the player muted in its own volume or in the
+// system's mixer, or, on macOS, a refused System Audio Recording
+// permission.
+const CheckPlayerHeard = "player heard"
+
 type CoreInfoResult struct {
 	Version  string     `json:"version"`
 	Protocol int        `json:"protocol"`
@@ -256,6 +262,11 @@ type TrackFinishedEvent struct {
 	// Partial is a take saved with track.keep: only the part that played,
 	// or all of one recorded in low quality.
 	Partial bool `json:"partial,omitempty"`
+	// PauseFade is a take paused mid-track whose player faded out before
+	// the pause and in after it: the pause is cut out, but the two fades
+	// meet where it was, a dip that is heard. Its name ends in
+	// " (pause fade)".
+	PauseFade bool `json:"pause_fade,omitempty"`
 }
 
 // FinishTimings are the steps between the end of a track and its file.

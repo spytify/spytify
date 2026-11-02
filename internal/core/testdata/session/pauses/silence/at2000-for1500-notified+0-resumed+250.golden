@@ -18,6 +18,7 @@
     2500ms  state paused
     4250ms  > player Playing pos=2000 (ring at 121275)
     4250ms  state recording
+    4300ms  log debug: "Track A": a pause was cut out at 2500 ms, 2 dB under the music
     6500ms  > player TrackChanged "Track B" id=/com/fake/track/2 length=3000ms pos=0 (ring at 220500)
     6500ms  log debug: cut for "Track B" at 4500 ms (kind 1, noticed at 5000 ms, window 4200..4802 ms)
     6500ms  started t-002 "Track B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2

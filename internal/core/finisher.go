@@ -45,6 +45,9 @@ type finishJob struct {
 	// suffix ends a kept take's title tag and file name: " (partial)" or
 	// " (low quality)".
 	suffix string
+	// pauseFade is a take paused mid-track whose player faded out and in
+	// around the pause: its title tag and file name end in " (pause fade)".
+	pauseFade bool
 	// cover is a held take's file cover, read while the file was there.
 	cover     []byte
 	coverMIME string
@@ -97,8 +100,9 @@ func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(str
 
 func (f *finisher) enqueue(j finishJob) {
 	// A partial take is discarded, so it does not make the track a
-	// duplicate of itself.
-	if !j.partial && j.rejected == "" {
+	// duplicate of itself, nor does one with a pause's fades in it: the
+	// track can still be recorded clean.
+	if !j.partial && j.rejected == "" && !j.pauseFade {
 		f.records.claim(j.info)
 	}
 	f.wg.Add(1)
@@ -213,7 +217,7 @@ type take struct {
 func (f *finisher) process(j finishJob) {
 	defer f.wg.Done()
 	defer func() {
-		if j.partial || j.rejected != "" {
+		if j.partial || j.rejected != "" || j.pauseFade {
 			return
 		}
 		f.records.release(j.info)
@@ -356,12 +360,16 @@ func (f *finisher) takeNumber(t *take) bool {
 // there takes a suffix, skips the take or is replaced, as
 // recorder.duplicates says.
 func (f *finisher) pickName(t *take) bool {
-	// A kept take's suffix ends its file name, wherever the template puts
-	// the title, and its title tag.
+	// A kept take's suffix, and a pause fade's, end its file name,
+	// wherever the template puts the title, and its title tag.
+	suffix := t.suffix
+	if t.pauseFade {
+		suffix += " (pause fade)"
+	}
 	nt := namingTrack(t.tags, t.info)
-	nt.Suffix = t.suffix
+	nt.Suffix = suffix
 	plan := naming.Build(nt, t.o)
-	t.tags.Title += t.suffix
+	t.tags.Title += suffix
 	root := t.v.Path(settings.OutputDir)
 	dir := filepath.Join(root, plan.Dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -458,8 +466,11 @@ func (f *finisher) save(t *take) {
 		f.advance(t.counter + 1)
 	}
 	if !t.keep {
-		// A partial file does not make the whole track a duplicate.
-		f.records.saved(t.info, t.final)
+		// A partial file does not make the whole track a duplicate, nor
+		// does one with a pause's fades in it.
+		if !t.pauseFade {
+			f.records.saved(t.info, t.final)
+		}
 		// The take held for track.keep goes once the next track is saved.
 		f.keep.drop()
 	}
@@ -475,6 +486,7 @@ func (f *finisher) save(t *take) {
 		TaggedBy:   t.tags.Source,
 		Timings:    t.timings,
 		Partial:    t.keep,
+		PauseFade:  t.pauseFade,
 	})
 }
 

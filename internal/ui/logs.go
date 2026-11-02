@@ -353,7 +353,7 @@ func checkLabel(c proto.Check) string {
 	if c.OK {
 		return c.Name
 	}
-	for _, word := range []string{"found", "running", "configured", "writable"} {
+	for _, word := range []string{"found", "running", "configured", "writable", "heard"} {
 		if strings.HasSuffix(c.Name, " "+word) {
 			return strings.TrimSuffix(c.Name, word) + "not " + word
 		}

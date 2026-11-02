@@ -349,13 +349,15 @@ func TestAJobInFlightClaimsItsTrack(t *testing.T) {
 	}
 }
 
-// A take cut short, one the session skipped and one saved with track.keep
-// claim nothing: none of them makes the whole track a duplicate.
+// A take cut short, one the session skipped, one saved with track.keep and
+// one with a pause's fades in it claim nothing: none of them makes the
+// whole track a duplicate.
 func TestJobsThatClaimNothing(t *testing.T) {
 	for name, j := range map[string]finishJob{
 		"cut short":       {partial: true},
 		"session skipped": {rejected: proto.SkipAd},
 		"kept":            {keep: true, partial: true},
+		"pause fade":      {pauseFade: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := newBench(t, nil)
@@ -599,6 +601,36 @@ func TestTheIndexFileFormat(t *testing.T) {
 func quoted(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// A take with the player's fades around a pause in it is saved marked, in
+// its name and its title tag, and leaves its track unrecorded, so it can
+// still be recorded clean.
+func TestAPauseFadeIsMarkedAndLeavesItsTrackUnrecorded(t *testing.T) {
+	ff := needFFmpeg(t)
+	b := newBench(t, nil)
+	fin := b.open(ff)
+	j := b.wholeTake("s-1", ferry)
+	j.pauseFade = true
+	fin.enqueue(j)
+	fin.wait()
+	want := "Neon Harbor - Midnight Ferry (pause fade).wav"
+	if saved, why := b.outcome("s-1"); saved != want {
+		t.Fatalf("saved %q, skipped %q, want %q", saved, why, want)
+	}
+	for _, ev := range b.rec.all() {
+		var f proto.TrackFinishedEvent
+		if ev.Method == proto.EventTrackFinished && ev.Decode(&f) == nil && !f.PauseFade {
+			t.Errorf("track.finished %+v: not a pause fade", f)
+		}
+	}
+	var side struct{ Title string }
+	if err := json.Unmarshal([]byte(b.read(want+".json")), &side); err != nil || side.Title != "Midnight Ferry (pause fade)" {
+		t.Errorf("sidecar title %q: %v", side.Title, err)
+	}
+	if b.recorded(fin, ferry) {
+		t.Error("recorded")
+	}
 }
 
 // A track saved is recorded at once, and for the next session too, which

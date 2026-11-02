@@ -184,7 +184,7 @@ func (r *rig) emit(method string, payload any) {
 	case proto.ErrorEvent:
 		msg := p.Msg
 		switch p.Code {
-		case "capture_low_quality", "capture_stalled":
+		case "capture_low_quality", "capture_stalled", "capture_silent":
 			// The advice after the first sentence depends on the system.
 			if i := strings.Index(msg, ". "); i >= 0 {
 				msg = msg[:i+1] + " …"
@@ -340,6 +340,7 @@ func takeLine(c *segment) string {
 		{c.provisional, "provisional"},
 		{c.awaitStart, "awaiting-sound"},
 		{c.partial, "partial"},
+		{c.pauseFade, "pause-fade"},
 		{c.w == nil && !c.ghost && !c.provisional, "no-file"},
 	} {
 		if fl.on {
@@ -367,6 +368,9 @@ func (r *rig) addJob(j finishJob) {
 	}
 	if j.rejected != "" {
 		line += " rejected=" + string(j.rejected)
+	}
+	if j.pauseFade {
+		line += " pause-fade"
 	}
 	if j.format != f44 {
 		line += fmt.Sprintf(" format=%d/%d", j.format.Rate, j.format.Channels)
