@@ -41,12 +41,57 @@ func (b *litButton) TypedKey(e *fyne.KeyEvent) {
 
 func (b *litButton) FocusGained() {
 	b.focused = true
+	b.Icon = b.iconFor(b.Icon)
 	b.Button.FocusGained()
 }
 
 func (b *litButton) FocusLost() {
 	b.focused = false
+	b.Icon = b.iconFor(b.Icon)
 	b.Button.FocusLost()
+}
+
+// SetIcon changes the icon, in the colour of the button's focus.
+func (b *litButton) SetIcon(icon fyne.Resource) {
+	b.Button.SetIcon(b.iconFor(icon))
+}
+
+// iconFor is icon as drawn with the focus the button has: in the text's
+// colour, which the focus changes.
+func (b *litButton) iconFor(icon fyne.Resource) fyne.Resource {
+	if f, ok := icon.(focusedIcon); ok {
+		icon = f.plain
+	}
+	if !b.focused || icon == nil {
+		return icon
+	}
+	return focusedIcon{ThemedResource: theme.NewColoredResource(icon, onColor(b.Importance)), plain: icon}
+}
+
+// focusedIcon is a lit button's icon while it has the focus. Fyne keeps an
+// icon as it first drew it, by its name and its theme's: under the same
+// name, it kept that colour, white on the focused grey or grey on the
+// fill once the focus had gone.
+type focusedIcon struct {
+	fyne.ThemedResource
+	plain fyne.Resource
+}
+
+func (f focusedIcon) Name() string { return "focused_" + f.ThemedResource.Name() }
+
+// onColor is the colour of the text on a button of importance imp.
+func onColor(imp widget.Importance) fyne.ThemeColorName {
+	switch imp {
+	case widget.HighImportance:
+		return theme.ColorNameForegroundOnPrimary
+	case widget.DangerImportance:
+		return theme.ColorNameForegroundOnError
+	case widget.WarningImportance:
+		return theme.ColorNameForegroundOnWarning
+	case widget.SuccessImportance:
+		return theme.ColorNameForegroundOnSuccess
+	}
+	return theme.ColorNameForeground
 }
 
 func (b *litButton) Show() {

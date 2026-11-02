@@ -332,7 +332,7 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			}
 			return s
 		}
-		sel := widget.NewSelect(shown, func(c string) { s.apply(key, swap(c, shown, opts)) })
+		sel := newSelectField(shown, func(c string) { s.apply(key, swap(c, shown, opts)) })
 		f.set = func(v any) { sel.SetSelected(swap(fmt.Sprint(number(v)), opts, shown)) }
 		f.input = sel
 	case settings.KindPath:
@@ -480,7 +480,7 @@ func (s *settingsScreen) render(st model.State) {
 		}
 	}
 	// FLAC and WAV are lossless: a bitrate means nothing for them.
-	if sel, ok := s.fields[settings.EncodeBitrateKbps.String()].input.(*widget.Select); ok {
+	if sel, ok := s.fields[settings.EncodeBitrateKbps.String()].input.(*selectField); ok {
 		if format, _ := st.Settings[settings.EncodeFormat.String()].(string); format == "flac" || format == "wav" {
 			sel.Disable()
 		} else {

@@ -25,6 +25,9 @@ func selectsIn(o fyne.CanvasObject) []*widget.Select {
 		case *widget.Select:
 			out = append(out, w)
 			return
+		case *selectField:
+			out = append(out, &w.Select)
+			return
 		case *checkSelect:
 			out = append(out, &w.Select)
 			return

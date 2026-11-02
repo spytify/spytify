@@ -501,8 +501,9 @@ func (a *App) setAction(text string, icon fyne.Resource, imp widget.Importance) 
 	}
 	a.action.SetText(text)
 	a.action.SetToolTip(shortcutTip(text, actionKey))
-	a.action.SetIcon(icon)
+	// The importance first: the icon takes its text's colour.
 	a.action.Importance = imp
+	a.action.SetIcon(icon)
 	a.action.Refresh()
 }
 

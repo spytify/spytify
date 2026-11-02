@@ -30,7 +30,7 @@ func newSearch(a *App, placeholder string, changed func(string)) *keyEntry {
 	clear.Hide()
 	// Before SetIcon: its refresh draws the field, with the action item it
 	// has by then.
-	e.ActionItem = container.NewThemeOverride(clear, clearTheme{cardTheme{input: colorCard}})
+	e.ActionItem = container.NewThemeOverride(container.New(clearInset(3), clear), clearTheme{cardTheme{input: colorCard}})
 	e.SetIcon(theme.SearchIcon())
 	e.SetPlaceHolder(placeholder)
 	e.OnChanged = func(s string) {
@@ -42,7 +42,23 @@ func newSearch(a *App, placeholder string, changed func(string)) *keyEntry {
 
 // clearOf is the clear button of a field newSearch made.
 func clearOf(e *keyEntry) *clearButton {
-	return e.ActionItem.(*container.ThemeOverride).Content.(*clearButton)
+	return e.ActionItem.(*container.ThemeOverride).Content.(*fyne.Container).Objects[0].(*clearButton)
+}
+
+// clearInset keeps the clear button, its focus too, that many pixels off
+// the field's border, which the field stretches its action item to. It is
+// as wide with the button hidden, as the button is.
+type clearInset float32
+
+func (p clearInset) Layout(objs []fyne.CanvasObject, s fyne.Size) {
+	for _, o := range objs {
+		o.Move(fyne.NewSquareOffsetPos(float32(p)))
+		o.Resize(s.Subtract(fyne.NewSquareSize(2 * float32(p))))
+	}
+}
+
+func (p clearInset) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	return objs[0].MinSize().Add(fyne.NewSquareSize(2 * float32(p)))
 }
 
 // clearButton is pressed by the space Space types rather than by the key,
