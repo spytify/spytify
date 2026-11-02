@@ -103,36 +103,6 @@ type segment struct {
 	cut *proto.TrackCut
 }
 
-type changeKind int
-
-const (
-	changeFirst changeKind = iota
-	changeBoundary
-	changeInterrupt
-)
-
-type change struct {
-	kind     changeKind
-	info     meta.TrackInfo
-	at       int64
-	lo, hi   int64
-	expected int64
-	ready    int64
-	// restart: the same item started over, so the take before is partial.
-	restart bool
-}
-
-// String names the kind as track.started's cut says it.
-func (k changeKind) String() string {
-	switch k {
-	case changeFirst:
-		return "first"
-	case changeBoundary:
-		return "boundary"
-	}
-	return "interrupt"
-}
-
 // sessionDeps is what a session needs from the core.
 type sessionDeps struct {
 	values  func() settings.Values
@@ -160,26 +130,20 @@ type Session struct {
 	initPos   int64
 	gotStatus bool
 	seen      bool
-	// While paused, every run of at least pauseRunMs of silent frames is cut
-	// out at the sample, so a pause leaves neither a hole nor a seam.
-	pausing  bool
-	excising bool
-	resumed  bool
-	quietRun int64
-	stop     stopMode
-	done     bool
-	n        int
-	tmpDir   string
+	// The pause excision's flags are set here as the player's status
+	// changes; it cuts the pauses out of the stream.
+	pauseExcision
+	stop   stopMode
+	done   bool
+	n      int
+	tmpDir string
 	// covers maps a cover URL the watcher published to the session's own
 	// copy of it in tmpDir.
 	covers map[string]string
 
-	silenceDB float64
-	window    int64
-	frame     int64
-	step      int64
-	block     int64
-	holdback  int64
+	// The cut finder's sizes are set by tune; the drain and the end of
+	// playback use them too.
+	cutFinder
 
 	lastSound time.Time
 	lastLevel time.Time
@@ -441,7 +405,7 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	}
 	data := ch.Data
 	if s.pausing {
-		if data = s.excisePause(ch.Format, data); len(data) == 0 {
+		if data = s.excise(ch.Format, data, s.ring, s.pauseFloor, s.silenceDB); len(data) == 0 {
 			s.progress()
 			return
 		}
@@ -752,64 +716,7 @@ func (s *Session) onTrack(info meta.TrackInfo, at int64, restart bool) {
 	if s.pend != nil {
 		s.tryResolve(true)
 	}
-	s.pend = s.plan(info, at, restart)
-}
-
-// plan places the search window for a track change noticed at sample at.
-func (s *Session) plan(info meta.TrackInfo, at int64, restart bool) *change {
-	r := s.ring
-	c := s.cur
-	ch := &change{info: info, at: at, restart: restart}
-	switch {
-	case c == nil:
-		ch.kind = changeFirst
-		ch.lo = at - s.ms(lateNotifyMs)
-		ch.expected = at
-	case c.length > 0 && at >= c.origin+c.length-s.window-s.ms(earlySlackMs):
-		// At its end, the same item again is a new take (repeat), and the
-		// one before it is complete.
-		ch.restart = false
-		e := c.origin + c.length
-		late := s.soundAt(c) + c.length
-		ch.kind, ch.lo, ch.hi, ch.expected = changeBoundary, e-s.window, late+s.window, e
-	default:
-		ch.kind, ch.lo, ch.hi, ch.expected = changeInterrupt, at-s.ms(lateNotifyMs), at+s.ms(earlyNotifyMs), at
-	}
-	floor := r.Start()
-	if c != nil {
-		if c.drained > floor {
-			floor = c.drained
-		}
-		if c.start+1 > floor {
-			floor = c.start + 1
-		}
-	}
-	if ch.lo < floor {
-		ch.lo = floor
-	}
-	if ch.hi < ch.lo {
-		ch.hi = ch.lo
-	}
-	if ch.expected < ch.lo {
-		ch.expected = ch.lo
-	}
-	ch.ready = ch.hi + s.frame/2 + 1
-	if ch.kind == changeFirst {
-		ch.ready = ch.lo
-	}
-	return ch
-}
-
-// soundAt is where the segment's audio begins, looking into the ring when
-// the drain has not reached it yet; start when there is no sound so far.
-func (s *Session) soundAt(c *segment) int64 {
-	if c.soundAt >= 0 {
-		return c.soundAt
-	}
-	if at, ok := s.ring.FirstAbove(maxInt(c.start, s.ring.Start()), s.silenceDB, s.block); ok {
-		return at
-	}
-	return c.start
+	s.pend = s.plan(s.ring, s.cur, info, at, restart)
 }
 
 func maxInt(a, b int64) int64 {
@@ -819,95 +726,17 @@ func maxInt(a, b int64) int64 {
 	return b
 }
 
-// firstAbove is Ring.FirstAbove over a byte slice: the first frame of the
-// first block louder than db.
-func firstAbove(f pcm.Format, data []byte, db float64, block int64) (int64, bool) {
-	fb := int64(f.FrameBytes())
-	n := int64(len(data)) / fb
-	thr := pow10(db / 20)
-	for at := int64(0); at < n; at += block {
-		end := at + block
-		if end > n {
-			end = n
-		}
-		if _, rms := f.Level(data[at*fb : end*fb]); rms <= db {
-			continue
-		}
-		for i := at; i < end; i++ {
-			for ch := 0; ch < f.Channels; ch++ {
-				v := f.SampleAt(data, int(i)*f.Channels+ch)
-				if v > thr || v < -thr {
-					return i, true
-				}
-			}
-		}
-		return at, true
-	}
-	return 0, false
-}
-
 // tryResolve cuts at the pending change once the audio it needs is in the
 // ring, or right away when force is set.
 func (s *Session) tryResolve(force bool) bool {
 	p := s.pend
 	r := s.ring
-	if p == nil || (!force && r.End() < p.ready) {
+	if p == nil {
 		return false
 	}
-	var cut int64
-	var by string
-	switch p.kind {
-	case changeFirst:
-		at, ok := s.firstSound(p.lo)
-		by = "first_sound"
-		if !ok {
-			by = "notice"
-			if !force && r.End() < p.at+s.ms(startTimeoutMs) {
-				return false
-			}
-			at = p.at
-			if at > r.End() {
-				at = r.End()
-			}
-		}
-		cut = at
-	default:
-		hi := p.hi
-		if hi > r.End() {
-			hi = r.End()
-		}
-		q, db := r.Quietest(p.lo, hi, s.frame, s.step)
-		refine := func(c int64) int64 { return r.RefineCut(c, s.frame, f1ms(r)) }
-		var edge int64
-		edgeOK := false
-		if p.kind == changeInterrupt {
-			at, peak, median := r.QuietestPeak(p.lo, hi, f1ms(r))
-			edge, edgeOK = at, peak <= median-skipDipDB
-		}
-		switch {
-		case db <= s.silenceDB:
-			cut, by = refine(q), "silence"
-		case db <= r.MedianRMS(p.lo, hi, s.frame)-dipDB:
-			// No silence, but a clear dip: two tracks faded into each
-			// other.
-			cut, by = refine(q), "dip"
-		case edgeOK:
-			// A skip cuts a track mid-note; the next one starts where the
-			// peak level drops for a millisecond, at its first sample.
-			cut, by = edge, "edge"
-		case p.kind == changeBoundary && s.cur != nil:
-			// Gapless: trust the declared length, counted from the
-			// track's first sound.
-			cut, by = s.soundAt(s.cur)+s.cur.length, "length"
-		default:
-			cut, by = p.expected, "notice"
-		}
-		if cut > r.End() {
-			cut = r.End()
-		}
-	}
-	if c := s.cur; c != nil && cut < c.drained {
-		cut = c.drained
+	cut, by, ok := s.resolve(r, p, s.cur, force)
+	if !ok {
+		return false
 	}
 	f := r.Format()
 	s.deps.log.Debugf("cut for %q at %d ms (kind %d, noticed at %d ms, window %d..%d ms)",
@@ -917,8 +746,6 @@ func (s *Session) tryResolve(force bool) bool {
 	s.cutAt(cut, p.info, p.kind == changeFirst, p.restart, how)
 	return true
 }
-
-func f1ms(r *Ring) int64 { return r.Format().FramesFromMs(1) }
 
 // cutAt ends the current segment at cut and starts the next one there.
 func (s *Session) cutAt(cut int64, info meta.TrackInfo, first, restart bool, how *proto.TrackCut) {
@@ -960,20 +787,8 @@ func (s *Session) stopIfDiskFull() {
 	}
 }
 
-// firstSound is where a track starts when it starts at its first sound:
-// the first block above silence_db, moved back over the quiet beginning of
-// its fade-in, no earlier than from.
-func (s *Session) firstSound(from int64) (int64, bool) {
-	at, ok := s.ring.FirstAbove(from, s.silenceDB, s.block)
-	if !ok {
-		return 0, false
-	}
-	f := s.ring.Format()
-	return s.ring.ExtendBack(at, s.silenceDB-12, f.FramesFromMs(1), f.FramesFromMs(100), from), true
-}
-
 func (s *Session) tryStart(c *segment, force bool) {
-	at, ok := s.firstSound(c.start)
+	at, ok := s.firstSound(s.ring, c.start)
 	if !ok {
 		if !force && s.ring.End() < c.startDeadline {
 			return
@@ -1187,78 +1002,13 @@ func (s *Session) pauseFloor() int64 {
 	return maxInt(floor, r.Start())
 }
 
-func quietFrame(f pcm.Format, data []byte, i int, thr float64) bool {
-	for c := 0; c < f.Channels; c++ {
-		if v := f.SampleAt(data, i*f.Channels+c); v > thr || v < -thr {
-			return false
-		}
-	}
-	return true
-}
-
 // trimPause handles a Paused notification that came after the audio
 // stopped: the silence already captured is cut back to its first frame.
 func (s *Session) trimPause() {
-	r := s.ring
-	if r == nil {
+	if s.ring == nil {
 		return
 	}
-	f := r.Format()
-	floor := s.pauseFloor()
-	tail := r.Bytes(floor, r.End())
-	thr := pow10(s.silenceDB / 20)
-	n := len(tail) / f.FrameBytes()
-	run := 0
-	for i := n - 1; i >= 0 && quietFrame(f, tail, i, thr); i-- {
-		run++
-	}
-	s.quietRun, s.excising = int64(run), false
-	if int64(run) >= f.FramesFromMs(pauseRunMs) {
-		r.Truncate(r.End() - int64(run))
-		s.quietRun, s.excising = 0, true
-	}
-}
-
-// excisePause filters one chunk while paused: frames of a silent run of at
-// least pauseRunMs are dropped, including the start of the run that earlier
-// chunks left in the ring; everything else is kept.
-func (s *Session) excisePause(f pcm.Format, data []byte) []byte {
-	fb := f.FrameBytes()
-	n := len(data) / fb
-	thr := pow10(s.silenceDB / 20)
-	minRun := f.FramesFromMs(pauseRunMs)
-	out := make([]byte, 0, len(data))
-	for i := 0; i < n; i++ {
-		quiet := quietFrame(f, data, i, thr)
-		if s.excising {
-			if quiet {
-				continue
-			}
-			s.excising = false
-			if s.resumed {
-				s.pausing, s.quietRun = false, 0
-				return append(out, data[i*fb:]...)
-			}
-		}
-		out = append(out, data[i*fb:(i+1)*fb]...)
-		if !quiet {
-			s.quietRun = 0
-			continue
-		}
-		s.quietRun++
-		if s.quietRun >= minRun {
-			inChunk := s.quietRun
-			if max := int64(len(out) / fb); inChunk > max {
-				inChunk = max
-			}
-			out = out[:len(out)-int(inChunk)*fb]
-			if earlier := s.quietRun - inChunk; earlier > 0 {
-				s.ring.Truncate(maxInt(s.ring.End()-earlier, s.pauseFloor()))
-			}
-			s.quietRun, s.excising = 0, true
-		}
-	}
-	return out
+	s.trim(s.ring, s.pauseFloor(), s.silenceDB)
 }
 
 // endOfPlayback closes the current segment with everything captured: the
@@ -1275,7 +1025,7 @@ func (s *Session) endOfPlayback() {
 			s.expireProvisional(c)
 		}
 		end := s.ring.End()
-		late := s.soundAt(c) + c.length
+		late := s.soundAt(s.ring, c) + c.length
 		if c.length > 0 && late+s.window < end {
 			// Cut at the declared end so trailing audio of whatever comes
 			// next is not appended.
