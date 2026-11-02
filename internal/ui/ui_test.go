@@ -1973,6 +1973,13 @@ func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 		t.Error("the warning shows on the Library tab")
 	}
 	a.showTab(tabRecord)
+	// What spytifyd last said no longer holds once it is gone.
+	m.SetConn(model.Disconnected, "spytifyd closed the connection")
+	a.render()
+	if r.alertRow.Visible() {
+		t.Fatalf("alert still shows %q with spytifyd gone", r.alert.String())
+	}
+	m.SetConn(model.Connected, "")
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
 	a.render()
 	if r.alertRow.Visible() {

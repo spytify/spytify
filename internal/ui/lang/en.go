@@ -47,6 +47,7 @@ const (
 	ReadyText                 = "Press Record, then play music in %s. Each track becomes its own file in %s."
 	RecordIsOff               = "Record is off"
 	RecordIsOffText           = "Spytify cannot write to the output folder, %s. The diagnostics say why."
+	RecordNeedsRecorder       = "Spytify records through spytifyd, which is not running. Start it to record."
 	AlreadyPlaying            = "A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start."
 	YourPlayer                = "your player"
 	Open                      = "Open %s"

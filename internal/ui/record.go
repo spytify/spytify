@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"image/color"
@@ -36,7 +37,10 @@ type recordScreen struct {
 	attention  *fyne.Container
 	openPlayer *litButton
 	diagnose   *litButton
-	session    *fyne.Container
+	// startDaemon, and startAgain in a session, start spytifyd once it
+	// went: Record is off without it.
+	startDaemon *litButton
+	session     *fyne.Container
 
 	card  *fyne.Container
 	glow  *canvas.Image
@@ -64,9 +68,10 @@ type recordScreen struct {
 	waiting *widget.RichText
 	// launch and play are what a waiting session needs from the player:
 	// to run, then to play.
-	launch  *litButton
-	play    *litButton
-	restart *button
+	launch     *litButton
+	play       *litButton
+	restart    *button
+	startAgain *litButton
 	// blocked leads to the diagnostics once a session ended for want of
 	// an output folder.
 	blocked *litButton
@@ -102,7 +107,9 @@ func newRecordScreen(a *App) *recordScreen {
 	r.diagnose = newLitButton(lang.OpenDiagnostics, theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
 	diagnose := r.diagnose
 	r.openPlayer = newLitButton(lang.OpenThePlayer, theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
-	r.attention = container.NewCenter(container.NewHBox(r.openPlayer.lit, diagnose.lit))
+	r.startDaemon = newLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
+	show(r.startDaemon, false)
+	r.attention = container.NewCenter(container.NewHBox(r.openPlayer.lit, diagnose.lit, r.startDaemon.lit))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
 		r.idleTitle,
@@ -165,11 +172,14 @@ func newRecordScreen(a *App) *recordScreen {
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
 	r.blocked = newLitButton(lang.OpenDiagnostics, theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
+	r.startAgain = newLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
+	// Until spytifyd goes: the screen's width counts every button shown.
+	show(r.startAgain, false)
 	// What the session waits for is an outlined info alert, as MUI draws
 	// one in the app's green: an outline and icon around green text, the
 	// page showing through, the next step on the right.
 	infoIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.InfoIcon(), theme.ColorNamePrimary)))
-	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch.lit, r.play.lit, r.restart, r.blocked.lit),
+	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch.lit, r.play.lit, r.restart, r.blocked.lit, r.startAgain.lit),
 		container.NewVBox(layout.NewSpacer(), r.waiting, layout.NewSpacer()))
 	r.waitRow = inset(newPanel("", theme.ColorNamePrimary, 8, fyne.NewSize(pad*2, pad*1.5), alert))
 	// The recorder's warning is the same alert in the error red, its text
@@ -313,13 +323,28 @@ func (r *recordScreen) render(s model.State) {
 	r.folder = settings.ExpandHome(r.folder)
 	defer r.relayout()
 	player := playerName(s.Info)
+	// spytifyd went after it answered: Record is off until it runs again,
+	// and what it last said of the session and the player no longer holds.
+	gone := s.Conn != model.Connected && !r.app.starting
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
 		// Until the recorder answers it is starting, with nothing to offer.
-		starting := !s.HaveInfo
+		starting := !s.HaveInfo || (s.Conn != model.Connected && r.app.starting)
 		setLabel(r.idleTitle, map[bool]string{true: lang.StartingRecorder, false: lang.ReadyToRecord}[starting])
 		show(r.idleText, !starting)
 		if starting {
 			show(r.attention, false)
+			r.idle.Show()
+			r.session.Hide()
+			return
+		}
+		show(r.startDaemon, gone)
+		if gone {
+			setLabel(r.idleTitle, lang.RecordIsOff)
+			setLabel(r.idleText, cmp.Or(r.app.startErr, lang.RecordNeedsRecorder))
+			show(r.hint, false)
+			show(r.openPlayer, false)
+			show(r.diagnose, false)
+			show(r.attention, true)
 			r.idle.Show()
 			r.session.Hide()
 			return
@@ -347,8 +372,8 @@ func (r *recordScreen) render(s model.State) {
 	r.session.Show()
 
 	// Only silence is said in a line: why, and what to do, is the system
-	// audio check's in the diagnostics.
-	warns := s.LastError != nil && s.LastError.Msg != "" && s.Recording()
+	// audio check's in the diagnostics. A recorder gone no longer warns.
+	warns := !gone && s.LastError != nil && s.LastError.Msg != "" && s.Recording()
 	silent := warns && s.LastError.Code == "capture_silent"
 	switch {
 	case silent:
@@ -360,20 +385,25 @@ func (r *recordScreen) render(s model.State) {
 	show(r.alertDiagnose, silent)
 
 	c := s.Current
+	if gone {
+		c = nil
+	}
 	// A session the output folder ended, its drive unplugged: Record stays
 	// off until the folder is back or another one is chosen.
-	blocked := c == nil && s.Session == proto.StateIdle && checkFails(s.Info.Checks, proto.CheckOutputWritable)
+	blocked := !gone && c == nil && s.Session == proto.StateIdle && checkFails(s.Info.Checks, proto.CheckOutputWritable)
 	// Nothing is recorded until the player plays, whatever the list holds:
 	// between sessions or while one waits, the info bar says so and offers
 	// the one next step, to open the player or to play; over a track the
 	// player paused, it offers to play. Waiting with the player running is
 	// also a track that started before the session, which only a restart
 	// records; the session does not tell it from a stopped player.
-	waits := s.Session == proto.StateIdle || s.Session == proto.StateWaiting || s.Session == proto.StatePaused
+	waits := !gone && (s.Session == proto.StateIdle || s.Session == proto.StateWaiting || s.Session == proto.StatePaused)
 	down := c == nil && waits && !blocked && !playerRunning(s)
-	paused := s.Session == proto.StatePaused && !down
+	paused := waits && s.Session == proto.StatePaused && !down
 	text := waitingText(s.Session)
 	switch {
+	case gone:
+		text = fmt.Sprintf(lang.NothingRecordedNotRunning, "spytifyd")
 	case blocked:
 		text = lang.SessionEndedBlocked
 	case down:
@@ -385,8 +415,9 @@ func (r *recordScreen) render(s model.State) {
 	r.launch.SetText(fmt.Sprintf(lang.Open, player))
 	show(r.launch, down)
 	show(r.play, paused)
-	show(r.restart, c == nil && s.Session == proto.StateWaiting && !down)
+	show(r.restart, waits && c == nil && s.Session == proto.StateWaiting && !down)
 	show(r.blocked, blocked)
+	show(r.startAgain, gone)
 	show(r.waitRow, c == nil || paused)
 	show(r.card, c != nil)
 	if c != nil {
@@ -474,9 +505,9 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 // relayout lays the screen out again when a part appeared or went away, or
 // a badge on the card changed width.
 func (r *recordScreen) relayout() {
-	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(),
+	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.startDaemon.Visible(), r.card.Visible(),
 		r.state.text, r.state.lead.Visible(), r.rate.text, r.channels.text, r.fileRate.Visible(), r.fileRate.text,
-		r.alertRow.Visible(), r.alert.String(), r.alertDiagnose.Visible(), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
+		r.alertRow.Visible(), r.alert.String(), r.alertDiagnose.Visible(), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.startAgain.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()
