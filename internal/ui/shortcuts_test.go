@@ -422,10 +422,44 @@ func TestShortcutTipSnapshots(t *testing.T) {
 		a.action.SetToolTip(label(a.action.Text, actionKey))
 		tip.SetToolTip(label(lang.Library, tabDigits[tabLibrary]))
 		for name, o := range map[string]fyne.CanvasObject{"record": a.action, "library": tip} {
-			test.MoveMouse(c, a.fa.Driver().AbsolutePositionForObject(o).AddXY(o.Size().Width/2, o.Size().Height/2))
-			time.Sleep(time.Second)
+			hoverTip(t, a, o)
 			snapshot(t, a, "shortcut-tip-"+name+"-"+sys.name)
 			test.MoveMouse(c, away)
 		}
 	}
 }
+
+// hoverTip puts the mouse over o and shows its tooltip. The tooltip shows
+// from a timer of its own through fyne.Do, which the headless driver runs
+// on the timer's goroutine, racing the test: until it comes, fyne.Do hands
+// the function to the test, as a real driver hands it to the main thread.
+func hoverTip(t *testing.T, a *App, o fyne.CanvasObject) {
+	t.Helper()
+	calls := make(chan func(), 1)
+	fyne.SetCurrentApp(queuedApp{a.fa, queuedDriver{a.fa.Driver(), calls}})
+	defer fyne.SetCurrentApp(a.fa)
+	test.MoveMouse(a.win.Canvas(), a.fa.Driver().AbsolutePositionForObject(o).AddXY(o.Size().Width/2, o.Size().Height/2))
+	select {
+	case show := <-calls:
+		fyne.SetCurrentApp(a.fa)
+		show()
+	case <-time.After(5 * time.Second):
+		t.Fatal("no tooltip 5 s after the mouse came")
+	}
+}
+
+// queuedApp is an app whose driver is queuedDriver.
+type queuedApp struct {
+	fyne.App
+	drv queuedDriver
+}
+
+func (q queuedApp) Driver() fyne.Driver { return q.drv }
+
+// queuedDriver sends what fyne.Do is given to calls instead of running it.
+type queuedDriver struct {
+	fyne.Driver
+	calls chan<- func()
+}
+
+func (d queuedDriver) DoFromGoroutine(f func(), _ bool) { d.calls <- f }
