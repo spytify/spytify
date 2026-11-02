@@ -52,8 +52,10 @@ jobs:
           scripts/build-fakeplayer-macos.sh "$RUNNER_TEMP"
           scripts/allow-fakeplayer-tcc.sh "$RUNNER_TEMP/FakePlayer.app"
           echo "SPYTIFY_FAKE_APP=$RUNNER_TEMP/FakePlayer.app" >> "$GITHUB_ENV"
+      # internal/ui runs serially and takes 7 to 10 minutes on the macOS
+      # runner under -race: go test's default 10m timeout cuts it short.
       - name: Unit, scenario, UI and end-to-end tests
-        run: go run gotest.tools/gotestsum@v1.12.3 --format testname --jsonfile test.jsonl -- -race ./...
+        run: go run gotest.tools/gotestsum@v1.12.3 --format testname --jsonfile test.jsonl -- -race -timeout 20m ./...
       - name: What macOS said about Apple events (on failure)
         if: failure() && runner.os == 'macOS'
         run: log show --last 10m --style compact --predicate 'subsystem == "com.apple.TCC" OR process == "appleeventsd" OR process == "tccd"' | grep -i -E "fakeplayer|osascript|AppleEvents" | tail -60 || true
