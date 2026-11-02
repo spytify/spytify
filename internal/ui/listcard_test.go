@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -158,5 +160,100 @@ func TestTheArrowsMoveAHighlightThroughTheList(t *testing.T) {
 	c.Unfocus()
 	if !rowAt(l, 0).hover.Hidden {
 		t.Error("the row stays highlighted once the list loses the focus")
+	}
+}
+
+// Tab stops once on the list and passes over its rows' buttons, which it
+// went through in no order, only those of the rows built. Right goes from
+// the row to its buttons, Left back; Space presses the one highlighted, or
+// on the row Play; Down goes to the next row itself.
+func TestTheArrowsReachARowsButtons(t *testing.T) {
+	test.NewTempApp(t).Settings().SetTheme(spytifyTheme{mode: "light"})
+	var pressed []string
+	l := newCardList(func() int { return 100 },
+		func() fyne.CanvasObject {
+			show, play := newRowButton("", theme.SearchIcon()), newRowButton("", theme.MediaPlayIcon())
+			play.main = true
+			return container.NewBorder(nil, nil, nil, container.NewHBox(show, play), widget.NewLabel("row"))
+		},
+		func(id widget.ListItemID, o fyne.CanvasObject) {
+			box := o.(*fyne.Container)
+			box.Objects[0].(*widget.Label).SetText(strconv.Itoa(id))
+			// Row 1's file is not saved yet: its buttons are off.
+			for i, verb := range []string{"show", "play"} {
+				b := box.Objects[1].(*fyne.Container).Objects[i].(*rowButton)
+				b.OnTapped = func() { pressed = append(pressed, fmt.Sprintf("%s %d", verb, id)) }
+				if id == 1 {
+					b.Disable()
+				} else {
+					b.Enable()
+				}
+			}
+		})
+	after := newButton("After", nil)
+	w := test.NewTempWindow(t, container.NewBorder(nil, after, nil, nil, l))
+	w.Resize(fyne.NewSize(400, 300))
+	l.Refresh()
+	c := w.Canvas()
+
+	c.FocusNext()
+	if c.Focused() != l {
+		t.Fatalf("Tab focused %T", c.Focused())
+	}
+	c.FocusNext()
+	if c.Focused() != after {
+		t.Fatalf("Tab went from the list to %T", c.Focused())
+	}
+	c.FocusPrevious()
+	buttons := rowButtons(rowAt(l, 0).content)
+	pressKey(c, fyne.KeyRight)
+	if l.lit != buttons[0] || rowAt(l, 0).hover.Hidden {
+		t.Errorf("Right: Show in folder lit %v, the row highlighted %v", l.lit == buttons[0], !rowAt(l, 0).hover.Hidden)
+	}
+	pressKey(c, fyne.KeyRight)
+	pressKey(c, fyne.KeyRight)
+	if l.lit != buttons[1] {
+		t.Errorf("Right past Play: lit %v", l.lit)
+	}
+	pressSpace(c)
+	for range 3 {
+		pressKey(c, fyne.KeyLeft)
+	}
+	if l.lit != nil || l.col != 0 {
+		t.Errorf("back Left: lit %v, column %d", l.lit, l.col)
+	}
+	pressSpace(c)
+	pressKey(c, fyne.KeyRight)
+	pressSpace(c)
+
+	// Down goes to the next row, not its button; row 1's are off.
+	pressKey(c, fyne.KeyDown)
+	if l.cursor != 1 || l.lit != nil {
+		t.Errorf("Down: row %d, lit %v", l.cursor, l.lit)
+	}
+	pressKey(c, fyne.KeyRight)
+	pressSpace(c)
+	if l.lit != nil || l.col != 0 {
+		t.Errorf("Right on a row whose buttons are off: lit %v, column %d", l.lit, l.col)
+	}
+
+	// Space plays the row the wheel scrolled away, and shows it again.
+	pressKey(c, fyne.KeyDown)
+	l.scroll.ScrollToOffset(fyne.NewPos(0, 2000))
+	l.scroll.OnScrolled(l.scroll.Offset)
+	pressSpace(c)
+	if rowAt(l, 2) == nil {
+		t.Errorf("Space on row 2 left rows %v in view", drawnIDs(l))
+	}
+	if want := []string{"play 0", "play 0", "show 0", "play 2"}; !slices.Equal(pressed, want) {
+		t.Errorf("pressed %v, want %v", pressed, want)
+	}
+
+	// A row's button shows the focus only while the list has it.
+	pressKey(c, fyne.KeyRight)
+	lit := l.lit
+	c.Unfocus()
+	if lit == nil || l.lit != nil || l.col != 0 {
+		t.Errorf("Right lit %v; once unfocused, lit %v, column %d", lit, l.lit, l.col)
 	}
 }

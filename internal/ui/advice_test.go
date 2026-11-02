@@ -46,7 +46,7 @@ func TestAdviceNeedsNoAttention(t *testing.T) {
 		t.Errorf("advice gives the diagnostics button importance %v", b.Importance)
 	}
 	d := diagnostics(t, a)
-	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 4)) || !contains(all, "PipeWire sample rates") || !contains(all, "resampled once") {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 5)) || !contains(all, "PipeWire sample rates") || !contains(all, "resampled once") {
 		t.Errorf("the diagnostics: %v", all)
 	}
 	if len(buttons(d, lang.SendToDevelopers)) != 0 {
@@ -55,7 +55,7 @@ func TestAdviceNeedsNoAttention(t *testing.T) {
 	snapshot(t, a, "logs-advice")
 
 	withAdvice(proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
-	if all := texts(overlay(t, a)); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 5)) {
+	if all := texts(overlay(t, a)); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 6)) {
 		t.Errorf("a check fails beside the advice: %v", all)
 	}
 	tapButton(t, overlay(t, a), lang.SendToDevelopers)

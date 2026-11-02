@@ -250,7 +250,7 @@ const screenshotWidth = 480
 // Send.
 func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	var failing []proto.Check
-	for _, c := range s.Info.Checks {
+	for _, c := range a.diagChecks(s) {
 		if needsAttention(c) {
 			failing = append(failing, c)
 		}
