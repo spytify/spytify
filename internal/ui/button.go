@@ -58,3 +58,22 @@ func (b *tipButton) TypedKey(e *fyne.KeyEvent) {
 	pressOnSpace(&b.Button.Button, e)
 	escapeFrom(b, e)
 }
+
+// rowButton is a button on a cardList's row, which Tab passes over: the
+// list builds only the rows in view, so Tab went through those in no order
+// and never reached the others. The list's arrows reach it instead, and
+// Space on its row presses the row's main one.
+type rowButton struct {
+	widget.Button
+	// FocusGained hides the button's: without it, rowButton is no
+	// fyne.Focusable, the one thing Tab looks for.
+	FocusGained struct{}
+	main        bool
+}
+
+func newRowButton(text string, icon fyne.Resource) *rowButton {
+	b := &rowButton{}
+	b.Text, b.Icon, b.Importance = text, icon, widget.LowImportance
+	b.ExtendBaseWidget(b)
+	return b
+}

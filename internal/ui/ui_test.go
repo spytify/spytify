@@ -651,7 +651,7 @@ func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
 	// Its buttons are square, in the middle of the row's height, as the
 	// Record list's are: QA found them as tall as the row.
 	at := a.fa.Driver().AbsolutePositionForObject
-	for _, i := range []int{1, 2} {
+	for _, i := range []int{1, 2, 3} {
 		row := all["Reunion"].row
 		b := row.Objects[2].(*fyne.Container).Objects[i].(*fyne.Container).Objects[0]
 		if mid := at(b).Y + b.Size().Height/2 - at(row).Y; b.Size().Width != b.Size().Height || mid < row.Size().Height/2-1 || mid > row.Size().Height/2+1 {
@@ -661,6 +661,12 @@ func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
 	// The pictures show a listener's folder, not this test's.
 	setCaption(lib.count, pluralFiles(len(files), len(files), "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-rows")
+	// The arrows on the second row's Show in folder.
+	a.win.Canvas().Focus(lib.list)
+	pressKey(a.win.Canvas(), fyne.KeyDown)
+	pressKey(a.win.Canvas(), fyne.KeyRight)
+	snapshot(t, a, "library-row-button")
+	a.win.Canvas().Unfocus()
 
 	a.win.Resize(a.win.Content().MinSize())
 	a.render()
@@ -692,7 +698,7 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	// before its words, and no outline around them.
 	i := slices.IndexFunc(r.rows, func(row model.Row) bool { return row.ID == "s-004" })
 	right := rowAt(r.list, i).content.(*fyne.Container).Objects[2].(*fyne.Container)
-	if keep, ok := right.Objects[1].(*fyne.Container).Objects[0].(*button); !ok {
+	if keep, ok := right.Objects[1].(*fyne.Container).Objects[0].(*rowButton); !ok {
 		t.Errorf("Keep anyway is a %T", right.Objects[1].(*fyne.Container).Objects[0])
 	} else if keep.Icon != theme.DocumentSaveIcon() || keep.Importance != widget.LowImportance {
 		t.Errorf("Keep anyway has the icon %v, importance %v", keep.Icon, keep.Importance)
@@ -899,7 +905,7 @@ func TestOtherScreensRender(t *testing.T) {
 		}
 	}
 	tapButton(t, a.win.Content(), lang.Diagnostics)
-	if d := texts(overlay(t, a)); !contains(d, fmt.Sprintf(lang.ChecksPass, 4)) || !contains(d, "ffmpeg found") {
+	if d := texts(overlay(t, a)); !contains(d, fmt.Sprintf(lang.ChecksPass, 5)) || !contains(d, "ffmpeg found") {
 		t.Errorf("the diagnostics: %v", d)
 	}
 	snapshot(t, a, "logs-diagnostics")
@@ -1286,6 +1292,8 @@ func asButton(o fyne.CanvasObject) (*widget.Button, bool) {
 	case *widget.Button:
 		return b, true
 	case *button:
+		return &b.Button, true
+	case *rowButton:
 		return &b.Button, true
 	case *ttwidget.Button:
 		return &b.Button, true
@@ -1727,11 +1735,11 @@ func TestTheDiagnosticsAreADialog(t *testing.T) {
 	m.SetInfo(info())
 	a.render()
 	d := diagnostics(t, a)
-	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 4)) {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 5)) {
 		t.Fatalf("opened from Record: %v", all)
 	}
 	failCheck(a, m)
-	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 5)) || !contains(all, "ffmpeg not found") {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 6)) || !contains(all, "ffmpeg not found") {
 		t.Errorf("a check fails under the dialog: %v", all)
 	}
 	tapButton(t, d, lang.Close)
@@ -1748,6 +1756,9 @@ func TestAFailedChecksReasonShowsWholeUnderItsName(t *testing.T) {
 	reason := `mkdir \\nas\shared\Music\Recordings from the radio, every Saturday night since the spring of 2019\Spytify: The system cannot find the path specified.`
 	in := info()
 	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: reason})
+	// Few enough rows to fit without scrolling, spytifyd's own check
+	// included.
+	in.Checks, in.Warnings = in.Checks[1:], nil
 	m.SetInfo(in)
 	m.SetSettings(defaults())
 	a.render()

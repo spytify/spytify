@@ -132,14 +132,6 @@ func setRowText(rt *widget.RichText, lines ...string) {
 	}
 }
 
-// rowButton is an action of a list's row: an icon alone, square, in the
-// middle of the row's height. Its button is Objects[0].
-func rowButton(icon fyne.Resource) *fyne.Container {
-	b := newIconButton("", icon, nil)
-	b.Importance = widget.LowImportance
-	return container.NewCenter(b)
-}
-
 // trackRow is a list row for a track: its cover, its text, then the parts
 // after it. The row is as tall as lines lines of text, the first one the
 // title's; a track showing fewer has them centred in that height, every row
@@ -210,14 +202,6 @@ func relayout(s *container.Scroll) {
 func plain(content fyne.CanvasObject) fyne.CanvasObject {
 	box := newPanel(colorPlain, "", 0, fyne.Size{}, content)
 	return container.NewThemeOverride(box, cardTheme{surface: colorPlain})
-}
-
-// margin keeps a screen off the window's sides and bottom, as the window's
-// own padding would; the window has none, so the bars' plain colour goes to
-// its edges.
-func margin(o fyne.CanvasObject) *fyne.Container {
-	pad := theme.Padding()
-	return container.New(layout.NewCustomPaddedLayout(0, pad, pad, pad), o)
 }
 
 // inset keeps a part of a screen off the window's sides, in line with the

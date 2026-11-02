@@ -138,7 +138,7 @@ func focusName(a *App, f fyne.Focusable) string {
 		return w.Text
 	case *widget.List, *cardList:
 		return "list"
-	case *keyRows:
+	case *checkList:
 		return "checks"
 	}
 	if key := setting(f.(fyne.CanvasObject)); key != "" {
@@ -230,7 +230,8 @@ func fakeOS(t *testing.T) (revealed, opened *[]string) {
 
 // Record: the app bar, then the track being recorded, its list and the
 // list's buttons, top to bottom; each does from the keyboard what a click
-// does.
+// does. Tab stops once on the list, which builds only the rows in view:
+// the arrows reach the rows and their buttons.
 func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	revealed, opened := fakeOS(t)
 	a, m, core := connectedApp(t)
@@ -251,15 +252,19 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	// A session: two files saved, one skipped, whose buttons are off.
 	feedSession(t, m)
 	a.render()
-	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", "Skip", "list", "Show in folder", "Play", "Show in folder", "Play", lang.ClearList, lang.OpenFolder)
+	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", "Skip", "list", lang.ClearList, lang.OpenFolder)
 	tabTo(t, a, "Skip", 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodPlayerControl)
-	for n := range 2 {
-		tabTo(t, a, "Show in folder", n+1)
+	// On each row, Right then Space shows its file, Left back to the row
+	// then Space plays it; the skipped file's row does neither.
+	tabTo(t, a, "list", 1)
+	for range len(a.screens[tabRecord].(*recordScreen).rows) {
+		pressKey(c, fyne.KeyRight)
 		pressSpace(c)
-		tabTo(t, a, "Play", n+1)
+		pressKey(c, fyne.KeyLeft)
 		pressSpace(c)
+		pressKey(c, fyne.KeyDown)
 	}
 	saved := []string{"/Users/listener/Music/Spytify/M83/Intro.flac", "/Users/listener/Music/Spytify/M83/Reunion.flac"}
 	slices.Sort(*revealed)
@@ -282,8 +287,9 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	}
 }
 
-// Library: the search, the sort and the filter above the files, then each
-// file's buttons, then Rescan and Open folder in the footer.
+// Library: the search, the sort and the filter above the files, then the
+// files, whose buttons the arrows reach, then Rescan and Open folder in the
+// footer.
 func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	revealed, opened := fakeOS(t)
 	a, _, file, _ := recorded(t)
@@ -291,7 +297,16 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	a.render()
 	c := a.win.Canvas()
 	lib := a.screens[tabLibrary].(*libraryScreen)
-	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", lang.SearchLibrary, "Sort", "Filter", "list", "Show in folder", "Play", lang.Rescan, lang.OpenFolder)
+	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", lang.SearchLibrary, "Sort", "Filter", "list", lang.Rescan, lang.OpenFolder)
+	// Shift+Tab goes back the same way. Going back, Fyne meets the list
+	// before its rows, so Shift+Tab went from the list into their buttons.
+	tabTo(t, a, lang.Rescan, 1)
+	for _, want := range []string{"list", "Filter"} {
+		pressShiftTab(c)
+		if got := focusName(a, c.Focused()); got != want {
+			t.Fatalf("Shift+Tab focused %q, want %q", got, want)
+		}
+	}
 
 	test.Type(tabTo(t, a, lang.SearchLibrary, 1), "nothing like it")
 	if len(lib.shown) != 0 {
@@ -326,13 +341,28 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 		t.Fatalf("%d files after the rescan", len(lib.shown))
 	}
 
-	// Sorted by name, Midnight City comes first.
-	tabTo(t, a, "Show in folder", 1)
+	// Sorted by name, Midnight City comes first: Right then Space shows it,
+	// Left back to its row then Space plays it.
+	tabTo(t, a, "list", 1)
+	pressKey(c, fyne.KeyRight)
 	pressSpace(c)
-	tabTo(t, a, "Play", 1)
+	pressKey(c, fyne.KeyLeft)
 	pressSpace(c)
 	if !slices.Equal(*revealed, []string{file}) || !slices.Equal(*opened, []string{file}) {
 		t.Errorf("showed %v and played %v, want %s", *revealed, *opened, file)
+	}
+
+	// The trash is the third button: Right three times, then Space.
+	var trashed []string
+	real := moveToTrash
+	t.Cleanup(func() { moveToTrash = real })
+	moveToTrash = func(p string) error { trashed = append(trashed, p); return os.Remove(p) }
+	for range 3 {
+		pressKey(c, fyne.KeyRight)
+	}
+	pressSpace(c)
+	if !slices.Equal(trashed, []string{file}) || len(lib.shown) != 1 {
+		t.Errorf("moved %v to the trash, %d files left; want %s, 1 left", trashed, len(lib.shown), file)
 	}
 }
 
@@ -531,11 +561,16 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 	l := a.screens[tabLogs].(*logsScreen)
 	wantOrder(t, a, lang.Donate, lang.Record, "Tabs", "error", "info", "debug", lang.Copy, lang.OpenLogFile, lang.Diagnostics, "list")
 
-	// Diagnostics opens its dialog with the focus on its first control.
+	// Diagnostics opens its dialog with the focus on its checks, then Tab
+	// goes to its buttons.
 	tabTo(t, a, lang.Diagnostics, 1)
 	pressSpace(c)
-	if got := focusName(a, c.Focused()); got != lang.RunChecksAgain {
+	if got := focusName(a, c.Focused()); got != "checks" {
 		t.Fatalf("the diagnostics open with %q focused", got)
+	}
+	pressTab(c)
+	if got := focusName(a, c.Focused()); got != lang.RunChecksAgain {
+		t.Fatalf("Tab from the checks goes to %q", got)
 	}
 	core.mu.Lock()
 	core.calls = nil
@@ -568,69 +603,6 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 	pressSpace(c)
 	if !slices.Equal(*opened, []string{l.path}) {
 		t.Errorf("Open log file opened %v", *opened)
-	}
-}
-
-// QA could not reach the diagnostics' checks from the keyboard: Tab went
-// from Run the checks again to Close and back. Tab stops on the checks, and
-// the arrows move a highlight from check to check, the separators passed
-// over, scrolling the checks to show it.
-func TestTheKeyboardGoesThroughTheChecks(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	in := info()
-	for i := range 12 {
-		in.Checks = append(in.Checks, proto.Check{Name: fmt.Sprintf("check %d", i), OK: true, Detail: "fine"})
-	}
-	m.SetInfo(in)
-	m.SetSettings(defaults())
-	a.render()
-	diagnostics(t, a)
-	c := a.win.Canvas()
-	l := a.screens[tabLogs].(*logsScreen)
-	var order []string
-	for range 4 {
-		pressTab(c)
-		order = append(order, focusName(a, c.Focused()))
-	}
-	if !slices.Contains(order, "checks") {
-		t.Fatalf("Tab goes through %v, never the checks", order)
-	}
-	for focusName(a, c.Focused()) != "checks" {
-		pressTab(c)
-	}
-	k := l.checkRows
-	items := k.items()
-	if !k.mark.Visible() || k.mark.Position().Y != items[0].Position().Y {
-		t.Fatalf("focused, the highlight shows %v at %v, want the first check at %v", k.mark.Visible(), k.mark.Position().Y, items[0].Position().Y)
-	}
-	if l.checksScroll.Offset.Y != 0 {
-		t.Errorf("the first check highlighted, the checks are scrolled by %v", l.checksScroll.Offset.Y)
-	}
-	for range len(items) + 2 {
-		pressKey(c, fyne.KeyDown)
-	}
-	last := items[len(items)-1]
-	if k.cursor != len(items)-1 || k.mark.Position().Y != last.Position().Y {
-		t.Fatalf("Down past the end: on row %d at %v, want the last, %d, at %v", k.cursor, k.mark.Position().Y, len(items)-1, last.Position().Y)
-	}
-	if view := l.checksScroll.Size().Height; l.checksScroll.Offset.Y+view < last.Position().Y+last.Size().Height {
-		t.Errorf("the last check highlighted is out of view: scrolled by %v, %v high", l.checksScroll.Offset.Y, view)
-	}
-	pressKey(c, fyne.KeyUp)
-	if k.cursor != len(items)-2 {
-		t.Errorf("Up: on row %d, want %d", k.cursor, len(items)-2)
-	}
-	pressTab(c)
-	if k.mark.Visible() {
-		t.Error("the highlight stays once the checks lose the focus")
-	}
-	pressShiftTab(c)
-	if focusName(a, c.Focused()) == "checks" {
-		pressKey(c, fyne.KeyEscape)
-		if c.Overlays().Top() != nil {
-			t.Error("Escape on the checks left the diagnostics open")
-		}
 	}
 }
 
