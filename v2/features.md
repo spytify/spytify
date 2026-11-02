@@ -33,13 +33,15 @@ Spytify records at the rate the system plays the application at, so nothing is c
 
 Ads and short untitled items are not recorded, and **Mute ads** silences the application while one plays. On macOS and Linux, **Mute the player on this computer** keeps the whole session silent while it records.
 
+In the session's list, the ads played one after another take one slim blue row between the tracks: **Advertisements** and their total length, such as 0:55. Click it, or press Space on it, to see each ad with its length: "Ad #1", or "Ad #2 · New EP is out now!" when the application gives it a title. Each break counts its ads from 1.
+
 ### [Low quality](#low-quality)
 
 When the application's output device runs below 44.1 kHz or in mono, as a Bluetooth headset does while an app uses its microphone, the tracks would sound like a phone call. Spytify says so and what to change, and skips the tracks recorded that way; **Keep anyway** still saves the last one.
 
 ### [The Record screen](#record-screen)
 
-The track being recorded sits on its cover's colours, with a badge that says whether it is recorded, the stream's rate and channels, and its progress along the bottom. Beside **Skip**, a meter shows each channel's level, L and R, while it records. Under it, the session's list says which tracks were saved, and why the others were skipped. When nothing is recorded, one line says why, with the one button that fixes it: open the player, **Play**, **Start the recorder** or **Open diagnostics**.
+The track being recorded sits on its cover's colours, with a badge that says whether it is recorded, the stream's rate and channels, and its progress along the bottom. Beside **Skip**, a meter shows each channel's level, L and R, while it records. Under it, the session's list says which tracks were saved, and why the others were skipped; the [ads](#ads) of each break are one row. When nothing is recorded, one line says why, with the one button that fixes it: open the player, **Play**, **Start the recorder** or **Open diagnostics**.
 
 Light or dark, as the system is; **Theme** in Settings > App picks one.
 
@@ -50,7 +52,7 @@ Every recorded file with its cover, sorted by newest, by name, or by album under
 ### [Keyboard](#keyboard)
 
 - **⌘R** (Ctrl+R on Linux and Windows) presses Record or Stop, **⌘1** to **⌘5** show the tabs, and **⌘S** goes to the Library's or the Settings' search. Hold ⌘ or Ctrl to see every key on screen.
-- **Tab** goes through each screen in the order it reads. On the tab bar, Left and Right show the tab before or after. A list is one stop: Up and Down move between its rows, Left and Right between a row and its buttons, and Space presses the button, or plays the row.
+- **Tab** goes through each screen in the order it reads. On the tab bar, Left and Right show the tab before or after. A list is one stop: Up and Down move between its rows, Left and Right between a row and its buttons, and Space presses the button, plays the row, or opens and closes an ad break.
 - **Escape** closes every dialog, as its Close, Cancel or No does.
 
 ### [Without a window](#headless)
