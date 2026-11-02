@@ -8,12 +8,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -56,7 +56,7 @@ func Decode(t testing.TB, ffmpeg, path string, sample pcm.SampleType) (pcm.Forma
 		codec = "pcm_f32le"
 	}
 	var stderr bytes.Buffer
-	cmd := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-i", path, "-c:a", codec, "-f", "wav", "-")
+	cmd := proc.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-i", path, "-c:a", codec, "-f", "wav", "-")
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
@@ -73,7 +73,7 @@ func Decode(t testing.TB, ffmpeg, path string, sample pcm.SampleType) (pcm.Forma
 // the summary of ffmpeg's EBU R128 meter.
 func Loudness(t testing.TB, ffmpeg, path string) float64 {
 	t.Helper()
-	out, err := exec.Command(ffmpeg, "-nostdin", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128", "-f", "null", "-").CombinedOutput()
+	out, err := proc.Command(ffmpeg, "-nostdin", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128", "-f", "null", "-").CombinedOutput()
 	if err != nil {
 		t.Fatalf("ebur128: %v: %s", err, tail(out))
 	}
