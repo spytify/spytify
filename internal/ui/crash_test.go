@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // leaveACrash writes a trace where spytifyd keeps the previous run's,
@@ -45,16 +47,16 @@ func TestACrashNotSentShowsItsTrace(t *testing.T) {
 	d := overlay(t, a)
 	snapshot(t, a, "privacy-crash-not-sent")
 	all := strings.Join(texts(d), "\n")
-	if !strings.Contains(all, "Spytify stopped unexpectedly") || !strings.Contains(all, "No report was sent to the developers: the Sentry bug tracker is off") {
+	if !strings.Contains(all, fmt.Sprintf(lang.StoppedUnexpectedly, lang.Spytify)) || !strings.Contains(all, fmt.Sprintf(lang.CrashNotReported, lang.TrackerOff)) {
 		t.Errorf("dialog texts %v", texts(d))
 	}
 	// The dialog's height, from its title to its buttons.
 	height := func() float32 {
-		top := a.fa.Driver().AbsolutePositionForObject(labels(d, "Spytify stopped unexpectedly")[0])
-		return a.fa.Driver().AbsolutePositionForObject(buttonObjects(d, "Close")[0]).Y - top.Y
+		top := a.fa.Driver().AbsolutePositionForObject(labels(d, fmt.Sprintf(lang.StoppedUnexpectedly, lang.Spytify))[0])
+		return a.fa.Driver().AbsolutePositionForObject(buttonObjects(d, lang.Close)[0]).Y - top.Y
 	}
 	folded := height()
-	tapButton(t, d, "Error and stack trace")
+	tapButton(t, d, lang.ErrorAndTrace)
 	snapshot(t, a, "privacy-crash-not-sent-open")
 	if open := height(); folded > 200 || open < folded+150 {
 		t.Errorf("the dialog is %v tall folded and %v open", folded, open)
@@ -63,14 +65,14 @@ func TestACrashNotSentShowsItsTrace(t *testing.T) {
 	if !strings.Contains(all, "panic: open ~") || strings.Contains(all, home) {
 		t.Errorf("the trace shown is not scrubbed: %v", texts(d))
 	}
-	if b := buttons(d, "Report on GitHub"); len(b) != 1 {
+	if b := buttons(d, lang.ReportOnGitHub); len(b) != 1 {
 		t.Fatal("no Report on GitHub button")
 	}
-	tapButton(t, d, "Error and stack trace")
+	tapButton(t, d, lang.ErrorAndTrace)
 	if h := height(); h != folded {
 		t.Errorf("the dialog is %v tall folded again, %v at first", h, folded)
 	}
-	tapButton(t, d, "Close")
+	tapButton(t, d, lang.Close)
 	if quiet(a, srv) != 0 {
 		t.Error("a crash left with the bug tracker off")
 	}
@@ -78,7 +80,7 @@ func TestACrashNotSentShowsItsTrace(t *testing.T) {
 	a.tel = telemetry.New(telemetry.Options{Prefs: a.fa.Preferences()})
 	leaveACrash(t, a, "boom")
 	a.checkCrashes()
-	if all := strings.Join(texts(overlay(t, a)), "\n"); !strings.Contains(all, "this build has no bug tracker") {
+	if all := strings.Join(texts(overlay(t, a)), "\n"); !strings.Contains(all, lang.NoTracker) {
 		t.Errorf("dialog texts in a build without a bug tracker: %v", all)
 	}
 }
@@ -92,10 +94,10 @@ func TestIssueURLHoldsTheCrash(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := u.Query()
-	if u.Path != "/spytify/spytify/issues/new" || q.Get("title") != "Crash: panic: boom" || !strings.Contains(q.Get("body"), "panic: boom") {
+	if u.Path != "/spytify/spytify/issues/new" || q.Get("title") != fmt.Sprintf(lang.IssueTitle, "panic: boom") || !strings.Contains(q.Get("body"), "panic: boom") {
 		t.Errorf("issue %s", raw)
 	}
-	if len(raw) > 8000 || !strings.Contains(q.Get("body"), "Copy in Spytify gives the rest") {
+	if len(raw) > 8000 || !strings.Contains(q.Get("body"), lang.IssueCut) {
 		t.Errorf("issue address of %d characters", len(raw))
 	}
 }

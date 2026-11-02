@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -37,27 +39,27 @@ func TestAdviceNeedsNoAttention(t *testing.T) {
 		a.render()
 	}
 	withAdvice()
-	if contains(texts(a.win.Content()), "Open diagnostics") {
+	if contains(texts(a.win.Content()), lang.OpenDiagnostics) {
 		t.Error("advice sends the user to the diagnostics")
 	}
 	if b := a.screens[tabLogs].(*logsScreen).diagnose; b.Importance != widget.LowImportance {
 		t.Errorf("advice gives the diagnostics button importance %v", b.Importance)
 	}
 	d := diagnostics(t, a)
-	if all := texts(d); !contains(all, "All 4 checks pass.") || !contains(all, "PipeWire sample rates") || !contains(all, "resampled once") {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 4)) || !contains(all, "PipeWire sample rates") || !contains(all, "resampled once") {
 		t.Errorf("the diagnostics: %v", all)
 	}
-	if len(buttons(d, "Send to the developers")) != 0 {
+	if len(buttons(d, lang.SendToDevelopers)) != 0 {
 		t.Error("advice offers to send it to the developers")
 	}
 	snapshot(t, a, "logs-advice")
 
 	withAdvice(proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
-	if all := texts(overlay(t, a)); !contains(all, "1 of 5 checks need attention.") {
+	if all := texts(overlay(t, a)); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 5)) {
 		t.Errorf("a check fails beside the advice: %v", all)
 	}
-	tapButton(t, overlay(t, a), "Send to the developers")
-	tapButton(t, overlay(t, a), "Send")
+	tapButton(t, overlay(t, a), lang.SendToDevelopers)
+	tapButton(t, overlay(t, a), lang.Send)
 	if ev := srv.Wait(t, "event", 1)[0].JSON(); ev["message"] != "stuck: ffmpeg found" {
 		t.Errorf("sent %v", ev["message"])
 	}

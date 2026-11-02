@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // newSearch is the Library's and Settings' search field: the magnifier
@@ -25,7 +26,7 @@ func newSearch(a *App, placeholder string, changed func(string)) *keyEntry {
 		}
 	}
 	clear.ExtendBaseWidget(clear)
-	clear.SetToolTip("Clear the search")
+	clear.SetToolTip(lang.ClearSearch)
 	clear.Hide()
 	// Before SetIcon: its refresh draws the field, with the action item it
 	// has by then.

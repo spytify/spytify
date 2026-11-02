@@ -1,9 +1,5 @@
 package ui
 
-// noTrayNote is what Minimize to tray says under its label where closing
-// quits with it on: the desktop shows no tray icons.
-const noTrayNote = "This desktop shows no tray icons: closing quits. On GNOME, the AppIndicator and KStatusNotifierItem Support extension adds them."
-
 // trayBus is what hasTrayHost asks the session bus; tests answer for it.
 type trayBus interface {
 	// watcherOwned says whether a program owns

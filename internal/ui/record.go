@@ -18,6 +18,7 @@ import (
 
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -86,13 +87,13 @@ func newRecordScreen(a *App) *recordScreen {
 	r.idleText = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{})
 	r.idleText.Wrapping = fyne.TextWrapWord
 	a.maskPaths(r.idleText)
-	r.hint = widget.NewLabelWithStyle("A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start.",
+	r.hint = widget.NewLabelWithStyle(lang.AlreadyPlaying,
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	r.hint.Wrapping = fyne.TextWrapWord
 	r.hint.SizeName = theme.SizeNameCaptionText
-	r.diagnose = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
+	r.diagnose = newLitButton(lang.OpenDiagnostics, theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
 	diagnose := r.diagnose
-	r.openPlayer = newLitButton("Open the player", theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
+	r.openPlayer = newLitButton(lang.OpenThePlayer, theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
 	r.attention = container.NewCenter(container.NewHBox(r.openPlayer.lit, diagnose.lit))
 	r.idle = container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 280), container.NewVBox(
 		container.NewCenter(icon),
@@ -133,7 +134,7 @@ func newRecordScreen(a *App) *recordScreen {
 	})
 	pad := theme.Padding()
 	skipBox := container.NewVBox(layout.NewSpacer(),
-		container.NewCenter(container.NewGridWrap(fyne.NewSquareSize(48), skip)), container.NewCenter(caption("Skip")),
+		container.NewCenter(container.NewGridWrap(fyne.NewSquareSize(48), skip)), container.NewCenter(caption(lang.Skip)),
 		layout.NewSpacer())
 	info := container.NewVBox(layout.NewSpacer(), container.NewHBox(r.state, r.rate, r.channels, r.fileRate), r.track, r.elapsed, layout.NewSpacer())
 	body := container.NewBorder(nil, nil, r.cover, skipBox, container.New(layout.NewCustomPaddedLayout(0, 0, pad*3, pad*2), info))
@@ -144,18 +145,18 @@ func newRecordScreen(a *App) *recordScreen {
 	r.card = container.NewStack(container.NewThemeOverride(media, mediaTheme{}))
 
 	r.waiting = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorInfoText, Inline: true}})
-	r.launch = newLitButton("Open the player", theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
-	r.play = newLitButton("Play", theme.MediaPlayIcon(), widget.HighImportance, func() {
+	r.launch = newLitButton(lang.OpenThePlayer, theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)
+	r.play = newLitButton(lang.Play, theme.MediaPlayIcon(), widget.HighImportance, func() {
 		a.noteAction("play in the player")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdPlay}, nil)
 	})
 	// A track already playing when the session starts is not recorded;
 	// playing it again from 0:00 makes it the next track.
-	r.restart = newIconButton("Record this track from the start", theme.MediaReplayIcon(), func() {
+	r.restart = newIconButton(lang.RecordFromStart, theme.MediaReplayIcon(), func() {
 		a.noteAction("record this track from the start")
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdRestart}, nil)
 	})
-	r.blocked = newLitButton("Open diagnostics", theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
+	r.blocked = newLitButton(lang.OpenDiagnostics, theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
 	// What the session waits for is an outlined info alert, as MUI draws
 	// one in the app's green: an outline and icon around green text, the
 	// page showing through, the next step on the right.
@@ -167,8 +168,8 @@ func newRecordScreen(a *App) *recordScreen {
 	r.list = newCardList(
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
-			status := newBadge("Skipped: duplicate", colorSkippedBadge, "", colorOnSkippedBadge)
-			keepBtn := newIconButton("Keep anyway", theme.DocumentSaveIcon(), nil)
+			status := newBadge(fmt.Sprintf(lang.SkippedFor, proto.SkipDuplicate), colorSkippedBadge, "", colorOnSkippedBadge)
+			keepBtn := newIconButton(lang.KeepAnyway, theme.DocumentSaveIcon(), nil)
 			keepBtn.Importance = widget.LowImportance
 			keep := container.NewCenter(keepBtn)
 			keep.Hide()
@@ -218,19 +219,19 @@ func newRecordScreen(a *App) *recordScreen {
 
 	r.totals = caption("")
 	r.totals.Segments[0].(*widget.TextSegment).Style.ColorName = colorLabel
-	openFolder := newIconButton("Open folder", theme.FolderOpenIcon(), func() {
+	openFolder := newIconButton(lang.OpenFolder, theme.FolderOpenIcon(), func() {
 		a.noteAction("open folder")
 		if r.folder != "" {
 			_ = openPath(r.folder)
 		}
 	})
 	openFolder.Importance = widget.LowImportance
-	r.clear = newIconButton("Clear list", theme.ContentClearIcon(), func() {
+	r.clear = newIconButton(lang.ClearList, theme.ContentClearIcon(), func() {
 		a.noteAction("clear list")
 		a.m.ClearRows()
 	})
 	r.clear.Importance = widget.LowImportance
-	r.noRows = emptyState("No files yet", widget.NewLabel("Each track becomes a file here when it ends."))
+	r.noRows = emptyState(lang.NoFilesYet, widget.NewLabel(lang.NoFilesYetText))
 	// The info bar over the track being recorded, the session's files under
 	// them and its totals at the bottom.
 	r.session = inReadingOrder(container.NewVBox(r.waitRow, r.card), footerBar(r.totals, container.NewHBox(r.clear, openFolder)), nil, nil,
@@ -295,12 +296,12 @@ func (r *recordScreen) render(s model.State) {
 	defer r.relayout()
 	player := s.Info.Target.Process
 	if player == "" {
-		player = "your player"
+		player = lang.YourPlayer
 	}
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
 		// Until the recorder answers it is starting, with nothing to offer.
 		starting := !s.HaveInfo
-		setLabel(r.idleTitle, map[bool]string{true: startingText, false: "Ready to record"}[starting])
+		setLabel(r.idleTitle, map[bool]string{true: lang.StartingRecorder, false: lang.ReadyToRecord}[starting])
 		show(r.idleText, !starting)
 		if starting {
 			show(r.attention, false)
@@ -308,10 +309,10 @@ func (r *recordScreen) render(s model.State) {
 			r.session.Hide()
 			return
 		}
-		title, text := "Ready to record", fmt.Sprintf("Press Record, then play music in %s. Each track becomes its own file in %s.", player, r.folder)
+		title, text := lang.ReadyToRecord, fmt.Sprintf(lang.ReadyText, player, r.folder)
 		blocked := checkFails(s.Info.Checks, proto.CheckOutputWritable)
 		if blocked {
-			title, text = "Record is off", fmt.Sprintf("Spytify cannot write to the output folder, %s. The diagnostics say why.", r.folder)
+			title, text = lang.RecordIsOff, fmt.Sprintf(lang.RecordIsOffText, r.folder)
 		}
 		setLabel(r.idleTitle, title)
 		setLabel(r.idleText, text)
@@ -319,7 +320,7 @@ func (r *recordScreen) render(s model.State) {
 		// A player that is not running is shown in the app bar and offered
 		// to open here; the diagnostics are for anything else.
 		down := !playerRunning(s)
-		r.openPlayer.SetText("Open " + player)
+		r.openPlayer.SetText(fmt.Sprintf(lang.Open, player))
 		show(r.openPlayer, down)
 		show(r.diagnose, failingChecks(s.Info.Checks) > 0)
 		show(r.attention, r.openPlayer.Visible() || r.diagnose.Visible())
@@ -346,14 +347,14 @@ func (r *recordScreen) render(s model.State) {
 	text := waitingText(s.Session)
 	switch {
 	case blocked:
-		text = "Session ended: Spytify cannot write to the output folder, so Record is off."
+		text = lang.SessionEndedBlocked
 	case down:
-		text = fmt.Sprintf("Nothing is recorded while %s is not running.", player)
+		text = fmt.Sprintf(lang.NothingRecordedNotRunning, player)
 	case paused:
-		text = fmt.Sprintf("Nothing is recorded while %s is paused: press play there.", player)
+		text = fmt.Sprintf(lang.NothingRecordedPaused, player)
 	}
 	setCaption(r.waiting, text)
-	r.launch.SetText("Open " + player)
+	r.launch.SetText(fmt.Sprintf(lang.Open, player))
 	show(r.launch, down)
 	show(r.play, paused)
 	show(r.restart, c == nil && s.Session == proto.StateWaiting && !down)
@@ -378,7 +379,7 @@ func (r *recordScreen) render(s model.State) {
 		r.clear.Enable()
 	}
 	t := s.Totals()
-	setCaption(r.totals, fmt.Sprintf("%d saved · %d skipped · %d ads · %s", t.Saved, t.Skipped, t.Ads, fmtBytes(t.Bytes)))
+	setCaption(r.totals, fmt.Sprintf(lang.SessionTotals, t.Saved, t.Skipped, t.Ads, fmtBytes(t.Bytes)))
 }
 
 // renderCard shows the track being recorded: its cover, blurred behind the
@@ -466,17 +467,21 @@ func show(o fyne.CanvasObject, visible bool) {
 // recorded: the red badge, with the level.
 func stateText(st proto.SessionState, c *model.Row) (text string, recording bool) {
 	if c.Status == model.Skipped {
-		return "Playing, not recorded: " + strings.TrimPrefix(c.StatusText(), "Skipped: "), false
+		why := lang.Skipped
+		if c.Reason != "" {
+			why = model.ReasonText(c.Reason)
+		}
+		return fmt.Sprintf(lang.StateNotRecorded, why), false
 	}
 	switch st {
 	case proto.StatePaused:
-		return "Paused", false
+		return lang.StatePaused, false
 	case proto.StateStopping:
-		return "Recording · stops after this track", true
+		return lang.StateStopping, true
 	case proto.StateAd:
-		return "Advert, not recorded", false
+		return lang.StateAdvert, false
 	}
-	return "Recording", true
+	return lang.Recording, true
 }
 
 // sourceParts is the captured stream, a badge each: "44.1 kHz", "Stereo",
@@ -490,14 +495,14 @@ func sourceParts(rate, channels int) []string {
 	parts := []string{khz(rate)}
 	switch channels {
 	case 1:
-		parts = append(parts, "Mono")
+		parts = append(parts, lang.Mono)
 	case 2:
-		parts = append(parts, "Stereo")
+		parts = append(parts, lang.Stereo)
 	default:
-		parts = append(parts, fmt.Sprintf("%d channels", channels))
+		parts = append(parts, fmt.Sprintf(lang.Channels, channels))
 	}
 	if file := encode.FileRate(rate); file != rate {
-		parts = append(parts, khz(file)+" file")
+		parts = append(parts, fmt.Sprintf(lang.FileRate, khz(file)))
 	}
 	return parts
 }
@@ -505,9 +510,9 @@ func sourceParts(rate, channels int) []string {
 func waitingText(st proto.SessionState) string {
 	switch st {
 	case proto.StateIdle:
-		return "Session ended."
+		return lang.SessionEnded
 	case proto.StateStopping:
-		return "Finishing the last files…"
+		return lang.FinishingLastFiles
 	}
-	return "Waiting for the next track to start."
+	return lang.WaitingNextTrack
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -227,23 +228,23 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	revealed, opened := fakeOS(t)
 	a, m, core := connectedApp(t)
 	c := a.win.Canvas()
-	wantOrder(t, a, "Donate", "Record", "Tabs")
-	tabTo(t, a, "Record", 1)
+	wantOrder(t, a, lang.Donate, lang.Record, "Tabs")
+	tabTo(t, a, lang.Record, 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodSessionStart)
 
 	// With the player closed, Record is off and the screen offers to open it.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
 	a.render()
-	wantOrder(t, a, "Donate", "Tabs", "Open Player")
-	tabTo(t, a, "Open Player", 1)
+	wantOrder(t, a, lang.Donate, "Tabs", fmt.Sprintf(lang.Open, "Player"))
+	tabTo(t, a, fmt.Sprintf(lang.Open, "Player"), 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodPlayerLaunch)
 
 	// A session: two files saved, one skipped, whose buttons are off.
 	feedSession(t, m)
 	a.render()
-	wantOrder(t, a, "Donate", "Stop", "Tabs", "Skip", "list", "Show in folder", "Play", "Show in folder", "Play", "Clear list", "Open folder")
+	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", "Skip", "list", "Show in folder", "Play", "Show in folder", "Play", lang.ClearList, lang.OpenFolder)
 	tabTo(t, a, "Skip", 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodPlayerControl)
@@ -258,15 +259,15 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	if !slices.Equal(*revealed, saved) || !slices.Equal(slices.Sorted(slices.Values(*opened)), saved) {
 		t.Errorf("the rows' buttons showed %v and played %v, want %v", *revealed, *opened, saved)
 	}
-	tabTo(t, a, "Open folder", 1)
+	tabTo(t, a, lang.OpenFolder, 1)
 	pressSpace(c)
 	if last := (*opened)[len(*opened)-1]; last != "/Users/listener/Music/Spytify" {
 		t.Errorf("Open folder opened %s", last)
 	}
-	tabTo(t, a, "Stop", 1)
+	tabTo(t, a, lang.Stop, 1)
 	pressSpace(c)
 	waitStops(t, core, 1)
-	tabTo(t, a, "Clear list", 1)
+	tabTo(t, a, lang.ClearList, 1)
 	pressSpace(c)
 	a.render()
 	if rows := m.Snapshot().Rows; len(rows) != 0 {
@@ -283,9 +284,9 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	a.render()
 	c := a.win.Canvas()
 	lib := a.screens[tabLibrary].(*libraryScreen)
-	wantOrder(t, a, "Donate", "Stop", "Tabs", "Search artist, title or album", "Sort", "Filter", "list", "Show in folder", "Play", "Rescan", "Open folder")
+	wantOrder(t, a, lang.Donate, lang.Stop, "Tabs", lang.SearchLibrary, "Sort", "Filter", "list", "Show in folder", "Play", lang.Rescan, lang.OpenFolder)
 
-	test.Type(tabTo(t, a, "Search artist, title or album", 1), "nothing like it")
+	test.Type(tabTo(t, a, lang.SearchLibrary, 1), "nothing like it")
 	if len(lib.shown) != 0 {
 		t.Errorf("%d files match a search for nothing", len(lib.shown))
 	}
@@ -297,13 +298,13 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	pressKey(c, fyne.KeyDown)
 	pressKey(c, fyne.KeyDown)
 	pressKey(c, fyne.KeyReturn)
-	if lib.sortBy.Selected != "Name" {
+	if lib.sortBy.Selected != lang.Name {
 		t.Errorf("sorted by %q, want Name", lib.sortBy.Selected)
 	}
 	tabTo(t, a, "Sort", 1)
 	pressSpace(c)
 	pressKey(c, fyne.KeyEscape)
-	if c.Overlays().Top() != nil || lib.sortBy.Selected != "Name" {
+	if c.Overlays().Top() != nil || lib.sortBy.Selected != lang.Name {
 		t.Errorf("Escape: choices still shown %v, sorted by %q", c.Overlays().Top() != nil, lib.sortBy.Selected)
 	}
 
@@ -312,7 +313,7 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	if err := os.WriteFile(other, []byte("fLaC"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tabTo(t, a, "Rescan", 1)
+	tabTo(t, a, lang.Rescan, 1)
 	pressSpace(c)
 	if len(lib.shown) != 2 {
 		t.Fatalf("%d files after the rescan", len(lib.shown))
@@ -332,7 +333,7 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 // settings in the table's order but those turned off, then its Advanced
 // fold.
 func settingsOrder(s *settingsScreen) []string {
-	want := []string{"Donate", "Record", "Tabs", "Search settings"}
+	want := []string{lang.Donate, lang.Record, "Tabs", lang.SearchSettings}
 	for _, g := range groups() {
 		var main []string
 		advanced := g == "App"
@@ -350,10 +351,10 @@ func settingsOrder(s *settingsScreen) []string {
 				}
 			}
 		}
-		want = append(want, "Reset")
+		want = append(want, lang.Reset)
 		want = append(want, main...)
 		if advanced {
-			want = append(want, "Advanced")
+			want = append(want, lang.Advanced)
 		}
 	}
 	return want
@@ -390,7 +391,7 @@ func TestTheKeyboardWorksSettings(t *testing.T) {
 		t.Fatal("Escape left the choices open")
 	}
 
-	tabTo(t, a, "Reset", 1)
+	tabTo(t, a, lang.Reset, 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodSettingsReset)
 
@@ -404,7 +405,7 @@ func TestTheKeyboardWorksSettings(t *testing.T) {
 	}
 
 	// The App card's Advanced fold holds the player: open, Tab goes in.
-	tabTo(t, a, "Advanced", 1)
+	tabTo(t, a, lang.Advanced, 1)
 	pressSpace(c)
 	if !s.advanced["App"].open {
 		t.Fatal("Space did not open Advanced")
@@ -412,7 +413,7 @@ func TestTheKeyboardWorksSettings(t *testing.T) {
 	// The window lays the screen out again before it next draws.
 	relayout(s.scroll)
 	order := tabOrder(t, a)
-	if i := slices.Index(order, "Advanced"); i < 0 || order[i+1] != "process name, or a comma list" {
+	if i := slices.Index(order, lang.Advanced); i < 0 || order[i+1] != lang.PlayerProcessHint {
 		t.Errorf("after the open Advanced, Tab goes to %v", order[i+1:])
 	}
 
@@ -426,7 +427,7 @@ func TestTheKeyboardWorksSettings(t *testing.T) {
 	if s.scroll.Offset.Y <= 0 || !inSight(a, s.scroll, last) {
 		t.Fatalf("the last setting, %s, is out of sight at offset %v", focusName(a, c.Focused()), s.scroll.Offset)
 	}
-	first := tabTo(t, a, "Reset", 1).(fyne.CanvasObject)
+	first := tabTo(t, a, lang.Reset, 1).(fyne.CanvasObject)
 	a.followFocus()
 	if !inSight(a, s.scroll, first) {
 		t.Fatalf("the first card's Reset is out of sight at offset %v", s.scroll.Offset)
@@ -443,15 +444,15 @@ func TestSpaceLeavesTheFocusOnTheButtonItPresses(t *testing.T) {
 	c := a.win.Canvas()
 	s := a.screens[tabSettings].(*settingsScreen)
 	closed := settingsOrder(s)
-	after := closed[slices.Index(closed, "Advanced")+1]
+	after := closed[slices.Index(closed, lang.Advanced)+1]
 
-	adv := tabTo(t, a, "Advanced", 1)
+	adv := tabTo(t, a, lang.Advanced, 1)
 	pressSpace(c)
 	if !s.advanced["App"].open || c.Focused() != adv {
 		t.Fatalf("Space on Advanced: open %v, the focus on %v", s.advanced["App"].open, c.Focused())
 	}
 	pressTab(c)
-	if got := focusName(a, c.Focused()); got != "process name, or a comma list" {
+	if got := focusName(a, c.Focused()); got != lang.PlayerProcessHint {
 		t.Errorf("Tab after opening Advanced went to %q, want the fold's first field", got)
 	}
 	pressShiftTab(c)
@@ -464,7 +465,7 @@ func TestSpaceLeavesTheFocusOnTheButtonItPresses(t *testing.T) {
 		t.Errorf("Tab after closing Advanced went to %q, want %q", got, after)
 	}
 
-	reset := tabTo(t, a, "Reset", 1)
+	reset := tabTo(t, a, lang.Reset, 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodSettingsReset)
 	if c.Focused() != reset {
@@ -521,12 +522,12 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 	a.render()
 	c := a.win.Canvas()
 	l := a.screens[tabLogs].(*logsScreen)
-	wantOrder(t, a, "Donate", "Record", "Tabs", "error", "info", "debug", "Copy", "Open log file", "Diagnostics", "list")
+	wantOrder(t, a, lang.Donate, lang.Record, "Tabs", "error", "info", "debug", lang.Copy, lang.OpenLogFile, lang.Diagnostics, "list")
 
 	// Diagnostics opens its dialog with the focus on its first control.
-	tabTo(t, a, "Diagnostics", 1)
+	tabTo(t, a, lang.Diagnostics, 1)
 	pressSpace(c)
-	if got := focusName(a, c.Focused()); got != "Run the checks again" {
+	if got := focusName(a, c.Focused()); got != lang.RunChecksAgain {
 		t.Fatalf("the diagnostics open with %q focused", got)
 	}
 	core.mu.Lock()
@@ -535,7 +536,7 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 	pressSpace(c)
 	waitCall(t, core, proto.MethodCoreInfo)
 	for range 5 {
-		if f := c.Focused(); f != nil && focusName(a, f) == "Close" {
+		if f := c.Focused(); f != nil && focusName(a, f) == lang.Close {
 			break
 		}
 		pressTab(c)
@@ -551,12 +552,12 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 		t.Errorf("Space on info: shown %v, %d lines", l.level.Selected, len(l.lines))
 	}
 	pressSpace(c)
-	tabTo(t, a, "Copy", 1)
+	tabTo(t, a, lang.Copy, 1)
 	pressSpace(c)
 	if got := a.fa.Clipboard().Content(); !strings.Contains(got, "session started") {
 		t.Errorf("Copy put %q on the clipboard", got)
 	}
-	tabTo(t, a, "Open log file", 1)
+	tabTo(t, a, lang.OpenLogFile, 1)
 	pressSpace(c)
 	if !slices.Equal(*opened, []string{l.path}) {
 		t.Errorf("Open log file opened %v", *opened)
@@ -574,9 +575,9 @@ func TestTheKeyboardWorksAbout(t *testing.T) {
 	a.showTab(tabAbout)
 	a.render()
 	c := a.win.Canvas()
-	wantOrder(t, a, "Donate", "Record", "Tabs", "Source code on GitHub", "Project page", "Check for updates", "♥ Donate")
+	wantOrder(t, a, lang.Donate, lang.Record, "Tabs", lang.SourceCode, lang.ProjectPage, lang.CheckForUpdates, lang.DonateHeart)
 	// Check for updates asks GitHub: not pressed here.
-	for _, name := range []string{"Donate", "Source code on GitHub", "Project page", "♥ Donate"} {
+	for _, name := range []string{lang.Donate, lang.SourceCode, lang.ProjectPage, lang.DonateHeart} {
 		tabTo(t, a, name, 1)
 		pressSpace(c)
 	}
@@ -592,8 +593,8 @@ func TestTheKeyboardWorksTheOfflineScreen(t *testing.T) {
 	m.SetConn(model.Disconnected, "spytifyd is not running")
 	a.render()
 	order := tabOrder(t, a)
-	if len(order) < 4 || !slices.Equal(order[:3], []string{"Donate", "Start the recorder", "process name, or a comma list"}) ||
-		order[len(order)-1] != "command that starts the player (optional)" {
+	if len(order) < 4 || !slices.Equal(order[:3], []string{lang.Donate, lang.StartRecorder, lang.PlayerProcessHint}) ||
+		order[len(order)-1] != lang.LaunchCommandHint {
 		t.Fatalf("Tab goes through %v", order)
 	}
 	// Start the recorder would start spytifyd: not pressed here.
@@ -618,7 +619,7 @@ func TestDialogsTakeTheFocus(t *testing.T) {
 	a.quitApp = func() { quit = true }
 
 	a.quit()
-	if got := focusName(a, c.Focused()); got != "No" {
+	if got := focusName(a, c.Focused()); got != lang.No {
 		t.Fatalf("Quit Spytify? opens with %q focused", got)
 	}
 	pressSpace(c)
@@ -627,7 +628,7 @@ func TestDialogsTakeTheFocus(t *testing.T) {
 	}
 	a.quit()
 	pressTab(c)
-	if got := focusName(a, c.Focused()); got != "Yes" {
+	if got := focusName(a, c.Focused()); got != lang.Yes {
 		t.Fatalf("Tab from No went to %q", got)
 	}
 	pressSpace(c)
@@ -636,7 +637,7 @@ func TestDialogsTakeTheFocus(t *testing.T) {
 	}
 
 	a.showError(errors.New("boom"))
-	if got := focusName(a, c.Focused()); got != "OK" {
+	if got := focusName(a, c.Focused()); got != lang.OK {
 		t.Fatalf("an error opens with %q focused", got)
 	}
 	pressSpace(c)
@@ -656,13 +657,13 @@ func TestTheFirstRunNoticeTakesTheKeyboard(t *testing.T) {
 	closed := false
 	a.maybeShowFirstRun(func() { closed = true })
 	c := a.win.Canvas()
-	if got := focusName(a, c.Focused()); got != trackerLabel {
+	if got := focusName(a, c.Focused()); got != lang.TrackerSwitch {
 		t.Fatalf("the notice opens with %q focused", got)
 	}
 	pressSpace(c)
 	pressTab(c)
 	pressTab(c)
-	if got := focusName(a, c.Focused()); got != "OK" {
+	if got := focusName(a, c.Focused()); got != lang.OK {
 		t.Fatalf("two Tabs on, %q is focused", got)
 	}
 	pressSpace(c)
@@ -681,15 +682,15 @@ func TestTheCrashDialogTakesTheKeyboard(t *testing.T) {
 	a.checkCrashes()
 	c := a.win.Canvas()
 	d := overlay(t, a)
-	if got := focusName(a, c.Focused()); got != "Error and stack trace" {
+	if got := focusName(a, c.Focused()); got != lang.ErrorAndTrace {
 		t.Fatalf("the crash dialog opens with %q focused", got)
 	}
 	pressSpace(c)
 	if !contains(texts(d), "panic: boom") {
 		t.Error("Space did not unfold the trace")
 	}
-	wantOrder(t, a, "Error and stack trace", "Close", "Copy", "Report on GitHub")
-	tabTo(t, a, "Close", 1)
+	wantOrder(t, a, lang.ErrorAndTrace, lang.Close, lang.Copy, lang.ReportOnGitHub)
+	tabTo(t, a, lang.Close, 1)
 	pressSpace(c)
 	if c.Overlays().Top() != nil {
 		t.Fatal("Close left the dialog shown")
@@ -706,22 +707,22 @@ func TestTabLeavesTheComment(t *testing.T) {
 	a.showTab(tabLogs)
 	a.render()
 	c := a.win.Canvas()
-	tabTo(t, a, "Diagnostics", 1)
+	tabTo(t, a, lang.Diagnostics, 1)
 	pressSpace(c)
-	tabTo(t, a, "Send to the developers", 1)
+	tabTo(t, a, lang.SendToDevelopers, 1)
 	pressSpace(c)
-	if got := focusName(a, c.Focused()); got != "What will be sent" {
+	if got := focusName(a, c.Focused()); got != lang.WhatWillBeSent {
 		t.Fatalf("the dialog opens with %q focused", got)
 	}
 	pressTab(c)
-	if got := focusName(a, c.Focused()); got != pictureLabel {
+	if got := focusName(a, c.Focused()); got != lang.SendPicture {
 		t.Fatalf("Tab from the fold: %q focused, want the picture's tick box", got)
 	}
 	pressTab(c)
 	comment := c.Focused()
 	test.Type(comment, "stuck")
 	pressTab(c)
-	if got := focusName(a, c.Focused()); got != "Cancel" || strings.Contains(comment.(*commentEntry).Text, "\t") {
+	if got := focusName(a, c.Focused()); got != lang.Cancel || strings.Contains(comment.(*commentEntry).Text, "\t") {
 		t.Fatalf("Tab from the comment: %q focused, comment %q", got, comment.(*commentEntry).Text)
 	}
 	pressShiftTab(c)
@@ -730,7 +731,7 @@ func TestTabLeavesTheComment(t *testing.T) {
 	}
 	pressTab(c)
 	pressTab(c)
-	if got := focusName(a, c.Focused()); got != "Send" {
+	if got := focusName(a, c.Focused()); got != lang.Send {
 		t.Fatalf("two Tabs from the comment: %q", got)
 	}
 	pressSpace(c)

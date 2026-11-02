@@ -23,6 +23,7 @@ import (
 
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -166,7 +167,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.tel.SetScreenshot(a.screenshot)
 	a.applyTheme("system")
 	a.covers = newCovers(a.scheduleRender)
-	a.win = fa.NewWindow("Spytify")
+	a.win = fa.NewWindow(lang.Spytify)
 	a.win.SetIcon(Logo)
 	a.win.Resize(fyne.NewSize(920, 640))
 
@@ -175,11 +176,11 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	// Logs and About their plain colour; Settings keeps its cards on the
 	// page, off them, and its scroll bar at the window's edge.
 	a.tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon("Record", theme.MediaRecordIcon(), a.screens[tabRecord].content()),
-		container.NewTabItemWithIcon("Library", theme.FolderIcon(), a.screens[tabLibrary].content()),
-		container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), a.screens[tabSettings].content()),
-		container.NewTabItemWithIcon("Logs", theme.ListIcon(), a.screens[tabLogs].content()),
-		container.NewTabItemWithIcon("About", theme.InfoIcon(), a.screens[tabAbout].content()),
+		container.NewTabItemWithIcon(lang.Record, theme.MediaRecordIcon(), a.screens[tabRecord].content()),
+		container.NewTabItemWithIcon(lang.Library, theme.FolderIcon(), a.screens[tabLibrary].content()),
+		container.NewTabItemWithIcon(lang.Settings, theme.SettingsIcon(), a.screens[tabSettings].content()),
+		container.NewTabItemWithIcon(lang.Logs, theme.ListIcon(), a.screens[tabLogs].content()),
+		container.NewTabItemWithIcon(lang.About, theme.InfoIcon(), a.screens[tabAbout].content()),
 	)
 	a.tabs.SetTabLocation(container.TabLocationTop)
 	a.tabs.OnSelected = func(*container.TabItem) {
@@ -201,9 +202,9 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.update.Hide()
 	a.donate = newTipButton("", heartIcon, func() { a.openURL(donateURL) })
 	a.donate.Importance = widget.LowImportance
-	a.donate.SetToolTip("Donate")
-	a.action = newLitButton("Record", theme.MediaRecordIcon(), widget.HighImportance, a.toggleRecording)
-	a.action.SetToolTip(shortcutTip("Record", actionKey))
+	a.donate.SetToolTip(lang.Donate)
+	a.action = newLitButton(lang.Record, theme.MediaRecordIcon(), widget.HighImportance, a.toggleRecording)
+	a.action.SetToolTip(shortcutTip(lang.Record, actionKey))
 	// The wordmark: the logo with the name in its green.
 	mark := canvas.NewImageFromResource(Wordmark)
 	mark.FillMode = canvas.ImageFillContain
@@ -218,9 +219,9 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.banner.Hide()
 	a.maskPaths(a.banner)
 
-	start := newLitButton("Start the recorder", theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
+	start := newLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
 	a.player = newPlayerCard(a)
-	intro := widget.NewLabel("Spytify records through spytifyd, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set.")
+	intro := widget.NewLabel(lang.RecorderExplained)
 	intro.Wrapping = fyne.TextWrapWord
 	a.offlineErr = widget.NewLabel("")
 	a.offlineErr.Wrapping = fyne.TextWrapWord
@@ -228,13 +229,13 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.maskPaths(a.offlineErr)
 	pad := theme.Padding()
 	a.offline = container.NewVScroll(container.New(layout.NewCustomPaddedLayout(pad, pad*2, pad*2, pad*2), container.NewVBox(
-		heading("The recorder is not running"),
+		heading(lang.RecorderNotRunning),
 		a.offlineErr,
 		intro,
 		container.NewHBox(start.lit),
 		caption(opts.Socket),
 		widget.NewSeparator(),
-		newCard(sectionTitle("Player"), indent(a.player.box)),
+		newCard(sectionTitle(lang.Player), indent(a.player.box)),
 	)))
 	a.starting = opts.AutoStart
 
@@ -363,7 +364,7 @@ func (a *App) quit() {
 		a.quitApp()
 		return
 	}
-	ask(a.win, "Quit Spytify?", "Recording stops, and the track being recorded is not kept.", func(ok bool) {
+	ask(a.win, lang.Quit, lang.QuitText, func(ok bool) {
 		if ok {
 			a.quitApp()
 		}
@@ -386,7 +387,8 @@ func (a *App) showOutputSetting() {
 	a.noteAction("choose another folder")
 	a.showTab(tabSettings)
 	if set, ok := a.screens[tabSettings].(*settingsScreen); ok {
-		set.search.SetText("Output folder")
+		d, _ := settings.Lookup(settings.OutputDir.String())
+		set.search.SetText(d.Label)
 	}
 }
 
@@ -407,44 +409,44 @@ func (a *App) render() {
 	switch {
 	case !connected && a.starting:
 		a.dot.Importance = widget.LowImportance
-		a.status.SetText(startingText)
+		a.status.SetText(lang.StartingRecorder)
 	case !connected:
 		a.dot.Importance = widget.LowImportance
-		a.status.SetText("Not connected")
+		a.status.SetText(lang.NotConnected)
 	case !s.HaveInfo:
 		a.dot.Importance = widget.LowImportance
-		a.status.SetText("Connecting…")
+		a.status.SetText(lang.Connecting)
 	case running:
 		a.dot.Importance = widget.SuccessImportance
-		a.status.SetText(s.Info.Target.Process + " is running")
+		a.status.SetText(fmt.Sprintf(lang.PlayerRunning, s.Info.Target.Process))
 	default:
 		a.dot.Importance = widget.WarningImportance
-		a.status.SetText(s.Info.Target.Process + " is not running")
+		a.status.SetText(fmt.Sprintf(lang.PlayerNotRunning, s.Info.Target.Process))
 	}
 	setCaption(a.output, outputText(s.Settings))
 	switch {
 	case !connected:
 		a.action.Disable()
-		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
+		a.setAction(lang.Record, theme.MediaRecordIcon(), widget.HighImportance)
 	case s.Session == proto.StateStopping:
 		a.action.Enable()
-		a.setAction("Stop now", theme.MediaStopIcon(), widget.DangerImportance)
+		a.setAction(lang.StopNow, theme.MediaStopIcon(), widget.DangerImportance)
 	case s.Recording():
 		a.action.Enable()
-		a.setAction("Stop", theme.MediaStopIcon(), widget.DangerImportance)
+		a.setAction(lang.Stop, theme.MediaStopIcon(), widget.DangerImportance)
 	case s.HaveInfo && !running:
 		// Nothing would play: the app bar says the player is not running,
 		// and the Record screen offers to open it.
 		a.action.Disable()
-		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
+		a.setAction(lang.Record, theme.MediaRecordIcon(), widget.HighImportance)
 	case s.HaveInfo && checkFails(s.Info.Checks, proto.CheckOutputWritable):
 		// Nothing could be saved: the Record screen says so and leads to
 		// the diagnostics.
 		a.action.Disable()
-		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
+		a.setAction(lang.Record, theme.MediaRecordIcon(), widget.HighImportance)
 	default:
 		a.action.Enable()
-		a.setAction("Record", theme.MediaRecordIcon(), widget.HighImportance)
+		a.setAction(lang.Record, theme.MediaRecordIcon(), widget.HighImportance)
 	}
 	a.syncTray()
 	if s.LastError != nil && s.LastError.Msg != "" && s.Recording() {
@@ -453,9 +455,9 @@ func (a *App) render() {
 	} else {
 		a.banner.Hide()
 	}
-	record := "Record"
+	record := lang.Record
 	if n := s.Totals().Saved; s.Recording() && n > 0 {
-		record = fmt.Sprintf("Record · %d", n)
+		record = fmt.Sprintf(lang.RecordCount, n)
 	}
 	if connected {
 		a.replaceOtherBuild(s)
@@ -573,7 +575,7 @@ func (a *App) checkUpdate() {
 		return
 	}
 	fyne.Do(func() {
-		a.update.SetText("Update to " + tag)
+		a.update.SetText(fmt.Sprintf(lang.UpdateTo, tag))
 		a.update.OnTapped = func() { a.openURL(page) }
 		a.update.Show()
 		a.bar.Refresh()

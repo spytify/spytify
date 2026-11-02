@@ -11,11 +11,10 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
-
-const disclaimer = "For personal use of content you are entitled to listen to; you are responsible for the terms of the services you record."
 
 type aboutScreen struct {
 	app      *App
@@ -28,14 +27,14 @@ func newAboutScreen(a *App) *aboutScreen {
 	logo := canvas.NewImageFromResource(Wordmark)
 	logo.FillMode = canvas.ImageFillContain
 	logo.SetMinSize(fyne.NewSize(300, 98))
-	tagline := widget.NewLabelWithStyle("Records any application's audio, splits it into tracks and tags them.", fyne.TextAlignCenter, fyne.TextStyle{})
+	tagline := widget.NewLabelWithStyle(lang.Tagline, fyne.TextAlignCenter, fyne.TextStyle{})
 	tagline.Wrapping = fyne.TextWrapWord
-	source := widget.NewHyperlink("Source code on GitHub", nil)
+	source := widget.NewHyperlink(lang.SourceCode, nil)
 	source.OnTapped = func() { a.openURL(sourceURL) }
-	project := newIconButton("Project page", theme.HomeIcon(), func() { a.openURL(siteURL) })
-	donate := newLitButton("♥ Donate", nil, widget.HighImportance, func() { a.openURL(donateURL) })
-	updates := newIconButton("Check for updates", theme.DownloadIcon(), s.checkNow)
-	legal := widget.NewLabelWithStyle(disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
+	project := newIconButton(lang.ProjectPage, theme.HomeIcon(), func() { a.openURL(siteURL) })
+	donate := newLitButton(lang.DonateHeart, nil, widget.HighImportance, func() { a.openURL(donateURL) })
+	updates := newIconButton(lang.CheckForUpdates, theme.DownloadIcon(), s.checkNow)
+	legal := widget.NewLabelWithStyle(lang.Disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	legal.Wrapping = fyne.TextWrapWord
 	legal.SizeName = theme.SizeNameCaptionText
 	// The spacers above and below share what room is left, so the content
@@ -56,11 +55,11 @@ func newAboutScreen(a *App) *aboutScreen {
 func (s *aboutScreen) content() fyne.CanvasObject { return s.root }
 
 func (s *aboutScreen) render(st model.State) {
-	core := "not connected"
+	core := lang.RecorderNotConnected
 	if st.HaveInfo {
-		core = fmt.Sprintf("%s on %s", st.Info.Version, st.Info.Platform)
+		core = fmt.Sprintf(lang.RecorderOn, st.Info.Version, st.Info.Platform)
 	}
-	setCaption(s.versions, fmt.Sprintf("App %s · recorder %s · protocol %d", proto.Version, core, proto.Protocol))
+	setCaption(s.versions, fmt.Sprintf(lang.Versions, proto.Version, core, proto.Protocol))
 }
 
 func (s *aboutScreen) checkNow() {
@@ -72,13 +71,13 @@ func (s *aboutScreen) checkNow() {
 			case err != nil:
 				s.app.showError(fmt.Errorf("update check: %w", err))
 			case tag != "" && newer(tag, proto.Version):
-				ask(s.app.win, "Update available", "Spytify "+tag+" is out. Open the release page?", func(ok bool) {
+				ask(s.app.win, lang.UpdateAvailable, fmt.Sprintf(lang.UpdateAvailableText, tag), func(ok bool) {
 					if ok {
 						s.app.openURL(page)
 					}
 				})
 			default:
-				inform(s.app.win, "Up to date", "Spytify "+proto.Version+" is the latest version.")
+				inform(s.app.win, lang.UpToDate, fmt.Sprintf(lang.UpToDateText, proto.Version))
 			}
 		})
 	}()
@@ -95,10 +94,9 @@ func (a *App) maybeShowFirstRun(then func()) {
 		a.askPrivacy(then)
 		return
 	}
-	body := widget.NewLabel("Spytify records the audio the player sends to your speakers. " +
-		"Streaming services send compressed audio, so a FLAC or WAV file avoids a second lossy pass but adds no quality.\n\n" + disclaimer)
+	body := widget.NewLabel(lang.FirstRunText + "\n\n" + lang.Disclaimer)
 	body.Wrapping = fyne.TextWrapWord
-	again := newCheck("Don't show this again")
+	again := newCheck(lang.DontShowAgain)
 	again.SetChecked(true)
 	box := container.NewVBox(body)
 	var tracker *check
@@ -107,7 +105,7 @@ func (a *App) maybeShowFirstRun(then func()) {
 		box.Add(tracker)
 	}
 	box.Add(again)
-	showDialog(a.win, "Before you record", box, "OK", "", fyne.NewSize(460, 300), func(bool) {
+	showDialog(a.win, lang.BeforeYouRecord, box, lang.OK, "", fyne.NewSize(460, 300), func(bool) {
 		if again.Checked {
 			prefs.SetBool(firstRunKey, true)
 		}

@@ -33,6 +33,7 @@ import (
 
 	"github.com/spytify/spytify/internal/bus"
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -238,8 +239,8 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	feedSession(t, m)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"Recording", "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", "Saved", "Skipped: duplicate",
-		"2 saved · 1 skipped · 0 ads", "Stop", "Player is running", "FLAC", "Skip"} {
+	for _, want := range []string{lang.Recording, "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", lang.Saved, fmt.Sprintf(lang.SkippedFor, proto.SkipDuplicate),
+		fmt.Sprintf(lang.SessionTotals, 2, 1, 0, ""), lang.Stop, fmt.Sprintf(lang.PlayerRunning, "Player"), "FLAC", lang.Skip} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
 		}
@@ -249,17 +250,17 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 		t.Error("a saved track's chip says Tagged")
 	}
 	// The app bar's Donate is a heart, as in v1; About has the worded one.
-	if contains(all, "♥ Donate") || !a.donate.Visible() || a.donate.Icon != heartIcon || a.donate.ToolTip() != "Donate" {
+	if contains(all, lang.DonateHeart) || !a.donate.Visible() || a.donate.Icon != heartIcon || a.donate.ToolTip() != lang.Donate {
 		t.Error("the app bar's Donate is not a heart alone")
 	}
-	if a.tabs.Items[tabRecord].Text != "Record · 2" {
+	if a.tabs.Items[tabRecord].Text != fmt.Sprintf(lang.RecordCount, 2) {
 		t.Errorf("Record tab title %q", a.tabs.Items[tabRecord].Text)
 	}
 	r := a.screens[tabRecord].(*recordScreen)
 	if r.clear.Disabled() {
 		t.Error("Clear list is disabled with rows in the list")
 	}
-	if a.action.Text != "Stop" || a.action.Importance != widget.DangerImportance {
+	if a.action.Text != lang.Stop || a.action.Importance != widget.DangerImportance {
 		t.Errorf("app bar action %q", a.action.Text)
 	}
 	snapshot(t, a, "record")
@@ -275,7 +276,7 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	if s := m.Snapshot(); len(s.Rows) != 0 || s.Current == nil {
 		t.Errorf("after Clear list: %d rows, current %v", len(s.Rows), s.Current)
 	}
-	if !r.clear.Disabled() || !contains(texts(a.win.Content()), "No files yet") {
+	if !r.clear.Disabled() || !contains(texts(a.win.Content()), lang.NoFilesYet) {
 		t.Error("the cleared list does not say it is empty")
 	}
 }
@@ -298,7 +299,7 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 		return out
 	}
 	// No format known, no badge for it.
-	if got, want := badges(), []string{"Recording"}; !slices.Equal(got, want) {
+	if got, want := badges(), []string{lang.Recording}; !slices.Equal(got, want) {
 		t.Errorf("card badges %q, want %q", got, want)
 	}
 
@@ -306,7 +307,7 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000},
 		Source: &proto.AudioSource{SampleRate: 96000, Channels: 2}}))
 	a.render()
-	if got, want := badges(), []string{"Recording", "96 kHz", "Stereo", "48 kHz file"}; !slices.Equal(got, want) {
+	if got, want := badges(), []string{lang.Recording, "96 kHz", lang.Stereo, "48 kHz file"}; !slices.Equal(got, want) {
 		t.Errorf("card badges %q, want %q", got, want)
 	}
 	if all := texts(r.card); !contains(all, "Outro") || !contains(all, "M83 · Hurry Up, We're Dreaming") || !contains(all, "0:00 / 4:07") {
@@ -352,10 +353,10 @@ func TestAPausedTrackHasTheInfoBarAboveItsCard(t *testing.T) {
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StatePaused}))
 	a.render()
 	r := a.screens[tabRecord].(*recordScreen)
-	if !r.card.Visible() || r.state.text != "Paused" || r.meter.Visible() {
+	if !r.card.Visible() || r.state.text != lang.StatePaused || r.meter.Visible() {
 		t.Errorf("paused card: shown %v, badge %q, meter shown %v", r.card.Visible(), r.state.text, r.meter.Visible())
 	}
-	if !r.waitRow.Visible() || !strings.HasSuffix(r.waiting.String(), "is paused: press play there.") || !r.play.Visible() || r.restart.Visible() {
+	if !r.waitRow.Visible() || r.waiting.String() != fmt.Sprintf(lang.NothingRecordedPaused, "Player") || !r.play.Visible() || r.restart.Visible() {
 		t.Errorf("info bar shown %v, says %q, Play %v, restart %v", r.waitRow.Visible(), r.waiting.String(), r.play.Visible(), r.restart.Visible())
 	}
 	if d := fyne.CurrentApp().Driver(); d.AbsolutePositionForObject(r.waitRow).Y >= d.AbsolutePositionForObject(r.card).Y {
@@ -370,7 +371,7 @@ func TestAPausedTrackHasTheInfoBarAboveItsCard(t *testing.T) {
 
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	a.render()
-	if r.waitRow.Visible() || r.state.text != "Recording" || !r.meter.Visible() {
+	if r.waitRow.Visible() || r.state.text != lang.Recording || !r.meter.Visible() {
 		t.Errorf("playing again: info bar %v, badge %q, meter %v", r.waitRow.Visible(), r.state.text, r.meter.Visible())
 	}
 }
@@ -673,7 +674,7 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	r := a.screens[tabRecord].(*recordScreen)
 	r.list.ScrollToBottom()
 	all := texts(a.win.Content())
-	if !contains(all, "Skipped: incomplete") || !contains(all, "Keep anyway") {
+	if !contains(all, fmt.Sprintf(lang.SkippedFor, lang.ReasonIncomplete)) || !contains(all, lang.KeepAnyway) {
 		t.Errorf("no Keep anyway on the take cut short: %v", all)
 	}
 	// Keep anyway looks like the screen's other buttons: the save icon
@@ -689,7 +690,7 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 
 	m.Apply(event(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "s-004"}))
 	a.render()
-	if contains(texts(a.win.Content()), "Keep anyway") {
+	if contains(texts(a.win.Content()), lang.KeepAnyway) {
 		t.Error("Keep anyway stays once the take is let go")
 	}
 }
@@ -702,7 +703,7 @@ func TestWaitingOffersToRestartTheTrack(t *testing.T) {
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
 	a.render()
 	all := texts(a.win.Content())
-	if !contains(all, "Waiting for the next track to start.") || !contains(all, "Record this track from the start") {
+	if !contains(all, lang.WaitingNextTrack) || !contains(all, lang.RecordFromStart) {
 		t.Fatalf("waiting state: %v", all)
 	}
 	snapshot(t, a, "waiting")
@@ -735,25 +736,25 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	// The player was closed since: Record is off, the list stays, and the
 	// row offers to open the player.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
-	offers("Nothing is recorded while Player is not running.", r.launch)
-	if r.launch.Text != "Open Player" || !a.action.Disabled() || len(r.rows) != 1 {
+	offers(fmt.Sprintf(lang.NothingRecordedNotRunning, "Player"), r.launch)
+	if r.launch.Text != fmt.Sprintf(lang.Open, "Player") || !a.action.Disabled() || len(r.rows) != 1 {
 		t.Errorf("the button reads %q, Record disabled %v, %d rows", r.launch.Text, a.action.Disabled(), len(r.rows))
 	}
 	snapshot(t, a, "waiting-player-closed")
 	test.Tap(r.launch)
 	waitCall(t, core, proto.MethodPlayerLaunch)
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 4242}))
-	offers("Session ended.", nil)
+	offers(lang.SessionEnded, nil)
 
 	// It quits during a session.
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
-	offers("Nothing is recorded while Player is not running.", r.launch)
+	offers(fmt.Sprintf(lang.NothingRecordedNotRunning, "Player"), r.launch)
 
 	// It opens again, paused.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 4243}))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StatePaused}))
-	offers("Nothing is recorded while Player is paused: press play there.", r.play)
+	offers(fmt.Sprintf(lang.NothingRecordedPaused, "Player"), r.play)
 	snapshot(t, a, "waiting-player-paused")
 	test.Tap(r.play)
 	deadline := time.Now().Add(5 * time.Second)
@@ -772,7 +773,7 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 
 	// It plays the track it was on, which started before the session.
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
-	offers("Waiting for the next track to start.", r.restart)
+	offers(lang.WaitingNextTrack, r.restart)
 }
 
 func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
@@ -782,17 +783,17 @@ func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	m.SetSettings(defaults())
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"Ready to record", "Press Record, then play music in Player."} {
+	for _, want := range []string{lang.ReadyToRecord, fmt.Sprintf(lang.ReadyText, "Player", defaults()["output.dir"])} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the idle screen", want)
 		}
 	}
-	for _, unwanted := range []string{"pid 4242", "capture helper", "Open diagnostics"} {
+	for _, unwanted := range []string{"pid 4242", "capture helper", lang.OpenDiagnostics} {
 		if contains(all, unwanted) {
 			t.Errorf("%q is on the idle Record screen; the checks live in Logs", unwanted)
 		}
 	}
-	if n := len(buttons(a.win.Content(), "Record")); n != 1 {
+	if n := len(buttons(a.win.Content(), lang.Record)); n != 1 {
 		t.Errorf("%d Record buttons; want the app bar's only", n)
 	}
 	snapshot(t, a, "idle")
@@ -802,13 +803,13 @@ func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	down.Checks[1].OK = false
 	m.SetInfo(down)
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, "Open Player") || contains(all, "Open diagnostics") {
+	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.Open, "Player")) || contains(all, lang.OpenDiagnostics) {
 		t.Errorf("player not running: %v", all)
 	}
 	// It starts: the check follows the target's state, and the offer goes.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 99}))
 	a.render()
-	if all := texts(a.win.Content()); contains(all, "Open Player") || !checkOK(m.Snapshot().Info.Checks, "player running") {
+	if all := texts(a.win.Content()); contains(all, fmt.Sprintf(lang.Open, "Player")) || !checkOK(m.Snapshot().Info.Checks, "player running") {
 		t.Errorf("player started: %v", all)
 	}
 	// Any other failing check sends the user to the diagnostics.
@@ -816,7 +817,7 @@ func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	failing.Checks[2].OK = false
 	m.SetInfo(failing)
 	a.render()
-	if !contains(texts(a.win.Content()), "Open diagnostics") {
+	if !contains(texts(a.win.Content()), lang.OpenDiagnostics) {
 		t.Error("no way to the diagnostics while a check fails")
 	}
 }
@@ -826,7 +827,7 @@ func TestOfflineScreen(t *testing.T) {
 	m.SetConn(model.Disconnected, "spytifyd is not running")
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{"The recorder is not running", "spytifyd is not running", "Start the recorder", "/tmp/spytify.sock", "Player process"} {
+	for _, want := range []string{lang.RecorderNotRunning, "spytifyd is not running", lang.StartRecorder, "/tmp/spytify.sock", lang.PlayerProcess} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the offline screen", want)
 		}
@@ -857,7 +858,7 @@ func TestOtherScreensRender(t *testing.T) {
 		}
 	}
 	// Advanced settings are folded, and no field carries a caption.
-	for _, unwanted := range []string{"File name template", "Player process", "Embed album cover", "output.dir", "Log level", "Language"} {
+	for _, unwanted := range []string{"File name template", lang.PlayerProcess, "Embed album cover", "output.dir", "Log level", "Language"} {
 		if contains(all, unwanted) {
 			t.Errorf("%q shows on the settings screen", unwanted)
 		}
@@ -873,7 +874,7 @@ func TestOtherScreensRender(t *testing.T) {
 	}
 	s.search.SetText("player")
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, "Player process") || contains(all, "Restart spytifyd") {
+	if all := texts(a.win.Content()); !contains(all, lang.PlayerProcess) || contains(all, lang.RestartRecorder) {
 		t.Errorf("search for player: %v", all)
 	}
 	s.search.SetText("")
@@ -881,22 +882,22 @@ func TestOtherScreensRender(t *testing.T) {
 	a.showTab(tabLogs)
 	a.render()
 	all = texts(a.win.Content())
-	for _, want := range []string{"Diagnostics", "already recorded", "session 20261023-120000 started"} {
+	for _, want := range []string{lang.Diagnostics, "already recorded", "session 20261023-120000 started"} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the logs screen", want)
 		}
 	}
-	tapButton(t, a.win.Content(), "Diagnostics")
-	if d := texts(overlay(t, a)); !contains(d, "All 4 checks pass.") || !contains(d, "ffmpeg found") {
+	tapButton(t, a.win.Content(), lang.Diagnostics)
+	if d := texts(overlay(t, a)); !contains(d, fmt.Sprintf(lang.ChecksPass, 4)) || !contains(d, "ffmpeg found") {
 		t.Errorf("the diagnostics: %v", d)
 	}
 	snapshot(t, a, "logs-diagnostics")
-	tapButton(t, overlay(t, a), "Close")
+	tapButton(t, overlay(t, a), lang.Close)
 
 	a.showTab(tabAbout)
 	a.render()
 	all = texts(a.win.Content())
-	for _, want := range []string{"recorder v2.0.0-alpha on darwin/arm64", "Source code on GitHub", "Project page", "Check for updates", "♥ Donate"} {
+	for _, want := range []string{fmt.Sprintf(lang.Versions, proto.Version, fmt.Sprintf(lang.RecorderOn, "v2.0.0-alpha", "darwin/arm64"), proto.Protocol), lang.SourceCode, lang.ProjectPage, lang.CheckForUpdates, lang.DonateHeart} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the about screen", want)
 		}
@@ -1192,7 +1193,7 @@ func TestQuitWhileRecordingAsksFirst(t *testing.T) {
 	a.render()
 	a.quit()
 	top := a.win.Canvas().Overlays().Top()
-	if top == nil || !contains(texts(top), "Quit Spytify?") {
+	if top == nil || !contains(texts(top), lang.Quit) {
 		t.Fatal("quitting during a recording did not ask")
 	}
 }
@@ -1319,7 +1320,7 @@ func TestANewerReleaseShowsTheBadge(t *testing.T) {
 		t.Fatal("Update shows before any release was found")
 	}
 	a.checkUpdate()
-	if !a.update.Visible() || a.update.Icon != newReleasesIcon || a.update.Text != "Update to v9.0.0" {
+	if !a.update.Visible() || a.update.Icon != newReleasesIcon || a.update.Text != fmt.Sprintf(lang.UpdateTo, "v9.0.0") {
 		t.Fatalf("Update: visible %v, text %q", a.update.Visible(), a.update.Text)
 	}
 	snapshot(t, a, "update")
@@ -1462,8 +1463,8 @@ func TestSourceParts(t *testing.T) {
 	for _, c := range []struct {
 		rate, ch int
 		want     []string
-	}{{44100, 2, []string{"44.1 kHz", "Stereo"}}, {48000, 2, []string{"48 kHz", "Stereo"}}, {48000, 1, []string{"48 kHz", "Mono"}},
-		{96000, 2, []string{"96 kHz", "Stereo", "48 kHz file"}}, {88200, 2, []string{"88.2 kHz", "Stereo", "44.1 kHz file"}},
+	}{{44100, 2, []string{"44.1 kHz", lang.Stereo}}, {48000, 2, []string{"48 kHz", lang.Stereo}}, {48000, 1, []string{"48 kHz", lang.Mono}},
+		{96000, 2, []string{"96 kHz", lang.Stereo, "48 kHz file"}}, {88200, 2, []string{"88.2 kHz", lang.Stereo, "44.1 kHz file"}},
 		{96000, 6, []string{"96 kHz", "6 channels", "48 kHz file"}}, {0, 2, nil}} {
 		if got := sourceParts(c.rate, c.ch); !slices.Equal(got, c.want) {
 			t.Errorf("sourceParts(%d, %d) = %q, want %q", c.rate, c.ch, got, c.want)
@@ -1622,7 +1623,7 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	a.render()
 	snapshot(t, a, "starting")
 	all := texts(a.win.Content())
-	if !contains(all, "Starting the recorder…") || contains(all, "Start the recorder") || contains(all, "The recorder is not running") {
+	if !contains(all, lang.StartingRecorder) || contains(all, lang.StartRecorder) || contains(all, lang.RecorderNotRunning) {
 		t.Fatalf("starting: %v", all)
 	}
 	if a.center.Objects[0] != a.tabsView || a.tabs.SelectedIndex() != tabRecord {
@@ -1635,7 +1636,7 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	a.showTab(tabRecord)
 	a.startFailed(link.ErrInArchive)
 	all = texts(a.win.Content())
-	for _, want := range []string{"The recorder is not running", link.ErrInArchive.Error(), "Start the recorder"} {
+	for _, want := range []string{lang.RecorderNotRunning, link.ErrInArchive.Error(), lang.StartRecorder} {
 		if !contains(all, want) {
 			t.Errorf("%q not shown after a failed start: %v", want, all)
 		}
@@ -1643,7 +1644,7 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	m.SetConn(model.Connected, "")
 	m.SetInfo(info())
 	a.render()
-	if contains(texts(a.win.Content()), "Starting the recorder…") {
+	if contains(texts(a.win.Content()), lang.StartingRecorder) {
 		t.Error("still starting once connected")
 	}
 }
@@ -1668,7 +1669,7 @@ func TestRecordWaitsForThePlayer(t *testing.T) {
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
 	a.render()
-	if a.action.Disabled() || a.action.Text != "Stop" {
+	if a.action.Disabled() || a.action.Text != lang.Stop {
 		t.Fatalf("player quit while recording: %q disabled %v", a.action.Text, a.action.Disabled())
 	}
 }
@@ -1697,14 +1698,14 @@ func TestTheDiagnosticsAreADialog(t *testing.T) {
 	m.SetInfo(info())
 	a.render()
 	d := diagnostics(t, a)
-	if all := texts(d); !contains(all, "All 4 checks pass.") {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 4)) {
 		t.Fatalf("opened from Record: %v", all)
 	}
 	failCheck(a, m)
-	if all := texts(d); !contains(all, "1 of 5 checks need attention.") || !contains(all, "ffmpeg not found") {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 5)) || !contains(all, "ffmpeg not found") {
 		t.Errorf("a check fails under the dialog: %v", all)
 	}
-	tapButton(t, d, "Close")
+	tapButton(t, d, lang.Close)
 	if a.win.Canvas().Overlays().Top() != nil || a.tabs.SelectedIndex() != tabRecord {
 		t.Errorf("closed: a dialog %v, tab %d", a.win.Canvas().Overlays().Top(), a.tabs.SelectedIndex())
 	}
@@ -1803,7 +1804,7 @@ func TestNoDiagnosticsForAPlayerThatIsOff(t *testing.T) {
 	m.SetSettings(defaults())
 	a.render()
 	all := texts(a.win.Content())
-	if !contains(all, "Open Player") || contains(all, "Open diagnostics") {
+	if !contains(all, fmt.Sprintf(lang.Open, "Player")) || contains(all, lang.OpenDiagnostics) {
 		t.Errorf("player off: %v", all)
 	}
 	// The check can lag behind the player's state, which the app bar
@@ -1811,7 +1812,7 @@ func TestNoDiagnosticsForAPlayerThatIsOff(t *testing.T) {
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 7}))
 	m.SetInfo(stale)
 	a.render()
-	if all := texts(a.win.Content()); contains(all, "Open diagnostics") {
+	if all := texts(a.win.Content()); contains(all, lang.OpenDiagnostics) {
 		t.Errorf("a stale player check sends to the diagnostics: %v", all)
 	}
 }
@@ -1826,16 +1827,16 @@ func TestRecordIsOffWithoutAnOutputFolder(t *testing.T) {
 	m.SetSettings(defaults())
 	a.render()
 	all := texts(a.win.Content())
-	if !a.action.Disabled() || !contains(all, "Record is off") || !contains(all, "Open diagnostics") || contains(all, "Ready to record") {
+	if !a.action.Disabled() || !contains(all, lang.RecordIsOff) || !contains(all, lang.OpenDiagnostics) || contains(all, lang.ReadyToRecord) {
 		t.Fatalf("output folder gone: Record disabled %v, screen %v", a.action.Disabled(), all)
 	}
 	snapshot(t, a, "record-no-output")
-	tapButton(t, a.win.Content(), "Open diagnostics")
+	tapButton(t, a.win.Content(), lang.OpenDiagnostics)
 	if a.tabs.SelectedIndex() != tabRecord {
 		t.Fatalf("Open diagnostics shows tab %d", a.tabs.SelectedIndex())
 	}
 	snapshot(t, a, "diagnostics-no-output")
-	tapButton(t, overlay(t, a), "Choose another folder")
+	tapButton(t, overlay(t, a), lang.ChooseAnotherFolder)
 	set := a.screens[tabSettings].(*settingsScreen)
 	if a.tabs.SelectedIndex() != tabSettings || set.search.Text != "Output folder" {
 		t.Fatalf("Choose another folder shows tab %d, searching %q", a.tabs.SelectedIndex(), set.search.Text)
@@ -1855,13 +1856,13 @@ func TestRecordIsOffWithoutAnOutputFolder(t *testing.T) {
 	m.SetInfo(outputGone())
 	a.render()
 	all = texts(a.win.Content())
-	if !a.action.Disabled() || !contains(all, "Session ended: Spytify cannot write to the output folder, so Record is off.") || !contains(all, "Open diagnostics") {
+	if !a.action.Disabled() || !contains(all, lang.SessionEndedBlocked) || !contains(all, lang.OpenDiagnostics) {
 		t.Fatalf("session ended without its folder: Record disabled %v, screen %v", a.action.Disabled(), all)
 	}
 	snapshot(t, a, "record-session-no-output")
 	m.SetInfo(info())
 	a.render()
-	if a.action.Disabled() || contains(texts(a.win.Content()), "Open diagnostics") {
+	if a.action.Disabled() || contains(texts(a.win.Content()), lang.OpenDiagnostics) {
 		t.Error("Record stays off once the folder is back")
 	}
 }
@@ -1889,10 +1890,10 @@ func TestTheOutputFolderIsCheckedAgain(t *testing.T) {
 	// has them, the dialog is open and shows the one that fails.
 	eventually(t, "the checks did not run again after the refused start", failing)
 	a.render()
-	if len(buttons(overlay(t, a), "Choose another folder")) != 1 || !a.action.Disabled() {
+	if len(buttons(overlay(t, a), lang.ChooseAnotherFolder)) != 1 || !a.action.Disabled() {
 		t.Fatalf("after the refused start: diagnostics %v, Record disabled %v", texts(overlay(t, a)), a.action.Disabled())
 	}
-	tapButton(t, overlay(t, a), "Close")
+	tapButton(t, overlay(t, a), lang.Close)
 	// Another folder chosen.
 	core.setNoOutput(false)
 	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{"output.dir": "/Volumes/Other"}}))

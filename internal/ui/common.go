@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -22,7 +23,7 @@ func showError(w fyne.Window, err error) dialog.Dialog {
 	if errors.As(err, &perr) {
 		err = errors.New(perr.Message)
 	}
-	return showText(w, "Error", capitalized(err.Error()), "OK", "", nil)
+	return showText(w, lang.Error, capitalized(err.Error()), lang.OK, "", nil)
 }
 
 func fmtDuration(ms int64) string {

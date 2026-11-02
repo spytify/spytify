@@ -10,6 +10,8 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // Escape closes the modal on top of the window, as its Close, Cancel or No
@@ -130,12 +132,12 @@ func showText(w fyne.Window, title, message, dismiss, confirm string, answered f
 
 // ask is dialog.ShowConfirm: No, then Yes.
 func ask(w fyne.Window, title, message string, answered func(bool)) {
-	showText(w, title, message, "No", "Yes", answered)
+	showText(w, title, message, lang.No, lang.Yes, answered)
 }
 
 // inform is dialog.ShowInformation: OK.
 func inform(w fyne.Window, title, message string) {
-	showText(w, title, message, "OK", "", nil)
+	showText(w, title, message, lang.OK, "", nil)
 }
 
 // capitalized is s with its first letter upper case, as Fyne's error dialog

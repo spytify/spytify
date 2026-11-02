@@ -22,6 +22,7 @@ import (
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -67,7 +68,7 @@ type field struct {
 
 func newSettingsScreen(a *App) *settingsScreen {
 	s := &settingsScreen{app: a, fields: map[string]*field{}, advanced: map[string]*fold{}, open: map[string]bool{}}
-	s.search = newSearch(a, "Search settings", func(string) { s.layout() })
+	s.search = newSearch(a, lang.SearchSettings, func(string) { s.layout() })
 	s.sections = container.New(layout.NewCustomPaddedVBoxLayout(theme.Padding() * 3))
 	// The cards off the window's sides, the scroll bar at its edge, as the
 	// Record screen's and the Library's.
@@ -147,7 +148,7 @@ func (s *settingsScreen) layout() {
 		}
 		rows := main
 		if len(block) > 0 {
-			acc := newFold("Advanced", newBlock(block...))
+			acc := newFold(lang.Advanced, newBlock(block...))
 			if q != "" || s.open[g] {
 				acc.setOpen(true)
 			}
@@ -164,7 +165,7 @@ func (s *settingsScreen) header(group string, keys []string) fyne.CanvasObject {
 	if len(keys) == 0 {
 		return sectionTitle(group)
 	}
-	reset := newIconButton("Reset", theme.HistoryIcon(), func() {
+	reset := newIconButton(lang.Reset, theme.HistoryIcon(), func() {
 		s.app.noteAction("reset " + group)
 		s.resetKeys(keys)
 	})
@@ -408,11 +409,11 @@ func settingNote(text string) *widget.RichText {
 func (s *settingsScreen) showUnknown(text string) {
 	names := settings.UnknownPlaceholders(text)
 	if len(names) > 0 {
-		lead := "Not a placeholder, left out when saved: "
+		text := lang.NotAPlaceholder
 		if len(names) > 1 {
-			lead = "Not placeholders, left out when saved: "
+			text = lang.NotPlaceholders
 		}
-		setCaption(s.unknown, lead+strings.Join(names, ", "))
+		setCaption(s.unknown, fmt.Sprintf(text, strings.Join(names, ", ")))
 	}
 	if shown := len(names) > 0; shown != s.unknown.Visible() {
 		if shown {
@@ -487,7 +488,7 @@ func (s *settingsScreen) render(st model.State) {
 		}
 	}
 	if s.example != nil {
-		setCaption(s.example, "e.g. "+exampleName(st.Settings))
+		setCaption(s.example, fmt.Sprintf(lang.Example, exampleName(st.Settings)))
 	}
 	// The counter's settings mean something only with the counter prefix.
 	prefix, _ := st.Settings[settings.OutputPrefix.String()].(string)
@@ -575,20 +576,20 @@ func newPlayerCard(a *App) *playerCard {
 		e.SetPlaceHolder(placeholder)
 		return e
 	}
-	p.process = entry("process name, or a comma list")
-	p.bundle = entry("bundle id")
-	p.mpris = entry("org.mpris.MediaPlayer2.<name> (default)")
-	p.launch = entry("command that starts the player (optional)")
-	rows := []fyne.CanvasObject{settingRow("Player process", p.process, nil)}
+	p.process = entry(lang.PlayerProcessHint)
+	p.bundle = entry(lang.BundleIDHint)
+	p.mpris = entry(lang.MPRISNameHint)
+	p.launch = entry(lang.LaunchCommandHint)
+	rows := []fyne.CanvasObject{settingRow(lang.PlayerProcess, p.process, nil)}
 	switch runtime.GOOS {
 	case "darwin":
-		rows = append(rows, settingRow("Bundle id", p.bundle, nil))
+		rows = append(rows, settingRow(lang.BundleID, p.bundle, nil))
 	case "linux":
-		rows = append(rows, settingRow("MPRIS name", p.mpris, nil))
+		rows = append(rows, settingRow(lang.MPRISName, p.mpris, nil))
 	}
-	rows = append(rows, settingRow("Launch command", p.launch, nil))
-	restart := newIconButton("Restart spytifyd", theme.ViewRefreshIcon(), p.restart)
-	note := widget.NewRichText(&widget.TextSegment{Text: "Saved. spytifyd records this player once it restarts.", Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
+	rows = append(rows, settingRow(lang.LaunchCommand, p.launch, nil))
+	restart := newIconButton(lang.RestartRecorder, theme.ViewRefreshIcon(), p.restart)
+	note := widget.NewRichText(&widget.TextSegment{Text: lang.PlayerSaved, Style: widget.RichTextStyle{ColorName: colorSubtle, Inline: true}})
 	p.notice = container.New(rowLayout{}, note, restart)
 	p.notice.Hide()
 	p.box = container.NewVBox(append(lines(rows), p.notice)...)
@@ -669,7 +670,7 @@ func (p *playerCard) restart() {
 		})
 	}
 	if p.app.last.Recording() {
-		ask(p.app.win, "Restart spytifyd?", "A session is recording; restarting stops it now.", func(ok bool) {
+		ask(p.app.win, lang.RestartRecorderAsk, lang.RestartStopsSession, func(ok bool) {
 			if ok {
 				restart()
 			}

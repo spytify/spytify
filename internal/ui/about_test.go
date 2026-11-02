@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // findObject is the first object under o that match accepts, and where it
@@ -48,11 +49,11 @@ func TestAboutKeepsItsContentInTheMiddle(t *testing.T) {
 	})
 	project, projectAt := findObject(root, func(o fyne.CanvasObject) bool {
 		b, ok := asButton(o)
-		return ok && b.Text == "Project page"
+		return ok && b.Text == lang.ProjectPage
 	})
 	legal, legalAt := findObject(root, func(o fyne.CanvasObject) bool {
 		l, ok := o.(*widget.Label)
-		return ok && l.Text == disclaimer
+		return ok && l.Text == lang.Disclaimer
 	})
 	if logo == nil || project == nil || legal == nil {
 		t.Fatalf("logo %v, Project page %v, disclaimer %v", logo != nil, project != nil, legal != nil)
