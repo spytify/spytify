@@ -115,7 +115,7 @@ func TestEscapeClosesEveryModal(t *testing.T) {
 		srv := fakesentry.New(t)
 		a, m := privacyApp(t, srv, false)
 		connect(t, a, m, false)
-		a.tel = telemetry.New(telemetry.Options{Prefs: a.fa.Preferences()})
+		a.tel = untracked(t, a.fa.Preferences())
 		then := false
 		closesOnEscapeEverywhere(t, a, "the crash report", func() {
 			then = false
