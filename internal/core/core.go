@@ -347,7 +347,7 @@ func (c *Core) Info() proto.CoreInfoResult {
 		}
 	}
 	info.Checks = append(info.Checks, c.backends.Probe()...)
-	info.Checks = append(info.Checks, playerHeardCheck(runtime.GOOS, c.silent.Load()))
+	info.Checks = append(info.Checks, playerHeardCheck(c.silent.Load()))
 	dir := v.Path(settings.OutputDir)
 	err := outputWritable(dir)
 	facts := outputFacts(dir, err, v.String(settings.OutputDir) == settings.Defaults().String(settings.OutputDir))
@@ -451,14 +451,14 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 	// Not on the finisher's goroutine: stopping waits for it.
 	fin.full = func() { go func() { _, _ = c.StopSession(true) }() }
 	s := newSession(id, sessionDeps{
-		values:     c.store.Values,
-		emit:       c.emit,
-		log:        c.log,
-		fin:        fin,
-		control:    np.Control,
-		mute:       adMuter(np),
-		silentHint: silentHint(runtime.GOOS),
-		silence:    c.silent.Store,
+		values:       c.store.Values,
+		emit:         c.emit,
+		log:          c.log,
+		fin:          fin,
+		control:      np.Control,
+		mute:         adMuter(np),
+		watchSilence: true,
+		silence:      c.silent.Store,
 	}, opts)
 	restore := c.pinVolume(np)
 	if c.store.Values().Bool(settings.PlayerMuteOutput) && runtime.GOOS == "windows" {

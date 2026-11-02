@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -122,10 +121,9 @@ type sessionDeps struct {
 	control func(cmd string) error
 	// mute silences the player (true) or gives it back its volume.
 	mute func(on bool) error
-	// silentHint is the warning for a capture that delivers only silence
-	// while the player plays; empty, as in tests, the session does not
-	// watch for it.
-	silentHint string
+	// watchSilence makes the session warn of a capture that delivers only
+	// silence while the player plays; tests leave it off.
+	watchSilence bool
 	// silence tells that the capture hears only silence while the player
 	// plays (true), or sound (false).
 	silence func(on bool)
@@ -363,59 +361,14 @@ var captureSilent = 10 * time.Second
 // diskFree reports the free space of a folder's disk; tests replace it.
 var diskFree = freeBytes
 
-// stallHint is what to look at when no audio arrives.
-func stallHint(goos string) string {
-	switch goos {
-	case "darwin":
-		return "No audio from the player for 10 s. If macOS asks to let Spytify record system audio, allow it; it is in System Settings > Privacy & Security > Screen & System Audio Recording."
-	case "windows":
-		return "No audio from the player for 10 s. Check that the Windows Audio service runs and that the player plays on an output device."
-	}
-	return "No audio from the player for 10 s. Check that PipeWire runs: systemctl --user restart pipewire."
-}
-
-// silentHint is what to look at when only silence arrives while the player
-// plays: the player muted somewhere, unless the track is silent there. The
-// capture hears the player's own volume, and its slider in the Volume mixer
-// on Windows or in the sound settings on Linux, but not the output
-// device's. On macOS a tap that System Audio Recording was refused to
-// records silence too, not nothing. The window shows it as the player
-// heard check's detail.
-func silentHint(goos string) string {
-	const lead = "Only silence from the player for 10 s while it plays. Check that the player is not muted in its own volume"
-	switch goos {
-	case "darwin":
-		return lead + "; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
-	case "windows":
-		return lead + ", nor in the Volume mixer."
-	}
-	return lead + ", nor in the system's sound settings."
-}
-
 // playerHeardCheck is the check that the capture did not hear only silence
-// while the player played, until it heard sound again.
-func playerHeardCheck(goos string, silent bool) proto.Check {
+// while the player played, until it heard sound again. The window words
+// its failure as the only silence warning (model.CheckDetail).
+func playerHeardCheck(silent bool) proto.Check {
 	if silent {
-		return proto.Check{Name: proto.CheckPlayerHeard, Detail: silentHint(goos)}
+		return proto.Check{Name: proto.CheckPlayerHeard, Detail: "only silence from the capture while the player played"}
 	}
 	return proto.Check{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"}
-}
-
-// lowQualityHint is what to change when the capture is too poor for
-// music, as from a Bluetooth headset in a call.
-func lowQualityHint(goos string, f pcm.Format) string {
-	what := fmt.Sprintf("%g kHz", float64(f.Rate)/1000)
-	if f.Channels < 2 {
-		what += " mono"
-	}
-	lead := "The player's output device runs at " + what + ", not fit for recording: tracks will sound like a phone call. "
-	switch goos {
-	case "darwin":
-		return lead + "A Bluetooth headset switches to call mode when an app opens its microphone. In System Settings > Sound > Input, choose another microphone, such as the built-in one, or play to another output."
-	case "windows":
-		return lead + "A Bluetooth headset does this while an app uses its microphone. Choose another output in Settings > System > Sound, or end what uses the headset's microphone."
-	}
-	return lead + "A Bluetooth headset does this while an app uses its microphone. Choose another output device, or end what uses the headset's microphone."
 }
 
 func (s *Session) onTick() {
@@ -425,14 +378,16 @@ func (s *Session) onTick() {
 	}
 	if s.status == meta.Playing && !s.stalled && !last.IsZero() && time.Since(last) > captureStall {
 		s.stalled = true
-		s.deps.log.Errorf("no audio from the capture for %s while the player plays", captureStall)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: stallHint(runtime.GOOS)})
+		msg := fmt.Sprintf("no audio from the capture for %s while the player plays", captureStall)
+		s.deps.log.Errorf("%s", msg)
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: msg})
 	}
 	// An ad may be silent, muted by the session or not.
-	if s.deps.silentHint != "" && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
+	if s.deps.watchSilence && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
 		s.silent = true
-		s.deps.log.Errorf("only silence from the capture for %s while the player plays", captureSilent)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: s.deps.silentHint})
+		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureSilent)
+		s.deps.log.Errorf("%s", msg)
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: msg})
 		if s.deps.silence != nil {
 			s.deps.silence(true)
 		}
@@ -521,8 +476,9 @@ func (s *Session) checkQuality(f pcm.Format) {
 	low := poorFormat(f)
 	switch {
 	case low:
-		s.deps.log.Errorf("the capture is %s: tracks will sound like a phone call", f)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: lowQualityHint(runtime.GOOS, f)})
+		msg := fmt.Sprintf("the capture is %s: tracks will sound like a phone call", f)
+		s.deps.log.Errorf("%s", msg)
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: msg, Source: &proto.AudioSource{SampleRate: f.Rate, Channels: f.Channels}})
 	case s.lowFormat:
 		s.deps.log.Infof("the capture is %s, fit for music again", f)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"})
@@ -933,7 +889,8 @@ func (s *Session) classify(seg *segment) {
 	}
 	if seg.reason == "" && !seg.ghost && !seg.provisional {
 		if free, ok := diskFree(v.Path(settings.OutputDir)); ok && free < minFreeBytes {
-			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: fmt.Sprintf("only %d MB free in the output folder", free/1e6)})
+			mb := int64(free / 1e6)
+			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: fmt.Sprintf("only %d MB free in the output folder", mb), FreeMB: &mb})
 			seg.reason = proto.SkipIncomplete
 			if v.Bool(settings.RecorderPauseOnDiskFull) {
 				go func() { _ = s.deps.control(proto.CmdPause) }()

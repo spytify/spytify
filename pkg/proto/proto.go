@@ -323,10 +323,18 @@ type LogEvent struct {
 	TS    string `json:"ts"`
 }
 
+// ErrorEvent is a failure or a warning, by its code. Msg is what the
+// recorder found, in English, for the log and the bug tracker; the window
+// words its known codes itself, from the code and the facts that follow.
 type ErrorEvent struct {
 	Code  string `json:"code"`
 	Msg   string `json:"msg"`
 	Fatal bool   `json:"fatal"`
+	// Source is the capture's format, for capture_low_quality.
+	Source *AudioSource `json:"source,omitempty"`
+	// FreeMB is the space left in the output folder, in millions of bytes,
+	// for disk_full.
+	FreeMB *int64 `json:"free_mb,omitempty"`
 }
 
 // Event is a decoded notification: its method name and raw payload.

@@ -184,18 +184,19 @@ func (r *rig) emit(method string, payload any) {
 	case proto.ErrorEvent:
 		msg := p.Msg
 		switch p.Code {
-		case "capture_low_quality", "capture_stalled", "capture_silent":
-			// The advice after the first sentence depends on the system.
-			if i := strings.Index(msg, ". "); i >= 0 {
-				msg = msg[:i+1] + " …"
-			}
 		case "output_dir", "temp_file", "write":
-			// So does the system's own wording of a file error.
+			// The system words a file error its own way.
 			if i := strings.LastIndex(msg, ": "); i >= 0 {
 				msg = msg[:i+2] + "…"
 			}
 		}
 		line = fmt.Sprintf("error %s %q", p.Code, r.clean(msg))
+		if p.Source != nil {
+			line += fmt.Sprintf(" source=%d/%d", p.Source.SampleRate, p.Source.Channels)
+		}
+		if p.FreeMB != nil {
+			line += fmt.Sprintf(" free_mb=%d", *p.FreeMB)
+		}
 		if p.Fatal {
 			line += " fatal"
 		}

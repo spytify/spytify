@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,10 +50,10 @@ func TestPinnedStallAndRecovery(t *testing.T) {
 	want := []string{
 		"state waiting",
 		"log error: no audio from the capture for 10s while the player plays",
-		`error capture_stalled "No audio from the player for 10 s. …"`,
+		`error capture_stalled "no audio from the capture for 10s while the player plays"`,
 		"log info: audio from the capture again",
 		"log error: no audio from the capture for 10s while the player plays",
-		`error capture_stalled "No audio from the player for 10 s. …"`,
+		`error capture_stalled "no audio from the capture for 10s while the player plays"`,
 		"state paused",
 		"state waiting",
 		"log info: player interface gone",
@@ -75,49 +74,45 @@ func TestPinnedSilentCapture(t *testing.T) {
 	loud := capture.Chunk{Data: slices.Repeat([]byte{0x00, 0x40}, len(silent.Data)/2), Format: f44}
 	reported := []string{
 		"log error: only silence from the capture for 10s while the player plays",
-		`error capture_silent "Only silence from the player for 10 s while it plays. …"`,
+		`error capture_silent "only silence from the capture for 10s while the player plays"`,
 		"log info: sound from the capture again",
 		`error capture_silent ""`,
 	}
-	for _, goos := range []string{"darwin", "windows", "linux"} {
-		t.Run(goos, func(t *testing.T) {
-			r := bareRig(t, map[string]any{"recorder.mute_ads": true}, endOnStop)
-			s := r.s
-			s.deps.silentHint = silentHint(goos)
-			s.deps.mute = func(bool) error { return nil }
-			var told []bool
-			s.deps.silence = func(on bool) { told = append(told, on) }
-			ctx := context.Background()
-			long := time.Now().Add(-time.Hour)
-			s.onMeta(ctx, statusEvent(meta.Playing))
-			s.onChunk(silent)
-			s.onTick()
-			s.lastSound = long
-			s.onTick()
-			s.onChunk(silent)
-			s.onTick()
-			s.onChunk(loud)
-			s.onMeta(ctx, statusEvent(meta.Paused))
-			s.lastSound = long
-			s.onTick()
-			s.onMeta(ctx, statusEvent(meta.Playing))
-			s.setState(proto.StateAd)
-			s.lastSound = long
-			s.onTick()
-			s.setState(proto.StateRecording)
-			s.onTick()
-			s.onChunk(loud)
-			// The player heard check is told of the silence, and of the
-			// first sound; a later sound tells it nothing new.
-			want := append(append([]string{"state waiting"}, reported...), "state paused", "state waiting", "state ad", "state recording")
-			wantTold := []bool{true, false}
-			if got := r.lines(); !slices.Equal(got, want) {
-				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
-			}
-			if !slices.Equal(told, wantTold) {
-				t.Fatalf("player heard check told %v, want %v", told, wantTold)
-			}
-		})
+	r := bareRig(t, map[string]any{"recorder.mute_ads": true}, endOnStop)
+	s := r.s
+	s.deps.watchSilence = true
+	s.deps.mute = func(bool) error { return nil }
+	var told []bool
+	s.deps.silence = func(on bool) { told = append(told, on) }
+	ctx := context.Background()
+	long := time.Now().Add(-time.Hour)
+	s.onMeta(ctx, statusEvent(meta.Playing))
+	s.onChunk(silent)
+	s.onTick()
+	s.lastSound = long
+	s.onTick()
+	s.onChunk(silent)
+	s.onTick()
+	s.onChunk(loud)
+	s.onMeta(ctx, statusEvent(meta.Paused))
+	s.lastSound = long
+	s.onTick()
+	s.onMeta(ctx, statusEvent(meta.Playing))
+	s.setState(proto.StateAd)
+	s.lastSound = long
+	s.onTick()
+	s.setState(proto.StateRecording)
+	s.onTick()
+	s.onChunk(loud)
+	// The player heard check is told of the silence, and of the
+	// first sound; a later sound tells it nothing new.
+	want := append(append([]string{"state waiting"}, reported...), "state paused", "state waiting", "state ad", "state recording")
+	wantTold := []bool{true, false}
+	if got := r.lines(); !slices.Equal(got, want) {
+		t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
+	}
+	if !slices.Equal(told, wantTold) {
+		t.Fatalf("player heard check told %v, want %v", told, wantTold)
 	}
 }
 
@@ -129,7 +124,7 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 		t.Run(fmt.Sprintf("mute_ads=%v", muted), func(t *testing.T) {
 			r := bareRig(t, map[string]any{"recorder.mute_ads": muted}, endOnStop)
 			s := r.s
-			s.deps.silentHint = silentHint("darwin")
+			s.deps.watchSilence = true
 			s.deps.mute = func(bool) error { return nil }
 			long := time.Now().Add(-time.Hour)
 			s.onMeta(context.Background(), statusEvent(meta.Playing))
@@ -148,7 +143,7 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 			s.onTick()
 			want := []string{"state waiting", "state ad", "state recording",
 				"log error: only silence from the capture for 10s while the player plays",
-				`error capture_silent "Only silence from the player for 10 s while it plays. …"`}
+				`error capture_silent "only silence from the capture for 10s while the player plays"`}
 			if got := r.lines(); !slices.Equal(got, want) {
 				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
 			}
@@ -156,31 +151,15 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 	}
 }
 
-// The player heard check fails with the silence's warning while the
-// capture hears only silence, on every system. The warning says to check
-// the player's own volume first, then the system's: its mixer, or on macOS
-// the System Audio Recording permission.
+// The player heard check fails while the capture hears only silence; the
+// window words why, as the silence warning (model.CheckDetail).
 func TestPlayerHeardCheck(t *testing.T) {
 	same := func(a, b proto.Check) bool { return a.Name == b.Name && a.OK == b.OK && a.Detail == b.Detail }
-	for _, goos := range []string{"darwin", "windows", "linux"} {
-		if got, want := playerHeardCheck(goos, false), (proto.Check{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"}); !same(got, want) {
-			t.Errorf("%s with sound: %+v, want %+v", goos, got, want)
-		}
-		if got, want := playerHeardCheck(goos, true), (proto.Check{Name: proto.CheckPlayerHeard, Detail: silentHint(goos)}); !same(got, want) {
-			t.Errorf("%s with only silence: %+v, want %+v", goos, got, want)
-		}
-		if hint := silentHint(goos); !strings.Contains(hint, "the player is not muted in its own volume") {
-			t.Errorf("%s: the warning does not say to check the player's own volume first: %q", goos, hint)
-		}
+	if got, want := playerHeardCheck(false), (proto.Check{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"}); !same(got, want) {
+		t.Errorf("with sound: %+v, want %+v", got, want)
 	}
-	for goos, then := range map[string]string{
-		"darwin":  "Screen & System Audio Recording",
-		"windows": "Volume mixer",
-		"linux":   "sound settings",
-	} {
-		if hint := silentHint(goos); !strings.Contains(hint, then) {
-			t.Errorf("%s: the warning does not name %q: %q", goos, then, hint)
-		}
+	if got, want := playerHeardCheck(true), (proto.Check{Name: proto.CheckPlayerHeard, Detail: "only silence from the capture while the player played"}); !same(got, want) {
+		t.Errorf("with only silence: %+v, want %+v", got, want)
 	}
 }
 
@@ -499,21 +478,6 @@ func TestPinnedDiskFull(t *testing.T) {
 			}
 		})
 	}
-}
-
-// What the session says when no audio comes, only silence comes, or the
-// capture is too poor for music, on each system.
-func TestPinnedHints(t *testing.T) {
-	call := pcm.Format{Rate: 16000, Channels: 1, Sample: pcm.S16LE}
-	f8 := pcm.Format{Rate: 8000, Channels: 2, Sample: pcm.S16LE}
-	var b strings.Builder
-	for _, goos := range []string{"darwin", "windows", "linux"} {
-		fmt.Fprintf(&b, "%s stall: %s\n", goos, stallHint(goos))
-		fmt.Fprintf(&b, "%s silent: %s\n", goos, silentHint(goos))
-		fmt.Fprintf(&b, "%s call: %s\n", goos, lowQualityHint(goos, call))
-		fmt.Fprintf(&b, "%s 8 kHz: %s\n", goos, lowQualityHint(goos, f8))
-	}
-	checkGolden(t, "health/hints", b.String())
 }
 
 // A player whose volume cannot be set is written down in the log, and the

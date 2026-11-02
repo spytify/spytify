@@ -8,7 +8,7 @@
        0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
        0ms  > audio silence, 8000(500ms)
       10ms  log error: the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call
-      10ms  error capture_low_quality "The player's output device runs at 16 kHz mono, not fit for recording: tracks will sound like a phone call. …"
+      10ms  error capture_low_quality "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call" source=16000/1
      500ms  > audio music 1 at 0ms, 48000(3000ms)
      510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
      510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=16000/1
