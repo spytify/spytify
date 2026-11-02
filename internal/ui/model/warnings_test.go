@@ -23,11 +23,13 @@ func TestPinnedWarnings(t *testing.T) {
 	}
 	free := int64(80)
 	fmt.Fprintf(&b, "disk full: %s\n", WarningText(proto.ErrorEvent{Code: "disk_full", FreeMB: &free}, "linux"))
-	want, err := os.ReadFile("testdata/warnings.golden")
+	golden, err := os.ReadFile("testdata/warnings.golden")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := b.String(); got != string(want) {
+	// Git may check text out with CRLF on Windows.
+	want := strings.ReplaceAll(string(golden), "\r\n", "\n")
+	if got := b.String(); got != want {
 		t.Errorf("warnings:\n%s\nwant, from testdata/warnings.golden:\n%s", got, want)
 	}
 }
