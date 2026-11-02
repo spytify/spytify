@@ -143,8 +143,8 @@ func newLibraryScreen(a *App) *libraryScreen {
 			// The title and the artists, as the player lists a track; or in
 			// the Album view, an album's heading. A take Keep anyway saved
 			// says which in a badge, as the Record screen's rows say theirs.
-			reveal, play := newIconButton("", theme.SearchIcon(), nil), newIconButton("", theme.MediaPlayIcon(), nil)
-			reveal.Importance, play.Importance = widget.LowImportance, widget.LowImportance
+			reveal, play := newRowButton("", theme.SearchIcon()), newRowButton("", theme.MediaPlayIcon())
+			play.main = true
 			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(newBadge("", colorSkippedBadge, "", colorOnSkippedBadge)), reveal, play)), albumHeading())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
@@ -172,8 +172,8 @@ func newLibraryScreen(a *App) *libraryScreen {
 			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
-			after.Objects[1].(*button).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
-			after.Objects[2].(*button).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
+			after.Objects[1].(*rowButton).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
+			after.Objects[2].(*rowButton).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
 			box.Refresh()
 		},
 	)

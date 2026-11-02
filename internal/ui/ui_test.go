@@ -650,6 +650,12 @@ func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
 	// The pictures show a listener's folder, not this test's.
 	setCaption(lib.count, pluralFiles(len(files), len(files), "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-rows")
+	// The arrows on the second row's Show in folder.
+	a.win.Canvas().Focus(lib.list)
+	pressKey(a.win.Canvas(), fyne.KeyDown)
+	pressKey(a.win.Canvas(), fyne.KeyRight)
+	snapshot(t, a, "library-row-button")
+	a.win.Canvas().Unfocus()
 
 	a.win.Resize(a.win.Content().MinSize())
 	a.render()
@@ -681,7 +687,7 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	// before its words, and no outline around them.
 	i := slices.IndexFunc(r.rows, func(row model.Row) bool { return row.ID == "s-004" })
 	right := rowAt(r.list, i).content.(*fyne.Container).Objects[2].(*fyne.Container)
-	if keep, ok := right.Objects[1].(*fyne.Container).Objects[0].(*button); !ok {
+	if keep, ok := right.Objects[1].(*fyne.Container).Objects[0].(*rowButton); !ok {
 		t.Errorf("Keep anyway is a %T", right.Objects[1].(*fyne.Container).Objects[0])
 	} else if keep.Icon != theme.DocumentSaveIcon() || keep.Importance != widget.LowImportance {
 		t.Errorf("Keep anyway has the icon %v, importance %v", keep.Icon, keep.Importance)
@@ -1275,6 +1281,8 @@ func asButton(o fyne.CanvasObject) (*widget.Button, bool) {
 	case *widget.Button:
 		return b, true
 	case *button:
+		return &b.Button, true
+	case *rowButton:
 		return &b.Button, true
 	case *ttwidget.Button:
 		return &b.Button, true
