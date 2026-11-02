@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/spytify/spytify/internal/osopen"
 	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/trash"
 )
@@ -25,12 +26,4 @@ var reveal = func(path string) error {
 
 // openPath opens a file or folder with its default application. Tests
 // replace it.
-var openPath = func(path string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return proc.Command("open", path).Start()
-	case "windows":
-		return proc.Command("cmd", "/C", "start", "", path).Start()
-	}
-	return proc.Command("xdg-open", path).Start()
-}
+var openPath = osopen.Open
