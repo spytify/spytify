@@ -1,9 +1,16 @@
 package ui
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -511,5 +518,262 @@ func TestTheTrashButtonMovesAFileToTheTrash(t *testing.T) {
 	}
 	if got := rowNames(lib); !slices.Equal(got, order[2:]) {
 		t.Fatalf("rows after the trash of a file gone: %q", got)
+	}
+}
+
+// A Library row is a file's title over its artists, as the player lists a
+// track: as its tags say once read, as its name says until then and for a
+// file without tags. At the narrowest the window goes, a long line ends in an
+// ellipsis and leaves the buttons in the row.
+func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
+	ff, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	longTitle := "Outro (Extended Mix, Live in a Very Large Concert Hall With the Full Orchestra and the Choir, Second Night)"
+	longArtist := "M83 with The Hurry Up Orchestra, The Choir of the Night, The Second Night Strings, The Brass of the Rain and The Children's Voices"
+	tagged := func(name, title, artist string) string {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(ff, "-v", "error", "-nostdin", "-f", "lavfi", "-t", "0.5", "-i", "anullsrc", "-metadata", "title="+title, "-metadata", "artist="+artist, path)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("make %s: %v: %s", name, err, b)
+		}
+		return path
+	}
+	untagged := func(name, data string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	// Newest first: the Library's order.
+	files := []string{
+		tagged("Outro.flac", longTitle, longArtist),
+		tagged(filepath.Join("Hurry Up, We're Dreaming", "03 Reunion.flac"), "Reunion", "M83"),
+		untagged("Splendor.wav", "RIFF"),
+		untagged("M83 - Wait.mp3", ""),
+		untagged("Intermission.mp3", ""),
+	}
+	untagged("Splendor.wav.json", `{"title": "Splendor", "performers": ["M83", "The Hurry Up Orchestra"]}`)
+	for i, path := range files {
+		at := time.Now().Add(-time.Duration(i) * time.Minute)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	// Until the tags are read, the names say what they can. Taking the
+	// reads' slots holds them back.
+	for range cap(lib.tagged.slots) {
+		lib.tagged.slots <- struct{}{}
+	}
+	a.showTab(tabLibrary)
+	a.render()
+	all := drawnRows(t, lib.list)
+	for title, want := range map[string][]string{
+		"Outro":        {"Outro"},
+		"03 Reunion":   {"03 Reunion"},
+		"Splendor":     {"Splendor"},
+		"Wait":         {"Wait", "M83"},
+		"Intermission": {"Intermission"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("before the tags, %s row %q, want %q", title, got, want)
+		}
+	}
+
+	for range cap(lib.tagged.slots) {
+		<-lib.tagged.slots
+	}
+	eventually(t, "the tags are never read", func() bool {
+		lib.tagged.mu.Lock()
+		defer lib.tagged.mu.Unlock()
+		return len(lib.tagged.read) == len(files)
+	})
+	lib.list.Refresh()
+	all = drawnRows(t, lib.list)
+	for title, want := range map[string][]string{
+		"Reunion":      {"Reunion", "M83"},
+		"Splendor":     {"Splendor", "M83, The Hurry Up Orchestra"},
+		"Wait":         {"Wait", "M83"},
+		"Intermission": {"Intermission"},
+	} {
+		if got := words(all[title].lines); !slices.Equal(got, want) {
+			t.Errorf("%s row %q, want %q", title, got, want)
+		}
+	}
+	// The same look as the Record list's rows: the title in its style, the
+	// artists in the caption's, rows as tall, a lone title in the middle.
+	if lines := all["Reunion"].lines; len(lines) == 2 {
+		if title, artist := lines[0], lines[1]; !title.TextStyle.Bold || title.TextSize <= artist.TextSize || artist.TextStyle.Bold || artist.Color == title.Color {
+			t.Errorf("the artists are drawn like the title: %+v, %+v", title, artist)
+		}
+	}
+	for title, row := range all {
+		if h := all["Reunion"].row.Size().Height; row.row.Size().Height != h {
+			t.Errorf("%s row is %v tall, the others %v", title, row.row.Size().Height, h)
+		}
+	}
+	if full, short := all["Reunion"].text, all["Intermission"].text; full.Position().Y != 0 || short.Position().Y < (full.Size().Height-short.Size().Height)/2-0.5 {
+		t.Errorf("the row with no artist has its text at y %v, the others at %v", short.Position().Y, full.Position().Y)
+	}
+	// Its buttons are square, in the middle of the row's height, as the
+	// Record list's are: QA found them as tall as the row.
+	at := a.fa.Driver().AbsolutePositionForObject
+	for _, i := range []int{1, 2, 3} {
+		row := all["Reunion"].row
+		b := row.Objects[2].(*fyne.Container).Objects[i].(*fyne.Container).Objects[0]
+		if mid := at(b).Y + b.Size().Height/2 - at(row).Y; b.Size().Width != b.Size().Height || mid < row.Size().Height/2-1 || mid > row.Size().Height/2+1 {
+			t.Errorf("button %d is %v, its middle %v down a row %v tall", i, b.Size(), mid, row.Size().Height)
+		}
+	}
+	// The pictures show a listener's folder, not this test's.
+	setCaption(lib.count, pluralFiles(len(files), len(files), "/Users/listener/Music/Spytify"))
+	snapshot(t, a, "library-rows")
+	// The arrows on the second row's Show in folder.
+	a.win.Canvas().Focus(lib.list)
+	pressKey(a.win.Canvas(), fyne.KeyDown)
+	pressKey(a.win.Canvas(), fyne.KeyRight)
+	snapshot(t, a, "library-row-button")
+	a.win.Canvas().Unfocus()
+
+	a.win.Resize(a.win.Content().MinSize())
+	a.render()
+	all = drawnRows(t, lib.list)
+	if got := words(all[longTitle].lines); len(got) != 2 || !strings.HasPrefix(got[0], "Outro (Extended Mix, ") || !strings.HasSuffix(got[0], "…") ||
+		!strings.HasPrefix(got[1], "M83 with The") || !strings.HasSuffix(got[1], "…") {
+		t.Errorf("a long title and long artists do not end in an ellipsis: %q", got)
+	}
+	insideRows(t, all)
+	snapshot(t, a, "library-rows-narrow")
+}
+
+func TestLibraryRescansWhenShown(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	dir := t.TempDir()
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+
+	a.showTab(tabLibrary)
+	a.render()
+	if len(lib.shown) != 0 {
+		t.Fatalf("%d files in an empty folder", len(lib.shown))
+	}
+	// A file lands while another tab is open; coming back lists it.
+	a.showTab(tabRecord)
+	if err := os.WriteFile(filepath.Join(dir, "Artist - Title.flac"), []byte("fLaC"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.showTab(tabLibrary)
+	a.render()
+	if len(lib.shown) != 1 || !slices.Equal(words(drawnRows(t, lib.list)["Title"].lines), []string{"Title", "Artist"}) {
+		t.Errorf("library after coming back: %d files", len(lib.shown))
+	}
+}
+
+func TestLibraryShowsEmbeddedCovers(t *testing.T) {
+	ff, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	var picture bytes.Buffer
+	red := color.NRGBA{R: 0xff, A: 0xff}
+	pic := image.NewNRGBA(image.Rect(0, 0, 8, 8))
+	draw.Draw(pic, pic.Bounds(), image.NewUniform(red), image.Point{}, draw.Src)
+	if err := png.Encode(&picture, pic); err != nil {
+		t.Fatal(err)
+	}
+	cover := filepath.Join(t.TempDir(), "cover.png")
+	if err := os.WriteFile(cover, picture.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	track := filepath.Join(dir, "Artist - Song.flac")
+	cmd := exec.Command(ff, "-v", "error", "-nostdin", "-f", "lavfi", "-t", "0.5", "-i", "anullsrc", "-i", cover,
+		"-map", "0:a", "-map", "1:v", "-c:a", "flac", "-c:v", "copy", "-disposition:v", "attached_pic", track)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("make the FLAC: %v: %s", err, b)
+	}
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.showTab(tabLibrary)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	if len(lib.shown) != 1 {
+		t.Fatalf("%d files listed", len(lib.shown))
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if got := lib.cover(lib.shown[0]).row; got != nil {
+			if got.Bounds().Dx() != 8 || color.NRGBAModel.Convert(got.At(4, 4)) != red {
+				t.Fatalf("the row shows another picture: %v, %v at its middle", got.Bounds(), got.At(4, 4))
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the cover never loaded")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// The library builds rows only for the files in view, however many there
+// are: a row, and its cover, cost nothing until it scrolls in.
+func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 400 {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("Artist - Song %03d.mp3", i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// No ffmpeg: the empty files have no cover to look for.
+	t.Setenv("SPYTIFY_FFMPEG", filepath.Join(dir, "none"))
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	values := defaults()
+	values["output.dir"] = dir
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.showTab(tabLibrary)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	if len(lib.shown) != 400 {
+		t.Fatalf("%d files listed", len(lib.shown))
+	}
+	drawn := map[widget.ListItemID]bool{}
+	update := lib.list.update
+	lib.list.update = func(id widget.ListItemID, o fyne.CanvasObject) {
+		drawn[id] = true
+		update(id, o)
+	}
+	// About eight rows fit in the window.
+	lib.list.Refresh()
+	if len(drawn) == 0 || len(drawn) > 12 {
+		t.Errorf("drew rows %v of 400", slices.Sorted(maps.Keys(drawn)))
+	}
+	clear(drawn)
+	lib.list.ScrollTo(200)
+	if len(drawn) == 0 || len(drawn) > 12 || !drawn[200] {
+		t.Errorf("scrolled to the 200th file, drew rows %v", slices.Sorted(maps.Keys(drawn)))
 	}
 }
