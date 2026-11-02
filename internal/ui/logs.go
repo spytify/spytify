@@ -42,6 +42,7 @@ type logsScreen struct {
 	// check fails.
 	summary      *widget.Label
 	checks       *fyne.Container
+	checkList    *checkList
 	checksScroll *container.Scroll
 	actions      *fyne.Container
 	refresh      *button
@@ -55,7 +56,8 @@ func newLogsScreen(a *App) *logsScreen {
 	l.summary = widget.NewLabel("")
 	l.checks = container.NewVBox()
 	a.maskPaths(l.checks)
-	l.checksScroll = container.NewVScroll(l.checks)
+	l.checkList = newCheckList(l.checks)
+	l.checksScroll = l.checkList.scroll
 	l.refresh = newIconButton(lang.RunChecksAgain, theme.ViewRefreshIcon(), func() {
 		a.noteAction("run the checks again")
 		go a.refreshChecks()
@@ -66,9 +68,12 @@ func newLogsScreen(a *App) *logsScreen {
 	// grow, past the window's edge: this pop-up looks like one, and is
 	// centred again.
 	title := widget.NewLabelWithStyle(lang.Diagnostics, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	// Its buttons have no background but their focus, as Run the checks
+	// again: the checks stand out.
 	done := newButton(lang.Close, l.hideDiagnostics)
+	done.Importance = widget.LowImportance
 	pad := theme.Padding()
-	body := container.NewBorder(container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done), nil, nil, l.checksScroll)
+	body := container.NewBorder(container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done), nil, nil, l.checkList)
 	l.diag = widget.NewModalPopUp(container.New(layout.NewCustomPaddedLayout(pad*2, pad*2, pad*2, pad*2), body), a.win.Canvas())
 	l.diagnose = newLitButton(lang.Diagnostics, theme.ConfirmIcon(), widget.LowImportance, a.showDiagnostics)
 
@@ -150,6 +155,7 @@ func (a *App) showDiagnostics() {
 	l.diag.Show()
 	l.fitDiagnostics()
 	l.checksScroll.ScrollToBottom()
+	a.win.Canvas().Focus(l.checkList)
 	closesOnEscape(a.win, l.hideDiagnostics)
 }
 
@@ -279,6 +285,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 	// these results, unless they opted out of the bug tracker.
 	if failing > 0 && l.app.tel.Available() {
 		send := newIconButton(lang.SendToDevelopers, theme.MailSendIcon(), nil)
+		send.Importance = widget.LowImportance
 		done := func() {
 			l.sent = state
 			send.SetText(lang.Sent)
@@ -306,8 +313,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 		l.actions.Objects = []fyne.CanvasObject{l.refresh}
 	}
 	l.actions.Refresh()
-	l.checks.Objects = lines(rows)
-	l.checks.Refresh()
+	l.checkList.setRows(rows)
 	l.summary.SetText(summary)
 	if l.open {
 		l.fitDiagnostics()
