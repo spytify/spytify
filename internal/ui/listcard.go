@@ -30,6 +30,8 @@ type cardList struct {
 	itemMin fyne.Size
 	shown   []shownRow
 	spare   []*cardRow
+	// look is the theme's text and background the spare rows were drawn in.
+	look [2]color.Color
 	// cursor is the row the arrows highlight while the list has the focus,
 	// col where on it: 0 the row itself, then its buttons left to right.
 	// lit is the button col shows focused.
@@ -304,6 +306,11 @@ func (r *cardListRenderer) MinSize() fyne.Size {
 func (r *cardListRenderer) Refresh() {
 	l := r.l
 	r.measure()
+	// The rows put aside missed the refresh a new theme gives the rows in
+	// view: drawn again, they kept the former theme's icons and badges.
+	if look := [2]color.Color{theme.ColorForWidget(theme.ColorNameForeground, l), theme.ColorForWidget(theme.ColorNameBackground, l)}; look != l.look {
+		l.look, l.spare = look, nil
+	}
 	l.card.FillColor = theme.ColorForWidget(colorCard, l)
 	l.card.Refresh()
 	l.cursor = max(0, min(l.cursor, l.length()-1))
