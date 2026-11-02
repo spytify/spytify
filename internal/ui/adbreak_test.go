@@ -35,28 +35,51 @@ func TestEachRunOfAdsIsOnePill(t *testing.T) {
 		{ID: "s-2", Title: "Reunion", Status: model.Saved},
 		{ID: "s-1", Title: "Intro", Status: model.Skipped, Reason: proto.SkipDuplicate},
 	}
-	describe := func(items []sessionItem) []string {
-		var out []string
-		for _, it := range items {
-			switch it.kind {
-			case itemTrack:
-				out = append(out, it.row.Title)
-			case itemBreak:
-				out = append(out, "pill "+it.brk+" "+fmtDuration(it.length))
-			case itemAd:
-				out = append(out, adName(it.n, it.row.Title)+" "+fmtDuration(it.length))
-			}
-		}
-		return out
-	}
 	closed := []string{"pill a-5 0:30", "Wait", "pill a-2 1:09", "Reunion", "Intro"}
-	if got := describe(sessionItems(rows, nil)); !slices.Equal(got, closed) {
+	if got := describeItems(sessionItems(rows, nil)); !slices.Equal(got, closed) {
 		t.Errorf("closed: %q, want %q", got, closed)
 	}
 	open := []string{"pill a-5 0:30", "Wait", "pill a-2 1:09", "Ad #3 0:24", "Ad #2 · New EP is out now! 0:30", "Ad #1 0:15", "Reunion", "Intro"}
-	if got := describe(sessionItems(rows, map[string]bool{"a-2": true})); !slices.Equal(got, open) {
+	if got := describeItems(sessionItems(rows, map[string]bool{"a-2": true})); !slices.Equal(got, open) {
 		t.Errorf("open: %q, want %q", got, open)
 	}
+}
+
+// Each break counts its own ads from 1: the ads of a break after a few
+// tracks do not go on from the last break's, and its pill has their length
+// alone.
+func TestEachAdBreakCountsItsAdsFromOne(t *testing.T) {
+	rows := []model.Row{
+		adRow("b-2", "", 30000),
+		adRow("b-1", "", 25000),
+		{ID: "s-3", Title: "Midnight City", Status: model.Saved},
+		{ID: "s-2", Title: "Wait", Status: model.Saved},
+		adRow("a-3", "", 24000),
+		adRow("a-2", "", 30000),
+		adRow("a-1", "", 15000),
+		{ID: "s-1", Title: "Intro", Status: model.Saved},
+	}
+	want := []string{"pill b-1 0:55", "Ad #2 0:30", "Ad #1 0:25", "Midnight City", "Wait", "pill a-1 1:09", "Ad #3 0:24", "Ad #2 0:30", "Ad #1 0:15", "Intro"}
+	if got := describeItems(sessionItems(rows, map[string]bool{"b-1": true, "a-1": true})); !slices.Equal(got, want) {
+		t.Errorf("both breaks open: %q, want %q", got, want)
+	}
+}
+
+// describeItems is the list's lines as words: a track's title, a pill's
+// key and length, an ad's name and length.
+func describeItems(items []sessionItem) []string {
+	var out []string
+	for _, it := range items {
+		switch it.kind {
+		case itemTrack:
+			out = append(out, it.row.Title)
+		case itemBreak:
+			out = append(out, "pill "+it.brk+" "+fmtDuration(it.length))
+		case itemAd:
+			out = append(out, adName(it.n, it.row.Title)+" "+fmtDuration(it.length))
+		}
+	}
+	return out
 }
 
 // feedAdBreak is a session where three ads played between two tracks, the
