@@ -366,6 +366,91 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	}
 }
 
+// arrowsThroughRow checks row id of the focused list l: it is highlighted,
+// Right lights its buttons one by one, by their icons, each drawn on the
+// row, an icon alone square, and stops on the last; Left goes back to the
+// row itself, which keeps its highlight throughout. A row's buttons moved
+// into a box of their own, or out of the row, would fail it.
+func arrowsThroughRow(t *testing.T, a *App, l *cardList, id widget.ListItemID, icons ...fyne.Resource) {
+	t.Helper()
+	c := a.win.Canvas()
+	at := a.fa.Driver().AbsolutePositionForObject
+	row := rowAt(l, id)
+	if c.Focused() != l || l.cursor != id || row == nil || row.hover.Hidden {
+		t.Fatalf("row %d: list focused %v, cursor on %d, row drawn %v, highlighted %v", id, c.Focused() == l, l.cursor, row != nil, row != nil && !row.hover.Hidden)
+	}
+	for i, icon := range icons {
+		pressKey(c, fyne.KeyRight)
+		b := l.lit
+		if b == nil || b.Icon.Name() != icon.Name() {
+			t.Fatalf("row %d, Right %d: lit %s, want %s", id, i+1, litIcon(l), icon.Name())
+		}
+		pos, size := at(b).Subtract(at(row)), b.Size()
+		if size.Width == 0 || pos.X < 0 || pos.Y < 0 || pos.X+size.Width > row.Size().Width || pos.Y+size.Height > row.Size().Height {
+			t.Errorf("row %d: %s is %v at %v, out of the row's %v", id, icon.Name(), size, pos, row.Size())
+		}
+		if b.Text == "" && size.Width != size.Height {
+			t.Errorf("row %d: %s is %v, not square", id, icon.Name(), size)
+		}
+		if row.hover.Hidden {
+			t.Errorf("row %d: lighting %s took the row's highlight", id, icon.Name())
+		}
+	}
+	pressKey(c, fyne.KeyRight)
+	if n := len(icons); n == 0 && l.lit != nil || n > 0 && litIcon(l) != icons[n-1].Name() {
+		t.Errorf("row %d: Right past its last button lit %s", id, litIcon(l))
+	}
+	for range icons {
+		pressKey(c, fyne.KeyLeft)
+	}
+	if l.lit != nil || l.col != 0 || row.hover.Hidden {
+		t.Errorf("row %d: back Left, lit %s, column %d, highlighted %v", id, litIcon(l), l.col, !row.hover.Hidden)
+	}
+}
+
+// litIcon names the icon of the button l lights, or says none is.
+func litIcon(l *cardList) string {
+	if l.lit == nil {
+		return "nothing"
+	}
+	return l.lit.Icon.Name()
+}
+
+// QA's keys on the Record list: Down goes from row to row, each
+// highlighted, and Right reaches each one's buttons, Show in folder then
+// Play; a skipped file's are off, and Right stays on its row.
+func TestTheArrowsReachTheRecordRowsButtons(t *testing.T) {
+	a, m, _ := connectedApp(t)
+	feedSession(t, m)
+	a.render()
+	tabTo(t, a, "list", 1)
+	r := a.screens[tabRecord].(*recordScreen)
+	icons := map[string][]fyne.Resource{
+		"Intro":   {theme.SearchIcon(), theme.MediaPlayIcon()},
+		"Reunion": {theme.SearchIcon(), theme.MediaPlayIcon()},
+		"Wait":    nil,
+	}
+	for id, row := range r.rows {
+		want, ok := icons[row.Title]
+		if !ok {
+			t.Fatalf("row %d is %q, a track this test does not know", id, row.Title)
+		}
+		arrowsThroughRow(t, a, r.list, id, want...)
+		pressKey(a.win.Canvas(), fyne.KeyDown)
+	}
+}
+
+// QA's keys on the Library list: Right reaches the file's buttons, Show
+// in folder, Play, then the trash.
+func TestTheArrowsReachTheLibraryRowsButtons(t *testing.T) {
+	a, _, _, _ := recorded(t)
+	a.showTab(tabLibrary)
+	a.render()
+	tabTo(t, a, "list", 1)
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	arrowsThroughRow(t, a, lib.list, 0, theme.SearchIcon(), theme.MediaPlayIcon(), theme.DeleteIcon())
+}
+
 // settingsOrder is the Settings screen's Tab order: each card's Reset, its
 // settings in the table's order but those turned off, then its Advanced
 // fold.
