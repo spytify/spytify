@@ -30,6 +30,9 @@ type cardList struct {
 	// as for the Library's files, that is a multiplication.
 	height        func(id widget.ListItemID) float32
 	tops, heights []float32
+	// band, when set, names a row's background, "" for the card's: a run of
+	// rows on one is a single block, without a line at its ends.
+	band func(id widget.ListItemID) fyne.ThemeColorName
 
 	scroll  *container.Scroll
 	page    *fyne.Container
@@ -119,6 +122,14 @@ func (l *cardList) rowAt(y float32, n int) int {
 	return sort.Search(n, func(i int) bool { return l.tops[i+1] > y })
 }
 
+// bandOf is the background band names for row id, "" without one.
+func (l *cardList) bandOf(id widget.ListItemID) fyne.ThemeColorName {
+	if l.band == nil || id < 0 || id >= l.length() {
+		return ""
+	}
+	return l.band(id)
+}
+
 func (l *cardList) CreateRenderer() fyne.WidgetRenderer {
 	l.card = canvas.NewRectangle(color.Transparent)
 	l.page = container.New(cardPage{l}, l.card)
@@ -157,7 +168,8 @@ func (l *cardList) place(all bool) {
 		} else {
 			row = l.spareRow()
 		}
-		row.setLook(id == 0, l.focused && id == l.cursor)
+		fill, above := l.bandOf(id), l.bandOf(id-1)
+		row.setLook(id == 0 || fill != above, l.focused && id == l.cursor, fill, id > 0 && fill != "" && fill == above)
 		row.box.Move(fyne.NewPos(0, l.rowTop(id)))
 		row.box.Resize(fyne.NewSize(l.page.Size().Width, l.rowHeight(id)))
 		if all || !ok {
@@ -213,6 +225,8 @@ func rowButtons(o fyne.CanvasObject) []*rowButton {
 			buttons = append(buttons, rowButtons(child)...)
 		}
 		return buttons
+	case *container.ThemeOverride:
+		return rowButtons(o.Content)
 	}
 	return nil
 }
@@ -237,7 +251,7 @@ func (l *cardList) spareRow() *cardRow {
 		l.spare = l.spare[:n-1]
 		return row
 	}
-	row := &cardRow{content: l.create(), line: widget.NewSeparator(), hover: canvas.NewRectangle(color.Transparent)}
+	row := &cardRow{content: l.create(), line: widget.NewSeparator(), back: canvas.NewRectangle(color.Transparent), hover: canvas.NewRectangle(color.Transparent)}
 	row.ExtendBaseWidget(row)
 	row.box = container.NewThemeOverride(row, cardTheme{input: colorCardInput, surface: colorCard})
 	return row
@@ -389,22 +403,26 @@ func (p cardPage) MinSize([]fyne.CanvasObject) fyne.Size {
 
 // cardRow is a row of a cardList: its content, a line above it but on the
 // first row, and a highlight under the pointer or the arrows, as
-// widget.List draws them.
+// widget.List draws them; on a band, its background, over the gap above
+// when the row above is on the band too, and no line at the band's ends.
 type cardRow struct {
 	widget.BaseWidget
 	content fyne.CanvasObject
 	line    *widget.Separator
+	back    *canvas.Rectangle
 	hover   *canvas.Rectangle
 	// box is the row in the card's theme, as the list lays it out.
-	box                   fyne.CanvasObject
-	first, focus, hovered bool
+	box                    fyne.CanvasObject
+	noLine, focus, hovered bool
+	fill                   fyne.ThemeColorName
+	joined                 bool
 }
 
 var _ desktop.Hoverable = (*cardRow)(nil)
 
-func (r *cardRow) setLook(first, focus bool) {
-	if r.first != first || r.focus != focus {
-		r.first, r.focus = first, focus
+func (r *cardRow) setLook(noLine, focus bool, fill fyne.ThemeColorName, joined bool) {
+	if r.noLine != noLine || r.focus != focus || r.fill != fill || r.joined != joined {
+		r.noLine, r.focus, r.fill, r.joined = noLine, focus, fill, joined
 		r.Refresh()
 	}
 }
@@ -431,6 +449,12 @@ type cardRowRenderer struct{ r *cardRow }
 
 func (rr *cardRowRenderer) Layout(s fyne.Size) {
 	r := rr.r
+	r.back.Move(fyne.NewPos(0, 0))
+	r.back.Resize(s)
+	if r.joined {
+		r.back.Move(fyne.NewPos(0, -theme.Padding()))
+		r.back.Resize(s.AddWidthHeight(0, theme.Padding()))
+	}
 	r.hover.Resize(s)
 	side := rowSide()
 	// The line sits in the middle of the padding above the row.
@@ -451,13 +475,18 @@ func (rr *cardRowRenderer) Refresh() {
 	r.hover.FillColor = theme.ColorForWidget(theme.ColorNameHover, r)
 	r.hover.Hidden = !r.hovered && !r.focus
 	r.hover.Refresh()
-	r.line.Hidden = r.first
+	r.back.Hidden = r.fill == ""
+	if r.fill != "" {
+		r.back.FillColor = theme.ColorForWidget(r.fill, r)
+	}
+	r.back.Refresh()
+	r.line.Hidden = r.noLine
 	r.line.Refresh()
 	rr.Layout(r.Size())
 }
 
 func (rr *cardRowRenderer) Objects() []fyne.CanvasObject {
-	return []fyne.CanvasObject{rr.r.hover, rr.r.line, rr.r.content}
+	return []fyne.CanvasObject{rr.r.back, rr.r.hover, rr.r.line, rr.r.content}
 }
 
 func (rr *cardRowRenderer) Destroy() {}

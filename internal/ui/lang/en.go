@@ -110,6 +110,15 @@ const (
 	ReasonLowQuality = "low quality"
 )
 
+// An ad break in the session list. AdBreak, its pill, takes the ads'
+// length; AdNumber an ad's number in the break, and AdTitled then its
+// title.
+const (
+	AdBreak  = "Advertisements %s"
+	AdNumber = "Ad #%d"
+	AdTitled = "Ad #%d · %s"
+)
+
 // The Library: its search, whose ✕ Settings' search shares, its sorts, the
 // kinds of file its filter ticks, and what it says when it shows nothing.
 const (

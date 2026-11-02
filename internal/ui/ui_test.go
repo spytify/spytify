@@ -698,7 +698,9 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	// Keep anyway looks like the screen's other buttons: the save icon
 	// before its words, and no outline around them.
 	i := slices.IndexFunc(r.rows, func(row model.Row) bool { return row.ID == "s-004" })
-	right := rowAt(r.list, i).content.(*fyne.Container).Objects[2].(*fyne.Container)
+	// The row's track, over an ad break's pill and an ad's line.
+	track := rowAt(r.list, i).content.(*fyne.Container).Objects[0].(*fyne.Container)
+	right := track.Objects[2].(*fyne.Container)
 	if keep, ok := right.Objects[1].(*fyne.Container).Objects[0].(*rowButton); !ok {
 		t.Errorf("Keep anyway is a %T", right.Objects[1].(*fyne.Container).Objects[0])
 	} else if keep.Icon != theme.DocumentSaveIcon() || keep.Importance != widget.LowImportance {

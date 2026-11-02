@@ -305,3 +305,33 @@ func TestTheListHoldsRowsOfDifferentHeights(t *testing.T) {
 		t.Errorf("at the bottom, rows %v of 100 are drawn", ids)
 	}
 }
+
+// A run of rows on a band is one block of its colour, over the gaps
+// between its rows, with the lines between them but none at its ends.
+func TestABandIsOneBlockWithoutLinesAtItsEnds(t *testing.T) {
+	n := 8
+	l, _ := testCardList(t, &n)
+	l.band = func(id widget.ListItemID) fyne.ThemeColorName {
+		if id >= 2 && id <= 4 {
+			return colorAdBand
+		}
+		return ""
+	}
+	l.Refresh()
+	pad := theme.Padding()
+	for id, want := range map[widget.ListItemID]bool{1: true, 2: false, 3: true, 4: true, 5: false, 6: true} {
+		if line := !rowAt(l, id).line.Hidden; line != want {
+			t.Errorf("row %d: line above %v, want %v", id, line, want)
+		}
+	}
+	if r := rowAt(l, 1); !r.back.Hidden {
+		t.Error("a row off the band has a background")
+	}
+	top, inside := rowAt(l, 2), rowAt(l, 3)
+	if top.back.Hidden || top.back.FillColor != cardColors[colorAdBand][0] || top.back.Position().Y != 0 {
+		t.Errorf("the band's first row: hidden %v, %v, at %v", top.back.Hidden, top.back.FillColor, top.back.Position().Y)
+	}
+	if inside.back.Position().Y != -pad || inside.back.Size().Height != inside.box.Size().Height+pad {
+		t.Errorf("a row inside the band leaves the gap above it: at %v, %v high", inside.back.Position().Y, inside.back.Size().Height)
+	}
+}
