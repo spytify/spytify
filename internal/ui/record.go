@@ -179,14 +179,11 @@ func newRecordScreen(a *App) *recordScreen {
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
 			status := newBadge(fmt.Sprintf(lang.SkippedFor, proto.SkipDuplicate), colorSkippedBadge, "", colorOnSkippedBadge)
-			keepBtn := newIconButton(lang.KeepAnyway, theme.DocumentSaveIcon(), nil)
-			keepBtn.Importance = widget.LowImportance
-			keep := container.NewCenter(keepBtn)
+			keep := container.NewCenter(newRowButton(lang.KeepAnyway, theme.DocumentSaveIcon()))
 			keep.Hide()
-			reveal := newIconButton("", theme.SearchIcon(), nil)
-			reveal.Importance = widget.LowImportance
-			play := newIconButton("", theme.MediaPlayIcon(), nil)
-			play.Importance = widget.LowImportance
+			reveal := newRowButton("", theme.SearchIcon())
+			play := newRowButton("", theme.MediaPlayIcon())
+			play.main = true
 			// The title, the artist, then the length, format and size.
 			return trackRow(3, container.NewHBox(container.NewCenter(status), keep, container.NewCenter(reveal), container.NewCenter(play)))
 		},
@@ -202,9 +199,9 @@ func newRecordScreen(a *App) *recordScreen {
 			fill, ink := badgeColors(row)
 			right.Objects[0].(*fyne.Container).Objects[0].(*badge).set(row.StatusText(), fill, ink)
 			keep := right.Objects[1].(*fyne.Container)
-			keepBtn := keep.Objects[0].(*button)
-			revealBtn := right.Objects[2].(*fyne.Container).Objects[0].(*button)
-			playBtn := right.Objects[3].(*fyne.Container).Objects[0].(*button)
+			keepBtn := keep.Objects[0].(*rowButton)
+			revealBtn := right.Objects[2].(*fyne.Container).Objects[0].(*rowButton)
+			playBtn := right.Objects[3].(*fyne.Container).Objects[0].(*rowButton)
 			if row.Keepable {
 				id := row.ID
 				keepBtn.OnTapped = func() { a.keep(id) }

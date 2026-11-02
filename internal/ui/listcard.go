@@ -16,7 +16,8 @@ import (
 // does: its scroll bar is at the window's edge, where a widget.List puts
 // its own inside the card. Like widget.List, it builds only the rows in
 // view, as a library holds thousands of files, and Tab stops on it for the
-// arrows to move a highlight from row to row.
+// arrows to move a highlight from row to row, then from a row to its
+// buttons, which Tab passes over.
 type cardList struct {
 	widget.BaseWidget
 	length func() int
@@ -29,9 +30,13 @@ type cardList struct {
 	itemMin fyne.Size
 	shown   []shownRow
 	spare   []*cardRow
-	// cursor is the row the arrows highlight while the list has the focus.
+	// cursor is the row the arrows highlight while the list has the focus,
+	// col where on it: 0 the row itself, then its buttons left to right.
+	// lit is the button col shows focused.
 	focused bool
 	cursor  widget.ListItemID
+	col     int
+	lit     *rowButton
 }
 
 var _ fyne.Focusable = (*cardList)(nil)
@@ -117,6 +122,61 @@ func (l *cardList) place(all bool) {
 	}
 	l.page.Objects = objs
 	l.card.Resize(fyne.NewSize(l.page.Size().Width, l.cardHeight(n)))
+	// The row's buttons change with its file, and its row with a scroll.
+	var lit *rowButton
+	if buttons, ok := l.cursorButtons(); ok && l.focused {
+		l.col = min(l.col, len(buttons))
+		if l.col > 0 {
+			lit = buttons[l.col-1]
+		}
+	}
+	l.light(lit)
+}
+
+// cursorButtons is the buttons the arrows reach on the cursor's row, and
+// whether the row is built.
+func (l *cardList) cursorButtons() ([]*rowButton, bool) {
+	for _, s := range l.shown {
+		if s.id == l.cursor {
+			return rowButtons(s.row.content), true
+		}
+	}
+	return nil, false
+}
+
+// rowButtons is the buttons in o's containers that are shown and on, left
+// to right.
+func rowButtons(o fyne.CanvasObject) []*rowButton {
+	if !o.Visible() {
+		return nil
+	}
+	switch o := o.(type) {
+	case *rowButton:
+		if !o.Disabled() {
+			return []*rowButton{o}
+		}
+	case *fyne.Container:
+		var buttons []*rowButton
+		for _, child := range o.Objects {
+			buttons = append(buttons, rowButtons(child)...)
+		}
+		return buttons
+	}
+	return nil
+}
+
+// light shows b focused, and the button it showed before no more.
+func (l *cardList) light(b *rowButton) {
+	if b == l.lit {
+		return
+	}
+	if l.lit != nil {
+		l.lit.Button.FocusLost()
+	}
+	if b != nil {
+		b.Button.FocusGained()
+	}
+	l.lit = b
 }
 
 func (l *cardList) spareRow() *cardRow {
@@ -137,22 +197,53 @@ func (l *cardList) FocusGained() {
 	l.place(false)
 }
 
+// FocusLost leaves the highlight on the row, for Tab back to start there.
 func (l *cardList) FocusLost() {
 	l.focused = false
+	l.col = 0
 	l.place(false)
 }
 
-// TypedKey moves the highlight a row down or up, scrolling it into view.
+// TypedKey moves the highlight a row down or up, scrolling it into view,
+// and Left and Right between the row and its buttons. Space presses the
+// button highlighted, or on the row its main one: Play.
 func (l *cardList) TypedKey(e *fyne.KeyEvent) {
 	switch {
 	case e.Name == fyne.KeyDown && l.cursor < l.length()-1:
 		l.cursor++
+		l.col = 0
 	case e.Name == fyne.KeyUp && l.cursor > 0:
 		l.cursor--
+		l.col = 0
+	case e.Name == fyne.KeyLeft && l.col > 0:
+		l.col--
+	case e.Name == fyne.KeyRight:
+		// place stops it at the last button.
+		l.col++
+	case e.Name == fyne.KeySpace:
+		// The wheel may have scrolled the row away.
+		l.ScrollTo(l.cursor)
+		l.press()
+		return
 	default:
 		return
 	}
 	l.ScrollTo(l.cursor)
+}
+
+func (l *cardList) press() {
+	b := l.lit
+	if l.col == 0 {
+		buttons, _ := l.cursorButtons()
+		for _, main := range buttons {
+			if main.main {
+				b = main
+			}
+		}
+	}
+	if b != nil && b.OnTapped != nil {
+		b.OnTapped()
+	}
 }
 
 func (l *cardList) TypedRune(rune) {}
