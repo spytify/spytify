@@ -40,6 +40,7 @@ var cases = map[string][]string{
 	"recorder.trim_silence":            {"internal/core:TestSilenceSettings"},
 	"recorder.silence_db":              {"internal/core:TestSilenceSettings"},
 	"recorder.boundary_window_ms":      {"internal/core:TestScenarios"},
+	"recorder.pause_fade_db":           {"internal/core:TestThePauseFadeThresholdSetting"},
 	"recorder.session_timer":           {"internal/core:TestTheSessionTimerEndsTheSession"},
 	"recorder.target_lufs":             {"internal/core:TestLoudnessSettings"},
 	"recorder.pause_on_disk_full":      {"internal/core:TestAFullDiskStopsTheRecording"},

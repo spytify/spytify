@@ -256,6 +256,11 @@ type TrackFinishedEvent struct {
 	// Partial is a take saved with track.keep: only the part that played,
 	// or all of one recorded in low quality.
 	Partial bool `json:"partial,omitempty"`
+	// PauseFade is a take paused mid-track whose player faded out before
+	// the pause and in after it: the pause is cut out, but the two fades
+	// meet where it was, a dip that is heard. Its name ends in
+	// " (pause fade)".
+	PauseFade bool `json:"pause_fade,omitempty"`
 }
 
 // FinishTimings are the steps between the end of a track and its file.

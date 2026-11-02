@@ -18,6 +18,7 @@
     2700ms  > player Playing pos=-1 (ring at 97020)
     2700ms  state recording
     2700ms  > audio music 1 at 1700ms, 57330(1300ms)
+    3000ms  log debug: "A": a pause was cut out at 2200 ms, -2 dB under the music
     4000ms  > audio silence, 22050(500ms)
     4500ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 176400)
     4500ms  log debug: cut for "B" at 3500 ms (kind 1, noticed at 4000 ms, window 3200..3801 ms)

@@ -83,6 +83,7 @@ var Table = []Def{
 	{Key: "recorder.trim_silence", Tab: "Recorder", Group: "Recording", Label: "Trim leading/trailing silence", Kind: KindBool, Default: true, Advanced: true},
 	{Key: "recorder.silence_db", Tab: "Recorder", Group: "Recording", Label: "Silence threshold (dBFS)", Kind: KindFloat, Default: -50.0, Min: -90, Max: -20, Ranged: true, Advanced: true},
 	{Key: "recorder.boundary_window_ms", Tab: "Recorder", Group: "Recording", Label: "Boundary search window (ms)", Kind: KindInt, Default: int64(300), Min: 20, Max: 2000, Ranged: true, Advanced: true},
+	{Key: "recorder.pause_fade_db", Tab: "Advanced", Group: "Recording", Label: "Pause fade threshold (dB, 0 = off)", Kind: KindFloat, Default: 20.0, Min: 0, Max: 60, Ranged: true, Advanced: true, Note: "A paused take is marked (pause fade) when the cut is this far under the music."},
 	{Key: "recorder.session_timer", Tab: "Recorder", Group: "Recording", Label: "Stop the session after (0s = never)", Kind: KindDuration, Default: "0s", Advanced: true},
 	{Key: "recorder.target_lufs", Tab: "Advanced", Group: "Recording", Label: "Target loudness (LUFS)", Kind: KindFloat, Default: -14.0, Min: -30, Max: -5, Ranged: true, Advanced: true},
 	{Key: "recorder.pause_on_disk_full", Tab: "Advanced", Group: "Recording", Label: "Pause player when disk is full", Kind: KindBool, Default: true, Advanced: true},

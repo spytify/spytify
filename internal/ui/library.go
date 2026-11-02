@@ -82,10 +82,11 @@ const (
 	takeComplete   = lang.Complete
 	takePartial    = lang.Partial
 	takeLowQuality = lang.LowQuality
+	takePauseFade  = lang.PauseFade
 	noAlbum        = lang.NoAlbum
 )
 
-var takeKinds = []string{takeComplete, takePartial, takeLowQuality}
+var takeKinds = []string{takeComplete, takePartial, takeLowQuality, takePauseFade}
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
@@ -102,9 +103,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 	l.search = newSearch(a, lang.SearchLibrary, func(string) { l.filter() })
 	l.sortBy = newSelectField([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
-	// Keep anyway saves a take cut short or in low quality: the filter hides
-	// those files, or shows them alone to clean them up, a box per kind of
-	// file in its dropdown. They start ticked without their callback, which
+	// Keep anyway saves a take cut short or in low quality, and a take with
+	// a pause fade is marked: the filter hides those files, or shows them
+	// alone to clean them up, a box per kind of file in its dropdown. They start ticked without their callback, which
 	// needs the list: the sort's, below, draws the list first.
 	l.takes = map[string]*widget.Check{}
 	boxes := container.NewVBox()
@@ -118,7 +119,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.kinds.Selected = l.takesLabel()
 	// A select is as wide as its placeholder, which a choice made never
 	// shows: the longest label fits.
-	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality
+	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality + ", " + takePauseFade
 	rescan := newIconButton(lang.Rescan, theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
@@ -361,13 +362,15 @@ func takeKind(path string) string {
 		return takePartial
 	case strings.Contains(name, "(low quality)"), strings.Contains(name, "(low_quality)"):
 		return takeLowQuality
+	case strings.Contains(name, "(pause fade)"), strings.Contains(name, "(pause_fade)"):
+		return takePauseFade
 	}
 	return takeComplete
 }
 
-// takeMarker is the marker Keep anyway adds to a take's title, and the
-// space before it: the row shows the kind in its chip instead.
-var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality)\)`)
+// takeMarker is the marker Keep anyway, or a pause fade, adds to a take's
+// title, and the space before it: the row shows the kind in its chip instead.
+var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality|pause[ _]fade)\)`)
 
 // takesLabel says which kinds of file the filter shows.
 func (l *libraryScreen) takesLabel() string {

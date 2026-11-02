@@ -20,6 +20,7 @@
     3500ms  state paused
     8500ms  > player Playing pos=3000 (ring at 154350)
     8500ms  state recording
+    8800ms  log debug: "Hold That Thought": a pause was cut out at 3500 ms, -1 dB under the music
    14500ms  > player TrackChanged "Wait For It (Live)" id=/com/fake/track/2 length=6000ms pos=0 (ring at 418950)
    14500ms  log debug: cut for "Wait For It (Live)" at 8500 ms (kind 1, noticed at 9500 ms, window 8200..8801 ms)
    14500ms  started t-002 "Wait For It (Live)" artist="Velvet Static" album="Intermission" length=6000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
@@ -28,6 +29,7 @@
    17300ms  state paused
    19800ms  > player Playing pos=2500 (ring at 529200)
    19800ms  state recording
+   20300ms  log debug: "Wait For It (Live)": a pause was cut out at 12000 ms, -4 dB under the music
    24500ms  > player TrackChanged "Not Yet" id=/com/fake/track/3 length=6000ms pos=0 (ring at 727650)
    24500ms  log debug: cut for "Not Yet" at 15500 ms (kind 1, noticed at 16500 ms, window 14200..15803 ms)
    24500ms  started t-003 "Not Yet" artist="Velvet Static" album="Intermission" length=6000ms cut=boundary/silence offset=-1000ms source=44100/2 cover
@@ -36,6 +38,7 @@
    27850ms  state paused
    30250ms  > player Playing pos=3500 (ring at 893025)
    30250ms  state recording
+   30300ms  log debug: "Not Yet": a pause was cut out at 20000 ms, 1 dB under the music
    33500ms  > player TrackChanged "After the Break - Remastered" id=/com/fake/track/4 length=4000ms pos=0 (ring at 1036350)
    33500ms  log debug: cut for "After the Break - Remastered" at 22500 ms (kind 1, noticed at 23500 ms, window 21200..22802 ms)
    33500ms  started t-004 "After the Break - Remastered" artist="Velvet Static" album="Intermission" length=4000ms cut=boundary/silence offset=-1000ms source=44100/2 cover

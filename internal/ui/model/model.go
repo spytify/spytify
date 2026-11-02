@@ -54,6 +54,9 @@ type Row struct {
 	// saved (track.keep); Partial is one that was.
 	Keepable bool
 	Partial  bool
+	// PauseFade is a take saved with the player's fades around a pause in
+	// it, its name marked " (pause fade)".
+	PauseFade bool
 	// PausedFor is how long the track was paused before the pause going on,
 	// which began at PausedAt.
 	PausedFor time.Duration
@@ -70,6 +73,9 @@ func (r Row) StatusText() string {
 			return lang.SavedLowQuality
 		}
 		return lang.SavedPartial
+	}
+	if r.PauseFade && r.Status == Saved {
+		return lang.SavedPauseFade
 	}
 	return string(r.Status)
 }
@@ -400,7 +406,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		m.edit(s, e.ID, func(r *Row) {
 			r.Status, r.Path, r.DurationMs, r.Bytes, r.TaggedBy = Saved, e.Path, e.DurationMs, e.Bytes, e.TaggedBy
-			r.Partial, r.Keepable = e.Partial, false
+			r.Partial, r.PauseFade, r.Keepable = e.Partial, e.PauseFade, false
 		})
 	case proto.EventTrackSkipped:
 		var e proto.TrackSkippedEvent

@@ -170,6 +170,19 @@ func TestALowQualityTakeSaysSo(t *testing.T) {
 	}
 }
 
+// A take saved with the player's fades around a pause in it reads "Saved:
+// pause fade".
+func TestAPauseFadeSaysSo(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(started(t, "a", "First"))
+	m.Apply(started(t, "b", "Second"))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (pause fade).flac", PauseFade: true}))
+	if r := m.Snapshot().Rows[0]; r.Status != Saved || r.StatusText() != lang.SavedPauseFade {
+		t.Fatalf("saved %+v, %q", r, r.StatusText())
+	}
+}
+
 func TestSettingsLogsAndErrors(t *testing.T) {
 	m := New()
 	m.SetSettings(map[string]any{"encode.format": "mp3", "output.dir": "/m"})
