@@ -98,6 +98,11 @@ func (t spytifyTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color
 	if name == theme.ColorNameBackground {
 		name = colorPage
 	}
+	// The dialogs are on the cards' colour, white or charcoal: Fyne's dark
+	// one is a navy blue.
+	if name == theme.ColorNameOverlayBackground {
+		name = colorCard
+	}
 	if c, ok := cardColors[name]; ok {
 		if light {
 			return c[0]

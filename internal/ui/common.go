@@ -204,14 +204,6 @@ func plain(content fyne.CanvasObject) fyne.CanvasObject {
 	return container.NewThemeOverride(box, cardTheme{surface: colorPlain})
 }
 
-// margin keeps a screen off the window's sides and bottom, as the window's
-// own padding would; the window has none, so the bars' plain colour goes to
-// its edges.
-func margin(o fyne.CanvasObject) *fyne.Container {
-	pad := theme.Padding()
-	return container.New(layout.NewCustomPaddedLayout(0, pad, pad, pad), o)
-}
-
 // inset keeps a part of a screen off the window's sides, in line with the
 // cards.
 func inset(o fyne.CanvasObject) *fyne.Container {
