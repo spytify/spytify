@@ -10,7 +10,7 @@
 // player's own volume normalisation off, and play the ten files in order.
 // Then
 //
-//	go run ./internal/tools/gate1 check -dir ~/Gate1 -out ~/Music/Spytify
+//	go run ./internal/tools/gate1 check -dir ~/Gate1 -out ~/Spytify
 //
 // compares each recording with its file and exits non-zero if one fails.
 package main
