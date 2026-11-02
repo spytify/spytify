@@ -4,8 +4,9 @@
 //
 // Not here: the settings' labels and notes, which settings.Table keeps by
 // their key; the checks' names and details, and the errors, which come from
-// the recorder or are written where they are made; and log lines, telemetry
-// names and preference keys, which the window never shows.
+// the recorder or are written where they are made, but for the recorder's
+// warnings, which model.WarningText words from their code; and log lines,
+// telemetry names and preference keys, which the window never shows.
 package lang
 
 // The app and its tabs.
@@ -184,6 +185,33 @@ const (
 	Send                = "Send"
 	Sent                = "Sent"
 	NotSent             = "Not sent, try again"
+)
+
+// The recorder's warnings, by their code (model.WarningText), in the Record
+// tab's alert and the notifications: what the recorder found, then what to
+// do about it on macOS, Windows or Linux. The player heard check says
+// OnlySilence when it fails. Its advice follows what the capture hears:
+// the player's own volume, and its slider in the Volume mixer on Windows or
+// in the sound settings on Linux, but not the output device's; on macOS a
+// tap refused System Audio Recording records silence too, not nothing.
+// PhoneCall takes the device's format, DeviceRate or DeviceRateMono, which
+// take its rate in kHz; DiskFull takes the megabytes left.
+const (
+	NoAudio            = "No audio from the player for 10 s."
+	NoAudioMacOS       = "If macOS asks to let Spytify record system audio, allow it; it is in System Settings > Privacy & Security > Screen & System Audio Recording."
+	NoAudioWindows     = "Check that the Windows Audio service runs and that the player plays on an output device."
+	NoAudioLinux       = "Check that PipeWire runs: systemctl --user restart pipewire."
+	OnlySilence        = "Only silence from the player for 10 s while it plays."
+	OnlySilenceMacOS   = "Check that the player is not muted in its own volume; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
+	OnlySilenceWindows = "Check that the player is not muted in its own volume, nor in the Volume mixer."
+	OnlySilenceLinux   = "Check that the player is not muted in its own volume, nor in the system's sound settings."
+	PhoneCall          = "The player's output device runs at %s, not fit for recording: tracks will sound like a phone call."
+	PhoneCallMacOS     = "A Bluetooth headset switches to call mode when an app opens its microphone. In System Settings > Sound > Input, choose another microphone, such as the built-in one, or play to another output."
+	PhoneCallWindows   = "A Bluetooth headset does this while an app uses its microphone. Choose another output in Settings > System > Sound, or end what uses the headset's microphone."
+	PhoneCallLinux     = "A Bluetooth headset does this while an app uses its microphone. Choose another output device, or end what uses the headset's microphone."
+	DeviceRate         = "%g kHz"
+	DeviceRateMono     = "%g kHz mono"
+	DiskFull           = "Only %d MB free in the output folder."
 )
 
 // About. Versions takes the app's version, the recorder's, then the

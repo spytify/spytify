@@ -14,7 +14,7 @@
     1500ms  > the stream is now s16le 16000 Hz 1ch
     1500ms  > audio music 1 at 1000ms, 32000(2000ms)
     1510ms  log error: the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call
-    1510ms  error capture_low_quality "The player's output device runs at 16 kHz mono, not fit for recording: tracks will sound like a phone call. …"
+    1510ms  error capture_low_quality "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call" source=16000/1
     1510ms  log info: stream format changed from s16le 44100 Hz 2ch to s16le 16000 Hz 1ch
     1510ms  log debug: "A" starts at its first sound, 0 ms
     1510ms  take t-001 "A" start=0(0ms) length=48000(3000ms) format=16000/1

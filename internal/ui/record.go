@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -376,15 +377,15 @@ func (r *recordScreen) render(s model.State) {
 	r.idle.Hide()
 	r.session.Show()
 
-	// Only silence is said in a line: why, and what to do, is the system
-	// audio check's in the diagnostics. A recorder gone no longer warns.
+	// Only silence is said in a line: why, and what to do, is the player
+	// heard check's in the diagnostics. A recorder gone no longer warns.
 	warns := !gone && s.LastError != nil && s.LastError.Msg != "" && s.Recording()
 	silent := warns && s.LastError.Code == "capture_silent"
 	switch {
 	case silent:
 		setCaption(r.alert, fmt.Sprintf(lang.OnlySilenceHeard, player))
 	case warns:
-		setCaption(r.alert, s.LastError.Msg)
+		setCaption(r.alert, model.WarningText(*s.LastError, runtime.GOOS))
 	}
 	show(r.alertRow, warns)
 	show(r.alertDiagnose, silent)

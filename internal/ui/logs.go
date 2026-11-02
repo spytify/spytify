@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -270,11 +271,12 @@ func (l *logsScreen) renderChecks(s model.State) {
 			fix = choose.lit
 		}
 		name := container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c)))
-		var row fyne.CanvasObject = container.NewBorder(nil, nil, name, fix, clipped(c.Detail))
-		if !c.OK && c.Detail != "" {
+		detail := model.CheckDetail(c, runtime.GOOS)
+		var row fyne.CanvasObject = container.NewBorder(nil, nil, name, fix, clipped(detail))
+		if !c.OK && detail != "" {
 			// Why it failed goes under the name, whole and in line with it:
 			// beside it, cut short, it lost the reason.
-			reason := container.New(layout.NewCustomPaddedLayout(0, 0, theme.IconInlineSize()+theme.Padding(), 0), wrapped(c.Detail))
+			reason := container.New(layout.NewCustomPaddedLayout(0, 0, theme.IconInlineSize()+theme.Padding(), 0), wrapped(detail))
 			row = container.New(layout.NewCustomPaddedVBoxLayout(0), container.NewBorder(nil, nil, name, fix), reason)
 		}
 		if c.OK {
