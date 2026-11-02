@@ -1000,6 +1000,9 @@ type recordingCore struct {
 	// noOutput is an output folder that cannot be written to: its check
 	// fails and no session starts.
 	noOutput bool
+	// silent is a capture that heard only silence: the system audio check
+	// fails.
+	silent bool
 }
 
 func (c *recordingCore) setNoOutput(gone bool) {
@@ -1007,6 +1010,13 @@ func (c *recordingCore) setNoOutput(gone bool) {
 	c.noOutput = gone
 	c.mu.Unlock()
 }
+
+func (c *recordingCore) setSilent(silent bool) {
+	c.mu.Lock()
+	c.silent = silent
+	c.mu.Unlock()
+}
+
 
 func (c *recordingCore) handle(ctx context.Context, method string, params json.RawMessage) (any, error) {
 	c.mu.Lock()
@@ -1026,12 +1036,17 @@ func (c *recordingCore) handle(ctx context.Context, method string, params json.R
 		_ = json.Unmarshal(params, &p)
 		c.controls = append(c.controls, p.Cmd)
 	}
-	noOutput := c.noOutput
+	noOutput, silent := c.noOutput, c.silent
 	c.mu.Unlock()
 	switch method {
 	case proto.MethodCoreInfo:
 		if noOutput {
 			return outputGone(), nil
+		}
+		if silent {
+			i := info()
+			i.Checks = append(i.Checks, proto.Check{Name: proto.CheckSystemAudio, Detail: silentHint})
+			return i, nil
 		}
 		return info(), nil
 	case proto.MethodSessionStart:
@@ -1916,12 +1931,103 @@ func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
 	msg := "The player plays to a device at 16 kHz mono, not fit for recording: tracks will sound like a phone call."
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: msg}))
 	a.render()
-	if !a.banner.Visible() || a.banner.Text != msg {
-		t.Fatalf("banner shown %v, text %q", a.banner.Visible(), a.banner.Text)
+	r := a.screens[tabRecord].(*recordScreen)
+	if !r.alertRow.Visible() || r.alert.String() != msg {
+		t.Fatalf("alert shown %v, text %q", r.alertRow.Visible(), r.alert.String())
 	}
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
 	a.render()
-	if a.banner.Visible() {
-		t.Fatalf("banner still shows %q with the device fit again", a.banner.Text)
+	if r.alertRow.Visible() {
+		t.Fatalf("alert still shows %q with the device fit again", r.alert.String())
+	}
+}
+
+// The recorder's warning shows once, on the Record tab, in an outlined
+// alert in the error red over the track being recorded, as the info alert
+// the session waits in: not as a line of red text over the tabs. It goes
+// when the recorder withdraws it.
+func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	msg := "The player's output device runs at 16 kHz mono, not fit for recording: tracks will sound like a phone call."
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: msg}))
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	if !r.alertRow.Visible() || r.alert.String() != msg || r.alertDiagnose.Visible() {
+		t.Fatalf("alert shown %v, text %q, Open diagnostics %v", r.alertRow.Visible(), r.alert.String(), r.alertDiagnose.Visible())
+	}
+	if p := r.alertRow.Objects[0].(*panel); p.line != theme.ColorNameError || p.fill != "" {
+		t.Errorf("alert outline %q, fill %q", p.line, p.fill)
+	}
+	shown := func(o fyne.CanvasObject) int {
+		return len(slices.DeleteFunc(texts(o), func(s string) bool { return s != msg }))
+	}
+	if all, tab := shown(a.win.Content()), shown(r.root); all == 0 || all != tab {
+		t.Errorf("the warning shows %d times, %d on the Record tab", all, tab)
+	}
+	if !r.card.Visible() || r.alertRow.Position().Y >= r.card.Position().Y {
+		t.Errorf("alert at %v, not over the track card at %v", r.alertRow.Position(), r.card.Position())
+	}
+	a.showTab(tabLibrary)
+	a.render()
+	if contains(texts(a.win.Content()), msg) {
+		t.Error("the warning shows on the Library tab")
+	}
+	a.showTab(tabRecord)
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
+	a.render()
+	if r.alertRow.Visible() {
+		t.Fatalf("alert still shows %q with the device fit again", r.alert.String())
+	}
+}
+
+// silentHint is the recorder's warning of only silence on macOS.
+const silentHint = "Only silence from the player for 10 s while it plays. macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
+
+// Only silence from the player is said in one line on the Record tab, with
+// Open diagnostics, where the failing system audio check says why and what
+// to do. The checks run again when the silence is reported and when sound
+// comes back.
+func TestOnlySilenceLeadsToTheSystemAudioCheck(t *testing.T) {
+	a, m, core := connectedApp(t)
+	feedSession(t, m)
+	failing := func() bool { return checkFails(m.Snapshot().Info.Checks, proto.CheckSystemAudio) }
+	core.setSilent(true)
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: silentHint}))
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -120, RMSDBFS: -120}))
+	eventually(t, "the checks did not run again for the silence", failing)
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	want := fmt.Sprintf(lang.OnlySilenceHeard, "Player")
+	if !r.alertRow.Visible() || r.alert.String() != want || !r.alertDiagnose.Visible() {
+		t.Fatalf("alert shown %v, text %q, Open diagnostics %v", r.alertRow.Visible(), r.alert.String(), r.alertDiagnose.Visible())
+	}
+	if contains(texts(a.win.Content()), silentHint) {
+		t.Error("the Record tab shows the whole warning, not the line")
+	}
+	snapshot(t, a, "record-silent")
+	light := defaults()
+	light["app.theme"] = "light"
+	m.SetSettings(light)
+	a.render()
+	snapshot(t, a, "record-silent-light")
+	m.SetSettings(defaults())
+	a.render()
+
+	test.Tap(r.alertDiagnose)
+	all := texts(overlay(t, a))
+	if !contains(all, proto.CheckSystemAudio) || !contains(all, silentHint) {
+		t.Fatalf("diagnostics without the system audio check and its reason: %q", all)
+	}
+	snapshot(t, a, "diagnostics-system-audio")
+	tapButton(t, overlay(t, a), lang.Close)
+
+	core.setSilent(false)
+	before := core.count(proto.MethodCoreInfo)
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent"}))
+	eventually(t, "the checks did not run again for the sound", func() bool { return core.count(proto.MethodCoreInfo) > before && !failing() })
+	a.render()
+	if r.alertRow.Visible() {
+		t.Fatalf("alert still shows %q with sound again", r.alert.String())
 	}
 }

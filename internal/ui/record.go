@@ -52,6 +52,14 @@ type recordScreen struct {
 	progress *bar
 	elapsed  *widget.RichText
 
+	// alertRow is the recorder's warning while a session runs: a capture
+	// too poor for music, or one that brings no audio or only silence.
+	alertRow *fyne.Container
+	alert    *widget.RichText
+	// alertDiagnose leads to the diagnostics, which say why and what to do
+	// when the warning has a check of its own.
+	alertDiagnose *litButton
+
 	waitRow *fyne.Container
 	waiting *widget.RichText
 	// launch and play are what a waiting session needs from the player:
@@ -164,6 +172,15 @@ func newRecordScreen(a *App) *recordScreen {
 	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch.lit, r.play.lit, r.restart, r.blocked.lit),
 		container.NewVBox(layout.NewSpacer(), r.waiting, layout.NewSpacer()))
 	r.waitRow = inset(newPanel("", theme.ColorNamePrimary, 8, fyne.NewSize(pad*2, pad*1.5), alert))
+	// The recorder's warning is the same alert in the error red, its text
+	// on as many lines as it takes.
+	r.alert = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorErrorText, Inline: true}})
+	r.alert.Wrapping = fyne.TextWrapWord
+	a.maskPaths(r.alert)
+	r.alertDiagnose = newLitButton(lang.OpenDiagnostics, theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
+	errorIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.ErrorIcon(), theme.ColorNameError)))
+	r.alertRow = inset(newPanel("", theme.ColorNameError, 8, fyne.NewSize(pad*2, pad*1.5),
+		container.NewBorder(nil, nil, errorIcon, container.NewCenter(r.alertDiagnose.lit), container.NewVBox(layout.NewSpacer(), r.alert, layout.NewSpacer()))))
 
 	r.list = newCardList(
 		func() int { return len(r.rows) },
@@ -232,9 +249,10 @@ func newRecordScreen(a *App) *recordScreen {
 	})
 	r.clear.Importance = widget.LowImportance
 	r.noRows = emptyState(lang.NoFilesYet, widget.NewLabel(lang.NoFilesYetText))
-	// The info bar over the track being recorded, the session's files under
-	// them and its totals at the bottom.
-	r.session = inReadingOrder(container.NewVBox(r.waitRow, r.card), footerBar(r.totals, container.NewHBox(r.clear, openFolder)), nil, nil,
+	// The recorder's warning and the info bar over the track being
+	// recorded, the session's files under them and its totals at the
+	// bottom.
+	r.session = inReadingOrder(container.NewVBox(r.alertRow, r.waitRow, r.card), footerBar(r.totals, container.NewHBox(r.clear, openFolder)), nil, nil,
 		container.NewStack(r.list, r.noRows))
 	r.root = container.NewStack(r.idle, r.session)
 	return r
@@ -330,6 +348,19 @@ func (r *recordScreen) render(s model.State) {
 	}
 	r.idle.Hide()
 	r.session.Show()
+
+	// Only silence is said in a line: why, and what to do, is the system
+	// audio check's in the diagnostics.
+	warns := s.LastError != nil && s.LastError.Msg != "" && s.Recording()
+	silent := warns && s.LastError.Code == "capture_silent"
+	switch {
+	case silent:
+		setCaption(r.alert, fmt.Sprintf(lang.OnlySilenceHeard, player))
+	case warns:
+		setCaption(r.alert, s.LastError.Msg)
+	}
+	show(r.alertRow, warns)
+	show(r.alertDiagnose, silent)
 
 	c := s.Current
 	// A session the output folder ended, its drive unplugged: Record stays
@@ -448,7 +479,7 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 func (r *recordScreen) relayout() {
 	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.card.Visible(),
 		r.state.text, r.state.lead.Visible(), r.rate.text, r.channels.text, r.fileRate.Visible(), r.fileRate.text,
-		r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
+		r.alertRow.Visible(), r.alert.String(), r.alertDiagnose.Visible(), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()

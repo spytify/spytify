@@ -66,6 +66,7 @@ const (
 	WaitingNextTrack          = "Waiting for the next track to start."
 	NothingRecordedNotRunning = "Nothing is recorded while %s is not running."
 	NothingRecordedPaused     = "Nothing is recorded while %s is paused: press play there."
+	OnlySilenceHeard          = "Spytify hears only silence from %s."
 	SessionTotals             = "%d saved · %d skipped · %d ads · %s"
 )
 

@@ -85,6 +85,8 @@ func TestPinnedSilentCapture(t *testing.T) {
 			s := r.s
 			s.deps.silentHint = silentHint(goos)
 			s.deps.mute = func(bool) error { return nil }
+			var told []bool
+			s.deps.silence = func(on bool) { told = append(told, on) }
 			ctx := context.Background()
 			long := time.Now().Add(-time.Hour)
 			s.onMeta(ctx, statusEvent(meta.Playing))
@@ -104,15 +106,47 @@ func TestPinnedSilentCapture(t *testing.T) {
 			s.onTick()
 			s.setState(proto.StateRecording)
 			s.onTick()
+			s.onChunk(loud)
 			want := []string{"state waiting"}
+			// The system audio check is told of the silence, and of the
+			// first sound; a later sound tells it nothing new.
+			wantTold := []bool{false}
 			if goos == "darwin" {
 				want = append(want, reported...)
+				wantTold = []bool{true, false}
 			}
 			want = append(want, "state paused", "state waiting", "state ad", "state recording")
 			if got := r.lines(); !slices.Equal(got, want) {
 				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
 			}
+			if !slices.Equal(told, wantTold) {
+				t.Fatalf("system audio check told %v, want %v", told, wantTold)
+			}
 		})
+	}
+}
+
+// The system audio check is on macOS only, where it fails with the
+// silence's warning while the capture hears only silence.
+func TestSystemAudioCheck(t *testing.T) {
+	for _, c := range []struct {
+		goos   string
+		silent bool
+		want   proto.Check
+		listed bool
+	}{
+		{"darwin", false, proto.Check{Name: proto.CheckSystemAudio, OK: true, Detail: "no silence heard"}, true},
+		{"darwin", true, proto.Check{Name: proto.CheckSystemAudio, Detail: silentHint("darwin")}, true},
+		{"windows", true, proto.Check{}, false},
+		{"linux", true, proto.Check{}, false},
+	} {
+		got, listed := systemAudioCheck(c.goos, c.silent)
+		if listed != c.listed || got.Name != c.want.Name || got.OK != c.want.OK || got.Detail != c.want.Detail {
+			t.Errorf("%s silent=%v: %+v listed %v, want %+v listed %v", c.goos, c.silent, got, listed, c.want, c.listed)
+		}
+	}
+	if !strings.Contains(silentHint("darwin"), "Screen & System Audio Recording") {
+		t.Errorf("the failing check does not say where to allow it: %q", silentHint("darwin"))
 	}
 }
 

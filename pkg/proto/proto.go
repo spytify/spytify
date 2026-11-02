@@ -111,6 +111,11 @@ type Check struct {
 // to: without it, no recording starts (CodeOutputDir).
 const CheckOutputWritable = "output folder writable"
 
+// CheckSystemAudio is the check, on macOS, that the capture did not hear
+// only silence while the player played: what a refused System Audio
+// Recording permission gives.
+const CheckSystemAudio = "system audio recording"
+
 type CoreInfoResult struct {
 	Version  string     `json:"version"`
 	Protocol int        `json:"protocol"`

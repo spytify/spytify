@@ -145,6 +145,9 @@ type sessionDeps struct {
 	// silentHint is the warning for a capture that delivers only silence
 	// while the player plays; empty, the session does not watch for it.
 	silentHint string
+	// silence tells that the capture hears only silence while the player
+	// plays (true), or sound (false).
+	silence func(on bool)
 }
 
 // Session turns a stream of frames and now-playing events into track files.
@@ -192,8 +195,8 @@ type Session struct {
 	lastChunk time.Time
 	stalled   bool
 	// silent is set once a capture that delivers only silence while the
-	// player plays was reported.
-	silent bool
+	// player plays was reported; heard once the capture brought sound.
+	silent, heard bool
 	// lowFormat is set while the capture's format is too poor for music.
 	lowFormat bool
 	peak, sum float64
@@ -403,6 +406,20 @@ func silentHint(goos string) string {
 	return ""
 }
 
+// systemAudioCheck is the check that the capture did not hear only silence
+// while the player played, until it heard sound again; false where the
+// session does not watch for it.
+func systemAudioCheck(goos string, silent bool) (proto.Check, bool) {
+	hint := silentHint(goos)
+	switch {
+	case hint == "":
+		return proto.Check{}, false
+	case silent:
+		return proto.Check{Name: proto.CheckSystemAudio, Detail: hint}, true
+	}
+	return proto.Check{Name: proto.CheckSystemAudio, OK: true, Detail: "no silence heard"}, true
+}
+
 // lowQualityHint is what to change when the capture is too poor for
 // music, as from a Bluetooth headset in a call.
 func lowQualityHint(goos string, f pcm.Format) string {
@@ -435,6 +452,9 @@ func (s *Session) onTick() {
 		s.silent = true
 		s.deps.log.Errorf("only silence from the capture for %s while the player plays", captureSilent)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: s.deps.silentHint})
+		if s.deps.silence != nil {
+			s.deps.silence(true)
+		}
 	}
 	if s.opts.IdleExit > 0 && s.seen && (s.status != meta.Playing) && time.Since(s.lastSound) > s.opts.IdleExit {
 		s.deps.log.Infof("player idle for %s, ending the session", s.opts.IdleExit)
@@ -468,11 +488,7 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	peak, rms := ch.Format.Level(ch.Data)
 	if peak > s.silenceDB {
 		s.lastSound = time.Now()
-		if s.silent {
-			s.silent = false
-			s.deps.log.Infof("sound from the capture again")
-			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent"})
-		}
+		s.hear()
 	}
 	data := ch.Data
 	if s.pausing {
@@ -491,6 +507,23 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	}
 	s.meter(peak, rms, len(ch.Data)/ch.Format.Sample.Bytes())
 	s.progress()
+}
+
+// hear notes sound from the capture, the session's first or the first
+// after a silence was reported, which it withdraws.
+func (s *Session) hear() {
+	if s.heard && !s.silent {
+		return
+	}
+	s.heard = true
+	if s.silent {
+		s.silent = false
+		s.deps.log.Infof("sound from the capture again")
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent"})
+	}
+	if s.deps.silence != nil {
+		s.deps.silence(false)
+	}
 }
 
 // poorFormat is a format too poor for music, under 44.1 kHz or in mono:
