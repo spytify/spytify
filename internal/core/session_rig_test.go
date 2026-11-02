@@ -184,7 +184,7 @@ func (r *rig) emit(method string, payload any) {
 	case proto.ErrorEvent:
 		msg := p.Msg
 		switch p.Code {
-		case "capture_low_quality", "capture_stalled":
+		case "capture_low_quality", "capture_stalled", "capture_silent":
 			// The advice after the first sentence depends on the system.
 			if i := strings.Index(msg, ". "); i >= 0 {
 				msg = msg[:i+1] + " …"

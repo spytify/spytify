@@ -290,6 +290,23 @@ func TestAGoodCaptureAgainClearsTheLowQualityWarning(t *testing.T) {
 	}
 }
 
+// The warning of a capture that hears only silence holds while silent
+// levels flow, unlike the one of no audio at all, and goes when the core
+// withdraws it.
+func TestSoundAgainClearsTheSilenceWarning(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: "only silence"}))
+	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -120, RMSDBFS: -120}))
+	if e := m.Snapshot().LastError; e == nil || e.Code != "capture_silent" {
+		t.Fatalf("warning %+v", e)
+	}
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent"}))
+	if e := m.Snapshot().LastError; e != nil {
+		t.Fatalf("warning kept with sound again: %+v", e)
+	}
+}
+
 func TestTrackStartedKeepsTheSourceFormat(t *testing.T) {
 	m := New()
 	m.Apply(ev(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-001", Title: "A"}, Source: &proto.AudioSource{SampleRate: 44100, Channels: 2}}))

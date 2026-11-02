@@ -45,6 +45,7 @@ var stopCodes = map[string]bool{"disk_full": true, "output_dir": true, "counter_
 var warnTitles = map[string]string{
 	"capture_low_quality": lang.RecordingLowQuality,
 	"capture_stalled":     lang.NothingRecorded,
+	"capture_silent":      lang.NothingRecorded,
 }
 
 // notify tells, while the window is hidden in the tray, what would

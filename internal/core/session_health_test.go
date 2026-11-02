@@ -1,6 +1,7 @@
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -60,6 +61,58 @@ func TestPinnedStallAndRecovery(t *testing.T) {
 	}
 	if got := r.lines(); !slices.Equal(got, want) {
 		t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// A capture that delivers frames, all silent, while the player plays is
+// reported once, on the tick after captureSilent, and withdrawn at the
+// first sound: macOS records silence when System Audio Recording was
+// refused. Not while the player is paused, nor while the session mutes an
+// ad, nor on the systems where the session does not watch for it. The
+// clock is moved by setting when the last sound came.
+func TestPinnedSilentCapture(t *testing.T) {
+	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
+	loud := capture.Chunk{Data: slices.Repeat([]byte{0x00, 0x40}, len(silent.Data)/2), Format: f44}
+	reported := []string{
+		"log error: only silence from the capture for 10s while the player plays",
+		`error capture_silent "Only silence from the player for 10 s while it plays. …"`,
+		"log info: sound from the capture again",
+		`error capture_silent ""`,
+	}
+	for _, goos := range []string{"darwin", "windows", "linux"} {
+		t.Run(goos, func(t *testing.T) {
+			r := bareRig(t, map[string]any{"recorder.mute_ads": true}, endOnStop)
+			s := r.s
+			s.deps.silentHint = silentHint(goos)
+			s.deps.mute = func(bool) error { return nil }
+			ctx := context.Background()
+			long := time.Now().Add(-time.Hour)
+			s.onMeta(ctx, statusEvent(meta.Playing))
+			s.onChunk(silent)
+			s.onTick()
+			s.lastSound = long
+			s.onTick()
+			s.onChunk(silent)
+			s.onTick()
+			s.onChunk(loud)
+			s.onMeta(ctx, statusEvent(meta.Paused))
+			s.lastSound = long
+			s.onTick()
+			s.onMeta(ctx, statusEvent(meta.Playing))
+			s.setState(proto.StateAd)
+			s.lastSound = long
+			s.onTick()
+			s.setState(proto.StateRecording)
+			s.onTick()
+			want := []string{"state waiting"}
+			if goos == "darwin" {
+				want = append(want, reported...)
+			}
+			want = append(want, "state paused", "state waiting", "state ad", "state recording")
+			if got := r.lines(); !slices.Equal(got, want) {
+				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
+			}
+		})
 	}
 }
 
@@ -372,14 +425,15 @@ func TestPinnedDiskFull(t *testing.T) {
 	}
 }
 
-// What the session says when no audio comes, or the capture is too poor
-// for music, on each system.
+// What the session says when no audio comes, only silence comes, or the
+// capture is too poor for music, on each system.
 func TestPinnedHints(t *testing.T) {
 	call := pcm.Format{Rate: 16000, Channels: 1, Sample: pcm.S16LE}
 	f8 := pcm.Format{Rate: 8000, Channels: 2, Sample: pcm.S16LE}
 	var b strings.Builder
 	for _, goos := range []string{"darwin", "windows", "linux"} {
 		fmt.Fprintf(&b, "%s stall: %s\n", goos, stallHint(goos))
+		fmt.Fprintf(&b, "%s silent: %s\n", goos, cmp.Or(silentHint(goos), "-"))
 		fmt.Fprintf(&b, "%s call: %s\n", goos, lowQualityHint(goos, call))
 		fmt.Fprintf(&b, "%s 8 kHz: %s\n", goos, lowQualityHint(goos, f8))
 	}
