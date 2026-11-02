@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -245,9 +246,6 @@ func (a *App) noteTab(i int) {
 // developers, which fits the dialog.
 const screenshotWidth = 480
 
-// pictureLabel is Send to the developers' tick box for the picture.
-const pictureLabel = "Send the picture of the window"
-
 // sendChecks shows what the diagnostics' report holds, and sends it on
 // Send.
 func (a *App) sendChecks(s model.State, sent func(ok bool)) {
@@ -267,7 +265,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	}
 	// The window as it shows under this dialog, which is not open yet.
 	report := telemetry.Checks{Failing: failing, Log: log, Screenshot: a.picture()}
-	without := "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
+	without := lang.SendChecksText
 	body := widget.NewLabel(without)
 	body.Wrapping = fyne.TextWrapWord
 	preview := container.NewVBox()
@@ -275,7 +273,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	// report leave it out.
 	var keep *check
 	if shot := report.Screenshot; shot != nil {
-		with := "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
+		with := lang.SendChecksPicture
 		img := canvas.NewImageFromImage(shot)
 		img.FillMode = canvas.ImageFillContain
 		b := shot.Bounds()
@@ -283,7 +281,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 		// At the left, as the log's long lines widen what scrolls.
 		pic := container.NewHBox(img)
 		preview.Add(pic)
-		keep = newCheck(pictureLabel)
+		keep = newCheck(lang.SendPicture)
 		keep.OnChanged = func(on bool) {
 			if on {
 				body.SetText(with)
@@ -298,14 +296,14 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 	preview.Add(widget.NewLabelWithStyle(a.tel.ChecksPreview(report), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true}))
 	scroll := container.NewScroll(preview)
 	scroll.SetMinSize(fyne.NewSize(0, 160))
-	content := container.NewVBox(body, newFold("What will be sent", scroll))
+	content := container.NewVBox(body, newFold(lang.WhatWillBeSent, scroll))
 	if keep != nil {
 		content.Add(keep)
 	}
 	message := newCommentEntry()
-	message.SetPlaceHolder("Comment (optional)")
+	message.SetPlaceHolder(lang.Comment)
 	content.Add(message)
-	showDialog(a.win, "Send to the developers", content, "Cancel", "Send", fyne.NewSize(560, 420), func(send bool) {
+	showDialog(a.win, lang.SendToDevelopers, content, lang.Cancel, lang.Send, fyne.NewSize(560, 420), func(send bool) {
 		if !send {
 			return
 		}
