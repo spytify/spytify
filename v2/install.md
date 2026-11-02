@@ -3,7 +3,7 @@ layout: page
 title: Install
 ---
 
-Every release has a build per system on the [releases page]({{ site.repository_download }}). Spytify also needs **ffmpeg**, which encodes the files.
+Every release has a build per system on the [releases page]({{ site.repository_download }}). Spytify encodes the files with **ffmpeg**: the macOS app and the Windows zip come with their own, built with only what Spytify runs.
 
 ### [Linux](#linux)
 
@@ -19,7 +19,7 @@ Every release has a build per system on the [releases page]({{ site.repository_d
   }
   ```
 
-  then run `systemctl --user restart pipewire`.
+  then run `systemctl --user restart pipewire`. Without it, Spytify still records, and the diagnostics list it as advice.
 - The packages install a user service: `systemctl --user enable --now spytifyd` keeps the recorder running from login.
 
 ### [macOS](#macos)
@@ -27,12 +27,12 @@ Every release has a build per system on the [releases page]({{ site.repository_d
 - macOS 14.2 or later. Open the `.dmg` and drag Spytify to Applications.
 - The app is not notarised yet: the first time, macOS refuses to open it. Allow it in System Settings > Privacy & Security > Open Anyway.
 - macOS asks once for two permissions: **System Audio Recording**, for the capture, and **Automation**, to read what is playing. If you said no, turn them on in System Settings > Privacy & Security and open Spytify again.
-- Install ffmpeg with [Homebrew](https://brew.sh): `brew install ffmpeg`. Spytify finds it in `/opt/homebrew/bin` and `/usr/local/bin`.
+- The app comes with its own ffmpeg, an LGPL build (see `ffmpeg-README.txt` in the app's `Contents/Resources`): nothing to install.
 
 ### [Windows](#windows)
 
 - Windows 10 version 2004 or later, or Windows 11. Unzip the release anywhere and open `Spytify.exe`.
-- The zip comes with `ffmpeg.exe`, an LGPL build (see `ffmpeg-README.txt`). One installed with winget, Chocolatey or Scoop works too.
+- The zip comes with `ffmpeg.exe`, an LGPL build with only what Spytify runs (see `ffmpeg-README.txt`). One installed with winget, Chocolatey or Scoop works too.
 - Without a graphics driver offering OpenGL, such as on a computer whose graphics card is disabled, Spytify draws its window in software with the copy of Mesa in its `opengl` folder.
 - The application must show what it plays in the Windows media controls (the volume flyout).
 

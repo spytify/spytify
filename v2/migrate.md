@@ -9,7 +9,7 @@ Every v1 setting and feature, and where it is in v2:
 
 | v1 | v2 |
 | --- | --- |
-| Output path | **Output folder** (`output.dir`) |
+| Output path | **Output folder** (`output.dir`), `~/Spytify` by default |
 | Audio device, or a virtual audio cable | Gone: v2 records the application's own audio stream, whatever device it plays on |
 | Muting other apps while recording | Gone: no other app can be recorded. **Mute the player on this computer while recording** (`player.mute_output`) silences the player for you on macOS and Linux |
 | Audio quality, 128 to 320 kbps | **Bitrate** (`encode.bitrate_kbps`), for MP3 and AAC |
@@ -30,6 +30,6 @@ Every v1 setting and feature, and where it is in v2:
 | Track changes read from the window title | The application's media interface: MPRIS, AppleScript, Windows media controls |
 | English, French, Dutch and German | English |
 | The recorded tracks list and the console | The **Record** tab, with the track playing and the session's list, and the **Logs** tab |
-| | New: the **Library** tab, the light and dark themes, the tray, `spytify-cli`, and Linux and macOS |
+| | New: the **Library** tab, the light and dark themes, keyboard shortcuts, the tray, `spytify-cli`, and Linux and macOS |
 
 Your v1 recordings stay where they are. v2 names and groups its files with its own settings, so it does not take v1 files for duplicates unless their names match.

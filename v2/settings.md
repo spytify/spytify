@@ -38,7 +38,7 @@ The player Spytify records. The app saves it in the `.env` file of your configur
 
 | Setting | Key | Values | Default |
 | --- | --- | --- | --- |
-| Output folder | `output.dir` | a folder: absolute, or starting with ~/ | `~/Music/Spytify` |
+| Output folder | `output.dir` | a folder: absolute, or starting with ~/ | `~/Spytify` |
 | Group by folders | `output.group_by` | none, artist, artist/album, artists, artists/album | `artist/album` |
 
 Advanced:
