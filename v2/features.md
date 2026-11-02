@@ -39,7 +39,7 @@ When the application's output device runs below 44.1 kHz or in mono, as a Blueto
 
 ### [The Record screen](#record-screen)
 
-The track being recorded sits on its cover's colours, with a badge that says whether it is recorded (a level meter while it is), the stream's rate and channels, and its progress along the bottom. Under it, the session's list says which tracks were saved, and why the others were skipped. When nothing is recorded, one line says why, with the one button that fixes it: open the player, **Play**, **Start the recorder** or **Open diagnostics**.
+The track being recorded sits on its cover's colours, with a badge that says whether it is recorded, the stream's rate and channels, and its progress along the bottom. Beside **Skip**, a meter shows each channel's level, L and R, while it records. Under it, the session's list says which tracks were saved, and why the others were skipped. When nothing is recorded, one line says why, with the one button that fixes it: open the player, **Play**, **Start the recorder** or **Open diagnostics**.
 
 Light or dark, as the system is; **Theme** in Settings > App picks one.
 

@@ -6,7 +6,7 @@ title: Overview
 Spytify records the sound one application sends to your speakers, nothing else, and saves each track it plays as its own file: cut at the right sample, encoded with ffmpeg, and tagged with the title, artist, album and cover the application itself reports.
 
 <p align="center">
-  <a href="{{ '/assets/images/v2/recording.png' | relative_url }}"><img width="48%" alt="Spytify recording, light theme: the current track on its cover's colours with its progress, and the files already saved" src="{{ '/assets/images/v2/recording.png' | relative_url }}" /></a>
+  <a href="{{ '/assets/images/v2/recording.png' | relative_url }}"><img width="48%" alt="Spytify recording, light theme: the current track on its cover's colours with its progress and its L and R level, and the files already saved" src="{{ '/assets/images/v2/recording.png' | relative_url }}" /></a>
   <a href="{{ '/assets/images/v2/recording-dark.png' | relative_url }}"><img width="48%" alt="The same session in the dark theme" src="{{ '/assets/images/v2/recording-dark.png' | relative_url }}" /></a>
 </p>
 
