@@ -565,12 +565,9 @@ func inSight(a *App, s *container.Scroll, o fyne.CanvasObject) bool {
 func TestTheSwitchShowsItsFocus(t *testing.T) {
 	for _, mode := range []string{"light", "dark"} {
 		t.Run(mode, func(t *testing.T) {
-			a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 			values := defaults()
 			values["app.theme"] = mode
-			m.SetConn(model.Connected, "")
-			m.SetInfo(info())
-			m.SetSettings(values)
+			a, _ := connectedTestApp(t, values)
 			a.showTab(tabSettings)
 			a.render()
 			c := a.win.Canvas()

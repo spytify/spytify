@@ -566,12 +566,9 @@ func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	values := defaults()
 	values["output.dir"] = dir
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(values)
+	a, _ := connectedTestApp(t, values)
 	lib := a.screens[tabLibrary].(*libraryScreen)
 	// Until the tags are read, the names say what they can. Taking the
 	// reads' slots holds them back.
@@ -660,14 +657,10 @@ func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
 }
 
 func TestLibraryRescansWhenShown(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	dir := t.TempDir()
 	values := defaults()
 	values["output.dir"] = dir
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(values)
-	a.render()
+	a, _ := connectedTestApp(t, values)
 	lib := a.screens[tabLibrary].(*libraryScreen)
 
 	a.showTab(tabLibrary)
@@ -710,12 +703,9 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("make the FLAC: %v: %s", err, b)
 	}
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	values := defaults()
 	values["output.dir"] = dir
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(values)
+	a, _ := connectedTestApp(t, values)
 	a.showTab(tabLibrary)
 	a.render()
 	lib := a.screens[tabLibrary].(*libraryScreen)
@@ -748,12 +738,9 @@ func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
 	}
 	// No ffmpeg: the empty files have no cover to look for.
 	t.Setenv("SPYTIFY_FFMPEG", filepath.Join(dir, "none"))
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	values := defaults()
 	values["output.dir"] = dir
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(values)
+	a, _ := connectedTestApp(t, values)
 	a.showTab(tabLibrary)
 	a.render()
 	lib := a.screens[tabLibrary].(*libraryScreen)

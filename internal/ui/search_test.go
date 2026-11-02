@@ -1,14 +1,11 @@
 package ui
 
 import (
-	"path/filepath"
 	"testing"
 
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-
-	"github.com/spytify/spytify/internal/ui/model"
 )
 
 // The Library's and Settings' search fields sit alike, square, the
@@ -16,12 +13,9 @@ import (
 // the dropdowns beside and under them are square too, the Library's two as
 // wide as each other.
 func TestTheSearchFieldsLookAlike(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
 	values := defaults()
 	values["output.dir"] = t.TempDir()
-	m.SetSettings(values)
+	a, _ := connectedTestApp(t, values)
 	at := a.fa.Driver().AbsolutePositionForObject
 	fields := []struct {
 		tab    int
@@ -79,10 +73,7 @@ func TestTheSearchFieldsLookAlike(t *testing.T) {
 // space. The button has no background under the pointer, only when
 // focused, and little padding around its icon.
 func TestTheClearButtonOfASearch(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, _ := connectedTestApp(t, defaults())
 	a.showTab(tabSettings)
 	a.render()
 	s := a.screens[tabSettings].(*settingsScreen)

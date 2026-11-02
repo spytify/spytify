@@ -36,10 +36,7 @@ func TestAFailedCheckReadsAsWhatIsWrong(t *testing.T) {
 // turns to a warning while a check fails. Opened from another tab, the
 // dialog follows the checks there, and closing it stays on that tab.
 func TestTheDiagnosticsAreADialog(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, m := connectedTestApp(t, defaults())
 	a.showTab(tabLogs)
 	a.render()
 	b := a.screens[tabLogs].(*logsScreen).diagnose

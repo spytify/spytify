@@ -27,10 +27,7 @@ import (
 // settingsApp is the app on its Settings tab, with the defaults applied.
 func settingsApp(t *testing.T) (*App, *model.Model, *settingsScreen) {
 	t.Helper()
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, m := connectedTestApp(t, defaults())
 	a.showTab(tabSettings)
 	a.render()
 	return a, m, a.screens[tabSettings].(*settingsScreen)

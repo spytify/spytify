@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/spytify/spytify/internal/openfiles"
-	"github.com/spytify/spytify/internal/ui/model"
 )
 
 // The Library tab reads the output folder and its covers, then lets go of
@@ -28,12 +27,9 @@ func TestTheLibraryHoldsNothingInTheOutputFolder(t *testing.T) {
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("make the FLAC: %v: %s", err, b)
 	}
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	values := defaults()
 	values["output.dir"] = dir
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(values)
+	a, _ := connectedTestApp(t, values)
 	a.showTab(tabLibrary)
 	a.render()
 	lib := a.screens[tabLibrary].(*libraryScreen)

@@ -74,7 +74,7 @@ func TestTheShortcutLeavesADisabledRecord(t *testing.T) {
 // 1 to 5 show the tabs in their order, as a click does: what had the focus
 // loses it, so a key goes nowhere hidden.
 func TestShortcutsShowTheTabs(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	for _, step := range []struct {
 		key  fyne.KeyName
 		want int
@@ -98,7 +98,7 @@ func TestShortcutsShowTheTabs(t *testing.T) {
 // In a text field the shortcuts still work and type nothing, and the
 // field's own keys stay its own.
 func TestShortcutsGoThroughTextFields(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	press(t, a, fyne.Key2)
 	search := a.screens[tabLibrary].(*libraryScreen).search
 	if a.win.Canvas().Focus(search); a.win.Canvas().Focused() != search {
@@ -136,7 +136,7 @@ func TestShortcutsGoThroughTextFields(t *testing.T) {
 // typed to replace it. Elsewhere, under a dialog or offline, it moves
 // nothing.
 func TestTheShortcutGoesToTheSearch(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	c := a.win.Canvas()
 	library := a.screens[tabLibrary].(*libraryScreen).search
 	settings := a.screens[tabSettings].(*settingsScreen).search
@@ -263,7 +263,7 @@ func TestKeyLabels(t *testing.T) {
 
 // Record/Stop's tooltip follows its name.
 func TestTheActionTipNamesItsKey(t *testing.T) {
-	a, m := connectedTestApp(t)
+	a, m := connectedTestApp(t, defaults())
 	if got, want := a.action.ToolTip(), shortcutTip(lang.Record, actionKey); got != want {
 		t.Errorf("tooltip %q, want %q", got, want)
 	}
@@ -302,7 +302,7 @@ func lit(b fyne.CanvasObject) bool {
 // goes to the tooltip, and the tab still lights up; a click goes through
 // to the tab.
 func TestTabTipsLieOverTheirTabs(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	c := a.win.Canvas()
 	tips := a.tabsView.Objects[3:]
 	if len(tips) != len(a.tabs.Items) {
@@ -360,7 +360,7 @@ func TestShortcutTipSnapshots(t *testing.T) {
 	if os.Getenv("SPYTIFY_UI_SNAPSHOTS") == "" {
 		t.Skip("only for the pictures")
 	}
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	c := a.win.Canvas()
 	away := a.fa.Driver().AbsolutePositionForObject(a.tabsView).AddXY(a.tabsView.Size().Width/2, 300)
 	tip := a.tabsView.Objects[3+tabLibrary].(*tabTip)

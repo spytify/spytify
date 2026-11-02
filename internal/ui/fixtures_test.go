@@ -379,12 +379,14 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-func connectedTestApp(t *testing.T) (*App, *model.Model) {
+// connectedTestApp is the window connected to a recorder whose checks pass,
+// with these settings, drawn once.
+func connectedTestApp(t *testing.T, values map[string]any) (*App, *model.Model) {
 	t.Helper()
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	m.SetConn(model.Connected, "")
 	m.SetInfo(info())
-	m.SetSettings(defaults())
+	m.SetSettings(values)
 	a.render()
 	return a, m
 }
