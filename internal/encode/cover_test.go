@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/spytify/spytify/internal/testkit"
 )
 
 // withCover writes a short FLAC with picture attached, as the tag writer does.
@@ -29,7 +31,7 @@ func withCover(t *testing.T, f *FFmpeg, picture []byte) string {
 }
 
 func TestCoverComesOutAsStored(t *testing.T) {
-	f := ffmpegOrSkip(t)
+	f := testkit.Need(t, "ffmpeg", Find)
 	var picture bytes.Buffer
 	if err := png.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
 		t.Fatal(err)

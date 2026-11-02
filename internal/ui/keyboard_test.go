@@ -26,47 +26,6 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// The keys go where Fyne 2.8.2's window sends them
-// (internal/driver/glfw/window.go): Tab and Shift+Tab move the focus, unless
-// the field focused types tabs; every other key goes to the control
-// focused.
-
-func pressTab(c fyne.Canvas) {
-	if !typesTab(c) {
-		c.FocusNext()
-	}
-}
-
-func pressShiftTab(c fyne.Canvas) {
-	if !typesTab(c) {
-		c.FocusPrevious()
-	}
-}
-
-// typesTab hands Tab to the field focused if it types tabs.
-func typesTab(c fyne.Canvas) bool {
-	f, ok := c.Focused().(fyne.Tabbable)
-	if ok && f.AcceptsTab() {
-		c.Focused().TypedKey(&fyne.KeyEvent{Name: fyne.KeyTab})
-	}
-	return ok && f.AcceptsTab()
-}
-
-func pressKey(c fyne.Canvas, key fyne.KeyName) {
-	if f := c.Focused(); f != nil {
-		f.TypedKey(&fyne.KeyEvent{Name: key})
-	}
-}
-
-// pressSpace is the space bar: the key, then the character it types, which
-// goes to whatever has the focus by then.
-func pressSpace(c fyne.Canvas) {
-	pressKey(c, fyne.KeySpace)
-	if f := c.Focused(); f != nil {
-		f.TypedRune(' ')
-	}
-}
-
 // focusName names a control as the test reads it: its text, its tooltip,
 // what its icon does, or the setting it changes.
 func focusName(a *App, f fyne.Focusable) string {
@@ -606,12 +565,9 @@ func inSight(a *App, s *container.Scroll, o fyne.CanvasObject) bool {
 func TestTheSwitchShowsItsFocus(t *testing.T) {
 	for _, mode := range []string{"light", "dark"} {
 		t.Run(mode, func(t *testing.T) {
-			a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 			values := defaults()
 			values["app.theme"] = mode
-			m.SetConn(model.Connected, "")
-			m.SetInfo(info())
-			m.SetSettings(values)
+			a, _ := connectedTestApp(t, values)
 			a.showTab(tabSettings)
 			a.render()
 			c := a.win.Canvas()

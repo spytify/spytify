@@ -5,11 +5,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/spytify/spytify/internal/testkit"
 )
 
 // The tags come back as written, the characters ffmpeg escapes included.
 func TestTagsComeOutAsWritten(t *testing.T) {
-	f := ffmpegOrSkip(t)
+	f := testkit.Need(t, "ffmpeg", Find)
 	want := map[string]string{"title": "Midnight City = A; B # C \\ D", "artist": "M83, The Hurry Up Orchestra"}
 	for _, ext := range []string{"flac", "mp3", "m4a"} {
 		path := filepath.Join(t.TempDir(), "track."+ext)

@@ -42,10 +42,26 @@ func thenB(r *rig) {
 
 var endOnStop = SessionOptions{EndOnStop: true}
 
-// Every state the session reports, every way into it and out of it, and a
-// stop and a stop now in each.
-func TestPinnedStates(t *testing.T) {
-	scripts := map[string]stateScript{
+// pinStates runs each script on a rig of its own and checks it against its
+// golden file under states/. The TestPinned tests that call it walk through
+// every state the session reports, every way into it and out of it.
+func pinStates(t *testing.T, scripts map[string]stateScript) {
+	t.Helper()
+	for _, name := range sortedKeys(scripts) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			sc := scripts[name]
+			r := newRig(t, sc.settings, sc.opts)
+			r.describe("A and B are 3000 ms each")
+			sc.run(r)
+			r.check("states/" + name)
+		})
+	}
+}
+
+// A stop and a stop now in each state the session reports.
+func TestPinnedStops(t *testing.T) {
+	pinStates(t, map[string]stateScript{
 		"stop-while-waiting": {endOnStop, nil, func(r *rig) {
 			r.stop(false)
 		}},
@@ -154,6 +170,13 @@ func TestPinnedStates(t *testing.T) {
 			r.sound(1, 300)
 			r.stop(false)
 		}},
+	})
+}
+
+// What a recording session does when its capture stream or its player's
+// events end, or when Run's context is canceled.
+func TestPinnedStreamsEnd(t *testing.T) {
+	pinStates(t, map[string]stateScript{
 		"context-canceled-while-recording": {endOnStop, nil, func(r *rig) {
 			playA(r)
 			r.cancelRun()
@@ -168,6 +191,12 @@ func TestPinnedStates(t *testing.T) {
 			r.sound(1, 2500)
 			r.quiet(500)
 		}},
+	})
+}
+
+// Where in a track, and with which player status, a session starts.
+func TestPinnedStarts(t *testing.T) {
+	pinStates(t, map[string]stateScript{
 		"session-starts-mid-track": {endOnStop, nil, func(r *rig) {
 			r.track(trackA, 2500)
 			r.status(meta.Playing)
@@ -233,6 +262,13 @@ func TestPinnedStates(t *testing.T) {
 			r.quiet(500)
 			r.status(meta.Stopped)
 		}},
+	})
+}
+
+// The player stopping, pausing and quitting, before and after it
+// played, and coming back.
+func TestPinnedPlayerStopsAndQuits(t *testing.T) {
+	pinStates(t, map[string]stateScript{
 		"player-stops-before-it-played": {endOnStop, nil, func(r *rig) {
 			r.status(meta.Stopped)
 			r.quiet(500)
@@ -306,6 +342,13 @@ func TestPinnedStates(t *testing.T) {
 			r.send(meta.Event{Kind: meta.PlayerGone, PositionMs: -1})
 			r.quiet(500)
 		}},
+	})
+}
+
+// The player going to another track, starting one over or unloading it,
+// a track's metadata refreshed, and a session of a single track.
+func TestPinnedTrackChanges(t *testing.T) {
+	pinStates(t, map[string]stateScript{
 		// Today's behavior, which looks odd: B, named with no take open,
 		// starts at the first sound in the second before its notice, which
 		// is A's; its end is counted from there, so it loses its last
@@ -383,6 +426,12 @@ func TestPinnedStates(t *testing.T) {
 			playA(r)
 			thenB(r)
 		}},
+	})
+}
+
+// Ads, and tracks recorded already.
+func TestPinnedAdsAndDuplicates(t *testing.T) {
+	pinStates(t, map[string]stateScript{
 		"ad-between-tracks": {endOnStop, map[string]any{"recorder.mute_ads": true}, func(r *rig) {
 			playA(r)
 			r.sound(1, 2000)
@@ -431,6 +480,13 @@ func TestPinnedStates(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		}},
+	})
+}
+
+// Seeks forward and back, with no position or no track, and while the
+// next track is awaited.
+func TestPinnedSeeks(t *testing.T) {
+	pinStates(t, map[string]stateScript{
 		"seek-forward-and-back": {endOnStop, nil, func(r *rig) {
 			playA(r)
 			r.send(meta.Event{Kind: meta.Seeked, Track: trackA, PositionMs: 2000})
@@ -461,17 +517,7 @@ func TestPinnedStates(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		}},
-	}
-	for _, name := range sortedKeys(scripts) {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			sc := scripts[name]
-			r := newRig(t, sc.settings, sc.opts)
-			r.describe("A and B are 3000 ms each")
-			sc.run(r)
-			r.check("states/" + name)
-		})
-	}
+	})
 }
 
 // The ends of a session that never recorded.

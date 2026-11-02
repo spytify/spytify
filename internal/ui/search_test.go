@@ -1,63 +1,21 @@
 package ui
 
 import (
-	"path/filepath"
 	"testing"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-
-	"github.com/spytify/spytify/internal/ui/model"
 )
-
-// selectsIn are the dropdowns shown under o, the Library's check select
-// included.
-func selectsIn(o fyne.CanvasObject) []*widget.Select {
-	var out []*widget.Select
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		switch w := o.(type) {
-		case *widget.Select:
-			out = append(out, w)
-			return
-		case *selectField:
-			out = append(out, &w.Select)
-			return
-		case *checkSelect:
-			out = append(out, &w.Select)
-			return
-		case *fyne.Container:
-			for _, c := range w.Objects {
-				walk(c)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, c := range test.WidgetRenderer(w).Objects() {
-				walk(c)
-			}
-		}
-	}
-	walk(o)
-	return out
-}
 
 // The Library's and Settings' search fields sit alike, square, the
 // magnifier before the text, nothing at the end until something is typed;
 // the dropdowns beside and under them are square too, the Library's two as
 // wide as each other.
 func TestTheSearchFieldsLookAlike(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
 	values := defaults()
 	values["output.dir"] = t.TempDir()
-	m.SetSettings(values)
+	a, _ := connectedTestApp(t, values)
 	at := a.fa.Driver().AbsolutePositionForObject
 	fields := []struct {
 		tab    int
@@ -80,7 +38,7 @@ func TestTheSearchFieldsLookAlike(t *testing.T) {
 		if clearOf(e).Visible() {
 			t.Errorf("tab %d: a clear button with nothing to clear", f.tab)
 		}
-		selects := selectsIn(a.win.Content())
+		selects := visible[*widget.Select](a.win.Content())
 		if len(selects) == 0 {
 			t.Errorf("tab %d: no dropdown", f.tab)
 		}
@@ -115,10 +73,7 @@ func TestTheSearchFieldsLookAlike(t *testing.T) {
 // space. The button has no background under the pointer, only when
 // focused, and little padding around its icon.
 func TestTheClearButtonOfASearch(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, _ := connectedTestApp(t, defaults())
 	a.showTab(tabSettings)
 	a.render()
 	s := a.screens[tabSettings].(*settingsScreen)

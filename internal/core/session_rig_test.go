@@ -21,7 +21,6 @@ import (
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/pcm"
-	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -97,19 +96,7 @@ func bareRig(t *testing.T, extra map[string]any, opts SessionOptions) *rig {
 	t.Helper()
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	overrides := map[string]any{"output.dir": out}
-	for _, m := range []map[string]any{baseSettings, extra} {
-		for k, v := range m {
-			overrides[k] = v
-		}
-	}
-	if rej := store.Override(overrides); len(rej) > 0 {
-		t.Fatalf("settings rejected: %v", rej)
-	}
+	store := testStore(t, dir, map[string]any{"output.dir": out}, baseSettings, extra)
 	if o, ok := extra["output.dir"].(string); ok {
 		out = o
 		extra = maps.Clone(extra)

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
@@ -28,39 +27,10 @@ import (
 // settingsApp is the app on its Settings tab, with the defaults applied.
 func settingsApp(t *testing.T) (*App, *model.Model, *settingsScreen) {
 	t.Helper()
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, m := connectedTestApp(t, defaults())
 	a.showTab(tabSettings)
 	a.render()
 	return a, m, a.screens[tabSettings].(*settingsScreen)
-}
-
-// holds reports whether o is in root's tree, through containers and
-// widgets alike.
-func holds(root, o fyne.CanvasObject) bool {
-	if root == o {
-		return true
-	}
-	switch w := root.(type) {
-	case nil:
-		return false
-	case *fyne.Container:
-		for _, c := range w.Objects {
-			if holds(c, o) {
-				return true
-			}
-		}
-		return false
-	case fyne.Widget:
-		for _, c := range test.WidgetRenderer(w).Objects() {
-			if holds(c, o) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // folded reports whether o is under a group's Advanced.
@@ -209,35 +179,6 @@ func TestEveryNoteShowsUnderItsLabel(t *testing.T) {
 	s.search.SetText("tag")
 	a.render()
 	snapshot(t, a, "settings-notes-tags")
-}
-
-// richText is the rich text in o's containers that says text.
-func richText(o fyne.CanvasObject, text string) *widget.RichText {
-	switch w := o.(type) {
-	case *widget.RichText:
-		if ts, ok := w.Segments[0].(*widget.TextSegment); ok && ts.Text == text {
-			return w
-		}
-	case *fyne.Container:
-		for _, c := range w.Objects {
-			if r := richText(c, text); r != nil {
-				return r
-			}
-		}
-	}
-	return nil
-}
-
-// shown is the text a rich text draws, an ellipsis included when it is
-// cut.
-func shown(r *widget.RichText) string {
-	var out []string
-	for _, o := range test.WidgetRenderer(r).Objects() {
-		if t, ok := o.(*canvas.Text); ok {
-			out = append(out, t.Text)
-		}
-	}
-	return strings.Join(out, "\n")
 }
 
 // Each bitrate in the list says what a minute of it takes; picking one
@@ -418,23 +359,11 @@ func TestResetResetsItsSection(t *testing.T) {
 		t.Fatalf("%d Reset buttons in the first section", len(resets))
 	}
 	test.Tap(resets[0])
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		core.mu.Lock()
-		n := 0
-		for _, c := range core.calls {
-			if c == proto.MethodSettingsReset {
-				n++
-			}
-		}
-		core.mu.Unlock()
-		if n == len(want) {
-			break
-		}
-		if n > len(want) || time.Now().After(deadline) {
-			t.Fatalf("%d settings.reset calls, want %d (%v)", n, len(want), want)
-		}
-		time.Sleep(20 * time.Millisecond)
+	eventually(t, fmt.Sprintf("fewer than %d settings.reset calls (%v)", len(want), want), func() bool {
+		return core.count(proto.MethodSettingsReset) >= len(want)
+	})
+	if n := core.count(proto.MethodSettingsReset); n != len(want) {
+		t.Fatalf("%d settings.reset calls, want %d (%v)", n, len(want), want)
 	}
 }
 
@@ -535,7 +464,7 @@ func TestTheFolderPickerIsLargerAndCentred(t *testing.T) {
 	a.render()
 	var browse *widget.Button
 	for _, o := range s.fields["output.dir"].input.(*fyne.Container).Objects {
-		if b, ok := asButton(o); ok {
+		if b, ok := as[*widget.Button](o); ok {
 			browse = b
 		}
 	}

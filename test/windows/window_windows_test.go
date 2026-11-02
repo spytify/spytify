@@ -14,6 +14,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/spytify/spytify/internal/testkit"
 	"golang.org/x/sys/windows"
 )
 
@@ -192,9 +193,7 @@ func detached(cmd *exec.Cmd) {
 // cover) from a spytifyd started as the app starts it; none of it may
 // open a window.
 func TestSavingASongOpensNoWindow(t *testing.T) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not installed")
-	}
+	testkit.Need(t, "ffmpeg", exec.LookPath)
 	w := watchWindows(t)
 	// The hook has to see a console window on this runner for the check to
 	// mean anything.

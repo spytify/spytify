@@ -184,48 +184,11 @@ func blurs(a *App, img image.Image, obj fyne.CanvasObject) bool {
 	return false
 }
 
-// visible are the visible objects of type T under o.
-func visible[T fyne.CanvasObject](o fyne.CanvasObject) []T {
-	var out []T
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		if w, ok := o.(T); ok {
-			out = append(out, w)
-		}
-		switch w := o.(type) {
-		case *fyne.Container:
-			for _, child := range w.Objects {
-				walk(child)
-			}
-		case fyne.Widget:
-			for _, child := range test.WidgetRenderer(w).Objects() {
-				walk(child)
-			}
-		}
-	}
-	walk(o)
-	return out
-}
-
-// richTexts are the visible rich texts that read text.
-func richTexts(o fyne.CanvasObject, text string) []*widget.RichText {
-	var out []*widget.RichText
-	for _, rt := range visible[*widget.RichText](o) {
-		if rt.String() == text {
-			out = append(out, rt)
-		}
-	}
-	return out
-}
-
 // outputField is the output folder's text field in Settings.
 func outputField(t *testing.T, a *App) fyne.CanvasObject {
 	t.Helper()
 	for _, o := range a.screens[tabSettings].(*settingsScreen).fields["output.dir"].input.(*fyne.Container).Objects {
-		if _, ok := asButton(o); !ok {
+		if _, ok := as[*widget.Button](o); !ok {
 			return o
 		}
 	}
@@ -391,7 +354,7 @@ func TestNoPictureItCannotCover(t *testing.T) {
 	}
 
 	for _, o := range s.fields["output.dir"].input.(*fyne.Container).Objects {
-		if b, ok := asButton(o); ok {
+		if b, ok := as[*widget.Button](o); ok {
 			test.Tap(b)
 		}
 	}

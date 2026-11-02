@@ -7,44 +7,12 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
-	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
-
-// labelsIn are the labels shown under o whose text keep takes.
-func labelsIn(o fyne.CanvasObject, keep func(string) bool) []*widget.Label {
-	var out []*widget.Label
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		switch w := o.(type) {
-		case *widget.Label:
-			if keep(w.Text) {
-				out = append(out, w)
-			}
-			return
-		case *fyne.Container:
-			for _, c := range w.Objects {
-				walk(c)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, c := range test.WidgetRenderer(w).Objects() {
-				walk(c)
-			}
-		}
-	}
-	walk(o)
-	return out
-}
 
 // The log goes to the window's sides, its scroll bar at the edge as the
 // Library's is, while its tools and its lines' text stay two paddings off

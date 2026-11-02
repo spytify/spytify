@@ -1,6 +1,6 @@
 # Contributing
 
-Issues and pull requests are welcome. Run `gofmt` and `go test -race ./...` before you push: CI runs the tests with `-race`, builds every platform, runs the PipeWire scenarios, and runs the tests and the shipped executables on Windows.
+Issues and pull requests are welcome. Run `gofmt` and `go test -race -timeout 20m ./...` before you push: CI runs the tests with `-race`, builds every platform, runs the PipeWire scenarios, and runs the tests and the shipped executables on Windows.
 
 A change to what the bug tracker sends or scrubs (`internal/telemetry`) updates [PRIVACY.md](PRIVACY.md) in the same pull request.
 
@@ -59,8 +59,10 @@ Clients speak newline-delimited JSON-RPC 2.0 on the socket, or on TCP with `spyt
 ## Tests
 
 ```sh
-go test -race ./...    # unit tests, the fake-player scenarios, the CLI end to end
+go test -race -timeout 20m ./...    # unit tests, the fake-player scenarios, the CLI end to end
 ```
+
+`internal/ui` takes 7 to 10 minutes under `-race`, and `go test` stops a package at 10 by default: give it 20, as CI does.
 
 - **Scenarios.** [`testdata/timelines`](testdata/timelines) drive the real core with a scripted player: notifications from 300 ms early to 800 ms late, gapless albums, ads, a sample-rate change, a pause, duplicates, skips, seeks. Each file must match its source by cross-correlation: peak within 2 ms of zero, residual under −50 dBFS. `spytifyd --fake <timeline>` plays one by hand.
 - **Real PipeWire and MPRIS**, through `cmd/fakeplayer`; CI runs it in a container with no sound card:
@@ -69,6 +71,8 @@ go test -race ./...    # unit tests, the fake-player scenarios, the CLI end to e
   . scripts/pipewire-session.sh      # D-Bus, PipeWire, WirePlumber and a null sink
   go test -tags integration -v ./test/integration/
   ```
+
+  `TestUIStaysIdleWhileRecording`'s 12 % limit is for CI's runner. In a virtual machine on a busy host, such as podman's on a Mac, the app is charged the time the host takes back: the same app read 11 to 12 % with the Mac at its usual load, 18 to 65 % with its cores busy. There, compare two builds with `SPYTIFY_UI_BINARY`, in turn, rather than reading the limit.
 
 - **macOS capture**, against what `afplay` plays. It needs the System Audio Recording permission, so not in CI: `go test -tags macos_capture -v ./test/macos/`.
 - **AppleScript**, against FakePlayer ([`macos/fakeplayer`](macos/fakeplayer)), a scriptable app that plays a timeline: `scripts/build-fakeplayer-macos.sh && SPYTIFY_FAKE_APP=$PWD/bin/FakePlayer.app go test -run TestJXAWithTheFakePlayer -v ./internal/meta/`.

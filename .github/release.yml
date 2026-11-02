@@ -1,0 +1,8 @@
+# GitHub's list of changes in a release's notes (the release workflow's
+# --generate-notes): one line per merged pull request, but none for those
+# labelled "not in notes", such as a pull request whose change came with
+# another one and was merged as an empty commit.
+changelog:
+  exclude:
+    labels:
+      - not in notes

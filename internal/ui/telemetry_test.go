@@ -66,13 +66,12 @@ func TestRecordingCountsLeave(t *testing.T) {
 	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-2", Reason: proto.SkipAd}))
 	a.tel.Flush(2 * time.Second)
 	got := map[string]fakesentry.Metric{}
-	deadline := time.Now().Add(5 * time.Second)
-	for len(got) < 3 && time.Now().Before(deadline) {
+	eventually(t, "fewer than 3 metrics", func() bool {
 		for _, mt := range srv.Metrics() {
 			got[mt.Name] = mt
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return len(got) >= 3
+	})
 	if c := got["cut.offset"]; c.Type != "distribution" || c.Value != -480 || c.Attrs["kind"] != "boundary" || c.Attrs["by"] != "silence" {
 		t.Errorf("cut.offset %+v", c)
 	}
@@ -172,17 +171,7 @@ func TestTheLaunchSaysWhereTheOutputFolderIs(t *testing.T) {
 	m.SetSettings(values)
 	a.render()
 	a.tel.Flush(2 * time.Second)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		for _, l := range srv.Logs() {
-			if l.Body == "launch" {
-				if l.Attrs["output.drive"] != "fixed" || l.Attrs["output.cloud"] != "OneDrive" {
-					t.Errorf("launch %v", l.Attrs)
-				}
-				return
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
+	if l := launchLog(t, srv); l.Attrs["output.drive"] != "fixed" || l.Attrs["output.cloud"] != "OneDrive" {
+		t.Errorf("launch %v", l.Attrs)
 	}
-	t.Fatal("no launch log")
 }

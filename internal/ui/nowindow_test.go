@@ -61,19 +61,9 @@ func TestTheLaunchSaysWhetherTheWindowIsDrawnInSoftware(t *testing.T) {
 			a.opts.SoftwareOpenGL = software
 			connect(t, a, m, true)
 			a.tel.Flush(2 * time.Second)
-			deadline := time.Now().Add(5 * time.Second)
-			for time.Now().Before(deadline) {
-				for _, l := range srv.Logs() {
-					if l.Body == "launch" {
-						if got := l.Attrs["software_opengl"]; got != strconv.FormatBool(software) {
-							t.Errorf("software_opengl %q, want %v", got, software)
-						}
-						return
-					}
-				}
-				time.Sleep(20 * time.Millisecond)
+			if got := launchLog(t, srv).Attrs["software_opengl"]; got != strconv.FormatBool(software) {
+				t.Errorf("software_opengl %q, want %v", got, software)
 			}
-			t.Fatal("no launch log")
 		})
 	}
 }
