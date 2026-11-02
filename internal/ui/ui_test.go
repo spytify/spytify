@@ -894,7 +894,7 @@ func TestOtherScreensRender(t *testing.T) {
 		}
 	}
 	tapButton(t, a.win.Content(), lang.Diagnostics)
-	if d := texts(overlay(t, a)); !contains(d, fmt.Sprintf(lang.ChecksPass, 4)) || !contains(d, "ffmpeg found") {
+	if d := texts(overlay(t, a)); !contains(d, fmt.Sprintf(lang.ChecksPass, 5)) || !contains(d, "ffmpeg found") {
 		t.Errorf("the diagnostics: %v", d)
 	}
 	snapshot(t, a, "logs-diagnostics")
@@ -1706,11 +1706,11 @@ func TestTheDiagnosticsAreADialog(t *testing.T) {
 	m.SetInfo(info())
 	a.render()
 	d := diagnostics(t, a)
-	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 4)) {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 5)) {
 		t.Fatalf("opened from Record: %v", all)
 	}
 	failCheck(a, m)
-	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 5)) || !contains(all, "ffmpeg not found") {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 6)) || !contains(all, "ffmpeg not found") {
 		t.Errorf("a check fails under the dialog: %v", all)
 	}
 	tapButton(t, d, lang.Close)
@@ -1727,6 +1727,9 @@ func TestAFailedChecksReasonShowsWholeUnderItsName(t *testing.T) {
 	reason := `mkdir \\nas\shared\Music\Recordings from the radio, every Saturday night since the spring of 2019\Spytify: The system cannot find the path specified.`
 	in := info()
 	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: reason})
+	// Few enough rows to fit without scrolling, spytifyd's own check
+	// included.
+	in.Checks, in.Warnings = in.Checks[1:], nil
 	m.SetInfo(in)
 	m.SetSettings(defaults())
 	a.render()

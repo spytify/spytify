@@ -133,6 +133,8 @@ func focusName(a *App, f fyne.Focusable) string {
 		return w.Text
 	case *widget.List, *cardList:
 		return "list"
+	case *checkList:
+		return "checks"
 	}
 	if key := setting(f.(fyne.CanvasObject)); key != "" {
 		return key
@@ -554,11 +556,16 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 	l := a.screens[tabLogs].(*logsScreen)
 	wantOrder(t, a, lang.Donate, lang.Record, "Tabs", "error", "info", "debug", lang.Copy, lang.OpenLogFile, lang.Diagnostics, "list")
 
-	// Diagnostics opens its dialog with the focus on its first control.
+	// Diagnostics opens its dialog with the focus on its checks, then Tab
+	// goes to its buttons.
 	tabTo(t, a, lang.Diagnostics, 1)
 	pressSpace(c)
-	if got := focusName(a, c.Focused()); got != lang.RunChecksAgain {
+	if got := focusName(a, c.Focused()); got != "checks" {
 		t.Fatalf("the diagnostics open with %q focused", got)
+	}
+	pressTab(c)
+	if got := focusName(a, c.Focused()); got != lang.RunChecksAgain {
+		t.Fatalf("Tab from the checks goes to %q", got)
 	}
 	core.mu.Lock()
 	core.calls = nil

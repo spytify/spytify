@@ -168,6 +168,7 @@ const (
 	RunChecksAgain      = "Run the checks again"
 	ChecksPass          = "All %d checks pass."
 	ChecksNeedAttention = "%d of %d checks need attention."
+	NothingElseChecked  = "spytifyd is not running, so nothing else can be checked."
 	ChooseAnotherFolder = "Choose another folder"
 	NotRunning          = "not running"
 	PID                 = "pid %d"

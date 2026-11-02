@@ -685,7 +685,11 @@ func (a *App) toggleRecording() {
 func (a *App) refreshChecks() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	_ = a.link.RefreshInfo(ctx)
+	// Without spytifyd, checking again is looking for it now rather than
+	// at the end of the link's wait.
+	if errors.Is(a.link.RefreshInfo(ctx), link.ErrNotConnected) {
+		a.link.Retry()
+	}
 }
 
 // recheck runs the checks again when what they test may have changed:
