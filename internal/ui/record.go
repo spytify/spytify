@@ -203,7 +203,7 @@ func newRecordScreen(a *App) *recordScreen {
 	r.list = newCardList(
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
-			status := newBadge(fmt.Sprintf(lang.SkippedFor, proto.SkipDuplicate), colorSkippedBadge, "", colorOnSkippedBadge)
+			status := newBadge(fmt.Sprintf(lang.SkippedFor, lang.ReasonDuplicate), colorSkippedBadge, "", colorOnSkippedBadge)
 			keep := container.NewCenter(newRowButton(lang.KeepAnyway, theme.DocumentSaveIcon()))
 			keep.Hide()
 			reveal := newRowButton("", theme.SearchIcon())
