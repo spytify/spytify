@@ -20,7 +20,6 @@ import (
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/spytify/spytify/internal/settings"
-	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
@@ -804,7 +803,7 @@ func TestTheCrashDialogTakesTheKeyboard(t *testing.T) {
 	srv := fakesentry.New(t)
 	a, m := privacyApp(t, srv, false)
 	connect(t, a, m, false)
-	a.tel = telemetry.New(telemetry.Options{Prefs: a.fa.Preferences()})
+	a.tel = untracked(t, a.fa.Preferences())
 	leaveACrash(t, a, "boom")
 	a.checkCrashes()
 	c := a.win.Canvas()

@@ -37,6 +37,14 @@ func privacyApp(t *testing.T, srv *fakesentry.Server, on bool) (*App, *model.Mod
 	return a, m
 }
 
+// untracked is the telemetry of a build without a bug tracker, whatever
+// the shell exports: build.env's SPYTIFY_SENTRY_DSN gave the test one.
+func untracked(t *testing.T, prefs fyne.Preferences) *telemetry.Client {
+	t.Helper()
+	t.Setenv("SPYTIFY_SENTRY_DSN", "")
+	return telemetry.New(telemetry.Options{Prefs: prefs})
+}
+
 // connect gives the app a recorder with the bug tracker on or off.
 func connect(t *testing.T, a *App, m *model.Model, on bool) {
 	t.Helper()

@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -240,7 +241,7 @@ func TestRecordScreenShowsTheSession(t *testing.T) {
 	feedSession(t, m)
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{lang.Recording, "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", lang.Saved, fmt.Sprintf(lang.SkippedFor, proto.SkipDuplicate),
+	for _, want := range []string{lang.Recording, "Midnight City", "M83 · Hurry Up, We're Dreaming", "Reunion", lang.Saved, fmt.Sprintf(lang.SkippedFor, lang.ReasonDuplicate),
 		fmt.Sprintf(lang.SessionTotals, 2, 1, 0, ""), lang.Stop, fmt.Sprintf(lang.PlayerRunning, "Player"), "FLAC", lang.Skip} {
 		if !contains(all, want) {
 			t.Errorf("%q not on screen", want)
@@ -484,9 +485,9 @@ func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
 
 	all := drawnRows(t, r.list)
 	for title, want := range map[string][]string{
-		"Reunion":      {"Reunion", "M83", "3:56 · FLAC · 29.6 MB"},
+		"Reunion":      {"Reunion", "M83", "3:56 · FLAC · 31.0 MB"},
 		"Wait":         {"Wait", "M83", "2:54"},
-		"Intermission": {"Intermission", "1:02 · FLAC · 36.3 MB"},
+		"Intermission": {"Intermission", "1:02 · FLAC · 38.1 MB"},
 	} {
 		if got := words(all[title].lines); !slices.Equal(got, want) {
 			t.Errorf("%s row %q, want %q", title, got, want)
@@ -521,8 +522,8 @@ func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
 		proto.Track{ID: "s-009", Artist: "M83", Title: "Year One, One UFO", Album: "Hurry Up, We're Dreaming", LengthMs: 194000})
 	all = drawnRows(t, r.list)
 	for title, want := range map[string][]string{
-		"Splendor": {"Splendor", longArtist, "5:13 · FLAC · 36.3 MB"},
-		longTitle:  {longTitle, "M83", "4:07 · FLAC · 36.3 MB"},
+		"Splendor": {"Splendor", longArtist, "5:13 · FLAC · 38.1 MB"},
+		longTitle:  {longTitle, "M83", "4:07 · FLAC · 38.1 MB"},
 	} {
 		if got := words(all[title].lines); !slices.Equal(got, want) {
 			t.Errorf("%s row %q, want %q", title, got, want)
@@ -1077,7 +1078,7 @@ func (c *recordingCore) handle(ctx context.Context, method string, params json.R
 		}
 		if silent {
 			i := info()
-			i.Checks = append(i.Checks, proto.Check{Name: proto.CheckPlayerHeard, Detail: silentHint})
+			i.Checks = append(i.Checks, proto.Check{Name: proto.CheckPlayerHeard, Detail: "only silence from the capture while the player played"})
 			return i, nil
 		}
 		return info(), nil
@@ -1331,6 +1332,8 @@ func asButton(o fyne.CanvasObject) (*widget.Button, bool) {
 		return &b.Button.Button, true
 	case *litButton:
 		return &b.Button.Button, true
+	case *rowLitButton:
+		return &b.Button.Button, true
 	}
 	return nil, false
 }
@@ -1561,9 +1564,9 @@ func TestTrackText(t *testing.T) {
 		row  model.Row
 		want []string
 	}{
-		{"saved", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "M83", "3:56 · FLAC · 29.6 MB"}},
+		{"saved", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "M83", "3:56 · FLAC · 31.0 MB"}},
 		{"skipped", model.Row{Title: "Wait", Artist: "M83", Status: model.Skipped, LengthMs: 174000}, []string{"Wait", "M83", "2:54"}},
-		{"no artist", model.Row{Title: "Reunion", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "3:56 · FLAC · 29.6 MB"}},
+		{"no artist", model.Row{Title: "Reunion", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "3:56 · FLAC · 31.0 MB"}},
 		{"title alone", model.Row{Title: "Intermission", Status: model.Skipped}, []string{"Intermission"}},
 		{"no size", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000}, []string{"Reunion", "M83", "3:56 · FLAC"}},
 	} {
@@ -1983,8 +1986,9 @@ func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
 	m.SetInfo(info())
 	m.SetSettings(defaults())
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
-	msg := "The player plays to a device at 16 kHz mono, not fit for recording: tracks will sound like a phone call."
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: msg}))
+	low := proto.ErrorEvent{Code: "capture_low_quality", Msg: "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call", Source: &proto.AudioSource{SampleRate: 16000, Channels: 1}}
+	msg := model.WarningText(low, runtime.GOOS)
+	m.Apply(event(t, proto.EventError, low))
 	a.render()
 	r := a.screens[tabRecord].(*recordScreen)
 	if !r.alertRow.Visible() || r.alert.String() != msg {
@@ -2004,8 +2008,9 @@ func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
 func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
-	msg := "The player's output device runs at 16 kHz mono, not fit for recording: tracks will sound like a phone call."
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: msg}))
+	low := proto.ErrorEvent{Code: "capture_low_quality", Msg: "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call", Source: &proto.AudioSource{SampleRate: 16000, Channels: 1}}
+	msg := model.WarningText(low, runtime.GOOS)
+	m.Apply(event(t, proto.EventError, low))
 	a.render()
 	r := a.screens[tabRecord].(*recordScreen)
 	if !r.alertRow.Visible() || r.alert.String() != msg || r.alertDiagnose.Visible() {
@@ -2043,20 +2048,17 @@ func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 	}
 }
 
-// silentHint stands for the recorder's own words for only silence: the
-// player heard check's reason when it fails.
-const silentHint = "Only silence from the player for 10 s while it plays. Check that the player is not muted in its own volume."
-
 // Only silence from the player is said in one line on the Record tab, with
 // Open diagnostics, where the failing player heard check says why and what
-// to do in the recorder's words. The checks run again when the silence is
-// reported and when sound comes back.
+// to do on this system, in the lexicon's words. The checks run again when
+// the silence is reported and when sound comes back.
 func TestOnlySilenceLeadsToThePlayerHeardCheck(t *testing.T) {
 	a, m, core := connectedApp(t)
 	feedSession(t, m)
 	failing := func() bool { return checkFails(m.Snapshot().Info.Checks, proto.CheckPlayerHeard) }
+	why := model.WarningText(proto.ErrorEvent{Code: "capture_silent"}, runtime.GOOS)
 	core.setSilent(true)
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: silentHint}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: "only silence from the capture for 10s while the player plays"}))
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -120, RMSDBFS: -120}))
 	eventually(t, "the checks did not run again for the silence", failing)
 	a.render()
@@ -2065,7 +2067,7 @@ func TestOnlySilenceLeadsToThePlayerHeardCheck(t *testing.T) {
 	if !r.alertRow.Visible() || r.alert.String() != want || !r.alertDiagnose.Visible() {
 		t.Fatalf("alert shown %v, text %q, Open diagnostics %v", r.alertRow.Visible(), r.alert.String(), r.alertDiagnose.Visible())
 	}
-	if contains(texts(a.win.Content()), silentHint) {
+	if contains(texts(a.win.Content()), why) {
 		t.Error("the Record tab shows the whole warning, not the line")
 	}
 	snapshot(t, a, "record-silent")
@@ -2079,7 +2081,7 @@ func TestOnlySilenceLeadsToThePlayerHeardCheck(t *testing.T) {
 
 	test.Tap(r.alertDiagnose)
 	all := texts(overlay(t, a))
-	if !contains(all, "player not heard") || !contains(all, silentHint) {
+	if !contains(all, "player not heard") || !contains(all, why) {
 		t.Fatalf("diagnostics without the failing player heard check and its reason: %q", all)
 	}
 	snapshot(t, a, "diagnostics-player-heard")

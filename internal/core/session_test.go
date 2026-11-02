@@ -770,27 +770,27 @@ func lowQuality(events []proto.Event) []proto.ErrorEvent {
 func TestALowQualityCaptureIsReportedOnce(t *testing.T) {
 	for _, c := range []struct {
 		rate, channels int
-		want           string
+		warns          bool
 	}{
-		{16000, 2, "16 kHz"},
-		{44100, 1, "44.1 kHz mono"},
-		{44100, 2, ""},
-		{48000, 2, ""},
+		{16000, 2, true},
+		{44100, 1, true},
+		{44100, 2, false},
+		{48000, 2, false},
 	} {
 		tl := loadTimeline(t, "basic")
 		tl.Rate, tl.Channels = c.rate, c.channels
 		s := newScenario(t, tl, nil)
 		s.run(t, tl)
 		got := lowQuality(s.events.all())
-		if c.want == "" {
+		if !c.warns {
 			if len(got) != 0 {
 				t.Errorf("%d Hz, %d channels: warned %+v", c.rate, c.channels, got)
 			}
 			continue
 		}
-		if len(got) != 1 || got[0].Fatal || !strings.Contains(got[0].Msg, c.want) || !strings.Contains(got[0].Msg, "phone call") ||
-			strings.Contains(got[0].Msg, "mono") != (c.channels == 1) {
-			t.Errorf("%d Hz, %d channels: warnings %+v, want one saying %q", c.rate, c.channels, got, c.want)
+		want := proto.AudioSource{SampleRate: c.rate, Channels: c.channels}
+		if len(got) != 1 || got[0].Fatal || got[0].Msg == "" || got[0].Source == nil || *got[0].Source != want {
+			t.Errorf("%d Hz, %d channels: warnings %+v, want one with the source %+v", c.rate, c.channels, got, want)
 		}
 	}
 }
@@ -822,7 +822,7 @@ func TestTheLowQualityWarningFollowsTheCapture(t *testing.T) {
 	cancel()
 	<-done
 	got := lowQuality(rec.all())
-	if len(got) != 3 || !strings.Contains(got[0].Msg, "16 kHz mono") || got[1].Msg != "" || got[2].Msg != got[0].Msg {
+	if len(got) != 3 || got[0].Source == nil || *got[0].Source != (proto.AudioSource{SampleRate: 16000, Channels: 1}) || got[1].Msg != "" || got[2].Msg != got[0].Msg {
 		t.Fatalf("warnings %+v, want raised, withdrawn, raised", got)
 	}
 }

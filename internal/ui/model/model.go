@@ -80,11 +80,15 @@ func (r Row) StatusText() string {
 	return string(r.Status)
 }
 
-// ReasonText says why a track was skipped: "too short", "duplicate".
+// ReasonText says why a track was skipped: "too short", "already recorded".
 func ReasonText(r proto.SkipReason) string {
 	switch r {
+	case proto.SkipDuplicate:
+		return lang.ReasonDuplicate
 	case proto.SkipTooShort:
 		return lang.ReasonTooShort
+	case proto.SkipAd:
+		return lang.ReasonAd
 	case proto.SkipIncomplete:
 		return lang.ReasonIncomplete
 	case proto.SkipSeeked:

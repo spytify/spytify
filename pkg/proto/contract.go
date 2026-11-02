@@ -43,5 +43,5 @@ var Events = []EventSpec{
 	{EventSettingsChanged, SettingsValues{}, "after any successful settings.set or settings.reset"},
 	{EventTargetState, TargetStateEvent{}, "player process appears or exits"},
 	{EventLog, LogEvent{}, "each log line, every level"},
-	{EventError, ErrorEvent{}, "capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code"},
+	{EventError, ErrorEvent{}, "capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code. msg says what the recorder found, in English; capture_low_quality carries the capture's format in source, disk_full the megabytes left in free_mb"},
 }

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -98,15 +99,15 @@ func (a *App) sessionEnded() {
 // recorderError keeps why the recorder is ending the session, told once it
 // ended, and tells at once of a session recording nothing worth keeping.
 func (a *App) recorderError(e proto.ErrorEvent) {
+	msg := sentence(model.WarningText(e, runtime.GOOS))
 	if stopCodes[e.Code] {
-		a.notes.stopped = sentence(e.Msg)
+		a.notes.stopped = msg
 		return
 	}
 	s, ok := a.noticeState(noticeProblems)
 	if !ok {
 		return
 	}
-	msg := sentence(e.Msg)
 	if e.Code == "capture_silent" {
 		// Why, and what to do, wait in the diagnostics.
 		msg = fmt.Sprintf(lang.OnlySilenceHeard, playerName(s.Info))

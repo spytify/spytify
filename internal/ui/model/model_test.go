@@ -3,6 +3,11 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +22,45 @@ func ev(t *testing.T, method string, payload any) proto.Event {
 		t.Fatal(err)
 	}
 	return proto.Event{Method: method, Params: raw}
+}
+
+// Every reason the recorder can give for a skip has its words in the
+// lexicon, so a row never shows the protocol's value ("duplicate", "ad").
+func TestEachSkipReasonHasItsText(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join("..", "..", "..", "pkg", "proto", "proto.go"), nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reasons []proto.SkipReason
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok || g.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range g.Specs {
+			v := spec.(*ast.ValueSpec)
+			if typ, ok := v.Type.(*ast.Ident); !ok || typ.Name != "SkipReason" {
+				continue
+			}
+			for _, value := range v.Values {
+				s, err := strconv.Unquote(value.(*ast.BasicLit).Value)
+				if err != nil {
+					t.Fatal(err)
+				}
+				reasons = append(reasons, proto.SkipReason(s))
+			}
+		}
+	}
+	if len(reasons) < 6 {
+		t.Fatalf("found %d skip reasons in package proto: %v", len(reasons), reasons)
+	}
+	lexicon := map[string]bool{lang.ReasonDuplicate: true, lang.ReasonTooShort: true, lang.ReasonAd: true,
+		lang.ReasonIncomplete: true, lang.ReasonSeeked: true, lang.ReasonLowQuality: true}
+	for _, r := range reasons {
+		if got := ReasonText(r); !lexicon[got] {
+			t.Errorf("a track skipped as %q shows %q, not a text of the lexicon", r, got)
+		}
+	}
 }
 
 func started(t *testing.T, id, title string) proto.Event {
@@ -52,7 +96,7 @@ func TestSessionList(t *testing.T) {
 	if got := s.Rows[0].StatusText(); got != lang.Saved {
 		t.Fatalf("a track tagged online shows %q, want Saved", got)
 	}
-	if s.Current == nil || s.Current.StatusText() != fmt.Sprintf(lang.SkippedFor, proto.SkipAd) {
+	if s.Current == nil || s.Current.StatusText() != fmt.Sprintf(lang.SkippedFor, lang.ReasonAd) {
 		t.Fatalf("a skipped current track stays current: %+v", s.Current)
 	}
 

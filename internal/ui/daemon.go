@@ -55,7 +55,7 @@ func (a *App) StartDaemon() {
 		if err == nil {
 			// Started: it answers in a moment, or this says it did not.
 			time.Sleep(startAnswerTimeout)
-			err = errors.New("spytifyd started but does not answer; see its log in Logs")
+			err = errNoAnswer
 			if a.m.Snapshot().Conn == model.Connected {
 				return
 			}
@@ -66,6 +66,10 @@ func (a *App) StartDaemon() {
 
 // startAnswerTimeout is how long a started spytifyd has to answer.
 const startAnswerTimeout = 15 * time.Second
+
+// errNoAnswer is a spytifyd started that did not answer in time. The
+// launch's telemetry counts it by the error, not by its words.
+var errNoAnswer = errors.New("spytifyd started but does not answer; see its log in Logs")
 
 // startFailed shows the offline screen with why the recorder did not start.
 func (a *App) startFailed(err error) {
