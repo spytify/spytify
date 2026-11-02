@@ -933,7 +933,7 @@ func (s *Session) classify(seg *segment) {
 	}
 	if seg.reason == "" && !seg.ghost && !seg.provisional {
 		if free, ok := diskFree(v.Path(settings.OutputDir)); ok && free < minFreeBytes {
-			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: fmt.Sprintf("only %d MB free in the output folder", free>>20)})
+			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: fmt.Sprintf("only %d MB free in the output folder", free/1e6)})
 			seg.reason = proto.SkipIncomplete
 			if v.Bool(settings.RecorderPauseOnDiskFull) {
 				go func() { _ = s.deps.control(proto.CmdPause) }()

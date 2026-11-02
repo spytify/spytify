@@ -484,9 +484,9 @@ func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
 
 	all := drawnRows(t, r.list)
 	for title, want := range map[string][]string{
-		"Reunion":      {"Reunion", "M83", "3:56 · FLAC · 29.6 MB"},
+		"Reunion":      {"Reunion", "M83", "3:56 · FLAC · 31.0 MB"},
 		"Wait":         {"Wait", "M83", "2:54"},
-		"Intermission": {"Intermission", "1:02 · FLAC · 36.3 MB"},
+		"Intermission": {"Intermission", "1:02 · FLAC · 38.1 MB"},
 	} {
 		if got := words(all[title].lines); !slices.Equal(got, want) {
 			t.Errorf("%s row %q, want %q", title, got, want)
@@ -521,8 +521,8 @@ func TestARecordRowHasTheTitleTheArtistThenTheDetails(t *testing.T) {
 		proto.Track{ID: "s-009", Artist: "M83", Title: "Year One, One UFO", Album: "Hurry Up, We're Dreaming", LengthMs: 194000})
 	all = drawnRows(t, r.list)
 	for title, want := range map[string][]string{
-		"Splendor": {"Splendor", longArtist, "5:13 · FLAC · 36.3 MB"},
-		longTitle:  {longTitle, "M83", "4:07 · FLAC · 36.3 MB"},
+		"Splendor": {"Splendor", longArtist, "5:13 · FLAC · 38.1 MB"},
+		longTitle:  {longTitle, "M83", "4:07 · FLAC · 38.1 MB"},
 	} {
 		if got := words(all[title].lines); !slices.Equal(got, want) {
 			t.Errorf("%s row %q, want %q", title, got, want)
@@ -1561,9 +1561,9 @@ func TestTrackText(t *testing.T) {
 		row  model.Row
 		want []string
 	}{
-		{"saved", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "M83", "3:56 · FLAC · 29.6 MB"}},
+		{"saved", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "M83", "3:56 · FLAC · 31.0 MB"}},
 		{"skipped", model.Row{Title: "Wait", Artist: "M83", Status: model.Skipped, LengthMs: 174000}, []string{"Wait", "M83", "2:54"}},
-		{"no artist", model.Row{Title: "Reunion", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "3:56 · FLAC · 29.6 MB"}},
+		{"no artist", model.Row{Title: "Reunion", Status: model.Saved, Path: flac, DurationMs: 236000, Bytes: 31_000_000}, []string{"Reunion", "3:56 · FLAC · 31.0 MB"}},
 		{"title alone", model.Row{Title: "Intermission", Status: model.Skipped}, []string{"Intermission"}},
 		{"no size", model.Row{Title: "Reunion", Artist: "M83", Status: model.Saved, Path: flac, DurationMs: 236000}, []string{"Reunion", "M83", "3:56 · FLAC"}},
 	} {
