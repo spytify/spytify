@@ -15,6 +15,21 @@
       ],
       "type": "object"
     },
+    "ChannelLevel": {
+      "properties": {
+        "peak_dbfs": {
+          "type": "number"
+        },
+        "rms_dbfs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "peak_dbfs",
+        "rms_dbfs"
+      ],
+      "type": "object"
+    },
     "Check": {
       "properties": {
         "advice": {
@@ -188,6 +203,12 @@
     },
     "LevelEvent": {
       "properties": {
+        "channels": {
+          "items": {
+            "$ref": "#/$defs/ChannelLevel"
+          },
+          "type": "array"
+        },
         "peak_dbfs": {
           "type": "number"
         },

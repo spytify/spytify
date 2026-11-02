@@ -42,7 +42,7 @@ type libraryScreen struct {
 	app    *App
 	root   fyne.CanvasObject
 	search *keyEntry
-	sortBy *widget.Select
+	sortBy *selectField
 	list   *cardList
 	count  *widget.RichText
 	empty  fyne.CanvasObject
@@ -101,7 +101,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.covers = newCovers(loaded)
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 	l.search = newSearch(a, lang.SearchLibrary, func(string) { l.filter() })
-	l.sortBy = widget.NewSelect([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
+	l.sortBy = newSelectField([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
 	// Keep anyway saves a take cut short or in low quality: the filter hides
 	// those files, or shows them alone to clean them up, a box per kind of
 	// file in its dropdown. They start ticked without their callback, which
@@ -147,7 +147,8 @@ func newLibraryScreen(a *App) *libraryScreen {
 			// says which in a badge, as the Record screen's rows say theirs.
 			reveal, play, bin := newRowButton("", theme.SearchIcon()), newRowButton("", theme.MediaPlayIcon()), newRowButton("", theme.DeleteIcon())
 			play.main = true
-			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(newBadge("", colorSkippedBadge, "", colorOnSkippedBadge)), reveal, play, bin)), albumHeading())
+			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(newBadge("", colorSkippedBadge, "", colorOnSkippedBadge)),
+				container.NewCenter(reveal), container.NewCenter(play), container.NewCenter(bin))), albumHeading())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.rows) {
@@ -174,9 +175,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
-			after.Objects[1].(*rowButton).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
-			after.Objects[2].(*rowButton).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
-			after.Objects[3].(*rowButton).OnTapped = func() { l.app.noteAction("move a file to the trash"); l.trash(f) }
+			after.Objects[1].(*fyne.Container).Objects[0].(*rowButton).OnTapped = func() { l.app.noteAction("show a file in its folder"); _ = reveal(path) }
+			after.Objects[2].(*fyne.Container).Objects[0].(*rowButton).OnTapped = func() { l.app.noteAction("play a file"); _ = openPath(path) }
+			after.Objects[3].(*fyne.Container).Objects[0].(*rowButton).OnTapped = func() { l.app.noteAction("move a file to the trash"); l.trash(f) }
 			box.Refresh()
 		},
 	)

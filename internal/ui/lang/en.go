@@ -55,6 +55,8 @@ const (
 	OpenDiagnostics           = "Open diagnostics"
 	Play                      = "Play"
 	Skip                      = "Skip"
+	MeterLeft                 = "L"
+	MeterRight                = "R"
 	RecordFromStart           = "Record this track from the start"
 	KeepAnyway                = "Keep anyway"
 	OpenFolder                = "Open folder"

@@ -134,7 +134,8 @@ func feedSession(t *testing.T, m *model.Model) {
 	}
 	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-004", Artist: "M83", Title: "Midnight City", Album: "Hurry Up, We're Dreaming", LengthMs: 243000, CoverURL: generatedCover(t, 4)}}))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
-	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -3, RMSDBFS: -14}))
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -3, RMSDBFS: -14.4,
+		Channels: []proto.ChannelLevel{{PeakDBFS: -3, RMSDBFS: -13}, {PeakDBFS: -4.5, RMSDBFS: -16.5}}}))
 	m.Apply(event(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: "session 20261023-120000 started", TS: time.Now().Format(time.RFC3339Nano)}))
 	m.Apply(event(t, proto.EventLog, proto.LogEvent{Level: "error", Msg: "\"Wait\": already recorded", TS: time.Now().Format(time.RFC3339Nano)}))
 }
@@ -345,16 +346,16 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	snapshot(t, a, "record-96khz-narrow")
 }
 
-// A player paused mid-track keeps the track's card, its badge saying so,
-// with the info bar above it offering to play.
+// A player paused mid-track keeps the track's card, its badge saying so
+// and its meter out, with the info bar above it offering to play.
 func TestAPausedTrackHasTheInfoBarAboveItsCard(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StatePaused}))
 	a.render()
 	r := a.screens[tabRecord].(*recordScreen)
-	if !r.card.Visible() || r.state.text != lang.StatePaused || r.meter.Visible() {
-		t.Errorf("paused card: shown %v, badge %q, meter shown %v", r.card.Visible(), r.state.text, r.meter.Visible())
+	if !r.card.Visible() || r.state.text != lang.StatePaused || r.meter.lit != [2]float32{} {
+		t.Errorf("paused card: shown %v, badge %q, meter lit %v", r.card.Visible(), r.state.text, r.meter.lit)
 	}
 	if !r.waitRow.Visible() || r.waiting.String() != fmt.Sprintf(lang.NothingRecordedPaused, "Player") || !r.play.Visible() || r.restart.Visible() {
 		t.Errorf("info bar shown %v, says %q, Play %v, restart %v", r.waitRow.Visible(), r.waiting.String(), r.play.Visible(), r.restart.Visible())
@@ -371,8 +372,8 @@ func TestAPausedTrackHasTheInfoBarAboveItsCard(t *testing.T) {
 
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	a.render()
-	if r.waitRow.Visible() || r.state.text != lang.Recording || !r.meter.Visible() {
-		t.Errorf("playing again: info bar %v, badge %q, meter %v", r.waitRow.Visible(), r.state.text, r.meter.Visible())
+	if r.waitRow.Visible() || r.state.text != lang.Recording || r.meter.lit == [2]float32{} {
+		t.Errorf("playing again: info bar %v, badge %q, meter lit %v", r.waitRow.Visible(), r.state.text, r.meter.lit)
 	}
 }
 
@@ -646,6 +647,16 @@ func TestALibraryRowHasTheTitleThenTheArtists(t *testing.T) {
 	}
 	if full, short := all["Reunion"].text, all["Intermission"].text; full.Position().Y != 0 || short.Position().Y < (full.Size().Height-short.Size().Height)/2-0.5 {
 		t.Errorf("the row with no artist has its text at y %v, the others at %v", short.Position().Y, full.Position().Y)
+	}
+	// Its buttons are square, in the middle of the row's height, as the
+	// Record list's are: QA found them as tall as the row.
+	at := a.fa.Driver().AbsolutePositionForObject
+	for _, i := range []int{1, 2, 3} {
+		row := all["Reunion"].row
+		b := row.Objects[2].(*fyne.Container).Objects[i].(*fyne.Container).Objects[0]
+		if mid := at(b).Y + b.Size().Height/2 - at(row).Y; b.Size().Width != b.Size().Height || mid < row.Size().Height/2-1 || mid > row.Size().Height/2+1 {
+			t.Errorf("button %d is %v, its middle %v down a row %v tall", i, b.Size(), mid, row.Size().Height)
+		}
 	}
 	// The pictures show a listener's folder, not this test's.
 	setCaption(lib.count, pluralFiles(len(files), len(files), "/Users/listener/Music/Spytify"))
@@ -1153,7 +1164,7 @@ func TestButtonsSendActions(t *testing.T) {
 	}
 
 	// A choice shows its words and applies its value.
-	sel := s.fields["output.prefix"].input.(*widget.Select)
+	sel := s.fields["output.prefix"].input.(*selectField)
 	sel.SetSelected("Album track number (04)")
 	waitSets(t, core, 3)
 	core.mu.Lock()
@@ -1490,6 +1501,23 @@ func TestHoverAndSelectionAreTranslucent(t *testing.T) {
 	}
 }
 
+// A footer's button lights up under the pointer, off the footer's grey:
+// the usual hover is that grey, on which it did not show. It turns white
+// on the light grey, charcoal on the dark.
+func TestAFootersButtonLightsUpUnderThePointer(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	clear := a.screens[tabRecord].(*recordScreen).clear
+	for i, mode := range []string{"light", "dark"} {
+		a.fa.Settings().SetTheme(spytifyTheme{mode: mode})
+		a.render()
+		hover, footer := theme.ColorForWidget(theme.ColorNameHover, clear), cardColors[colorFooter][i]
+		if want := cardColors[colorFooterHover][i]; hover != want || hover == footer {
+			t.Errorf("%s: a footer's button lights %v under the pointer, want %v, the footer %v", mode, hover, want, footer)
+		}
+	}
+}
+
 func TestSourceParts(t *testing.T) {
 	for _, c := range []struct {
 		rate, ch int
@@ -1561,7 +1589,8 @@ func TestTheMeterWaitsUnderADialog(t *testing.T) {
 	a.render()
 	meter := a.screens[tabRecord].(*recordScreen).meter
 	before := meter.lit
-	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -30}))
+	// Louder: the bars rise at once.
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -6}))
 	d := dialog.NewInformation("A dialog", "covering the meter", a.win)
 	d.Show()
 	a.renderLevel()
