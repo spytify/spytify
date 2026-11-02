@@ -245,6 +245,8 @@ An empty object.
 | `name` | string |
 | `ok` | boolean |
 | `detail` | string, optional |
+| `advice` | boolean, optional |
+| `facts` | object of string, optional |
 
 #### Counters
 

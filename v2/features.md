@@ -37,10 +37,22 @@ Ads and short untitled items are not recorded, and **Mute ads** silences the app
 
 When the application's output device runs below 44.1 kHz or in mono, as a Bluetooth headset does while an app uses its microphone, the tracks would sound like a phone call. Spytify says so and what to change, and skips the tracks recorded that way; **Keep anyway** still saves the last one.
 
+### [The Record screen](#record-screen)
+
+The track being recorded sits on its cover's colours, with a badge that says whether it is recorded, the stream's rate and channels, and its progress along the bottom. Beside **Skip**, a meter shows each channel's level, L and R, while it records. Under it, the session's list says which tracks were saved, and why the others were skipped. When nothing is recorded, one line says why, with the one button that fixes it: open the player, **Play**, **Start the recorder** or **Open diagnostics**.
+
+Light or dark, as the system is; **Theme** in Settings > App picks one.
+
 ### [Library](#library)
 
-Every recorded file, newest first, with its cover, a search box, Reveal and Play.
+Every recorded file with its cover, sorted by newest, by name, or by album under a heading per album. The search finds an artist, a title or an album, and a filter shows the complete files, the partial takes **Keep anyway** saved, or the low-quality ones, together or alone, to clean them up. Each row's buttons show the file in its folder, play it, or move it to the system's trash (the Recycle Bin on Windows), where it can be put back: Spytify never deletes a file.
+
+### [Keyboard](#keyboard)
+
+- **⌘R** (Ctrl+R on Linux and Windows) presses Record or Stop, **⌘1** to **⌘5** show the tabs, and **⌘S** goes to the Library's or the Settings' search. Hold ⌘ or Ctrl to see every key on screen.
+- **Tab** goes through each screen in the order it reads. On the tab bar, Left and Right show the tab before or after. A list is one stop: Up and Down move between its rows, Left and Right between a row and its buttons, and Space presses the button, or plays the row.
+- **Escape** closes every dialog, as its Close, Cancel or No does.
 
 ### [Without a window](#headless)
 
-`spytifyd` records on its own: with **Minimize to tray** on (Settings > App), closing the window keeps Spytify recording in the tray or the menu bar (on a Linux desktop with no tray, closing quits), `spytify-cli` drives it from a terminal, `spytifyd --once` records one session without a socket, and `spytify-cli service install` starts it at login.
+`spytifyd` records on its own. Spytify's icon is in the tray or the menu bar from launch: with **Minimize to tray** on (Settings > App), closing the window keeps Spytify recording there (on a Linux desktop with no tray, closing quits), and it notifies you when a recording stops on its own. `spytify-cli` drives it from a terminal, `spytifyd --once` records one session without a socket, and `spytify-cli service install` starts it at login.

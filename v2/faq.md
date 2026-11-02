@@ -5,7 +5,11 @@ title: F.A.Q.
 
 ### [Nothing is recorded](#nothing-recorded)
 
-Open the **Logs** tab: its startup checks say what is wrong, such as "ffmpeg not found", and **Send to the developers** sends the checks that fail. If the application plays and no audio reaches Spytify for 10 seconds, the app also says where to look.
+Press **Diagnostics** in the Logs tab, or **Open diagnostics** on Record: the checks say what is wrong, such as "ffmpeg not found", and **Send to the developers** sends the checks that fail. When `spytifyd`, the recorder, is not running, Record says so and offers **Start the recorder**. If the application plays and no audio reaches Spytify for 10 seconds, the app also says where to look.
+
+### [Where are my files?](#output-folder)
+
+In `~/Spytify` (`C:\Users\<name>\Spytify` on Windows), grouped by artist and album, unless you chose another **Output folder** in Settings > Output. Up to 2.0.0-alpha.7 the default was `~/Music/Spytify`: an install that already records there keeps it. **Open folder** on Record opens it, and a row's magnifier shows its file there.
 
 ### [Tracks overlap, or a file starts with the end of the previous track](#tracks-overlap)
 
@@ -25,7 +29,7 @@ Some applications play your own music files in place of a streamed track when th
 
 ### [Keep a track that was cut short](#keep-anyway)
 
-The last track cut short (skipped, stopped with **Stop now**, or moved along its track bar) shows **Keep anyway** in the Record list until the next track is saved. It saves the part that played as "*title* (partial)", which never counts as the whole track: when it plays in full, it is recorded as usual. A track skipped as low quality is kept the same way, as "*title* (low quality)".
+The last track cut short (skipped, stopped with **Stop now**, or moved along its track bar) shows **Keep anyway** in the Record list until the next track is saved. It saves the part that played as "*title* (partial)", which never counts as the whole track: when it plays in full, it is recorded as usual. A track skipped as low quality is kept the same way, as "*title* (low quality)". The Library's filter shows these takes alone, to clean them up.
 
 ### [Tracks are skipped as low quality](#low-quality)
 

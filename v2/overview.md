@@ -5,7 +5,10 @@ title: Overview
 
 Spytify records the sound one application sends to your speakers, nothing else, and saves each track it plays as its own file: cut at the right sample, encoded with ffmpeg, and tagged with the title, artist, album and cover the application itself reports.
 
-<p align="center"><img alt="Spytify recording: the current track with its progress and level, and the files already saved" src="{{ '/assets/images/v2/recording.png' | relative_url }}" /></p>
+<p align="center">
+  <a href="{{ '/assets/images/v2/recording.png' | relative_url }}"><img width="48%" alt="Spytify recording, light theme: the current track on its cover's colours with its progress and its L and R level, and the files already saved" src="{{ '/assets/images/v2/recording.png' | relative_url }}" /></a>
+  <a href="{{ '/assets/images/v2/recording-dark.png' | relative_url }}"><img width="48%" alt="The same session in the dark theme" src="{{ '/assets/images/v2/recording-dark.png' | relative_url }}" /></a>
+</p>
 
 It runs on Linux, macOS 14.2 or later and Windows 10 version 2004 or later. [Download it]({{ site.repository_download }}) and see [Install](install.html).
 
@@ -16,15 +19,15 @@ It runs on Linux, macOS 14.2 or later and Windows 10 version 2004 or later. [Dow
 - **Sample-accurate cuts.** A track change notification only says roughly when a track ended. The track's length gives the expected end, and the quietest 20 ms around it decides the exact sample, so each file holds one whole track and nothing of its neighbours.
 - **Nothing converted twice.** Spytify records at the rate the system plays the application at: its output device's on macOS and Windows, PipeWire's on Linux.
 - **Whole tracks only.** A track that was skipped, stopped early, or moved along its track bar is not kept, even when it played for its full length. A track already playing when you press Record is skipped too, unless you choose **Record this track from the start**. **Keep anyway** still saves the last one cut short.
-- **A recorder and a window.** `spytifyd` records, and keeps recording while the window is hidden in the tray. The Spytify app and `spytify-cli` drive it.
+- **A recorder and a window.** `spytifyd` records, and keeps recording while the window is hidden in the tray. The Spytify app and `spytify-cli` drive it. When `spytifyd` is not running, Record says so and offers to start it.
 
 ### [Standard use](#standard-use)
 
 1. Open the application you want to record, and turn off its crossfade and gapless playback: two mixed tracks cannot be separated again.
-2. Open Spytify and press **Record**.
-3. Play music. Each track becomes a file in `~/Music/Spytify`, grouped by artist and album; Settings changes the folder, the format and the names.
-4. Press **Stop**: the track playing finishes first. **Stop now** stops at once; that track is not saved, unless you press **Keep anyway**.
+2. Open Spytify and press **Record** (⌘R on macOS, Ctrl+R on Linux and Windows).
+3. Play music. Each track becomes a file in `~/Spytify`, grouped by artist and album; Settings changes the folder, the format and the names.
+4. Press **Stop**: the track playing finishes first. **Stop now** stops at once; that track is not saved, unless you press **Keep anyway**. With **Stop the session when the player stops or quits** (Settings > Recording), the session ends with the playlist.
 
-The bug tracker sends crash reports and recording counts unless you untick it at the first launch; it never keeps your computer's name, your user name, your home folder or your IP address. See [Privacy](privacy.html).
+The bug tracker sends crash reports, errors with a picture of the window, and recording counts unless you untick it at the first launch; it never keeps your computer's name, your user name, your home folder or your IP address, and the picture blurs your folders. See [Privacy](privacy.html).
 
 Coming from Spytify v1? See [what changed](migrate.html).
