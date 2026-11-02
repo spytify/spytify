@@ -344,6 +344,19 @@ func TestTheKeyboardWorksTheLibrary(t *testing.T) {
 	if !slices.Equal(*revealed, []string{file}) || !slices.Equal(*opened, []string{file}) {
 		t.Errorf("showed %v and played %v, want %s", *revealed, *opened, file)
 	}
+
+	// The trash is the third button: Right three times, then Space.
+	var trashed []string
+	real := moveToTrash
+	t.Cleanup(func() { moveToTrash = real })
+	moveToTrash = func(p string) error { trashed = append(trashed, p); return os.Remove(p) }
+	for range 3 {
+		pressKey(c, fyne.KeyRight)
+	}
+	pressSpace(c)
+	if !slices.Equal(trashed, []string{file}) || len(lib.shown) != 1 {
+		t.Errorf("moved %v to the trash, %d files left; want %s, 1 left", trashed, len(lib.shown), file)
+	}
 }
 
 // settingsOrder is the Settings screen's Tab order: each card's Reset, its
