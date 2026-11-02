@@ -70,3 +70,46 @@ func TestTheDiagnosticsOpenOnTheirChecks(t *testing.T) {
 		t.Error("Escape from the checks left the dialog shown")
 	}
 }
+
+// A check's fix is reached as a Library row's buttons are: Tab stops on the
+// checks once and goes on to the dialog's buttons, Right lights the fix of
+// the check highlighted, Left goes back to the check, and Space presses it.
+func TestACheckFixIsReachedByTheArrowsNotTab(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
+	in := info()
+	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: "permission denied"})
+	m.SetInfo(in)
+	a.render()
+	diagnostics(t, a)
+	c := a.win.Canvas()
+	l := a.screens[tabLogs].(*logsScreen).checkList
+	if c.Focused() != l {
+		t.Fatalf("the diagnostics open with %s focused", focusName(a, c.Focused()))
+	}
+	pressTab(c)
+	if got := focusName(a, c.Focused()); got != lang.RunChecksAgain {
+		t.Errorf("Tab from the checks: %q focused, want %q", got, lang.RunChecksAgain)
+	}
+	c.Focus(l)
+	pressKey(c, fyne.KeyRight)
+	if l.lit == nil || l.lit.Text != lang.ChooseAnotherFolder || !l.lit.focused {
+		t.Fatalf("Right on the failed check lit %v", l.lit)
+	}
+	snapshot(t, a, "diagnostics-fix-lit")
+	pressKey(c, fyne.KeyRight)
+	if l.lit == nil || l.lit.Text != lang.ChooseAnotherFolder {
+		t.Error("Right past the last fix left it")
+	}
+	fix := l.lit
+	pressKey(c, fyne.KeyLeft)
+	if l.lit != nil || fix.focused {
+		t.Error("Left did not go back to the check")
+	}
+	pressKey(c, fyne.KeyRight)
+	pressKey(c, fyne.KeySpace)
+	if c.Overlays().Top() != nil || a.tabs.SelectedIndex() != tabSettings {
+		t.Errorf("Space on Choose another folder: dialog shown %v, tab %d", c.Overlays().Top() != nil, a.tabs.SelectedIndex())
+	}
+}
