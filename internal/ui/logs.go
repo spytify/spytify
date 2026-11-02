@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -55,7 +56,7 @@ func newLogsScreen(a *App) *logsScreen {
 	l.checks = container.NewVBox()
 	a.maskPaths(l.checks)
 	l.checksScroll = container.NewVScroll(l.checks)
-	l.refresh = newIconButton("Run the checks again", theme.ViewRefreshIcon(), func() {
+	l.refresh = newIconButton(lang.RunChecksAgain, theme.ViewRefreshIcon(), func() {
 		a.noteAction("run the checks again")
 		go a.refreshChecks()
 	})
@@ -64,12 +65,12 @@ func newLogsScreen(a *App) *logsScreen {
 	// A dialog of Fyne's stays where it first showed as the checks under it
 	// grow, past the window's edge: this pop-up looks like one, and is
 	// centred again.
-	title := widget.NewLabelWithStyle("Diagnostics", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	done := newButton("Close", l.hideDiagnostics)
+	title := widget.NewLabelWithStyle(lang.Diagnostics, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	done := newButton(lang.Close, l.hideDiagnostics)
 	pad := theme.Padding()
 	body := container.NewBorder(container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done), nil, nil, l.checksScroll)
 	l.diag = widget.NewModalPopUp(container.New(layout.NewCustomPaddedLayout(pad*2, pad*2, pad*2, pad*2), body), a.win.Canvas())
-	l.diagnose = newLitButton("Diagnostics", theme.ConfirmIcon(), widget.LowImportance, a.showDiagnostics)
+	l.diagnose = newLitButton(lang.Diagnostics, theme.ConfirmIcon(), widget.LowImportance, a.showDiagnostics)
 
 	l.level = widget.NewCheckGroup(logLevels, func([]string) { l.filter() })
 	l.level.Horizontal = true
@@ -107,7 +108,7 @@ func newLogsScreen(a *App) *logsScreen {
 	)
 	// SetSelected runs the callback, which needs the list.
 	l.level.SetSelected(logLevels)
-	copyAll := newIconButton("Copy", theme.ContentCopyIcon(), func() {
+	copyAll := newIconButton(lang.Copy, theme.ContentCopyIcon(), func() {
 		a.noteAction("copy the log")
 		var b strings.Builder
 		for _, line := range l.lines {
@@ -116,12 +117,12 @@ func newLogsScreen(a *App) *logsScreen {
 		a.fa.Clipboard().SetContent(b.String())
 	})
 	copyAll.Importance = widget.LowImportance
-	open := newIconButton("Open log file", theme.DocumentIcon(), func() {
+	open := newIconButton(lang.OpenLogFile, theme.DocumentIcon(), func() {
 		a.noteAction("open the log file")
 		_ = openPath(l.path)
 	})
 	open.Importance = widget.LowImportance
-	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel("Show"), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
+	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel(lang.Show), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
 	l.root = plain(margin(inReadingOrder(tools, nil, nil, nil, l.list)))
 	return l
 }
@@ -200,7 +201,7 @@ func (a *App) diagChecks(s model.State) []proto.Check {
 	}
 	detail := cmp.Or(a.startErr, s.ConnError)
 	if a.starting {
-		detail = startingText
+		detail = lang.StartingRecorder
 	}
 	return []proto.Check{{Name: checkDaemon, Detail: detail}}
 }
@@ -210,13 +211,13 @@ func (l *logsScreen) renderChecks(s model.State) {
 	failing := failingChecks(checks)
 	// Advice that fails reads with the advice, out of the count.
 	counted := len(checks) - len(adviceNames(checks))
-	summary := fmt.Sprintf("All %d checks pass.", counted)
+	summary := fmt.Sprintf(lang.ChecksPass, counted)
 	warnings := s.Info.Warnings
 	switch {
 	case s.Conn != model.Connected:
-		summary, warnings = "spytifyd is not running, so nothing else can be checked.", nil
+		summary, warnings = lang.NothingElseChecked, nil
 	case failing > 0:
-		summary = fmt.Sprintf("%d of %d checks need attention.", failing, counted)
+		summary = fmt.Sprintf(lang.ChecksNeedAttention, failing, counted)
 	}
 	state := fmt.Sprint(summary, checks, warnings)
 	// The send button follows the bug tracker's switch too.
@@ -242,15 +243,15 @@ func (l *logsScreen) renderChecks(s model.State) {
 		}
 		var fix fyne.CanvasObject
 		if c.Name == checkDaemon && !c.OK && !l.app.starting {
-			start := newLitButton("Start spytifyd", theme.MediaPlayIcon(), widget.HighImportance, l.app.StartDaemon)
+			start := newLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, l.app.StartDaemon)
 			fix = start.lit
 		}
 		if c.Name == "player running" && !c.OK {
-			open := newLitButton("Open "+s.Info.Target.Process, theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
+			open := newLitButton(fmt.Sprintf(lang.Open, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
 			fix = open.lit
 		}
 		if c.Name == proto.CheckOutputWritable && !c.OK {
-			choose := newLitButton("Choose another folder", theme.FolderOpenIcon(), widget.HighImportance, func() {
+			choose := newLitButton(lang.ChooseAnotherFolder, theme.FolderOpenIcon(), widget.HighImportance, func() {
 				l.hideDiagnostics()
 				l.app.showOutputSetting()
 			})
@@ -277,16 +278,16 @@ func (l *logsScreen) renderChecks(s model.State) {
 	// Stuck on a check: the user may send it to the developers, once for
 	// these results, unless they opted out of the bug tracker.
 	if failing > 0 && l.app.tel.Available() {
-		send := newIconButton("Send to the developers", theme.MailSendIcon(), nil)
+		send := newIconButton(lang.SendToDevelopers, theme.MailSendIcon(), nil)
 		done := func() {
 			l.sent = state
-			send.SetText("Sent")
+			send.SetText(lang.Sent)
 			send.Disable()
 		}
 		send.OnTapped = func() {
 			l.app.sendChecks(s, func(ok bool) {
 				if !ok {
-					send.SetText("Not sent, try again")
+					send.SetText(lang.NotSent)
 					return
 				}
 				done()
@@ -297,7 +298,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 		case !on:
 			// No tooltip shows in a pop-up: the reason is written out.
 			send.Disable()
-			l.actions.Objects = append(l.actions.Objects, container.NewCenter(caption(optedOut)))
+			l.actions.Objects = append(l.actions.Objects, container.NewCenter(caption(lang.TrackerOptedOut)))
 		case l.sent == state:
 			done()
 		}

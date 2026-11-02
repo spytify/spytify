@@ -13,13 +13,15 @@ import (
 // tabsLayout puts the plain colour behind the tabs' bar, and behind the
 // padding the window's layout leaves above it, up to the app bar: the tabs
 // draw no background of their own, and the page's grey is below. The tab
-// keys lie over the colour, under the tabs.
+// keys lie over the colour, under the tabs. It lays each tab's tooltip over
+// the tab.
 type tabsLayout struct{ tabs *container.AppTabs }
 
-// withPlainTabBar is tabs with the plain colour behind their bar, and keys,
-// the bar's stop in the Tab order, before the page.
+// withPlainTabBar is tabs with the plain colour behind their bar, keys, the
+// bar's stop in the Tab order, before the page, and their tooltips.
 func withPlainTabBar(tabs *container.AppTabs, keys *tabKeys) *fyne.Container {
-	return container.New(tabsLayout{tabs}, canvas.NewRectangle(theme.Color(colorPlain)), keys, tabs)
+	objs := append([]fyne.CanvasObject{canvas.NewRectangle(theme.Color(colorPlain)), keys, tabs}, tabTips(tabs)...)
+	return container.New(tabsLayout{tabs}, objs...)
 }
 
 func (l tabsLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
@@ -36,6 +38,7 @@ func (l tabsLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 	back.Resize(fyne.NewSize(size.Width, bar+pad))
 	objs[1].Move(back.Position())
 	objs[1].Resize(back.Size())
+	coverTabs(l.tabs, objs[3:])
 }
 
 func (l tabsLayout) MinSize([]fyne.CanvasObject) fyne.Size { return l.tabs.MinSize() }

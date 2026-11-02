@@ -5,6 +5,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // closeWindow answers the window's close button: with Minimize to tray on
@@ -26,7 +27,7 @@ func (a *App) hasTray() bool { return a.tray && !a.noTrayHost }
 // quits even with it on.
 func (a *App) trayNote() string {
 	if a.noTrayHost {
-		return noTrayNote
+		return lang.NoTrayIcons
 	}
 	return ""
 }
@@ -50,12 +51,12 @@ func (a *App) setupTray() {
 	desk.SetSystemTrayIcon(Logo)
 	// The tray's action is the app bar's, which render copies there:
 	// Record, Stop, or Stop now while the last track is being saved.
-	a.trayAction = fyne.NewMenuItem("Record", a.toggleRecording)
+	a.trayAction = fyne.NewMenuItem(lang.Record, a.toggleRecording)
 	a.trayAction.Disabled = true
-	a.trayMenu = fyne.NewMenu("Spytify",
+	a.trayMenu = fyne.NewMenu(lang.Spytify,
 		a.trayAction,
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Open window", a.showWindow),
+		fyne.NewMenuItem(lang.OpenWindow, a.showWindow),
 	)
 	desk.SetSystemTrayMenu(a.trayMenu)
 }
@@ -88,8 +89,8 @@ func (a *App) hideToTray() {
 	prefs := a.fa.Preferences()
 	if !prefs.Bool(trayNoticeKey) {
 		prefs.SetBool(trayNoticeKey, true)
-		a.fa.SendNotification(fyne.NewNotification("Spytify is still running",
-			"It records from the menu bar. Quit it from there, or turn off Minimize to tray in Settings."))
+		a.fa.SendNotification(fyne.NewNotification(lang.StillRunning,
+			lang.StillRunningText))
 	}
 }
 
