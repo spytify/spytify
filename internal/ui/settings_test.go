@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -14,10 +15,12 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -89,6 +92,23 @@ func TestSettingsAreLaidOutBySection(t *testing.T) {
 	for _, acc := range s.advanced {
 		if acc.open {
 			t.Error("an Advanced part is open before anyone opened it")
+		}
+	}
+}
+
+// The settings scroll to the window's edge, their scroll bar there as the
+// lists' is, while the search and the cards stay two paddings off the sides.
+func TestSettingsScrollToTheWindowsEdge(t *testing.T) {
+	a, _, s := settingsApp(t)
+	d := fyne.CurrentApp().Driver()
+	width := a.win.Canvas().Size().Width
+	if x := d.AbsolutePositionForObject(s.scroll).X; x != 0 || s.scroll.Size().Width != width {
+		t.Errorf("the scroll is at %v, %v wide, in a window %v wide", x, s.scroll.Size().Width, width)
+	}
+	side := 2 * theme.Padding()
+	for name, o := range map[string]fyne.CanvasObject{"search": s.search, "cards": s.sections} {
+		if x := d.AbsolutePositionForObject(o).X; x != side || o.Size().Width != width-2*side {
+			t.Errorf("the %s are at %v, %v wide, in a window %v wide", name, x, o.Size().Width, width)
 		}
 	}
 }
@@ -304,7 +324,7 @@ func TestTheTemplateShowsAnExample(t *testing.T) {
 	m.SetSettings(v)
 	a.render()
 	// By default the files go in artist and album folders.
-	if got, want := example(), "e.g. "+filepath.Join("Neon Harbor", "Harbor Lights", "Neon Harbor - Café Lumière.flac"); got != want {
+	if got, want := example(), fmt.Sprintf(lang.Example, filepath.Join("Neon Harbor", "Harbor Lights", "Neon Harbor - Café Lumière.flac")); got != want {
 		t.Errorf("example %q, want %q", got, want)
 	}
 	v["output.underscores"] = true
@@ -313,7 +333,7 @@ func TestTheTemplateShowsAnExample(t *testing.T) {
 	m.SetSettings(v)
 	s.search.SetText("output")
 	a.render()
-	if got, want := example(), "e.g. "+filepath.Join("Neon_Harbor", "Harbor_Lights", "001_Neon_Harbor_-_Cafe_Lumiere.flac"); got != want {
+	if got, want := example(), fmt.Sprintf(lang.Example, filepath.Join("Neon_Harbor", "Harbor_Lights", "001_Neon_Harbor_-_Cafe_Lumiere.flac")); got != want {
 		t.Errorf("with underscores, the counter and no diacritics, example %q, want %q", got, want)
 	}
 	if all := texts(s.sections); !contains(all, "Underscores instead of spaces") {
@@ -366,7 +386,7 @@ func TestThePlayerSavesWithoutAButton(t *testing.T) {
 	if _, err := os.Stat(target.UserEnvPath()); err == nil {
 		t.Fatal("showing the player wrote the .env file")
 	}
-	if all := texts(a.win.Content()); !contains(all, "Player process") || contains(all, "Restart spytifyd") {
+	if all := texts(a.win.Content()); !contains(all, lang.PlayerProcess) || contains(all, lang.RestartRecorder) {
 		t.Errorf("before any change the player shows %v", all)
 	}
 	s.player.process.SetText("otherplayer")
@@ -375,7 +395,7 @@ func TestThePlayerSavesWithoutAButton(t *testing.T) {
 		t.Errorf(".env after the change: %q, %v", env, err)
 	}
 	all := texts(a.win.Content())
-	if !contains(all, "Restart spytifyd") || contains(all, "Save and restart spytifyd") {
+	if !contains(all, lang.RestartRecorder) || contains(all, "Save and restart spytifyd") {
 		t.Errorf("after the change the player shows %v", all)
 	}
 	snapshot(t, a, "settings-player")
@@ -393,7 +413,7 @@ func TestResetResetsItsSection(t *testing.T) {
 			want = append(want, d.Key)
 		}
 	}
-	resets := buttons(s.sections.Objects[0], "Reset")
+	resets := buttons(s.sections.Objects[0], lang.Reset)
 	if len(resets) != 1 {
 		t.Fatalf("%d Reset buttons in the first section", len(resets))
 	}

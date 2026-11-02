@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -27,7 +28,7 @@ func diagnostics(t *testing.T, a *App) fyne.CanvasObject {
 // dialog, which shows.
 func sendButton(t *testing.T, a *App) *widget.Button {
 	t.Helper()
-	found := buttons(overlay(t, a), "Send to the developers")
+	found := buttons(overlay(t, a), lang.SendToDevelopers)
 	if len(found) != 1 {
 		t.Fatalf("%d Send to the developers buttons", len(found))
 	}
@@ -93,7 +94,7 @@ func TestSendToTheDevelopers(t *testing.T) {
 	connect(t, a, m, true)
 	a.showTab(tabLogs)
 	a.render()
-	if b := buttons(diagnostics(t, a), "Send to the developers"); len(b) != 0 {
+	if b := buttons(diagnostics(t, a), lang.SendToDevelopers); len(b) != 0 {
 		t.Fatal("a Send button while every check passes")
 	}
 	failCheck(a, m)
@@ -101,12 +102,12 @@ func TestSendToTheDevelopers(t *testing.T) {
 	if s := a.screens[tabLogs].(*logsScreen).checksScroll; s.Content.Size().Height == 0 || s.Offset.Y+s.Size().Height < s.Content.Size().Height {
 		t.Error("the checks are not scrolled down to the one that fails")
 	}
-	if send := sendButton(t, a); send.Disabled() || contains(texts(overlay(t, a)), optedOut) {
+	if send := sendButton(t, a); send.Disabled() || contains(texts(overlay(t, a)), lang.TrackerOptedOut) {
 		t.Fatalf("Send to the developers: disabled %v, the dialog %v", send.Disabled(), texts(overlay(t, a)))
 	}
-	tapButton(t, overlay(t, a), "Send to the developers")
+	tapButton(t, overlay(t, a), lang.SendToDevelopers)
 	snapshot(t, a, "privacy-send-checks")
-	tapButton(t, overlay(t, a), "Send")
+	tapButton(t, overlay(t, a), lang.Send)
 	ev := srv.Wait(t, "event", 1)[0].JSON()
 	if ev["message"] != "stuck: ffmpeg found" {
 		t.Errorf("sent %v", ev["message"])

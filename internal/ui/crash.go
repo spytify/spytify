@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // checkCrashes sends the crashes left behind with the bug tracker on.
@@ -42,17 +44,16 @@ func (a *App) showCrashes(crashes []telemetry.Crash) {
 // showCrash says a program crashed and that no report left, with its
 // error and trace, folded, to report on GitHub by hand.
 func (a *App) showCrash(cr telemetry.Crash, then func()) {
-	who := "Spytify"
+	who := lang.Spytify
 	if cr.Program == "spytifyd" {
-		who = "The recorder"
+		who = lang.TheRecorder
 	}
-	why := "the Sentry bug tracker is off"
+	why := lang.TrackerOff
 	if !a.tel.Available() {
-		why = "this build has no bug tracker"
+		why = lang.NoTracker
 	}
 	title, details := a.tel.CrashReport(cr)
-	body := widget.NewLabel("No report was sent to the developers: " + why + ". " +
-		"To report it yourself, open an issue on GitHub with the error below.")
+	body := widget.NewLabel(fmt.Sprintf(lang.CrashNotReported, why))
 	body.Wrapping = fyne.TextWrapWord
 	errTitle := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	errTitle.Wrapping = fyne.TextWrapWord
@@ -70,7 +71,7 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 			top.Refresh()
 		}
 	}
-	fold := newIconButton("Error and stack trace", theme.MenuExpandIcon(), nil)
+	fold := newIconButton(lang.ErrorAndTrace, theme.MenuExpandIcon(), nil)
 	fold.Importance = widget.LowImportance
 	fold.Alignment = widget.ButtonAlignLeading
 	fold.OnTapped = func() {
@@ -83,12 +84,12 @@ func (a *App) showCrash(cr telemetry.Crash, then func()) {
 		}
 		fit()
 	}
-	d = dialog.NewCustomWithoutButtons(who+" stopped unexpectedly", container.NewVBox(body, fold, fault), a.win)
-	closeButton := newButton("Close", d.Hide)
-	copyButton := newIconButton("Copy", theme.ContentCopyIcon(), func() {
+	d = dialog.NewCustomWithoutButtons(fmt.Sprintf(lang.StoppedUnexpectedly, who), container.NewVBox(body, fold, fault), a.win)
+	closeButton := newButton(lang.Close, d.Hide)
+	copyButton := newIconButton(lang.Copy, theme.ContentCopyIcon(), func() {
 		a.fa.Clipboard().SetContent(title + "\n\n" + details)
 	})
-	report := newLitButton("Report on GitHub", openInNewIcon, widget.HighImportance, func() { a.openURL(issueURL(title, details)) })
+	report := newLitButton(lang.ReportOnGitHub, openInNewIcon, widget.HighImportance, func() { a.openURL(issueURL(title, details)) })
 	d.SetButtons([]fyne.CanvasObject{closeButton, copyButton, report.lit})
 	d.SetOnClosed(then)
 	d.Resize(fyne.NewSize(crashDialogWidth, 0))
@@ -112,9 +113,8 @@ func issueURL(title, details string) string {
 		if cut < 0 {
 			cut = most
 		}
-		details = details[:cut] + "\n… (cut: Copy in Spytify gives the rest)"
+		details = details[:cut] + lang.IssueCut
 	}
-	body := "What I was doing:\n\n\n```\n" + details + "\n```\n"
-	q := url.Values{"title": {"Crash: " + title}, "body": {body}}
+	q := url.Values{"title": {fmt.Sprintf(lang.IssueTitle, title)}, "body": {fmt.Sprintf(lang.IssueBody, details)}}
 	return sourceURL + "/issues/new?" + q.Encode()
 }
