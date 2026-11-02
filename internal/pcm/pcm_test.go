@@ -79,6 +79,29 @@ func TestLevel(t *testing.T) {
 	}
 }
 
+// Each channel is measured alone: a loud left and a silent right are not
+// averaged into one level.
+func TestChannelLevels(t *testing.T) {
+	f := Format{48000, 2, S16LE}
+	b := make([]byte, 2*2*100)
+	for i := 0; i < 100; i++ {
+		f.PutSample(b, 2*i, 0.5)
+	}
+	peak, rms := f.ChannelLevels(b)
+	if len(peak) != 2 || len(rms) != 2 {
+		t.Fatalf("%d peaks and %d RMS for two channels", len(peak), len(rms))
+	}
+	if math.Abs(peak[0]-(-6.0206)) > 0.01 || math.Abs(rms[0]-peak[0]) > 0.01 {
+		t.Errorf("left: peak=%v rms=%v", peak[0], rms[0])
+	}
+	if peak[1] != Silence || rms[1] != Silence {
+		t.Errorf("silent right: peak=%v rms=%v", peak[1], rms[1])
+	}
+	if p, r := f.ChannelLevels(nil); p[0] != Silence || r[1] != Silence {
+		t.Errorf("no frames: peaks %v, RMS %v", p, r)
+	}
+}
+
 func TestCompareDetectsBleed(t *testing.T) {
 	f := Format{44100, 2, S16LE}
 	a := Synth{Seed: 1, FadeInMs: 20, FadeOut: 20}.Render(f, 44100)

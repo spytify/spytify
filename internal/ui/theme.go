@@ -24,8 +24,12 @@ const (
 	colorOnSkippedBadge fyne.ThemeColorName = "spytifyOnSkippedBadge"
 )
 
-// A screen's footer, on a grey of its own under the list.
-const colorFooter fyne.ThemeColorName = "spytifyFooter"
+// A screen's footer, on a grey of its own under the list, and a button
+// under the pointer there: white on the light grey, charcoal on the dark.
+const (
+	colorFooter      fyne.ThemeColorName = "spytifyFooter"
+	colorFooterHover fyne.ThemeColorName = "spytifyFooterHover"
+)
 
 // An info alert's text, in the green of its outline and icon, darker on the
 // light theme and lighter on the dark one, as MUI's outlined Alert does.
@@ -58,6 +62,7 @@ var cardColors = map[fyne.ThemeColorName][2]color.NRGBA{
 	colorSkippedBadge:   {{R: 0xf8, G: 0xec, B: 0xd4, A: 0xff}, {R: 0x3d, G: 0x2f, B: 0x12, A: 0xff}},
 	colorOnSkippedBadge: {{R: 0x5a, G: 0x42, B: 0x12, A: 0xff}, {R: 0xf2, G: 0xd9, B: 0xa6, A: 0xff}},
 	colorFooter:         {{R: 0xeb, G: 0xeb, B: 0xef, A: 0xff}, {R: 0x14, G: 0x14, B: 0x16, A: 0xff}},
+	colorFooterHover:    {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x2e, G: 0x2e, B: 0x32, A: 0xff}},
 	colorPage:           {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x0f, G: 0x0f, B: 0x10, A: 0xff}},
 	colorPlain:          {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x17, G: 0x17, B: 0x18, A: 0xff}},
 	colorCard:           {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x1c, G: 0x1c, B: 0x1e, A: 0xff}},
@@ -155,10 +160,11 @@ func (spytifyTheme) Size(n fyne.ThemeSizeName) float32       { return theme.Defa
 // cardTheme is the app's theme on a card or another surface: its inputs and
 // lines in the card's colours, square fields, a ticked check box showing
 // the surface it is on, a light shadow at a scrolled list's edges, and in
-// the advanced block, smaller text.
+// the advanced block, smaller text. hover, when set, is a button's under
+// the pointer.
 type cardTheme struct {
-	input, surface fyne.ThemeColorName
-	small          bool
+	input, surface, hover fyne.ThemeColorName
+	small                 bool
 }
 
 func (cardTheme) base() fyne.Theme { return fyne.CurrentApp().Settings().Theme() }
@@ -169,6 +175,8 @@ func (c cardTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.Co
 		name = c.input
 	case name == theme.ColorNameBackground && c.surface != "":
 		name = c.surface
+	case name == theme.ColorNameHover && c.hover != "":
+		name = c.hover
 	case name == theme.ColorNameSeparator:
 		name = colorCardLine
 	case name == theme.ColorNameShadow:
@@ -197,12 +205,14 @@ func (c cardTheme) Size(n fyne.ThemeSizeName) float32 {
 }
 
 // The recording card's own colours: a badge of translucent white and the
-// outline of one, and the red Recording badge with its dot.
+// outline of one, the red Recording badge with its dot, and the yellow
+// the level meter turns when it gets loud.
 const (
 	colorMediaBadge fyne.ThemeColorName = "spytifyMediaBadge"
 	colorMediaLine  fyne.ThemeColorName = "spytifyMediaLine"
 	colorRecBadge   fyne.ThemeColorName = "spytifyRecBadge"
 	colorOnRecBadge fyne.ThemeColorName = "spytifyOnRecBadge"
+	colorMeterLoud  fyne.ThemeColorName = "spytifyMeterLoud"
 )
 
 // mediaTheme is the app's theme on the recording card, over the cover's
@@ -235,6 +245,8 @@ func (m mediaTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.C
 		return color.NRGBA{R: 0xff, G: 0xda, B: 0xd6, A: 0xff}
 	case colorOnRecBadge:
 		return color.NRGBA{R: 0x41, G: 0x00, B: 0x02, A: 0xff}
+	case colorMeterLoud:
+		return color.NRGBA{R: 0xff, G: 0xd5, B: 0x3d, A: 0xff}
 	}
 	return m.base().Color(name, v)
 }

@@ -462,7 +462,7 @@ func TestTheTrashButtonMovesAFileToTheTrash(t *testing.T) {
 		if !ok {
 			t.Fatalf("no row for %s", title)
 		}
-		return row.row.Objects[2].(*fyne.Container).Objects[3].(*rowButton)
+		return row.row.Objects[2].(*fyne.Container).Objects[3].(*fyne.Container).Objects[0].(*rowButton)
 	}
 
 	first := trashButton("Splendor")

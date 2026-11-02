@@ -12,7 +12,7 @@ import (
 // and stays open while they are ticked: a select's list closes on the first
 // choice. Its text is whatever Selected is set to.
 type checkSelect struct {
-	widget.Select
+	selectField
 	boxes *fyne.Container
 	pop   *widget.PopUp
 }

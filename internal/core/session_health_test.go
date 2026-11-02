@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -191,35 +192,43 @@ func TestSystemAudioCheck(t *testing.T) {
 func TestPinnedMeter(t *testing.T) {
 	r := bareRig(t, nil, endOnStop)
 	s := r.s
+	mono := func(peak, rms float64, frames int) { s.meter([]float64{peak}, []float64{rms}, frames) }
 	later := time.Now().Add(time.Hour)
 	s.setState(proto.StateRecording)
-	s.meter(-6, -10, 100)
+	mono(-6, -10, 100)
 	s.lastLevel = later
-	s.meter(-20, -30, 100)
-	s.meter(-3, -12, 300)
+	mono(-20, -30, 100)
+	mono(-3, -12, 300)
 	s.lastLevel = time.Time{}
-	s.meter(-40, pcm.Silence, 100)
+	mono(-40, pcm.Silence, 100)
 	// No samples, no report.
 	s.lastLevel = time.Time{}
-	s.meter(-50, -50, 0)
+	mono(-50, -50, 0)
 	s.lastLevel = time.Time{}
-	s.meter(pcm.Silence, pcm.Silence, 10)
+	mono(pcm.Silence, pcm.Silence, 10)
 	s.setState(proto.StatePaused)
 	s.lastLevel = time.Time{}
-	s.meter(-1, -1, 100)
+	mono(-1, -1, 100)
 	s.setState(proto.StateRecording)
 	s.lastLevel = time.Time{}
-	s.meter(-30, -30, 100)
+	mono(-30, -30, 100)
+	// Stereo: each channel's, left then right, and the whole's.
+	s.lastLevel = time.Time{}
+	s.meter([]float64{-6, -20}, []float64{-12, -30}, 100)
+	one := func(peak, rms float64) proto.LevelEvent {
+		return proto.LevelEvent{PeakDBFS: peak, RMSDBFS: rms, Channels: []proto.ChannelLevel{{PeakDBFS: peak, RMSDBFS: rms}}}
+	}
 	want := []proto.LevelEvent{
-		{PeakDBFS: -6, RMSDBFS: -10},
-		{PeakDBFS: -3, RMSDBFS: -14.2},
-		{PeakDBFS: -120, RMSDBFS: -120},
-		{PeakDBFS: -30, RMSDBFS: -30},
+		one(-6, -10),
+		one(-3, -14.2),
+		one(-120, -120),
+		one(-30, -30),
+		{PeakDBFS: -6, RMSDBFS: -14.9, Channels: []proto.ChannelLevel{{PeakDBFS: -6, RMSDBFS: -12}, {PeakDBFS: -20, RMSDBFS: -30}}},
 	}
 	r.mu.Lock()
 	got := append([]proto.LevelEvent(nil), r.levels...)
 	r.mu.Unlock()
-	if !slices.Equal(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("levels %+v, want %+v", got, want)
 	}
 }

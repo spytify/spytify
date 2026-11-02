@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -163,7 +164,9 @@ type Session struct {
 	silent, heard bool
 	// lowFormat is set while the capture's format is too poor for music.
 	lowFormat bool
-	peak, sum float64
+	// peak and sum are each channel's since the last level reported, over
+	// count frames.
+	peak, sum []float64
 	count     int64
 	// diskFull is set when the output disk had no room for a track.
 	diskFull  bool
@@ -452,8 +455,8 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	case ch.Format != s.ring.Format():
 		s.formatChange(ch.Format)
 	}
-	peak, rms := ch.Format.Level(ch.Data)
-	if peak > s.silenceDB {
+	peaks, rms := ch.Format.ChannelLevels(ch.Data)
+	if slices.Max(peaks) > s.silenceDB {
 		s.lastSound = time.Now()
 		s.hear()
 	}
@@ -472,7 +475,7 @@ func (s *Session) onChunk(ch capture.Chunk) {
 			s.cur.partial = true
 		}
 	}
-	s.meter(peak, rms, len(ch.Data)/ch.Format.Sample.Bytes())
+	s.meter(peaks, rms, len(ch.Data)/ch.Format.FrameBytes())
 	s.progress()
 }
 
@@ -515,21 +518,32 @@ func (s *Session) checkQuality(f pcm.Format) {
 	s.lowFormat = low
 }
 
-func (s *Session) meter(peak, rms float64, samples int) {
-	if peak > s.peak || s.count == 0 {
-		s.peak = peak
+func (s *Session) meter(peaks, rms []float64, frames int) {
+	if s.count == 0 || len(peaks) != len(s.peak) {
+		s.peak, s.sum, s.count = slices.Clone(peaks), make([]float64, len(peaks)), 0
 	}
-	lin := pcmPow(rms)
-	s.sum += lin * lin * float64(samples)
-	s.count += int64(samples)
+	for c := range peaks {
+		s.peak[c] = max(s.peak[c], peaks[c])
+		lin := pcmPow(rms[c])
+		s.sum[c] += lin * lin * float64(frames)
+	}
+	s.count += int64(frames)
 	if time.Since(s.lastLevel) < 100*time.Millisecond {
 		return
 	}
 	if st := s.state(); st == proto.StateRecording && s.count > 0 {
-		s.deps.emit(proto.EventLevel, proto.LevelEvent{PeakDBFS: round1(s.peak), RMSDBFS: round1(pcm.DBFS(sqrt(s.sum / float64(s.count))))})
+		e := proto.LevelEvent{PeakDBFS: pcm.Silence}
+		var sum float64
+		for c := range s.peak {
+			e.Channels = append(e.Channels, proto.ChannelLevel{PeakDBFS: round1(s.peak[c]), RMSDBFS: round1(pcm.DBFS(sqrt(s.sum[c] / float64(s.count))))})
+			e.PeakDBFS = max(e.PeakDBFS, round1(s.peak[c]))
+			sum += s.sum[c]
+		}
+		e.RMSDBFS = round1(pcm.DBFS(sqrt(sum / float64(s.count*int64(len(s.peak))))))
+		s.deps.emit(proto.EventLevel, e)
 	}
 	s.lastLevel = time.Now()
-	s.peak, s.sum, s.count = pcm.Silence, 0, 0
+	s.count = 0
 }
 
 // makeRoom keeps the ring from overflowing when no notification comes: the

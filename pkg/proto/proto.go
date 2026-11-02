@@ -293,7 +293,15 @@ type TrackKeepParams struct {
 	ID string `json:"id,omitempty"`
 }
 
+// LevelEvent is the level since the last one: over every channel, then
+// each channel's in the stream's order, left then right for stereo.
 type LevelEvent struct {
+	PeakDBFS float64        `json:"peak_dbfs"`
+	RMSDBFS  float64        `json:"rms_dbfs"`
+	Channels []ChannelLevel `json:"channels,omitempty"`
+}
+
+type ChannelLevel struct {
 	PeakDBFS float64 `json:"peak_dbfs"`
 	RMSDBFS  float64 `json:"rms_dbfs"`
 }
