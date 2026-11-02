@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/settings"
@@ -89,6 +90,23 @@ func TestSettingsAreLaidOutBySection(t *testing.T) {
 	for _, acc := range s.advanced {
 		if acc.open {
 			t.Error("an Advanced part is open before anyone opened it")
+		}
+	}
+}
+
+// The settings scroll to the window's edge, their scroll bar there as the
+// lists' is, while the search and the cards stay two paddings off the sides.
+func TestSettingsScrollToTheWindowsEdge(t *testing.T) {
+	a, _, s := settingsApp(t)
+	d := fyne.CurrentApp().Driver()
+	width := a.win.Canvas().Size().Width
+	if x := d.AbsolutePositionForObject(s.scroll).X; x != 0 || s.scroll.Size().Width != width {
+		t.Errorf("the scroll is at %v, %v wide, in a window %v wide", x, s.scroll.Size().Width, width)
+	}
+	side := 2 * theme.Padding()
+	for name, o := range map[string]fyne.CanvasObject{"search": s.search, "cards": s.sections} {
+		if x := d.AbsolutePositionForObject(o).X; x != side || o.Size().Width != width-2*side {
+			t.Errorf("the %s are at %v, %v wide, in a window %v wide", name, x, o.Size().Width, width)
 		}
 	}
 }
