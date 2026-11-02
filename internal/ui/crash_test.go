@@ -77,7 +77,7 @@ func TestACrashNotSentShowsItsTrace(t *testing.T) {
 		t.Error("a crash left with the bug tracker off")
 	}
 
-	a.tel = telemetry.New(telemetry.Options{Prefs: a.fa.Preferences()})
+	a.tel = untracked(t, a.fa.Preferences())
 	leaveACrash(t, a, "boom")
 	a.checkCrashes()
 	if all := strings.Join(texts(overlay(t, a)), "\n"); !strings.Contains(all, lang.NoTracker) {

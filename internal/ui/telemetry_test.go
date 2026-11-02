@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -40,8 +41,12 @@ func TestStartErrorKinds(t *testing.T) {
 	for err, want := range map[error]string{
 		link.ErrInArchive: "in archive",
 		link.ErrNoDaemon:  "not found",
-		errors.New("spytifyd started but does not answer; see its log in Logs"): "no answer",
-		errors.New("spytifyd stopped: listen: address already in use"):          "failed",
+		errNoAnswer:       "no answer",
+		&fs.PathError{Op: "fork/exec", Path: "/x/spytifyd", Err: fs.ErrNotExist}: "not found",
+		errors.New("spytifyd stopped: listen: address already in use"):           "failed",
+		// What spytifyd said as it stopped is its own: it found itself.
+		errors.New("spytifyd stopped: ffmpeg not found"):               "failed",
+		errors.New("spytifyd stopped: open config.toml: no such file"): "failed",
 	} {
 		if got := startErrorKind(err); got != want {
 			t.Errorf("startErrorKind(%q) = %q, want %q", err, got, want)

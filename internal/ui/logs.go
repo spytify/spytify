@@ -256,15 +256,15 @@ func (l *logsScreen) renderChecks(s model.State) {
 		}
 		var fix fyne.CanvasObject
 		if c.Name == checkDaemon && !c.OK && !l.app.starting {
-			start := newLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, l.app.StartDaemon)
+			start := newRowLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, l.app.StartDaemon)
 			fix = start.lit
 		}
 		if c.Name == "player running" && !c.OK {
-			open := newLitButton(fmt.Sprintf(lang.Open, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
+			open := newRowLitButton(fmt.Sprintf(lang.Open, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
 			fix = open.lit
 		}
 		if c.Name == proto.CheckOutputWritable && !c.OK {
-			choose := newLitButton(lang.ChooseAnotherFolder, theme.FolderOpenIcon(), widget.HighImportance, func() {
+			choose := newRowLitButton(lang.ChooseAnotherFolder, theme.FolderOpenIcon(), widget.HighImportance, func() {
 				l.hideDiagnostics()
 				l.app.showOutputSetting()
 			})

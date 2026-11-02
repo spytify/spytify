@@ -332,7 +332,8 @@ type ErrorEvent struct {
 	Fatal bool   `json:"fatal"`
 	// Source is the capture's format, for capture_low_quality.
 	Source *AudioSource `json:"source,omitempty"`
-	// FreeMB is the space left in the output folder, for disk_full.
+	// FreeMB is the space left in the output folder, in millions of bytes,
+	// for disk_full.
 	FreeMB *int64 `json:"free_mb,omitempty"`
 }
 

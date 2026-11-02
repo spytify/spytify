@@ -77,7 +77,7 @@ go test -race ./...    # unit tests, the fake-player scenarios, the CLI end to e
 
   ```sh
   go run ./internal/tools/gate1 export -dir ~/Gate1   # then play them, recording to WAV or FLAC with normalize off
-  go run ./internal/tools/gate1 check -dir ~/Gate1 -out ~/Music/Spytify
+  go run ./internal/tools/gate1 check -dir ~/Gate1 -out ~/Spytify
   ```
 
 ## Releases
