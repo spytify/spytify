@@ -11,7 +11,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/recording-dark.png">
-  <img alt="Spytify recording a session: the current track on its cover's colours with its progress, and the files already saved" src="assets/recording.png">
+  <img alt="Spytify recording a session: the current track on its cover's colours with its progress and its L and R level, and the files already saved" src="assets/recording.png">
 </picture>
 
 Spytify records the sound one application plays, nothing else, and saves each track as its own file, cut at the right sample and tagged with the title, artist, album and cover the application reports. It runs on Linux, macOS 14.2 or later and Windows 10 version 2004 or later.
