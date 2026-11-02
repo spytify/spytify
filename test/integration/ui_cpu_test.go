@@ -75,8 +75,16 @@ func TestUIStaysIdleWhileRecording(t *testing.T) {
 	}
 	defer daemon.Process.Kill()
 
+	// What the app prints tells why it is not running, when it is not.
+	uiLog := filepath.Join(dir, "ui.log")
+	out, err := os.Create(uiLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
 	app := exec.Command(ui)
 	app.Env = env
+	app.Stdout, app.Stderr = out, out
 	if err := app.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -97,10 +105,15 @@ func TestUIStaysIdleWhileRecording(t *testing.T) {
 	// The fake player's audio starts after its delay and lead-in; the
 	// jitter timeline then plays ten items for about 55 s.
 	time.Sleep(time.Until(started.Add(delay + leadIn + 3*time.Second)))
-	a := cpuTicks(t, app.Process.Pid)
+	a := cpuTicks(t, app.Process.Pid, uiLog)
 	const window = 10 * time.Second
 	time.Sleep(window)
-	b := cpuTicks(t, app.Process.Pid)
+	b := cpuTicks(t, app.Process.Pid, uiLog)
+	// The meter alone repaints ten times a second: an app that used no time
+	// at all did not draw, and passed as idle.
+	if b == a {
+		t.Fatalf("the app used no CPU at all over %s of recording: it does not draw\n%s", window, lastLines(uiLog))
+	}
 	share := float64(b-a) / clockTicks(t) / window.Seconds() * 100
 	t.Logf("the app used %.1f %% of a core over %s of recording", share, window)
 	if share > maxUICPU {
@@ -109,18 +122,29 @@ func TestUIStaysIdleWhileRecording(t *testing.T) {
 }
 
 // cpuTicks is a process's user and system time, in clock ticks.
-func cpuTicks(t *testing.T, pid int) int64 {
+func cpuTicks(t *testing.T, pid int, uiLog string) int64 {
 	t.Helper()
 	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
-		t.Fatalf("the app is not running: %v", err)
+		t.Fatalf("the app is not running: %v\n%s", err, lastLines(uiLog))
 	}
 	// Fields after the command name, which is in parentheses and may hold
-	// spaces: utime and stime are the 12th and 13th.
+	// spaces: the state first, utime and stime the 12th and 13th. An app
+	// that exited stays a zombie until it is waited for, its times frozen.
 	f := strings.Fields(string(b[strings.LastIndexByte(string(b), ')')+2:]))
+	if f[0] == "Z" || f[0] == "X" {
+		t.Fatalf("the app is not running: it exited\n%s", lastLines(uiLog))
+	}
 	utime, _ := strconv.ParseInt(f[11], 10, 64)
 	stime, _ := strconv.ParseInt(f[12], 10, 64)
 	return utime + stime
+}
+
+// lastLines is the end of what the app printed.
+func lastLines(path string) string {
+	b, _ := os.ReadFile(path)
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	return "the app's last lines:\n" + strings.Join(lines[max(0, len(lines)-20):], "\n")
 }
 
 func clockTicks(t *testing.T) float64 {
