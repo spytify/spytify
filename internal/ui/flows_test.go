@@ -2,8 +2,6 @@ package ui
 
 import (
 	"bytes"
-	"context"
-	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -13,12 +11,9 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
-	"fyne.io/fyne/v2/widget"
 
-	"github.com/spytify/spytify/internal/bus"
 	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
@@ -27,39 +22,6 @@ import (
 
 // The user flows QA walked through on macOS, with the operating system's
 // parts (Finder, the media player, the menu bar) replaced by fakes.
-
-// connectedApp is the app talking to a recordingCore over a real socket.
-func connectedApp(t *testing.T) (*App, *model.Model, *recordingCore) {
-	t.Helper()
-	// A short folder: Unix socket paths have a length limit.
-	dir, err := os.MkdirTemp("", "spyui")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	core := &recordingCore{}
-	srv := bus.NewServer(core.handle, nil)
-	sock := filepath.Join(dir, "s.sock")
-	if err := srv.ListenUnix(sock); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { srv.Close() })
-	// Cancelled once newTestApp waited for the app's requests: they end
-	// with the core's answer, not with the link going away.
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	a, m, l := newTestApp(t, sock)
-	go l.Run(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for m.Snapshot().Conn != model.Connected {
-		if time.Now().After(deadline) {
-			t.Fatal("the app did not connect")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	a.render()
-	return a, m, core
-}
 
 func waitStops(t *testing.T, c *recordingCore, n int) []proto.SessionStopParams {
 	t.Helper()
@@ -375,68 +337,3 @@ func TestClosingQuitsWhereTheDesktopDrawsNoTray(t *testing.T) {
 	a.setTrayHost(false)
 	closing("the host gone", 1)
 }
-
-// iconButtons are the visible buttons that show only icon.
-func iconButtons(o fyne.CanvasObject, icon fyne.Resource) []*widget.Button {
-	var out []*widget.Button
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		if b, ok := asButton(o); ok {
-			if b.Text == "" && b.Icon != nil && b.Icon.Name() == icon.Name() && !b.Disabled() {
-				out = append(out, b)
-			}
-			return
-		}
-		if c, ok := o.(*fyne.Container); ok {
-			for _, child := range c.Objects {
-				walk(child)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, child := range test.WidgetRenderer(w).Objects() {
-				walk(child)
-			}
-		}
-	}
-	walk(o)
-	return out
-}
-
-// images are the names of the visible images' resources.
-func images(o fyne.CanvasObject) []string {
-	var out []string
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		switch w := o.(type) {
-		case *canvas.Image:
-			if w.Resource != nil {
-				out = append(out, w.Resource.Name())
-			} else if w.Image != nil {
-				out = append(out, picture(w.Image))
-			}
-			return
-		case *fyne.Container:
-			for _, child := range w.Objects {
-				walk(child)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, child := range test.WidgetRenderer(w).Objects() {
-				walk(child)
-			}
-		}
-	}
-	walk(o)
-	return out
-}
-
-// picture names an image shown from its pixels, such as a cover's thumbnail.
-func picture(img image.Image) string { return fmt.Sprintf("picture %p", img) }

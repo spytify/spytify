@@ -91,7 +91,7 @@ func TestAFailedChecksReasonShowsWholeUnderItsName(t *testing.T) {
 
 	name := labels(d, "output folder not writable")
 	var detail *widget.RichText
-	for _, rt := range richTextsOf(d) {
+	for _, rt := range visible[*widget.RichText](d) {
 		if rt.String() == reason {
 			detail = rt
 		}

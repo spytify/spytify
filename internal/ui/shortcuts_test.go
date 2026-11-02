@@ -14,55 +14,8 @@ import (
 	"fyne.io/fyne/v2/test"
 
 	"github.com/spytify/spytify/internal/ui/lang"
-	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
-
-// typeShortcut sends s as the window does: to the focused widget when it
-// takes shortcuts, else to the window's own, which the test window keeps
-// in the canvas it wraps.
-func typeShortcut(t *testing.T, a *App, s fyne.Shortcut) {
-	t.Helper()
-	c := a.win.Canvas()
-	if f, ok := c.Focused().(fyne.Shortcutable); ok {
-		f.TypedShortcut(s)
-		return
-	}
-	window, ok := reflect.ValueOf(c).Elem().FieldByName("WindowlessCanvas").Interface().(fyne.Shortcutable)
-	if !ok {
-		t.Fatal("the test window keeps no shortcuts")
-	}
-	window.TypedShortcut(s)
-}
-
-// press is key with the system's shortcut key: Cmd on macOS, Ctrl
-// elsewhere.
-func press(t *testing.T, a *App, key fyne.KeyName) {
-	t.Helper()
-	typeShortcut(t, a, shortcutFor(key))
-}
-
-func connectedTestApp(t *testing.T) (*App, *model.Model) {
-	t.Helper()
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
-	a.render()
-	return a, m
-}
-
-func (c *recordingCore) count(method string) int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	n := 0
-	for _, m := range c.calls {
-		if m == method {
-			n++
-		}
-	}
-	return n
-}
 
 // R is the app bar's action, as a click: Record, then Stop, then Stop now.
 func TestTheShortcutPressesRecordThenStop(t *testing.T) {

@@ -233,24 +233,13 @@ func TestSShowsUnderTheSearch(t *testing.T) {
 func TestHintsTakeNoClick(t *testing.T) {
 	a, _ := connectedTestApp(t)
 	holdUntilShown(t, a, time.Now())
-	var walk func(o fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
+	walk(a.hints, func(o fyne.CanvasObject) bool {
 		switch o.(type) {
 		case fyne.Tappable, fyne.SecondaryTappable, fyne.DoubleTappable, fyne.Draggable, fyne.Focusable, fyne.Scrollable, desktop.Hoverable, desktop.Mouseable:
 			t.Errorf("%T takes the mouse or the keys", o)
 		}
-		switch w := o.(type) {
-		case *fyne.Container:
-			for _, c := range w.Objects {
-				walk(c)
-			}
-		case fyne.Widget:
-			for _, c := range test.WidgetRenderer(w).Objects() {
-				walk(c)
-			}
-		}
-	}
-	walk(a.hints)
+		return true
+	})
 	h := shownKeys(a)["1"]
 	test.MoveMouse(a.win.Canvas(), a.fa.Driver().AbsolutePositionForObject(h).AddXY(h.Size().Width/2, h.Size().Height/2))
 	if hovered(t, a.win.Canvas()) == reflect.ValueOf(h).Pointer() {

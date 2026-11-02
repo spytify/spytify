@@ -9,10 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/test"
-	"fyne.io/fyne/v2/widget"
-
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/internal/ui/lang"
@@ -119,34 +115,4 @@ func TestACrashLeavesOnItsOwn(t *testing.T) {
 	if left := telemetry.FindCrashes(a.opts.StateDir, a.fa.Preferences(), time.Now()); len(left) != 0 {
 		t.Error("the crash would leave again")
 	}
-}
-
-// labels are the visible labels under o with this text.
-func labels(o fyne.CanvasObject, text string) []*widget.Label {
-	var out []*widget.Label
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		switch w := o.(type) {
-		case *widget.Label:
-			if w.Text == text {
-				out = append(out, w)
-			}
-			return
-		case *fyne.Container:
-			for _, child := range w.Objects {
-				walk(child)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, child := range test.WidgetRenderer(w).Objects() {
-				walk(child)
-			}
-		}
-	}
-	walk(o)
-	return out
 }

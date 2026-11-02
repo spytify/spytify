@@ -107,27 +107,16 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	panel := r.card.Objects[0]
 	d := fyne.CurrentApp().Driver()
 	box := d.AbsolutePositionForObject(panel)
-	var inside func(fyne.CanvasObject)
-	inside = func(o fyne.CanvasObject) {
+	walk(panel, func(o fyne.CanvasObject) bool {
 		if !o.Visible() {
-			return
+			return false
 		}
 		p, s := d.AbsolutePositionForObject(o), o.Size()
 		if p.X < box.X || p.X+s.Width > box.X+panel.Size().Width {
 			t.Errorf("%T at x %v to %v, out of the card's %v to %v", o, p.X, p.X+s.Width, box.X, box.X+panel.Size().Width)
 		}
-		switch w := o.(type) {
-		case *fyne.Container:
-			for _, c := range w.Objects {
-				inside(c)
-			}
-		case fyne.Widget:
-			for _, c := range test.WidgetRenderer(w).Objects() {
-				inside(c)
-			}
-		}
-	}
-	inside(panel)
+		return true
+	})
 	snapshot(t, a, "record-96khz-narrow")
 }
 
@@ -325,7 +314,7 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 			t.Errorf("the wait row says %q, want %q", r.waiting.String(), text)
 		}
 		for _, o := range []fyne.CanvasObject{r.launch, r.play, r.restart, r.blocked} {
-			if b, _ := asButton(o); o.Visible() != (o == want) {
+			if b, _ := as[*widget.Button](o); o.Visible() != (o == want) {
 				t.Errorf("%q shown %v", b.Text, o.Visible())
 			}
 		}
