@@ -97,9 +97,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	}
 	l.covers = newCovers(loaded)
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
-	l.search = widget.NewEntry()
-	l.search.SetPlaceHolder("Search artist, title or album")
-	l.search.OnChanged = func(string) { l.filter() }
+	l.search = newSearch("Search artist, title or album", func(string) { l.filter() })
 	l.sortBy = widget.NewSelect([]string{"Newest", "Name", byAlbum}, func(string) { l.filter() })
 	// Keep anyway saves a take cut short or in low quality: the filter hides
 	// those files, or shows them alone to clean them up, a box per kind of
@@ -181,7 +179,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	// SetSelected runs the callback, which needs the list and the count.
 	l.sortBy.SetSelected("Newest")
 	// The search and the sort are white fields on the page, as in Settings.
-	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, l.kinds), l.search), cardTheme{input: colorCard})
+	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, l.kinds), searchBox(l.search)), cardTheme{input: colorCard})
 	// The files from one side of the window to the other, their count and
 	// folder at the bottom, as the Record screen's session.
 	l.root = inReadingOrder(inset(top), footerBar(l.count, container.NewHBox(rescan, openFolder)), nil, nil, container.NewStack(l.list, l.empty))

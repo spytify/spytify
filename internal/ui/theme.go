@@ -145,7 +145,9 @@ func (spytifyTheme) Size(n fyne.ThemeSizeName) float32       { return theme.Defa
 // smaller text.
 type cardTheme struct {
 	input, surface fyne.ThemeColorName
-	small          bool
+	// small shrinks the text and its padding; square takes the round off
+	// the fields' corners.
+	small, square bool
 }
 
 func (cardTheme) base() fyne.Theme { return fyne.CurrentApp().Settings().Theme() }
@@ -169,6 +171,9 @@ func (c cardTheme) Icon(n fyne.ThemeIconName) fyne.Resource { return c.base().Ic
 
 func (c cardTheme) Size(n fyne.ThemeSizeName) float32 {
 	s := c.base().Size(n)
+	if c.square && n == theme.SizeNameInputRadius {
+		return 0
+	}
 	if c.small {
 		switch n {
 		case theme.SizeNameText:
