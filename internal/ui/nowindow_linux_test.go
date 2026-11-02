@@ -8,7 +8,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 
-	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/opengl"
 )
 
@@ -23,7 +22,7 @@ func (n *notified) SendNotification(x *fyne.Notification) { n.sent = append(n.se
 // notification says what to install.
 func TestNoWindowNotifiesWhatToInstall(t *testing.T) {
 	fa := &notified{App: test.NewTempApp(t)}
-	tel := telemetry.New(telemetry.Options{Prefs: fa.Preferences()})
+	tel := untracked(t, fa.Preferences())
 	t.Cleanup(tel.Close)
 	noGL := fmt.Errorf("%w: VersionUnavailable: GLX: Failed to create context: GLXBadFBConfig", opengl.ErrNoDriver)
 	NoWindow(fa, tel, nil, noGL)

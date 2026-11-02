@@ -42,8 +42,11 @@ func TestValidateRequiresProcess(t *testing.T) {
 
 func TestDefaultPlayerWhenUnset(t *testing.T) {
 	defer func(p string) { DefaultProcess = p }(DefaultProcess)
-	t.Setenv("SPYTIFY_TARGET_PROCESS", "x")
-	os.Unsetenv("SPYTIFY_TARGET_PROCESS")
+	// Nothing the shell exports counts, build.env's MPRIS name included.
+	for _, k := range TargetKeys {
+		t.Setenv(k, "x")
+		os.Unsetenv(k)
+	}
 
 	DefaultProcess = ""
 	if err := Load().Validate(); !errors.Is(err, ErrNoTarget) {
