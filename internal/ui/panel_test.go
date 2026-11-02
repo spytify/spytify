@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -40,14 +41,16 @@ func TestAPanelInsetsItsContent(t *testing.T) {
 
 // A panel takes its colours from the theme on each refresh, so a change of
 // theme shows, and from a theme override around it; with no line colour it
-// has no outline.
+// has no outline, and with no fill colour, as the session alert, only its
+// outline.
 func TestAPanelFollowsTheTheme(t *testing.T) {
 	fa := test.NewTempApp(t)
 	fa.Settings().SetTheme(spytifyTheme{mode: "light"})
 	outlined := newPanel(colorCard, colorCardLine, 10, fyne.Size{}, widget.NewLabel("outlined"))
 	plain := newPanel(colorFooter, "", 4, fyne.Size{}, widget.NewLabel("plain"))
+	line := newPanel("", theme.ColorNamePrimary, 8, fyne.Size{}, widget.NewLabel("line"))
 	input := newPanel(theme.ColorNameInputBackground, "", 0, fyne.Size{}, widget.NewLabel("input"))
-	test.NewTempWindow(t, container.NewVBox(outlined, plain, container.NewThemeOverride(input, cardTheme{input: colorCardInput})))
+	test.NewTempWindow(t, container.NewVBox(outlined, plain, line, container.NewThemeOverride(input, cardTheme{input: colorCardInput})))
 	box := func(p *panel) *canvas.Rectangle { return test.TempWidgetRenderer(t, p).(*panelRenderer).box }
 	for i, mode := range []string{"light", "dark"} {
 		fa.Settings().SetTheme(spytifyTheme{mode: mode})
@@ -56,6 +59,10 @@ func TestAPanelFollowsTheTheme(t *testing.T) {
 		}
 		if b := box(plain); b.FillColor != cardColors[colorFooter][i] || b.StrokeWidth != 0 || b.CornerRadius != 4 {
 			t.Errorf("%s, plain: %v, outline %v wide, rounded %v", mode, b.FillColor, b.StrokeWidth, b.CornerRadius)
+		}
+		primary := fa.Settings().Theme().Color(theme.ColorNamePrimary, fa.Settings().ThemeVariant())
+		if b := box(line); b.FillColor != color.Transparent || b.StrokeColor != primary || b.StrokeWidth != 1 || b.CornerRadius != 8 {
+			t.Errorf("%s, line only: %v, outline %v %v wide, rounded %v", mode, b.FillColor, b.StrokeColor, b.StrokeWidth, b.CornerRadius)
 		}
 		if b := box(input); b.FillColor != cardColors[colorCardInput][i] {
 			t.Errorf("%s, in an override: %v, want the override's %v", mode, b.FillColor, cardColors[colorCardInput][i])
