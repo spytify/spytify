@@ -216,6 +216,69 @@ func TestElapsedIsCappedAtLength(t *testing.T) {
 	}
 }
 
+func state(t *testing.T, st proto.SessionState) proto.Event {
+	return ev(t, proto.EventSessionState, proto.SessionStateEvent{State: st})
+}
+
+// Paused at 0:59 for 20 s, the track showed 1:19 once resumed while the
+// player was at 1:00: the core cuts the pause out of the take.
+func TestElapsedLeavesPausesOut(t *testing.T) {
+	m := New()
+	clock := time.Date(2026, 11, 1, 13, 37, 48, 0, time.UTC)
+	m.now = func() time.Time { return clock }
+	elapsed := func() time.Duration { c, _, _ := m.Live(); return m.Elapsed(*c) }
+
+	m.Apply(state(t, proto.StateRecording))
+	m.Apply(started(t, "s-001", "One"))
+	clock = clock.Add(59 * time.Second)
+	m.Apply(state(t, proto.StatePaused))
+	clock = clock.Add(20 * time.Second)
+	if got := elapsed(); got != 59*time.Second {
+		t.Fatalf("paused for 20 s: %v, want 59s", got)
+	}
+	m.Apply(state(t, proto.StateRecording))
+	clock = clock.Add(time.Second)
+	if got := elapsed(); got != time.Minute {
+		t.Fatalf("a second after resuming: %v, want 1m0s", got)
+	}
+	m.Apply(state(t, proto.StatePaused))
+	clock = clock.Add(2 * time.Minute)
+	m.Apply(state(t, proto.StateRecording))
+	clock = clock.Add(10 * time.Second)
+	if got := elapsed(); got != 70*time.Second {
+		t.Fatalf("after a second pause: %v, want 1m10s", got)
+	}
+}
+
+func TestElapsedOfATrackStartedWhilePaused(t *testing.T) {
+	m := New()
+	clock := time.Date(2026, 11, 1, 13, 37, 48, 0, time.UTC)
+	m.now = func() time.Time { return clock }
+	elapsed := func() time.Duration { c, _, _ := m.Live(); return m.Elapsed(*c) }
+
+	m.Apply(state(t, proto.StateRecording))
+	m.Apply(state(t, proto.StatePaused))
+	m.Apply(started(t, "s-001", "One"))
+	clock = clock.Add(30 * time.Second)
+	if got := elapsed(); got != 0 {
+		t.Fatalf("started while paused: %v, want 0s", got)
+	}
+	m.Apply(state(t, proto.StateRecording))
+	clock = clock.Add(5 * time.Second)
+	if got := elapsed(); got != 5*time.Second {
+		t.Fatalf("after resuming: %v, want 5s", got)
+	}
+
+	// A client that connects during a pause starts the clock stopped too.
+	late := New()
+	late.now = m.now
+	late.SetStatus(proto.SessionStatusResult{State: proto.StatePaused, SessionID: "x", Track: &proto.Track{ID: "x-004", Title: "Now"}})
+	clock = clock.Add(time.Minute)
+	if c, _, _ := late.Live(); late.Elapsed(*c) != 0 {
+		t.Fatalf("snapshot while paused: %v, want 0s", late.Elapsed(*c))
+	}
+}
+
 func TestSortRows(t *testing.T) {
 	now := time.Now()
 	rows := []Row{{Title: "b", Artist: "Z", Started: now}, {Title: "a", Artist: "Y", Started: now.Add(time.Minute)}}
