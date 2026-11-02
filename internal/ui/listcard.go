@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"sort"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -11,18 +12,24 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// cardList shows rows of one height on the card's colour, square and from
-// one side of the window to the other, on a page that scrolls as Settings'
-// does: its scroll bar is at the window's edge, where a widget.List puts
-// its own inside the card. Like widget.List, it builds only the rows in
-// view, as a library holds thousands of files, and Tab stops on it for the
-// arrows to move a highlight from row to row, then from a row to its
-// buttons, which Tab passes over.
+// cardList shows rows of one height, or of the heights height gives them,
+// on the card's colour, square and from one side of the window to the
+// other, on a page that scrolls as Settings' does: its scroll bar is at the
+// window's edge, where a widget.List puts its own inside the card. Like
+// widget.List, it builds only the rows in view, as a library holds
+// thousands of files, and Tab stops on it for the arrows to move a
+// highlight from row to row, then from a row to its buttons, which Tab
+// passes over.
 type cardList struct {
 	widget.BaseWidget
 	length func() int
 	create func() fyne.CanvasObject
 	update func(id widget.ListItemID, o fyne.CanvasObject)
+	// height, when set, gives a row a height of its own, 0 keeping the
+	// rows' own; sizeRows then adds up where each row starts. Without it,
+	// as for the Library's files, that is a multiplication.
+	height        func(id widget.ListItemID) float32
+	tops, heights []float32
 
 	scroll  *container.Scroll
 	page    *fyne.Container
@@ -65,8 +72,51 @@ func (l *cardList) cardHeight(n int) float32 {
 	if n == 0 {
 		return 0
 	}
+	return l.rowTop(n) + theme.Padding()
+}
+
+// sizeRows adds up the heights of n rows when height gives them, for
+// rowTop, rowHeight and rowAt.
+func (l *cardList) sizeRows(n int) {
+	if l.height == nil {
+		return
+	}
 	pad := theme.Padding()
-	return float32(n)*(l.itemMin.Height+pad) + pad
+	l.tops, l.heights = l.tops[:0], l.heights[:0]
+	var y float32
+	for id := range n {
+		h := l.height(id)
+		if h <= 0 {
+			h = l.itemMin.Height
+		}
+		l.tops, l.heights = append(l.tops, y), append(l.heights, h)
+		y += h + pad
+	}
+	l.tops = append(l.tops, y)
+}
+
+// rowTop is where row id starts on the page; past the last row, where one
+// more would.
+func (l *cardList) rowTop(id int) float32 {
+	if l.height == nil {
+		return float32(id) * (l.itemMin.Height + theme.Padding())
+	}
+	return l.tops[min(id, len(l.tops)-1)]
+}
+
+func (l *cardList) rowHeight(id int) float32 {
+	if l.height == nil || id >= len(l.heights) {
+		return l.itemMin.Height
+	}
+	return l.heights[id]
+}
+
+// rowAt is the row of n at y on the page, n past the last one.
+func (l *cardList) rowAt(y float32, n int) int {
+	if l.height == nil {
+		return int(y / (l.itemMin.Height + theme.Padding()))
+	}
+	return sort.Search(n, func(i int) bool { return l.tops[i+1] > y })
 }
 
 func (l *cardList) CreateRenderer() fyne.WidgetRenderer {
@@ -88,11 +138,11 @@ func (l *cardList) place(all bool) {
 		return
 	}
 	n := l.length()
-	step := l.itemMin.Height + theme.Padding()
+	l.sizeRows(n)
 	first, last := 0, -1
-	if view := l.scroll.Size().Height; n > 0 && step > 0 && view > 0 {
-		first = max(0, int(l.scroll.Offset.Y/step))
-		last = min(n-1, int((l.scroll.Offset.Y+view)/step))
+	if view := l.scroll.Size().Height; n > 0 && l.rowTop(n) > 0 && view > 0 {
+		first = max(0, l.rowAt(l.scroll.Offset.Y, n))
+		last = min(n-1, l.rowAt(l.scroll.Offset.Y+view, n))
 	}
 	old := make(map[widget.ListItemID]*cardRow, len(l.shown))
 	for _, s := range l.shown {
@@ -108,8 +158,8 @@ func (l *cardList) place(all bool) {
 			row = l.spareRow()
 		}
 		row.setLook(id == 0, l.focused && id == l.cursor)
-		row.box.Move(fyne.NewPos(0, float32(id)*step))
-		row.box.Resize(fyne.NewSize(l.page.Size().Width, l.itemMin.Height))
+		row.box.Move(fyne.NewPos(0, l.rowTop(id)))
+		row.box.Resize(fyne.NewSize(l.page.Size().Width, l.rowHeight(id)))
 		if all || !ok {
 			l.update(id, row.content)
 		}
@@ -256,10 +306,11 @@ func (l *cardList) ScrollTo(id widget.ListItemID) {
 	if l.scroll == nil {
 		return
 	}
-	top := float32(id) * (l.itemMin.Height + theme.Padding())
+	l.sizeRows(l.length())
+	top, height := l.rowTop(id), l.rowHeight(id)
 	off := l.scroll.Offset
-	if view := l.scroll.Size().Height; top+l.itemMin.Height > off.Y+view {
-		off.Y = top + l.itemMin.Height - view
+	if view := l.scroll.Size().Height; top+height > off.Y+view {
+		off.Y = top + height - view
 	}
 	off.Y = min(off.Y, top)
 	// The offset moved by hand tells OnScrolled nothing.
@@ -331,7 +382,9 @@ type cardPage struct{ l *cardList }
 func (p cardPage) Layout([]fyne.CanvasObject, fyne.Size) { p.l.place(false) }
 
 func (p cardPage) MinSize([]fyne.CanvasObject) fyne.Size {
-	return fyne.NewSize(p.l.itemMin.Width+2*rowSide(), p.l.cardHeight(p.l.length()))
+	n := p.l.length()
+	p.l.sizeRows(n)
+	return fyne.NewSize(p.l.itemMin.Width+2*rowSide(), p.l.cardHeight(n))
 }
 
 // cardRow is a row of a cardList: its content, a line above it but on the
