@@ -1017,7 +1017,7 @@ type recordingCore struct {
 	// noOutput is an output folder that cannot be written to: its check
 	// fails and no session starts.
 	noOutput bool
-	// silent is a capture that heard only silence: the system audio check
+	// silent is a capture that heard only silence: the player heard check
 	// fails.
 	silent bool
 }
@@ -1061,7 +1061,7 @@ func (c *recordingCore) handle(ctx context.Context, method string, params json.R
 		}
 		if silent {
 			i := info()
-			i.Checks = append(i.Checks, proto.Check{Name: proto.CheckSystemAudio, Detail: silentHint})
+			i.Checks = append(i.Checks, proto.Check{Name: proto.CheckPlayerHeard, Detail: silentHint})
 			return i, nil
 		}
 		return info(), nil
@@ -2027,18 +2027,18 @@ func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 	}
 }
 
-// silentHint stands for the recorder's own words for only silence, which
-// the window never shows: it says it in its lexicon's.
-const silentHint = "Only silence from the player for 10 s while it plays."
+// silentHint stands for the recorder's own words for only silence: the
+// player heard check's reason when it fails.
+const silentHint = "Only silence from the player for 10 s while it plays. Check that the player is not muted in its own volume."
 
 // Only silence from the player is said in one line on the Record tab, with
-// Open diagnostics, where the failing system audio check says why and what
-// to do, the player's own volume first. The checks run again when the
-// silence is reported and when sound comes back.
-func TestOnlySilenceLeadsToTheSystemAudioCheck(t *testing.T) {
+// Open diagnostics, where the failing player heard check says why and what
+// to do in the recorder's words. The checks run again when the silence is
+// reported and when sound comes back.
+func TestOnlySilenceLeadsToThePlayerHeardCheck(t *testing.T) {
 	a, m, core := connectedApp(t)
 	feedSession(t, m)
-	failing := func() bool { return checkFails(m.Snapshot().Info.Checks, proto.CheckSystemAudio) }
+	failing := func() bool { return checkFails(m.Snapshot().Info.Checks, proto.CheckPlayerHeard) }
 	core.setSilent(true)
 	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: silentHint}))
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -120, RMSDBFS: -120}))
@@ -2063,14 +2063,10 @@ func TestOnlySilenceLeadsToTheSystemAudioCheck(t *testing.T) {
 
 	test.Tap(r.alertDiagnose)
 	all := texts(overlay(t, a))
-	reason := fmt.Sprintf(lang.SystemAudioSilent, "Player")
-	if !contains(all, proto.CheckSystemAudio) || !contains(all, reason) || contains(all, silentHint) {
-		t.Fatalf("diagnostics without the system audio check and its reason in the window's words: %q", all)
+	if !contains(all, "player not heard") || !contains(all, silentHint) {
+		t.Fatalf("diagnostics without the failing player heard check and its reason: %q", all)
 	}
-	if !strings.Contains(reason, "Player is not muted") {
-		t.Errorf("the reason does not say to check the player's own volume: %q", reason)
-	}
-	snapshot(t, a, "diagnostics-system-audio")
+	snapshot(t, a, "diagnostics-player-heard")
 	tapButton(t, overlay(t, a), lang.Close)
 
 	core.setSilent(false)

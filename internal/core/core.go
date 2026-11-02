@@ -65,7 +65,7 @@ type Core struct {
 	// keep holds the last take cut short, across sessions.
 	keep *keeper
 	// silent is set while the capture hears only silence as the player
-	// plays, across sessions until it hears sound: the system audio check
+	// plays, across sessions until it hears sound: the player heard check
 	// fails.
 	silent atomic.Bool
 
@@ -347,9 +347,7 @@ func (c *Core) Info() proto.CoreInfoResult {
 		}
 	}
 	info.Checks = append(info.Checks, c.backends.Probe()...)
-	if ch, ok := systemAudioCheck(runtime.GOOS, c.silent.Load()); ok {
-		info.Checks = append(info.Checks, ch)
-	}
+	info.Checks = append(info.Checks, playerHeardCheck(runtime.GOOS, c.silent.Load()))
 	dir := v.Path(settings.OutputDir)
 	err := outputWritable(dir)
 	facts := outputFacts(dir, err, v.String(settings.OutputDir) == settings.Defaults().String(settings.OutputDir))

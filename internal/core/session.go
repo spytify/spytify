@@ -114,7 +114,8 @@ type sessionDeps struct {
 	// mute silences the player (true) or gives it back its volume.
 	mute func(on bool) error
 	// silentHint is the warning for a capture that delivers only silence
-	// while the player plays; empty, the session does not watch for it.
+	// while the player plays; empty, as in tests, the session does not
+	// watch for it.
 	silentHint string
 	// silence tells that the capture hears only silence while the player
 	// plays (true), or sound (false).
@@ -365,29 +366,30 @@ func stallHint(goos string) string {
 }
 
 // silentHint is what to look at when only silence arrives while the player
-// plays, or "" where the session does not watch for it. On macOS a tap
-// that System Audio Recording was refused to records silence, not nothing,
-// as it does from a player muted in its own volume. The window words it
-// in its lexicon; this text is the recorder's, for the log and the CLI.
+// plays: the player muted somewhere, unless the track is silent there. The
+// capture hears the player's own volume, and its slider in the Volume mixer
+// on Windows or in the sound settings on Linux, but not the output
+// device's. On macOS a tap that System Audio Recording was refused to
+// records silence too, not nothing. The window shows it as the player
+// heard check's detail.
 func silentHint(goos string) string {
-	if goos == "darwin" {
-		return "Only silence from the player for 10 s while it plays. Check that the player is not muted in its own volume; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
+	const lead = "Only silence from the player for 10 s while it plays. Check that the player is not muted in its own volume"
+	switch goos {
+	case "darwin":
+		return lead + "; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
+	case "windows":
+		return lead + ", nor in the Volume mixer."
 	}
-	return ""
+	return lead + ", nor in the system's sound settings."
 }
 
-// systemAudioCheck is the check that the capture did not hear only silence
-// while the player played, until it heard sound again; false where the
-// session does not watch for it.
-func systemAudioCheck(goos string, silent bool) (proto.Check, bool) {
-	hint := silentHint(goos)
-	switch {
-	case hint == "":
-		return proto.Check{}, false
-	case silent:
-		return proto.Check{Name: proto.CheckSystemAudio, Detail: hint}, true
+// playerHeardCheck is the check that the capture did not hear only silence
+// while the player played, until it heard sound again.
+func playerHeardCheck(goos string, silent bool) proto.Check {
+	if silent {
+		return proto.Check{Name: proto.CheckPlayerHeard, Detail: silentHint(goos)}
 	}
-	return proto.Check{Name: proto.CheckSystemAudio, OK: true, Detail: "no silence heard"}, true
+	return proto.Check{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"}
 }
 
 // lowQualityHint is what to change when the capture is too poor for
