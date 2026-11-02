@@ -72,9 +72,12 @@ func newLogsScreen(a *App) *logsScreen {
 	// again: the checks stand out.
 	done := newButton(lang.Close, l.hideDiagnostics)
 	done.Importance = widget.LowImportance
+	// The checks go from one side to the other, their scroll bar at the
+	// dialog's edge, as the lists' is at the window's.
 	pad := theme.Padding()
-	body := container.NewBorder(container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done), nil, nil, l.checkList)
-	l.diag = widget.NewModalPopUp(container.New(layout.NewCustomPaddedLayout(pad*2, pad*2, pad*2, pad*2), body), a.win.Canvas())
+	top := container.New(layout.NewCustomPaddedLayout(pad*2, 0, pad*2, pad*2), container.NewVBox(title, l.summary))
+	bottom := container.New(layout.NewCustomPaddedLayout(0, pad*2, pad*2, pad*2), container.NewBorder(nil, nil, l.actions, done))
+	l.diag = widget.NewModalPopUp(container.NewBorder(top, bottom, nil, nil, l.checkList), a.win.Canvas())
 	l.diagnose = newLitButton(lang.Diagnostics, theme.ConfirmIcon(), widget.LowImportance, a.showDiagnostics)
 
 	l.level = widget.NewCheckGroup(logLevels, func([]string) { l.filter() })
@@ -87,14 +90,17 @@ func newLogsScreen(a *App) *logsScreen {
 			a.maskPaths(msg)
 			prefix := widget.NewLabelWithStyle("00:00:00 info ", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 			prefix.SizeName = theme.SizeNameCaptionText
-			return container.NewBorder(nil, nil, prefix, nil, msg)
+			// Off the window's sides, in line with the tools above: the
+			// list goes to them, its scroll bar at the edge.
+			side := 2 * theme.Padding()
+			return container.New(layout.NewCustomPaddedLayout(0, 0, side, side), container.NewBorder(nil, nil, prefix, nil, msg))
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
 			if id >= len(l.lines) {
 				return
 			}
 			line := l.lines[id]
-			box := o.(*fyne.Container)
+			box := o.(*fyne.Container).Objects[0].(*fyne.Container)
 			ts := line.TS
 			if t, err := time.Parse(time.RFC3339Nano, line.TS); err == nil {
 				ts = t.Format("15:04:05")
@@ -108,7 +114,7 @@ func newLogsScreen(a *App) *logsScreen {
 			}
 			prefix.Refresh()
 			box.Objects[0].(*widget.Label).SetText(line.Msg)
-			l.list.SetItemHeight(id, box.MinSize().Height)
+			l.list.SetItemHeight(id, o.MinSize().Height)
 		},
 	)
 	// SetSelected runs the callback, which needs the list.
@@ -128,7 +134,7 @@ func newLogsScreen(a *App) *logsScreen {
 	})
 	open.Importance = widget.LowImportance
 	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel(lang.Show), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
-	l.root = plain(margin(inReadingOrder(tools, nil, nil, nil, l.list)))
+	l.root = plain(inReadingOrder(inset(tools), nil, nil, nil, l.list))
 	return l
 }
 

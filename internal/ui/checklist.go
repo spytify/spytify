@@ -86,13 +86,18 @@ func (l *checkList) TypedKey(e *fyne.KeyEvent) {
 
 func (l *checkList) TypedRune(rune) {}
 
-// checkPage lays the checks out, the highlight under the one the arrows
-// are on, from one side of the list to the other.
+// checkPage lays the checks out off the dialog's sides, in line with its
+// title, and the highlight under the one the arrows are on from one side
+// to the other.
 type checkPage struct{ l *checkList }
+
+// checkSide is how far the checks are from the dialog's sides.
+func checkSide() float32 { return 2 * theme.Padding() }
 
 func (p checkPage) Layout(_ []fyne.CanvasObject, size fyne.Size) {
 	l := p.l
-	l.box.Resize(size)
+	l.box.Move(fyne.NewPos(checkSide(), 0))
+	l.box.Resize(fyne.NewSize(size.Width-2*checkSide(), size.Height))
 	l.highlight.Hidden = !l.focused || len(l.rows) == 0
 	if l.highlight.Hidden {
 		return
@@ -104,4 +109,6 @@ func (p checkPage) Layout(_ []fyne.CanvasObject, size fyne.Size) {
 	l.highlight.Refresh()
 }
 
-func (p checkPage) MinSize([]fyne.CanvasObject) fyne.Size { return p.l.box.MinSize() }
+func (p checkPage) MinSize([]fyne.CanvasObject) fyne.Size {
+	return p.l.box.MinSize().AddWidthHeight(2*checkSide(), 0)
+}
