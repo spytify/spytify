@@ -122,6 +122,11 @@ func focusName(a *App, f fyne.Focusable) string {
 			return key
 		}
 		return "Sort"
+	case *selectField:
+		if key := setting(w); key != "" {
+			return key
+		}
+		return "Sort"
 	case *checkSelect:
 		return "Filter"
 	case *widget.Check:
@@ -132,6 +137,8 @@ func focusName(a *App, f fyne.Focusable) string {
 		return w.Text
 	case *widget.List, *cardList:
 		return "list"
+	case *keyRows:
+		return "checks"
 	}
 	if key := setting(f.(fyne.CanvasObject)); key != "" {
 		return key
@@ -560,6 +567,69 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 	pressSpace(c)
 	if !slices.Equal(*opened, []string{l.path}) {
 		t.Errorf("Open log file opened %v", *opened)
+	}
+}
+
+// QA could not reach the diagnostics' checks from the keyboard: Tab went
+// from Run the checks again to Close and back. Tab stops on the checks, and
+// the arrows move a highlight from check to check, the separators passed
+// over, scrolling the checks to show it.
+func TestTheKeyboardGoesThroughTheChecks(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	in := info()
+	for i := range 12 {
+		in.Checks = append(in.Checks, proto.Check{Name: fmt.Sprintf("check %d", i), OK: true, Detail: "fine"})
+	}
+	m.SetInfo(in)
+	m.SetSettings(defaults())
+	a.render()
+	diagnostics(t, a)
+	c := a.win.Canvas()
+	l := a.screens[tabLogs].(*logsScreen)
+	var order []string
+	for range 4 {
+		pressTab(c)
+		order = append(order, focusName(a, c.Focused()))
+	}
+	if !slices.Contains(order, "checks") {
+		t.Fatalf("Tab goes through %v, never the checks", order)
+	}
+	for focusName(a, c.Focused()) != "checks" {
+		pressTab(c)
+	}
+	k := l.checkRows
+	items := k.items()
+	if !k.mark.Visible() || k.mark.Position().Y != items[0].Position().Y {
+		t.Fatalf("focused, the highlight shows %v at %v, want the first check at %v", k.mark.Visible(), k.mark.Position().Y, items[0].Position().Y)
+	}
+	if l.checksScroll.Offset.Y != 0 {
+		t.Errorf("the first check highlighted, the checks are scrolled by %v", l.checksScroll.Offset.Y)
+	}
+	for range len(items) + 2 {
+		pressKey(c, fyne.KeyDown)
+	}
+	last := items[len(items)-1]
+	if k.cursor != len(items)-1 || k.mark.Position().Y != last.Position().Y {
+		t.Fatalf("Down past the end: on row %d at %v, want the last, %d, at %v", k.cursor, k.mark.Position().Y, len(items)-1, last.Position().Y)
+	}
+	if view := l.checksScroll.Size().Height; l.checksScroll.Offset.Y+view < last.Position().Y+last.Size().Height {
+		t.Errorf("the last check highlighted is out of view: scrolled by %v, %v high", l.checksScroll.Offset.Y, view)
+	}
+	pressKey(c, fyne.KeyUp)
+	if k.cursor != len(items)-2 {
+		t.Errorf("Up: on row %d, want %d", k.cursor, len(items)-2)
+	}
+	pressTab(c)
+	if k.mark.Visible() {
+		t.Error("the highlight stays once the checks lose the focus")
+	}
+	pressShiftTab(c)
+	if focusName(a, c.Focused()) == "checks" {
+		pressKey(c, fyne.KeyEscape)
+		if c.Overlays().Top() != nil {
+			t.Error("Escape on the checks left the diagnostics open")
+		}
 	}
 }
 

@@ -207,7 +207,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	// The wordmark: the logo with the name in its green.
 	mark := canvas.NewImageFromResource(Wordmark)
 	mark.FillMode = canvas.ImageFillContain
-	mark.SetMinSize(fyne.NewSize(26*622/204, 26))
+	mark.SetMinSize(fyne.NewSize(32*622/204, 32))
 	brand := container.NewCenter(mark)
 	pills := container.NewHBox(widget.NewSeparator(), a.dot, a.status, widget.NewSeparator(), a.output)
 	a.bar = container.NewBorder(nil, nil, container.NewHBox(brand, pills), container.NewHBox(a.update, a.donate, a.action.lit))
@@ -499,8 +499,9 @@ func (a *App) setAction(text string, icon fyne.Resource, imp widget.Importance) 
 	}
 	a.action.SetText(text)
 	a.action.SetToolTip(shortcutTip(text, actionKey))
-	a.action.SetIcon(icon)
+	// The importance first: the icon takes its text's colour.
 	a.action.Importance = imp
+	a.action.SetIcon(icon)
 	a.action.Refresh()
 }
 

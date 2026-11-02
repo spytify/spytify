@@ -312,3 +312,14 @@ func TestLevelEventsDoNotRedrawTheWindow(t *testing.T) {
 		t.Fatalf("50 level events ran %d full redraws and %d level updates", full, level)
 	}
 }
+
+// Each level report replaces the last whole: one without channels, from a
+// recorder that does not tell them apart, keeps none of the last one's.
+func TestALevelReportReplacesTheLast(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -14, Channels: []proto.ChannelLevel{{RMSDBFS: -13}, {RMSDBFS: -16}}}))
+	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -6}))
+	if _, _, l := m.Live(); l.RMSDBFS != -6 || len(l.Channels) != 0 {
+		t.Fatalf("level %+v, want -6 dBFS and no channels", l)
+	}
+}

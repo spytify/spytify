@@ -155,7 +155,7 @@ func TestShowingSettingsSendsNothingBack(t *testing.T) {
 // FLAC and WAV are lossless: the bitrate only applies to MP3 and AAC.
 func TestBitrateOnlyForLossyFormats(t *testing.T) {
 	a, m, s := settingsApp(t)
-	sel := s.fields["encode.bitrate_kbps"].input.(*widget.Select)
+	sel := s.fields["encode.bitrate_kbps"].input.(*selectField)
 	for format, enabled := range map[string]bool{"flac": false, "wav": false, "mp3": true, "aac": true} {
 		values := defaults()
 		values["encode.format"] = format
@@ -249,7 +249,7 @@ func TestPickingABitrateSendsItsNumber(t *testing.T) {
 	values["encode.format"] = "mp3"
 	m.SetSettings(values)
 	a.render()
-	sel := s.fields["encode.bitrate_kbps"].input.(*widget.Select)
+	sel := s.fields["encode.bitrate_kbps"].input.(*selectField)
 	if sel.Selected != "160 kbps · ~ 1.2 MB/min" {
 		t.Errorf("the bitrate shows %q", sel.Selected)
 	}
@@ -349,7 +349,7 @@ func TestTheCounterSettings(t *testing.T) {
 	if !next.Disabled() || !digits.Disabled() {
 		t.Error("the counter's settings are on while nothing uses the counter")
 	}
-	if sel := s.fields["output.prefix"].input.(*widget.Select); sel.Selected != "None" || !contains(sel.Options, "Counter (001)") {
+	if sel := s.fields["output.prefix"].input.(*selectField); sel.Selected != "None" || !contains(sel.Options, "Counter (001)") {
 		t.Errorf("the prefix shows %q of %v", sel.Selected, sel.Options)
 	}
 	// The next number is the setting itself, which the recorder moves on.

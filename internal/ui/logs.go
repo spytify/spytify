@@ -40,6 +40,7 @@ type logsScreen struct {
 	// check fails.
 	summary      *widget.Label
 	checks       *fyne.Container
+	checkRows    *keyRows
 	checksScroll *container.Scroll
 	actions      *fyne.Container
 	refresh      *button
@@ -53,7 +54,8 @@ func newLogsScreen(a *App) *logsScreen {
 	l.summary = widget.NewLabel("")
 	l.checks = container.NewVBox()
 	a.maskPaths(l.checks)
-	l.checksScroll = container.NewVScroll(l.checks)
+	l.checkRows = newKeyRows(l.checks)
+	l.checksScroll = l.checkRows.scroll
 	l.refresh = newIconButton("Run the checks again", theme.ViewRefreshIcon(), func() {
 		a.noteAction("run the checks again")
 		go a.refreshChecks()
@@ -66,7 +68,10 @@ func newLogsScreen(a *App) *logsScreen {
 	title := widget.NewLabelWithStyle("Diagnostics", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	done := newButton("Close", l.hideDiagnostics)
 	pad := theme.Padding()
-	body := container.NewBorder(container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done), nil, nil, l.checksScroll)
+	// The buttons before the checks: the dialog opens with the focus on
+	// Run the checks again, and Tab goes on to the checks after Close.
+	head, foot := container.NewVBox(title, l.summary), container.NewBorder(nil, nil, l.actions, done)
+	body := container.New(layout.NewBorderLayout(head, foot, nil, nil), head, foot, l.checkRows)
 	l.diag = widget.NewModalPopUp(container.New(layout.NewCustomPaddedLayout(pad*2, pad*2, pad*2, pad*2), body), a.win.Canvas())
 	l.diagnose = newLitButton("Diagnostics", theme.ConfirmIcon(), widget.LowImportance, a.showDiagnostics)
 
@@ -289,6 +294,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 	}
 	l.diagnose.Refresh()
 	l.checksScroll.ScrollToBottom()
+	l.checkRows.place()
 }
 
 func (l *logsScreen) filter() {

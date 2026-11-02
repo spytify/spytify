@@ -99,3 +99,48 @@ func TestALitButtonHidesWithItsTheme(t *testing.T) {
 		t.Errorf("shown: the button shown %v, its theme %v", b.Visible(), b.lit.Visible())
 	}
 }
+
+// QA found a focused Stop's square staying white while its text turned
+// dark, and Record's dot staying dark once the focus had gone: Fyne kept
+// the icon as first drawn, by its name. The icon takes its text's colour
+// with the focus and without, Record turned to Stop while focused too.
+func TestALitButtonsIconTakesItsTextsColour(t *testing.T) {
+	test.NewTempApp(t).Settings().SetTheme(spytifyTheme{mode: "light"})
+	plain := newButton("Project page", nil)
+	stop := newLitButton("Stop", theme.MediaStopIcon(), widget.DangerImportance, nil)
+	w := test.NewTempWindow(t, container.NewVBox(plain, stop.lit))
+	c := w.Canvas()
+	// The middle of the icon, a filled square or a filled dot.
+	ink := func() color.NRGBA {
+		icon := test.TempWidgetRenderer(t, stop).Objects()[3]
+		at := fyne.CurrentApp().Driver().AbsolutePositionForObject(icon).Add(fyne.NewPos(icon.Size().Width/2, icon.Size().Height/2))
+		return nrgba(c.Capture().At(int(at.X*c.Scale()), int(at.Y*c.Scale())))
+	}
+	dark := func(n color.NRGBA) bool { return int(n.R)+int(n.G)+int(n.B) < 3*0x80 }
+	for i, step := range []struct {
+		what  string
+		focus fyne.Focusable
+		dark  bool
+	}{
+		{"out of focus", plain, false},
+		{"focused", stop, true},
+		{"out of focus again", plain, false},
+		{"focused again", stop, true},
+	} {
+		c.Focus(step.focus)
+		if got := ink(); dark(got) != step.dark {
+			t.Errorf("%d, %s: the icon is %v, dark %v", i, step.what, got, step.dark)
+		}
+	}
+	// Focused, it turns to Record, as the app bar's button does.
+	stop.Importance = widget.HighImportance
+	stop.SetIcon(theme.MediaRecordIcon())
+	stop.Refresh()
+	if got := ink(); !dark(got) {
+		t.Errorf("turned to Record while focused: the icon is %v", got)
+	}
+	c.Focus(plain)
+	if got := ink(); dark(got) {
+		t.Errorf("Record out of focus: the icon is %v", got)
+	}
+}
