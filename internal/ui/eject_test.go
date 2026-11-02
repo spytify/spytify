@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/spytify/spytify/internal/openfiles"
 )
@@ -36,13 +35,7 @@ func TestTheLibraryHoldsNothingInTheOutputFolder(t *testing.T) {
 	if len(lib.shown) != 1 {
 		t.Fatalf("%d files listed", len(lib.shown))
 	}
-	deadline := time.Now().Add(10 * time.Second)
-	for lib.cover(lib.shown[0]).row == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("the cover never loaded")
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	eventually(t, "the cover never loaded", func() bool { return lib.cover(lib.shown[0]).row != nil })
 	held, err := openfiles.Held(os.Getpid(), dir)
 	if err != nil {
 		t.Fatal(err)

@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
@@ -341,19 +340,11 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	offers(fmt.Sprintf(lang.NothingRecordedPaused, "Player"), r.play)
 	snapshot(t, a, "waiting-player-paused")
 	test.Tap(r.play)
-	deadline := time.Now().Add(5 * time.Second)
-	for {
+	eventually(t, "player.control did not send play alone", func() bool {
 		core.mu.Lock()
-		controls := slices.Clone(core.controls)
-		core.mu.Unlock()
-		if slices.Equal(controls, []string{proto.CmdPlay}) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("player.control sent %q, want play", controls)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		defer core.mu.Unlock()
+		return slices.Equal(core.controls, []string{proto.CmdPlay})
+	})
 
 	// It plays the track it was on, which started before the session.
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))

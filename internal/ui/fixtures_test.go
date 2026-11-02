@@ -20,6 +20,7 @@ import (
 
 	"github.com/spytify/spytify/internal/bus"
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -342,41 +343,45 @@ func (c *recordingCore) called(method string) bool {
 
 func waitSets(t *testing.T, c *recordingCore, n int) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
+	eventually(t, fmt.Sprintf("fewer than %d settings.set calls", n), func() bool {
 		c.mu.Lock()
-		got := len(c.sets)
-		c.mu.Unlock()
-		if got >= n {
-			time.Sleep(100 * time.Millisecond)
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%d settings.set calls, want %d", got, n)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		defer c.mu.Unlock()
+		return len(c.sets) >= n
+	})
+	time.Sleep(100 * time.Millisecond)
 }
 
 func waitCall(t *testing.T, c *recordingCore, method string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !c.called(method) {
-		if time.Now().After(deadline) {
-			t.Fatalf("%s was not sent; calls: %v", method, c.calls)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	eventually(t, method+" was not sent", func() bool { return c.called(method) })
 }
 
-// eventually waits for cond, set by the link's goroutine.
+// eventually waits for cond, set by another goroutine: the link's, the
+// covers' or the bug tracker's. It gives it 10 s, what the Library's covers
+// were given.
 func eventually(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(20 * time.Millisecond) {
+	for deadline := time.Now().Add(10 * time.Second); !cond(); time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal(what)
 		}
 	}
+}
+
+// launchLog is the launch log the bug tracker sent srv.
+func launchLog(t *testing.T, srv *fakesentry.Server) fakesentry.Log {
+	t.Helper()
+	var launch fakesentry.Log
+	eventually(t, "no launch log", func() bool {
+		for _, l := range srv.Logs() {
+			if l.Body == "launch" {
+				launch = l
+				return true
+			}
+		}
+		return false
+	})
+	return launch
 }
 
 // connectedTestApp is the window connected to a recorder whose checks pass,
@@ -425,13 +430,7 @@ func connectedApp(t *testing.T) (*App, *model.Model, *recordingCore) {
 	t.Cleanup(cancel)
 	a, m, l := newTestApp(t, sock)
 	go l.Run(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for m.Snapshot().Conn != model.Connected {
-		if time.Now().After(deadline) {
-			t.Fatal("the app did not connect")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	eventually(t, "the app did not connect", func() bool { return m.Snapshot().Conn == model.Connected })
 	a.render()
 	return a, m, core
 }

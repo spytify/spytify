@@ -359,23 +359,11 @@ func TestResetResetsItsSection(t *testing.T) {
 		t.Fatalf("%d Reset buttons in the first section", len(resets))
 	}
 	test.Tap(resets[0])
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		core.mu.Lock()
-		n := 0
-		for _, c := range core.calls {
-			if c == proto.MethodSettingsReset {
-				n++
-			}
-		}
-		core.mu.Unlock()
-		if n == len(want) {
-			break
-		}
-		if n > len(want) || time.Now().After(deadline) {
-			t.Fatalf("%d settings.reset calls, want %d (%v)", n, len(want), want)
-		}
-		time.Sleep(20 * time.Millisecond)
+	eventually(t, fmt.Sprintf("fewer than %d settings.reset calls (%v)", len(want), want), func() bool {
+		return core.count(proto.MethodSettingsReset) >= len(want)
+	})
+	if n := core.count(proto.MethodSettingsReset); n != len(want) {
+		t.Fatalf("%d settings.reset calls, want %d (%v)", n, len(want), want)
 	}
 }
 

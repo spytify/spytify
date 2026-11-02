@@ -2,13 +2,13 @@ package ui
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
@@ -25,19 +25,14 @@ import (
 
 func waitStops(t *testing.T, c *recordingCore, n int) []proto.SessionStopParams {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
+	var stops []proto.SessionStopParams
+	eventually(t, fmt.Sprintf("fewer than %d session.stop calls", n), func() bool {
 		c.mu.Lock()
-		stops := append([]proto.SessionStopParams(nil), c.stops...)
-		c.mu.Unlock()
-		if len(stops) >= n {
-			return stops
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%d session.stop calls, want %d", len(stops), n)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		defer c.mu.Unlock()
+		stops = append([]proto.SessionStopParams(nil), c.stops...)
+		return len(stops) >= n
+	})
+	return stops
 }
 
 // Stop lets the track playing finish; pressed again, as Stop now, it ends
@@ -100,13 +95,7 @@ func recorded(t *testing.T) (a *App, m *model.Model, file, coverURL string) {
 	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-001", Path: file, DurationMs: 243000, Bytes: 4}))
 	a.render()
 	// The cover loads on its own goroutine; draw again once it is in.
-	deadline := time.Now().Add(5 * time.Second)
-	for a.covers.loads() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("the cover never loaded")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	eventually(t, "the cover never loaded", func() bool { return a.covers.loads() > 0 })
 	a.render()
 	return a, m, file, coverURL
 }
