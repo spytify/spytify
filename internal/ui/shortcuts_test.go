@@ -340,13 +340,14 @@ func TestTabTipsLieOverTheirTabs(t *testing.T) {
 	}
 	// A window too narrow for the tabs puts some in a menu: no tooltip
 	// then lies where they were.
-	a.win.Resize(fyne.NewSize(300, 620))
+	size := a.win.Canvas().Size()
+	a.win.Resize(fyne.NewSize(300, size.Height))
 	for _, tip := range tips {
 		if tip.Visible() {
 			t.Fatal("a tooltip shows while the tabs do not fit")
 		}
 	}
-	a.win.Resize(fyne.NewSize(920, 620))
+	a.win.Resize(size)
 	for _, tip := range tips {
 		if !tip.Visible() {
 			t.Fatal("a tooltip stays hidden once the tabs fit")

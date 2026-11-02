@@ -71,7 +71,8 @@ func outputGone() proto.CoreInfoResult {
 	return i
 }
 
-// newTestApp builds the window over a model the test feeds directly.
+// newTestApp builds the window, at the size the app opens it, over a model
+// the test feeds directly.
 func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	t.Helper()
 	fa := test.NewTempApp(t)
@@ -80,7 +81,6 @@ func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	l := link.New(addr, m)
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), Socket: addr, ManualRender: true, NoUpdateCheck: true})
 	t.Cleanup(a.calls.Wait)
-	a.win.Resize(fyne.NewSize(920, 620))
 	return a, m, l
 }
 

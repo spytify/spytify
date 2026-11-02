@@ -313,7 +313,6 @@ func TestClosingQuitsWhereTheDesktopDrawsNoTray(t *testing.T) {
 	if !contains(texts(s.sections), lang.NoTrayIcons) {
 		t.Error("Minimize to tray does not say the desktop draws no tray icons")
 	}
-	a.win.Resize(fyne.NewSize(920, 620))
 	snapshot(t, a, "settings-no-tray")
 	closing("no host", 1)
 
