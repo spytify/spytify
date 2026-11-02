@@ -124,6 +124,13 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 	return s.w.Write(p)
 }
 
+type testWriter struct{ t *testing.T }
+
+func (w testWriter) Write(p []byte) (int, error) {
+	w.t.Log(string(p))
+	return len(p), nil
+}
+
 func (s *scenario) run(t *testing.T, tl *fake.Timeline) {
 	t.Helper()
 	for _, a := range tl.Actions {
@@ -153,6 +160,82 @@ func loadTimeline(t *testing.T, name string) *fake.Timeline {
 		t.Fatal(err)
 	}
 	return tl
+}
+
+func outcome(t *testing.T, s *scenario) (saved []string, skipped map[string]proto.SkipReason) {
+	t.Helper()
+	titles := map[string]string{}
+	skipped = map[string]proto.SkipReason{}
+	for _, ev := range s.events.all() {
+		switch ev.Method {
+		case proto.EventTrackStarted:
+			var tr proto.TrackStartedEvent
+			_ = ev.Decode(&tr)
+			titles[tr.ID] = tr.Title
+		case proto.EventTrackFinished:
+			var f proto.TrackFinishedEvent
+			_ = ev.Decode(&f)
+			saved = append(saved, titles[f.ID])
+		case proto.EventTrackSkipped:
+			var sk proto.TrackSkippedEvent
+			_ = ev.Decode(&sk)
+			skipped[titles[sk.ID]] = sk.Reason
+		}
+	}
+	return saved, skipped
+}
+
+func runWith(t *testing.T, s *scenario, opts SessionOptions) {
+	t.Helper()
+	if _, err := s.core.StartSession(opts); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { s.core.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		t.Fatalf("session did not end; log:\n%s", s.logs)
+	}
+}
+
+// idOf is the id of the take of title.
+func idOf(s *scenario, title string) string {
+	for _, ev := range s.events.all() {
+		var tr proto.TrackStartedEvent
+		if ev.Method == proto.EventTrackStarted && ev.Decode(&tr) == nil && tr.Title == title {
+			return tr.ID
+		}
+	}
+	return ""
+}
+
+// keepable is every track.keepable the take of title got, in order.
+func keepable(s *scenario, title string) []bool {
+	id := idOf(s, title)
+	var out []bool
+	for _, ev := range s.events.all() {
+		var k proto.TrackKeepableEvent
+		if ev.Method == proto.EventTrackKeepable && ev.Decode(&k) == nil && k.ID == id {
+			out = append(out, k.Keepable)
+		}
+	}
+	return out
+}
+
+// finished waits for the file of take id.
+func finished(t *testing.T, s *scenario, id string) proto.TrackFinishedEvent {
+	t.Helper()
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		for _, ev := range s.events.all() {
+			var f proto.TrackFinishedEvent
+			if ev.Method == proto.EventTrackFinished && ev.Decode(&f) == nil && f.ID == id {
+				return f
+			}
+		}
+	}
+	t.Fatalf("no file for %s; log:\n%s", id, s.logs)
+	return proto.TrackFinishedEvent{}
 }
 
 func TestScenarios(t *testing.T) {
