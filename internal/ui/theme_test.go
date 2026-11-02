@@ -6,18 +6,12 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
-
-	"github.com/spytify/spytify/internal/ui/model"
 )
 
 func TestThemeFollowsTheSetting(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	values := defaults()
 	values["app.theme"] = "light"
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(values)
-	a.render()
+	a, m := connectedTestApp(t, values)
 	th := a.fa.Settings().Theme()
 	// The green replaces the blue, whatever variant the OS asks for.
 	if got := th.Color(theme.ColorNamePrimary, theme.VariantDark); got != greenLight {

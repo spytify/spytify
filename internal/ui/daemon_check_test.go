@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	"fyne.io/fyne/v2/widget"
@@ -15,10 +14,7 @@ import (
 // start it, and no longer show its last checks as passing. It coming back
 // brings its checks again.
 func TestTheDiagnosticsFollowSpytifyd(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, m := connectedTestApp(t, defaults())
 	a.showTab(tabRecord)
 	a.render()
 	d := diagnostics(t, a)

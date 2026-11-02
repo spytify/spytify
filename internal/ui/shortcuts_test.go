@@ -14,55 +14,8 @@ import (
 	"fyne.io/fyne/v2/test"
 
 	"github.com/spytify/spytify/internal/ui/lang"
-	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
-
-// typeShortcut sends s as the window does: to the focused widget when it
-// takes shortcuts, else to the window's own, which the test window keeps
-// in the canvas it wraps.
-func typeShortcut(t *testing.T, a *App, s fyne.Shortcut) {
-	t.Helper()
-	c := a.win.Canvas()
-	if f, ok := c.Focused().(fyne.Shortcutable); ok {
-		f.TypedShortcut(s)
-		return
-	}
-	window, ok := reflect.ValueOf(c).Elem().FieldByName("WindowlessCanvas").Interface().(fyne.Shortcutable)
-	if !ok {
-		t.Fatal("the test window keeps no shortcuts")
-	}
-	window.TypedShortcut(s)
-}
-
-// press is key with the system's shortcut key: Cmd on macOS, Ctrl
-// elsewhere.
-func press(t *testing.T, a *App, key fyne.KeyName) {
-	t.Helper()
-	typeShortcut(t, a, shortcutFor(key))
-}
-
-func connectedTestApp(t *testing.T) (*App, *model.Model) {
-	t.Helper()
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
-	a.render()
-	return a, m
-}
-
-func (c *recordingCore) count(method string) int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	n := 0
-	for _, m := range c.calls {
-		if m == method {
-			n++
-		}
-	}
-	return n
-}
 
 // R is the app bar's action, as a click: Record, then Stop, then Stop now.
 func TestTheShortcutPressesRecordThenStop(t *testing.T) {
@@ -121,7 +74,7 @@ func TestTheShortcutLeavesADisabledRecord(t *testing.T) {
 // 1 to 5 show the tabs in their order, as a click does: what had the focus
 // loses it, so a key goes nowhere hidden.
 func TestShortcutsShowTheTabs(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	for _, step := range []struct {
 		key  fyne.KeyName
 		want int
@@ -145,7 +98,7 @@ func TestShortcutsShowTheTabs(t *testing.T) {
 // In a text field the shortcuts still work and type nothing, and the
 // field's own keys stay its own.
 func TestShortcutsGoThroughTextFields(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	press(t, a, fyne.Key2)
 	search := a.screens[tabLibrary].(*libraryScreen).search
 	if a.win.Canvas().Focus(search); a.win.Canvas().Focused() != search {
@@ -183,7 +136,7 @@ func TestShortcutsGoThroughTextFields(t *testing.T) {
 // typed to replace it. Elsewhere, under a dialog or offline, it moves
 // nothing.
 func TestTheShortcutGoesToTheSearch(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	c := a.win.Canvas()
 	library := a.screens[tabLibrary].(*libraryScreen).search
 	settings := a.screens[tabSettings].(*settingsScreen).search
@@ -310,7 +263,7 @@ func TestKeyLabels(t *testing.T) {
 
 // Record/Stop's tooltip follows its name.
 func TestTheActionTipNamesItsKey(t *testing.T) {
-	a, m := connectedTestApp(t)
+	a, m := connectedTestApp(t, defaults())
 	if got, want := a.action.ToolTip(), shortcutTip(lang.Record, actionKey); got != want {
 		t.Errorf("tooltip %q, want %q", got, want)
 	}
@@ -349,7 +302,7 @@ func lit(b fyne.CanvasObject) bool {
 // goes to the tooltip, and the tab still lights up; a click goes through
 // to the tab.
 func TestTabTipsLieOverTheirTabs(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	c := a.win.Canvas()
 	tips := a.tabsView.Objects[3:]
 	if len(tips) != len(a.tabs.Items) {
@@ -387,13 +340,14 @@ func TestTabTipsLieOverTheirTabs(t *testing.T) {
 	}
 	// A window too narrow for the tabs puts some in a menu: no tooltip
 	// then lies where they were.
-	a.win.Resize(fyne.NewSize(300, 620))
+	size := a.win.Canvas().Size()
+	a.win.Resize(fyne.NewSize(300, size.Height))
 	for _, tip := range tips {
 		if tip.Visible() {
 			t.Fatal("a tooltip shows while the tabs do not fit")
 		}
 	}
-	a.win.Resize(fyne.NewSize(920, 620))
+	a.win.Resize(size)
 	for _, tip := range tips {
 		if !tip.Visible() {
 			t.Fatal("a tooltip stays hidden once the tabs fit")
@@ -407,7 +361,7 @@ func TestShortcutTipSnapshots(t *testing.T) {
 	if os.Getenv("SPYTIFY_UI_SNAPSHOTS") == "" {
 		t.Skip("only for the pictures")
 	}
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	c := a.win.Canvas()
 	away := a.fa.Driver().AbsolutePositionForObject(a.tabsView).AddXY(a.tabsView.Size().Width/2, 300)
 	tip := a.tabsView.Objects[3+tabLibrary].(*tabTip)

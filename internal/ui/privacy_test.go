@@ -9,7 +9,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
-	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
@@ -62,60 +61,6 @@ func failCheck(a *App, m *model.Model) {
 	in.Checks = append(in.Checks, proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
 	m.SetInfo(in)
 	a.render()
-}
-
-// overlay is the dialog on top of the window.
-func overlay(t *testing.T, a *App) fyne.CanvasObject {
-	t.Helper()
-	top := a.win.Canvas().Overlays().Top()
-	if top == nil {
-		t.Fatal("no dialog is shown")
-	}
-	return top
-}
-
-func tapButton(t *testing.T, o fyne.CanvasObject, text string) {
-	t.Helper()
-	b := buttons(o, text)
-	if len(b) != 1 {
-		t.Fatalf("%d %q buttons", len(b), text)
-	}
-	test.Tap(b[0])
-}
-
-// checkBoxes are the visible check boxes with this label.
-func checkBoxes(o fyne.CanvasObject, label string) []*widget.Check {
-	var out []*widget.Check
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		switch w := o.(type) {
-		case *widget.Check:
-			if w.Text == label {
-				out = append(out, w)
-			}
-			return
-		case *check:
-			if w.Text == label {
-				out = append(out, &w.Check)
-			}
-			return
-		case *fyne.Container:
-			for _, child := range w.Objects {
-				walk(child)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, child := range test.WidgetRenderer(w).Objects() {
-				walk(child)
-			}
-		}
-	}
-	walk(o)
-	return out
 }
 
 // quiet waits for anything queued, then says how many requests reached

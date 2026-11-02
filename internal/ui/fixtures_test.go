@@ -17,9 +17,10 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
-	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
+	"github.com/spytify/spytify/internal/bus"
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -70,7 +71,8 @@ func outputGone() proto.CoreInfoResult {
 	return i
 }
 
-// newTestApp builds the window over a model the test feeds directly.
+// newTestApp builds the window, at the size the app opens it, over a model
+// the test feeds directly.
 func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	t.Helper()
 	fa := test.NewTempApp(t)
@@ -79,7 +81,6 @@ func newTestApp(t *testing.T, addr string) (*App, *model.Model, *link.Link) {
 	l := link.New(addr, m)
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), Socket: addr, ManualRender: true, NoUpdateCheck: true})
 	t.Cleanup(a.calls.Wait)
-	a.win.Resize(fyne.NewSize(920, 620))
 	return a, m, l
 }
 
@@ -167,51 +168,6 @@ func snapshot(t *testing.T, a *App, name string) {
 	}
 }
 
-// texts collects every label and button text under o.
-func texts(o fyne.CanvasObject) []string {
-	var out []string
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		if b, ok := asButton(o); ok {
-			out = append(out, b.Text)
-		}
-		switch w := o.(type) {
-		case *widget.Label:
-			out = append(out, w.Text)
-		case *widget.RichText:
-			for _, seg := range w.Segments {
-				if ts, ok := seg.(*widget.TextSegment); ok {
-					out = append(out, ts.Text)
-				}
-			}
-		case *canvas.Text:
-			out = append(out, w.Text)
-		case *widget.Hyperlink:
-			out = append(out, w.Text)
-		case *widget.Card:
-			out = append(out, w.Title)
-			walk(w.Content)
-			return
-		case *fyne.Container:
-			for _, c := range w.Objects {
-				walk(c)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			r := test.WidgetRenderer(w)
-			for _, c := range r.Objects() {
-				walk(c)
-			}
-		}
-	}
-	walk(o)
-	return out
-}
-
 func contains(list []string, want string) bool {
 	for _, s := range list {
 		if strings.Contains(s, want) {
@@ -233,44 +189,38 @@ type drawnRow struct {
 func drawnRows(t *testing.T, list fyne.CanvasObject) map[string]drawnRow {
 	t.Helper()
 	out := map[string]drawnRow{}
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
+	walk(list, func(o fyne.CanvasObject) bool {
 		if !o.Visible() {
-			return
+			return false
 		}
-		switch w := o.(type) {
-		case *fyne.Container:
-			// A track's row: its text, centred in the middle, then its
-			// cover and the parts after its text.
-			if len(w.Objects) == 3 {
-				if box, ok := w.Objects[0].(*fyne.Container); ok && len(box.Objects) == 3 {
-					if rt, ok := box.Objects[1].(*widget.RichText); ok {
-						row := drawnRow{row: w, text: rt}
-						y := float32(-1)
-						for _, o := range test.WidgetRenderer(rt).Objects() {
-							if txt, ok := o.(*canvas.Text); ok && txt.Text != "" {
-								if txt.Position().Y <= y {
-									t.Errorf("%q is not on a line of its own", txt.Text)
-								}
-								y = txt.Position().Y
-								row.lines = append(row.lines, txt)
-							}
-						}
-						out[rt.Segments[0].(*widget.TextSegment).Text] = row
-						return
-					}
+		// A track's row: its text, centred in the middle, then its cover
+		// and the parts after its text.
+		w, ok := o.(*fyne.Container)
+		if !ok || len(w.Objects) != 3 {
+			return true
+		}
+		box, ok := w.Objects[0].(*fyne.Container)
+		if !ok || len(box.Objects) != 3 {
+			return true
+		}
+		rt, ok := box.Objects[1].(*widget.RichText)
+		if !ok {
+			return true
+		}
+		row := drawnRow{row: w, text: rt}
+		y := float32(-1)
+		for _, o := range test.WidgetRenderer(rt).Objects() {
+			if txt, ok := o.(*canvas.Text); ok && txt.Text != "" {
+				if txt.Position().Y <= y {
+					t.Errorf("%q is not on a line of its own", txt.Text)
 				}
-			}
-			for _, c := range w.Objects {
-				walk(c)
-			}
-		case fyne.Widget:
-			for _, c := range test.WidgetRenderer(w).Objects() {
-				walk(c)
+				y = txt.Position().Y
+				row.lines = append(row.lines, txt)
 			}
 		}
-	}
-	walk(list)
+		out[rt.Segments[0].(*widget.TextSegment).Text] = row
+		return false
+	})
 	return out
 }
 
@@ -393,130 +343,104 @@ func (c *recordingCore) called(method string) bool {
 
 func waitSets(t *testing.T, c *recordingCore, n int) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
+	eventually(t, fmt.Sprintf("fewer than %d settings.set calls", n), func() bool {
 		c.mu.Lock()
-		got := len(c.sets)
-		c.mu.Unlock()
-		if got >= n {
-			time.Sleep(100 * time.Millisecond)
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%d settings.set calls, want %d", got, n)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		defer c.mu.Unlock()
+		return len(c.sets) >= n
+	})
+	time.Sleep(100 * time.Millisecond)
 }
 
 func waitCall(t *testing.T, c *recordingCore, method string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !c.called(method) {
-		if time.Now().After(deadline) {
-			t.Fatalf("%s was not sent; calls: %v", method, c.calls)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	eventually(t, method+" was not sent", func() bool { return c.called(method) })
 }
 
-func buttons(o fyne.CanvasObject, text string) []*widget.Button {
-	var out []*widget.Button
-	for _, o := range buttonObjects(o, text) {
-		b, _ := asButton(o)
-		out = append(out, b)
-	}
-	return out
-}
-
-// buttonObjects are the buttons showing text under o as the window holds
-// them, the app's own included, to find where they are drawn.
-func buttonObjects(o fyne.CanvasObject, text string) []fyne.CanvasObject {
-	var out []fyne.CanvasObject
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		if b, ok := asButton(o); ok {
-			if b.Text == text {
-				out = append(out, o)
-			}
-			return
-		}
-		switch w := o.(type) {
-		case *fyne.Container:
-			for _, c := range w.Objects {
-				walk(c)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, c := range test.WidgetRenderer(w).Objects() {
-				walk(c)
-			}
-		}
-	}
-	walk(o)
-	return out
-}
-
-// asButton is the widget.Button of a button, Fyne's or one of the app's
-// built on it, to read and tap as Fyne's.
-func asButton(o fyne.CanvasObject) (*widget.Button, bool) {
-	switch b := o.(type) {
-	case *widget.Button:
-		return b, true
-	case *button:
-		return &b.Button, true
-	case *rowButton:
-		return &b.Button, true
-	case *ttwidget.Button:
-		return &b.Button, true
-	case *tipButton:
-		return &b.Button.Button, true
-	case *litButton:
-		return &b.Button.Button, true
-	case *rowLitButton:
-		return &b.Button.Button, true
-	}
-	return nil, false
-}
-
-// richTextsOf are the rich texts shown in o.
-func richTextsOf(o fyne.CanvasObject) []*widget.RichText {
-	var out []*widget.RichText
-	var walk func(fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
-		if o == nil || !o.Visible() {
-			return
-		}
-		switch w := o.(type) {
-		case *widget.RichText:
-			out = append(out, w)
-			return
-		case *fyne.Container:
-			for _, child := range w.Objects {
-				walk(child)
-			}
-			return
-		}
-		if w, ok := o.(fyne.Widget); ok {
-			for _, child := range test.WidgetRenderer(w).Objects() {
-				walk(child)
-			}
-		}
-	}
-	walk(o)
-	return out
-}
-
-// eventually waits for cond, set by the link's goroutine.
+// eventually waits for cond, set by another goroutine: the link's, the
+// covers' or the bug tracker's. It gives it 10 s, what the Library's covers
+// were given.
 func eventually(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(20 * time.Millisecond) {
+	for deadline := time.Now().Add(10 * time.Second); !cond(); time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal(what)
 		}
 	}
+}
+
+// launchLog is the launch log the bug tracker sent srv.
+func launchLog(t *testing.T, srv *fakesentry.Server) fakesentry.Log {
+	t.Helper()
+	var launch fakesentry.Log
+	eventually(t, "no launch log", func() bool {
+		for _, l := range srv.Logs() {
+			if l.Body == "launch" {
+				launch = l
+				return true
+			}
+		}
+		return false
+	})
+	return launch
+}
+
+// connectedTestApp is the window connected to a recorder whose checks pass,
+// with these settings, drawn once.
+func connectedTestApp(t *testing.T, values map[string]any) (*App, *model.Model) {
+	t.Helper()
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	m.SetConn(model.Connected, "")
+	m.SetInfo(info())
+	m.SetSettings(values)
+	a.render()
+	return a, m
+}
+
+func (c *recordingCore) count(method string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := 0
+	for _, m := range c.calls {
+		if m == method {
+			n++
+		}
+	}
+	return n
+}
+
+// connectedApp is the app talking to a recordingCore over a real socket.
+func connectedApp(t *testing.T) (*App, *model.Model, *recordingCore) {
+	t.Helper()
+	// A short folder: Unix socket paths have a length limit.
+	dir, err := os.MkdirTemp("", "spyui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	core := &recordingCore{}
+	srv := bus.NewServer(core.handle, nil)
+	sock := filepath.Join(dir, "s.sock")
+	if err := srv.ListenUnix(sock); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv.Close() })
+	// Cancelled once newTestApp waited for the app's requests: they end
+	// with the core's answer, not with the link going away.
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a, m, l := newTestApp(t, sock)
+	go l.Run(ctx)
+	eventually(t, "the app did not connect", func() bool { return m.Snapshot().Conn == model.Connected })
+	a.render()
+	return a, m, core
+}
+
+// overlay is the dialog on top of the window.
+func overlay(t *testing.T, a *App) fyne.CanvasObject {
+	t.Helper()
+	top := a.win.Canvas().Overlays().Top()
+	if top == nil {
+		t.Fatal("no dialog is shown")
+	}
+	return top
 }

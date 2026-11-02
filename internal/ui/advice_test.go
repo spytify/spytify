@@ -79,17 +79,7 @@ func TestTheLaunchNamesTheAdvice(t *testing.T) {
 	m.SetSettings(values)
 	a.render()
 	a.tel.Flush(2 * time.Second)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		for _, l := range srv.Logs() {
-			if l.Body == "launch" {
-				if !strings.Contains(l.Attrs["advice"], lowRates.Name) || strings.Contains(l.Attrs["failing"], lowRates.Name) {
-					t.Errorf("advice %q, failing %q", l.Attrs["advice"], l.Attrs["failing"])
-				}
-				return
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
+	if l := launchLog(t, srv); !strings.Contains(l.Attrs["advice"], lowRates.Name) || strings.Contains(l.Attrs["failing"], lowRates.Name) {
+		t.Errorf("advice %q, failing %q", l.Attrs["advice"], l.Attrs["failing"])
 	}
-	t.Fatal("no launch log")
 }

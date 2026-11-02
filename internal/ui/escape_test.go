@@ -5,23 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"fyne.io/fyne/v2"
-
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
 	"github.com/spytify/spytify/internal/ui/lang"
 )
-
-// pressEscape is Escape as Fyne 2.8.2's window sends it: to the control
-// focused, or to the window when nothing is.
-func pressEscape(c fyne.Canvas) {
-	e := &fyne.KeyEvent{Name: fyne.KeyEscape}
-	if f := c.Focused(); f != nil {
-		f.TypedKey(e)
-	} else if typed := c.OnTypedKey(); typed != nil {
-		typed(e)
-	}
-}
 
 // closesOnEscapeEverywhere opens a modal, and Escape closes it from each of
 // its controls in turn, then from nothing focused, as dismissed tells its

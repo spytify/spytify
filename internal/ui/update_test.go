@@ -46,11 +46,9 @@ func TestTheUpdateCheckFollowsTheSetting(t *testing.T) {
 		m.SetSettings(values)
 		before := asked.Load()
 		a.render()
-		deadline := time.Now().Add(3 * time.Second)
-		for on && asked.Load() == before && time.Now().Before(deadline) {
-			time.Sleep(20 * time.Millisecond)
-		}
-		if !on {
+		if on {
+			eventually(t, "the releases were not asked", func() bool { return asked.Load() != before })
+		} else {
 			time.Sleep(300 * time.Millisecond)
 		}
 		if got := asked.Load() > before; got != on {

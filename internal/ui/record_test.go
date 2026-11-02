@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
@@ -107,27 +106,16 @@ func TestTheRecordCardSaysTheFileIsAtALowerRate(t *testing.T) {
 	panel := r.card.Objects[0]
 	d := fyne.CurrentApp().Driver()
 	box := d.AbsolutePositionForObject(panel)
-	var inside func(fyne.CanvasObject)
-	inside = func(o fyne.CanvasObject) {
+	walk(panel, func(o fyne.CanvasObject) bool {
 		if !o.Visible() {
-			return
+			return false
 		}
 		p, s := d.AbsolutePositionForObject(o), o.Size()
 		if p.X < box.X || p.X+s.Width > box.X+panel.Size().Width {
 			t.Errorf("%T at x %v to %v, out of the card's %v to %v", o, p.X, p.X+s.Width, box.X, box.X+panel.Size().Width)
 		}
-		switch w := o.(type) {
-		case *fyne.Container:
-			for _, c := range w.Objects {
-				inside(c)
-			}
-		case fyne.Widget:
-			for _, c := range test.WidgetRenderer(w).Objects() {
-				inside(c)
-			}
-		}
-	}
-	inside(panel)
+		return true
+	})
 	snapshot(t, a, "record-96khz-narrow")
 }
 
@@ -294,10 +282,7 @@ func TestRecordScreenSaysATakeHasAPauseFade(t *testing.T) {
 }
 
 func TestWaitingOffersToRestartTheTrack(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, m := connectedTestApp(t, defaults())
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
 	a.render()
 	all := texts(a.win.Content())
@@ -325,7 +310,7 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 			t.Errorf("the wait row says %q, want %q", r.waiting.String(), text)
 		}
 		for _, o := range []fyne.CanvasObject{r.launch, r.play, r.restart, r.blocked} {
-			if b, _ := asButton(o); o.Visible() != (o == want) {
+			if b, _ := as[*widget.Button](o); o.Visible() != (o == want) {
 				t.Errorf("%q shown %v", b.Text, o.Visible())
 			}
 		}
@@ -355,19 +340,11 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	offers(fmt.Sprintf(lang.NothingRecordedPaused, "Player"), r.play)
 	snapshot(t, a, "waiting-player-paused")
 	test.Tap(r.play)
-	deadline := time.Now().Add(5 * time.Second)
-	for {
+	eventually(t, "player.control did not send play alone", func() bool {
 		core.mu.Lock()
-		controls := slices.Clone(core.controls)
-		core.mu.Unlock()
-		if slices.Equal(controls, []string{proto.CmdPlay}) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("player.control sent %q, want play", controls)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		defer core.mu.Unlock()
+		return slices.Equal(core.controls, []string{proto.CmdPlay})
+	})
 
 	// It plays the track it was on, which started before the session.
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
@@ -375,11 +352,7 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 }
 
 func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
-	a.render()
+	a, m := connectedTestApp(t, defaults())
 	all := texts(a.win.Content())
 	for _, want := range []string{lang.ReadyToRecord, fmt.Sprintf(lang.ReadyText, "Player", defaults()["output.dir"])} {
 		if !contains(all, want) {
@@ -495,10 +468,7 @@ func TestTheMeterWaitsUnderADialog(t *testing.T) {
 // Record needs the player: with it closed the button is off, and the app
 // bar says why. A recording under way keeps its Stop.
 func TestRecordWaitsForThePlayer(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, m := connectedTestApp(t, defaults())
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
 	a.render()
 	if !a.action.Disabled() || !strings.Contains(a.status.Text, "is not running") {
@@ -571,10 +541,7 @@ func TestRecordIsOffWithoutAnOutputFolder(t *testing.T) {
 // as the capture says so, while the session waits for the next track, and
 // goes once the device is fit again.
 func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
+	a, m := connectedTestApp(t, defaults())
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
 	low := proto.ErrorEvent{Code: "capture_low_quality", Msg: "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call", Source: &proto.AudioSource{SampleRate: 16000, Channels: 1}}
 	msg := model.WarningText(low, runtime.GOOS)
@@ -641,11 +608,7 @@ func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 // spytifyd killed with no session: Record says why Record is off and offers
 // to start it, rather than "Ready to record" beside a Record turned off.
 func TestRecordSaysSpytifydIsGone(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Connected, "")
-	m.SetInfo(info())
-	m.SetSettings(defaults())
-	a.render()
+	a, m := connectedTestApp(t, defaults())
 
 	m.SetConn(model.Disconnected, "spytifyd closed the connection")
 	a.render()

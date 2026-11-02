@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"fyne.io/fyne/v2/test"
 
@@ -117,13 +116,7 @@ func TestButtonsSendActions(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go l.Run(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for m.Snapshot().Conn != model.Connected {
-		if time.Now().After(deadline) {
-			t.Fatal("UI did not connect")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	eventually(t, "UI did not connect", func() bool { return m.Snapshot().Conn == model.Connected })
 	a.render()
 
 	test.Tap(a.action)
@@ -207,13 +200,7 @@ func TestQuittingStopsTheRecorderOnceTheLoopHasReturned(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go l.Run(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for m.Snapshot().Conn != model.Connected {
-		if time.Now().After(deadline) {
-			t.Fatal("UI did not connect")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	eventually(t, "UI did not connect", func() bool { return m.Snapshot().Conn == model.Connected })
 
 	// The test driver's loop returns at once, as Fyne's does at quit.
 	a.ShowAndRun()
