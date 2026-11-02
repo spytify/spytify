@@ -246,10 +246,15 @@ func (s *Session) Stop(now bool) {
 
 func (s *Session) setState(st proto.SessionState) {
 	s.mu.Lock()
-	changed := s.snap.State != st
+	prev := s.snap.State
+	changed := prev != st
 	s.snap.State = st
 	s.mu.Unlock()
 	if changed {
+		if prev == proto.StateAd {
+			// The player's sound is due from now, not from before the ad.
+			s.lastSound = time.Now()
+		}
 		s.deps.emit(proto.EventSessionState, proto.SessionStateEvent{State: st})
 		s.muteAds(st)
 	}
@@ -266,10 +271,6 @@ func (s *Session) muteAds(st proto.SessionState) {
 		return
 	}
 	s.adMuted = want
-	if !want {
-		// The player's sound is due from now, not from before the ad.
-		s.lastSound = time.Now()
-	}
 	if err := s.deps.mute(want); err != nil {
 		s.deps.log.Infof("mute ads: %v", err)
 	}
@@ -398,10 +399,12 @@ func stallHint(goos string) string {
 
 // silentHint is what to look at when only silence arrives while the player
 // plays, or "" where the session does not watch for it. On macOS a tap
-// that System Audio Recording was refused to records silence, not nothing.
+// that System Audio Recording was refused to records silence, not nothing,
+// as it does from a player muted in its own volume. The window words it
+// in its lexicon; this text is the recorder's, for the log and the CLI.
 func silentHint(goos string) string {
 	if goos == "darwin" {
-		return "Only silence from the player for 10 s while it plays. macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
+		return "Only silence from the player for 10 s while it plays. Check that the player is not muted in its own volume; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
 	}
 	return ""
 }
@@ -447,8 +450,8 @@ func (s *Session) onTick() {
 		s.deps.log.Errorf("no audio from the capture for %s while the player plays", captureStall)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: stallHint(runtime.GOOS)})
 	}
-	// An ad the session muted is silent on purpose.
-	if s.deps.silentHint != "" && s.status == meta.Playing && !s.adMuted && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
+	// An ad may be silent, muted by the session or not.
+	if s.deps.silentHint != "" && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
 		s.silent = true
 		s.deps.log.Errorf("only silence from the capture for %s while the player plays", captureSilent)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: s.deps.silentHint})

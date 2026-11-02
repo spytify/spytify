@@ -102,9 +102,16 @@ func (a *App) recorderError(e proto.ErrorEvent) {
 		a.notes.stopped = sentence(e.Msg)
 		return
 	}
-	if _, ok := a.noticeState(noticeProblems); ok {
-		a.fa.SendNotification(fyne.NewNotification(warnTitles[e.Code], sentence(e.Msg)))
+	s, ok := a.noticeState(noticeProblems)
+	if !ok {
+		return
 	}
+	msg := sentence(e.Msg)
+	if e.Code == "capture_silent" {
+		// Why, and what to do, wait in the diagnostics.
+		msg = fmt.Sprintf(lang.OnlySilenceHeard, playerName(s.Info))
+	}
+	a.fa.SendNotification(fyne.NewNotification(warnTitles[e.Code], msg))
 }
 
 // trackSaved tells of each saved track, by its title and artist.

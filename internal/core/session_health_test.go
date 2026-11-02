@@ -126,6 +126,41 @@ func TestPinnedSilentCapture(t *testing.T) {
 	}
 }
 
+// An ad brings no silence warning, muted by the session or not: it may be
+// silent, as when the player mutes it. The 10 s start again when it ends.
+func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
+	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
+	for _, muted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("mute_ads=%v", muted), func(t *testing.T) {
+			r := bareRig(t, map[string]any{"recorder.mute_ads": muted}, endOnStop)
+			s := r.s
+			s.deps.silentHint = silentHint("darwin")
+			s.deps.mute = func(bool) error { return nil }
+			long := time.Now().Add(-time.Hour)
+			s.onMeta(context.Background(), statusEvent(meta.Playing))
+			s.setState(proto.StateAd)
+			s.onChunk(silent)
+			s.lastSound = long
+			s.onTick()
+			s.setState(proto.StateRecording)
+			s.onChunk(silent)
+			s.onTick()
+			afterAd := []string{"state waiting", "state ad", "state recording"}
+			if got := r.lines(); !slices.Equal(got, afterAd) {
+				t.Fatalf("over the ad and just after:\n%q\nwant:\n%q", got, afterAd)
+			}
+			s.lastSound = long
+			s.onTick()
+			want := []string{"state waiting", "state ad", "state recording",
+				"log error: only silence from the capture for 10s while the player plays",
+				`error capture_silent "Only silence from the player for 10 s while it plays. …"`}
+			if got := r.lines(); !slices.Equal(got, want) {
+				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
+			}
+		})
+	}
+}
+
 // The system audio check is on macOS only, where it fails with the
 // silence's warning while the capture hears only silence.
 func TestSystemAudioCheck(t *testing.T) {

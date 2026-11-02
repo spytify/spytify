@@ -3,8 +3,8 @@
 // values through fmt.Sprintf, in the order its comment gives.
 //
 // Not here: the settings' labels and notes, which settings.Table keeps by
-// their key; the checks' names and details, and the errors, which come from
-// the recorder or are written where they are made; and log lines, telemetry
+// their key; the checks' names and most of their details, and the errors,
+// which come from the recorder or are written where they are made; and log lines, telemetry
 // names and preference keys, which the window never shows.
 package lang
 
@@ -160,6 +160,8 @@ const (
 
 // Logs and the diagnostics. NotRunning and PID are the player running
 // check's detail, kept current between two runs of the checks.
+// SystemAudioSilent, which takes the player, and NoSilenceHeard are the
+// system audio check's.
 const (
 	Show                = "Show"
 	Copy                = "Copy"
@@ -171,6 +173,8 @@ const (
 	ChooseAnotherFolder = "Choose another folder"
 	NotRunning          = "not running"
 	PID                 = "pid %d"
+	SystemAudioSilent   = "Only silence from %[1]s while it plays. Check that %[1]s is not muted in its own volume. If it is not, macOS gives Spytify silence when it may not record system audio: allow Spytify in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
+	NoSilenceHeard      = "no silence heard"
 	SendToDevelopers    = "Send to the developers"
 	SendChecksText      = "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
 	SendChecksPicture   = "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."

@@ -312,10 +312,7 @@ func (r *recordScreen) render(s model.State) {
 	r.folder, _ = s.Settings[settings.OutputDir.String()].(string)
 	r.folder = settings.ExpandHome(r.folder)
 	defer r.relayout()
-	player := s.Info.Target.Process
-	if player == "" {
-		player = lang.YourPlayer
-	}
+	player := playerName(s.Info)
 	if !s.Recording() && s.Current == nil && len(s.Rows) == 0 {
 		// Until the recorder answers it is starting, with nothing to offer.
 		starting := !s.HaveInfo

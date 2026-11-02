@@ -212,6 +212,15 @@ func margin(o fyne.CanvasObject) *fyne.Container {
 	return container.New(layout.NewCustomPaddedLayout(0, pad, pad, pad), o)
 }
 
+// playerName is the player the recorder records, or "your player" before
+// it says.
+func playerName(info proto.CoreInfoResult) string {
+	if info.Target.Process == "" {
+		return lang.YourPlayer
+	}
+	return info.Target.Process
+}
+
 // inset keeps a part of a screen off the window's sides, in line with the
 // cards.
 func inset(o fyne.CanvasObject) *fyne.Container {

@@ -230,11 +230,12 @@ func (l *logsScreen) renderChecks(s model.State) {
 			fix = choose.lit
 		}
 		name := container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c)))
-		var row fyne.CanvasObject = container.NewBorder(nil, nil, name, fix, clipped(c.Detail))
-		if !c.OK && c.Detail != "" {
+		detail := checkDetail(c, playerName(s.Info))
+		var row fyne.CanvasObject = container.NewBorder(nil, nil, name, fix, clipped(detail))
+		if !c.OK && detail != "" {
 			// Why it failed goes under the name, whole and in line with it:
 			// beside it, cut short, it lost the reason.
-			reason := container.New(layout.NewCustomPaddedLayout(0, 0, theme.IconInlineSize()+theme.Padding(), 0), wrapped(c.Detail))
+			reason := container.New(layout.NewCustomPaddedLayout(0, 0, theme.IconInlineSize()+theme.Padding(), 0), wrapped(detail))
 			row = container.New(layout.NewCustomPaddedVBoxLayout(0), container.NewBorder(nil, nil, name, fix), reason)
 		}
 		if c.OK {
@@ -309,6 +310,19 @@ func (l *logsScreen) filter() {
 
 // checkLabel names a check as it stands: a failed "ffmpeg found" reads
 // "ffmpeg not found". Code keeps finding checks by their names.
+// checkDetail is a check's detail as the window words it: the recorder's,
+// but for the system audio check, whose why and what to do are the
+// lexicon's.
+func checkDetail(c proto.Check, player string) string {
+	switch {
+	case c.Name != proto.CheckSystemAudio:
+		return c.Detail
+	case c.OK:
+		return lang.NoSilenceHeard
+	}
+	return fmt.Sprintf(lang.SystemAudioSilent, player)
+}
+
 func checkLabel(c proto.Check) string {
 	if c.OK {
 		return c.Name

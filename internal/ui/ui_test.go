@@ -1017,7 +1017,6 @@ func (c *recordingCore) setSilent(silent bool) {
 	c.mu.Unlock()
 }
 
-
 func (c *recordingCore) handle(ctx context.Context, method string, params json.RawMessage) (any, error) {
 	c.mu.Lock()
 	c.calls = append(c.calls, method)
@@ -1981,13 +1980,14 @@ func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 	}
 }
 
-// silentHint is the recorder's warning of only silence on macOS.
-const silentHint = "Only silence from the player for 10 s while it plays. macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
+// silentHint stands for the recorder's own words for only silence, which
+// the window never shows: it says it in its lexicon's.
+const silentHint = "Only silence from the player for 10 s while it plays."
 
 // Only silence from the player is said in one line on the Record tab, with
 // Open diagnostics, where the failing system audio check says why and what
-// to do. The checks run again when the silence is reported and when sound
-// comes back.
+// to do, the player's own volume first. The checks run again when the
+// silence is reported and when sound comes back.
 func TestOnlySilenceLeadsToTheSystemAudioCheck(t *testing.T) {
 	a, m, core := connectedApp(t)
 	feedSession(t, m)
@@ -2016,8 +2016,12 @@ func TestOnlySilenceLeadsToTheSystemAudioCheck(t *testing.T) {
 
 	test.Tap(r.alertDiagnose)
 	all := texts(overlay(t, a))
-	if !contains(all, proto.CheckSystemAudio) || !contains(all, silentHint) {
-		t.Fatalf("diagnostics without the system audio check and its reason: %q", all)
+	reason := fmt.Sprintf(lang.SystemAudioSilent, "Player")
+	if !contains(all, proto.CheckSystemAudio) || !contains(all, reason) || contains(all, silentHint) {
+		t.Fatalf("diagnostics without the system audio check and its reason in the window's words: %q", all)
+	}
+	if !strings.Contains(reason, "Player is not muted") {
+		t.Errorf("the reason does not say to check the player's own volume: %q", reason)
 	}
 	snapshot(t, a, "diagnostics-system-audio")
 	tapButton(t, overlay(t, a), lang.Close)
