@@ -212,10 +212,12 @@ func inset(o fyne.CanvasObject) *fyne.Container {
 }
 
 // footerBar is a screen's bottom bar, on a grey of its own under a line:
-// what the screen holds on the left, its actions on the right.
+// what the screen holds on the left, its actions on the right. A button
+// under the pointer lights up off the grey: the usual hover is that grey.
 func footerBar(left, actions fyne.CanvasObject) fyne.CanvasObject {
 	pad := theme.Padding()
 	row := container.New(layout.NewCustomPaddedLayout(pad/2, pad/2, pad*2, pad),
-		container.NewBorder(nil, nil, nil, actions, container.NewVBox(layout.NewSpacer(), left, layout.NewSpacer())))
+		container.NewBorder(nil, nil, nil, container.NewThemeOverride(actions, cardTheme{hover: colorFooterHover}),
+			container.NewVBox(layout.NewSpacer(), left, layout.NewSpacer())))
 	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, newPanel(colorFooter, "", 0, fyne.Size{}, row))
 }

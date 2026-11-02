@@ -290,8 +290,12 @@ func (m *Model) Replay(events []proto.Event) {
 // Apply folds one event into the state.
 func (m *Model) Apply(ev proto.Event) {
 	if ev.Method == proto.EventLevel {
+		// Each report replaces the last: decoded over it, one without
+		// channels would keep the last one's.
+		var level proto.LevelEvent
+		_ = ev.Decode(&level)
 		m.mu.Lock()
-		_ = ev.Decode(&m.s.Level)
+		m.s.Level = level
 		levels := append([]func(){}, m.levels...)
 		// Audio is back: the warning that none arrived no longer holds.
 		cleared := m.s.LastError != nil && m.s.LastError.Code == "capture_stalled"
@@ -411,6 +415,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		m.edit(s, e.ID, func(r *Row) { r.Keepable = e.Keepable && r.Status == Skipped })
 	case proto.EventLevel:
+		s.Level = proto.LevelEvent{}
 		_ = ev.Decode(&s.Level)
 	case proto.EventTargetState:
 		if ev.Decode(&s.Target) == nil {

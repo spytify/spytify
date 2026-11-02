@@ -110,6 +110,7 @@ func DBFS(amplitude float64) float64 {
 }
 
 // Level returns the peak and RMS of b in dBFS, over every channel.
+// Level returns the peak and RMS of b in dBFS, over every channel.
 func (f Format) Level(b []byte) (peak, rms float64) {
 	n := len(b) / f.Sample.Bytes()
 	if n == 0 {
@@ -124,4 +125,25 @@ func (f Format) Level(b []byte) (peak, rms float64) {
 		}
 	}
 	return DBFS(p), DBFS(math.Sqrt(sum / float64(n)))
+}
+
+// ChannelLevels returns the peak and RMS of each channel of b in dBFS, in
+// the frames' order: left then right for stereo.
+func (f Format) ChannelLevels(b []byte) (peak, rms []float64) {
+	peak, rms = make([]float64, f.Channels), make([]float64, f.Channels)
+	n := len(b) / f.FrameBytes()
+	for c := range f.Channels {
+		peak[c], rms[c] = Silence, Silence
+		if n == 0 {
+			continue
+		}
+		var p, sum float64
+		for i := 0; i < n; i++ {
+			v := f.SampleAt(b, i*f.Channels+c)
+			sum += v * v
+			p = max(p, math.Abs(v))
+		}
+		peak[c], rms[c] = DBFS(p), DBFS(math.Sqrt(sum/float64(n)))
+	}
+	return peak, rms
 }

@@ -8,7 +8,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
-	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
@@ -140,7 +139,7 @@ func TestOnlyASessionThatEndsOnItsOwnIsNews(t *testing.T) {
 // Notifications sit in Settings > App, at Problems only until changed.
 func TestTheNotificationsSettingStartsAtProblemsOnly(t *testing.T) {
 	a, _, s := settingsApp(t)
-	sel, ok := s.fields["app.notifications"].input.(*widget.Select)
+	sel, ok := s.fields["app.notifications"].input.(*selectField)
 	if !ok {
 		t.Fatalf("app.notifications is a %T", s.fields["app.notifications"].input)
 	}

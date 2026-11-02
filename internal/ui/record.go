@@ -45,11 +45,11 @@ type recordScreen struct {
 	card  *fyne.Container
 	glow  *canvas.Image
 	cover *canvas.Image
-	// state says whether the track is recorded, with the level while it is;
-	// rate, channels and fileRate are the stream's format.
+	// state says whether the track is recorded; rate, channels and
+	// fileRate are the stream's format; meter is its level by channel.
 	state                    *badge
 	recDot, pausedIcon       fyne.CanvasObject
-	meter                    *levelMeter
+	meter                    *stereoMeter
 	rate, channels, fileRate *badge
 	// track is the title, then the artist and album.
 	track    *widget.RichText
@@ -119,10 +119,9 @@ func newRecordScreen(a *App) *recordScreen {
 	r.glow.ScaleMode = canvas.ImageScaleSmooth
 	r.recDot = container.NewGridWrap(fyne.NewSquareSize(8), canvas.NewCircle(color.NRGBA{R: 0xba, G: 0x1a, B: 0x1a, A: 0xff}))
 	r.pausedIcon = container.NewGridWrap(fyne.NewSquareSize(14), widget.NewIcon(theme.MediaPauseIcon()))
-	r.meter = newLevelMeter(colorOnRecBadge)
+	r.meter = newStereoMeter()
 	r.state = newBadge("", colorRecBadge, "", colorOnRecBadge)
 	r.state.lead = container.NewStack(r.recDot, r.pausedIcon)
-	r.state.tail = r.meter
 	r.rate = newBadge("", "", colorMediaLine, theme.ColorNameForeground)
 	r.channels = newBadge("", "", colorMediaLine, theme.ColorNameForeground)
 	r.fileRate = newBadge("", "", colorMediaLine, theme.ColorNameForeground)
@@ -140,11 +139,19 @@ func newRecordScreen(a *App) *recordScreen {
 		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdNext}, nil)
 	})
 	pad := theme.Padding()
+	// The meter and Skip side by side, their captions on one line: Skip is
+	// centred on the meter's height, and each bar over its L or R.
+	skipPad := float32(meterHeight-48) / 2
 	skipBox := container.NewVBox(layout.NewSpacer(),
-		container.NewCenter(container.NewGridWrap(fyne.NewSquareSize(48), skip)), container.NewCenter(caption(lang.Skip)),
+		container.NewCenter(container.New(layout.NewCustomPaddedLayout(skipPad, skipPad, 0, 0), container.NewGridWrap(fyne.NewSquareSize(48), skip))),
+		container.NewCenter(caption(lang.Skip)),
 		layout.NewSpacer())
+	meterBox := container.NewVBox(layout.NewSpacer(), r.meter,
+		container.NewGridWithColumns(2, container.NewCenter(caption(lang.MeterLeft)), container.NewCenter(caption(lang.MeterRight))),
+		layout.NewSpacer())
+	controls := container.NewHBox(container.New(layout.NewCustomPaddedLayout(0, 0, 0, pad*2), meterBox), skipBox)
 	info := container.NewVBox(layout.NewSpacer(), container.NewHBox(r.state, r.rate, r.channels, r.fileRate), r.track, r.elapsed, layout.NewSpacer())
-	body := container.NewBorder(nil, nil, r.cover, skipBox, container.New(layout.NewCustomPaddedLayout(0, 0, pad*3, pad*2), info))
+	body := container.NewBorder(nil, nil, r.cover, controls, container.New(layout.NewCustomPaddedLayout(0, 0, pad*3, pad*2), info))
 	// The track being recorded is on its cover's colours, from one side of
 	// the window to the other, its progress along the bottom edge.
 	media := container.NewStack(r.glow, container.NewBorder(nil, r.progress, nil, nil,
@@ -169,11 +176,12 @@ func newRecordScreen(a *App) *recordScreen {
 	show(r.startAgain, false)
 	// What the session waits for is an outlined info alert, as MUI draws
 	// one in the app's green: an outline and icon around green text, the
-	// page showing through, the next step on the right.
+	// page showing through, the next step on the right. Its corners are
+	// square, as the cards'.
 	infoIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.InfoIcon(), theme.ColorNamePrimary)))
 	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch.lit, r.play.lit, r.restart, r.blocked.lit, r.startAgain.lit),
 		container.NewVBox(layout.NewSpacer(), r.waiting, layout.NewSpacer()))
-	r.waitRow = inset(newPanel("", theme.ColorNamePrimary, 8, fyne.NewSize(pad*2, pad*1.5), alert))
+	r.waitRow = inset(newPanel("", theme.ColorNamePrimary, 0, fyne.NewSize(pad*2, pad*1.5), alert))
 
 	r.list = newCardList(
 		func() int { return len(r.rows) },
@@ -431,7 +439,6 @@ func (r *recordScreen) renderCard(c *model.Row, session proto.SessionState) {
 	show(r.recDot, recording)
 	show(r.pausedIcon, pausedIcon)
 	show(r.state.lead, recording || pausedIcon)
-	show(r.meter, recording)
 	parts := sourceParts(c.SourceRate, c.SourceChannels)
 	for i, b := range []*badge{r.rate, r.channels, r.fileRate} {
 		show(b, i < len(parts))
@@ -465,9 +472,11 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 		r.progress.SetValue(0)
 		setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds()))
 	}
-	// The meter shows only while recording.
+	// The meter moves only while recording: paused or stopped, it is out.
 	if session == proto.StateRecording {
-		r.meter.SetLevel(level.RMSDBFS)
+		r.meter.SetLevel(level)
+	} else {
+		r.meter.Clear()
 	}
 }
 
