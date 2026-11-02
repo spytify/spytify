@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2"
 
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -42,8 +43,8 @@ var stopCodes = map[string]bool{"disk_full": true, "output_dir": true, "counter_
 // warnTitles title the problems that leave a session running with nothing
 // worth keeping: tracks that sound like a phone call, or no audio at all.
 var warnTitles = map[string]string{
-	"capture_low_quality": "Recording in low quality",
-	"capture_stalled":     "Nothing is being recorded",
+	"capture_low_quality": lang.RecordingLowQuality,
+	"capture_stalled":     lang.NothingRecorded,
 }
 
 // notify tells, while the window is hidden in the tray, what would
@@ -88,9 +89,9 @@ func (a *App) sessionEnded() {
 	}
 	if why == "" {
 		t := s.Totals()
-		why = fmt.Sprintf("%d saved · %d skipped", t.Saved, t.Skipped)
+		why = fmt.Sprintf(lang.SavedSkipped, t.Saved, t.Skipped)
 	}
-	a.fa.SendNotification(fyne.NewNotification("Recording stopped", why))
+	a.fa.SendNotification(fyne.NewNotification(lang.RecordingStopped, why))
 }
 
 // recorderError keeps why the recorder is ending the session, told once it
@@ -120,7 +121,7 @@ func (a *App) trackSaved(e proto.TrackFinishedEvent) {
 			}
 		}
 	}
-	a.fa.SendNotification(fyne.NewNotification("Track saved", name))
+	a.fa.SendNotification(fyne.NewNotification(lang.TrackSaved, name))
 }
 
 // noticeState is the model's state when a notification of level is due:

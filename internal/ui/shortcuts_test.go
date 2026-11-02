@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -298,11 +299,11 @@ func TestKeyLabels(t *testing.T) {
 		}
 	}
 	// The tooltip writes the key the shortcut is bound with.
-	want := "Library (Ctrl+2)"
+	want := lang.Library + " (Ctrl+2)"
 	if runtime.GOOS == "darwin" {
-		want = "Library (⌘2)"
+		want = lang.Library + " (⌘2)"
 	}
-	if got := shortcutTip("Library", fyne.Key2); got != want {
+	if got := shortcutTip(lang.Library, fyne.Key2); got != want {
 		t.Errorf("tooltip %q, want %q", got, want)
 	}
 }
@@ -310,13 +311,13 @@ func TestKeyLabels(t *testing.T) {
 // Record/Stop's tooltip follows its name.
 func TestTheActionTipNamesItsKey(t *testing.T) {
 	a, m := connectedTestApp(t)
-	if got, want := a.action.ToolTip(), shortcutTip("Record", actionKey); got != want {
+	if got, want := a.action.ToolTip(), shortcutTip(lang.Record, actionKey); got != want {
 		t.Errorf("tooltip %q, want %q", got, want)
 	}
 	for _, step := range []struct {
 		state proto.SessionState
 		name  string
-	}{{proto.StateRecording, "Stop"}, {proto.StateStopping, "Stop now"}, {proto.StateIdle, "Record"}} {
+	}{{proto.StateRecording, lang.Stop}, {proto.StateStopping, lang.StopNow}, {proto.StateIdle, lang.Record}} {
 		m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: step.state}))
 		a.render()
 		if got, want := a.action.ToolTip(), shortcutTip(step.name, actionKey); a.action.Text != step.name || got != want {
@@ -419,7 +420,7 @@ func TestShortcutTipSnapshots(t *testing.T) {
 			return name + " (" + keyLabel(sys.mac, &desktop.CustomShortcut{KeyName: key, Modifier: sys.mod}) + ")"
 		}
 		a.action.SetToolTip(label(a.action.Text, actionKey))
-		tip.SetToolTip(label("Library", tabDigits[tabLibrary]))
+		tip.SetToolTip(label(lang.Library, tabDigits[tabLibrary]))
 		for name, o := range map[string]fyne.CanvasObject{"record": a.action, "library": tip} {
 			test.MoveMouse(c, a.fa.Driver().AbsolutePositionForObject(o).AddXY(o.Size().Width/2, o.Size().Height/2))
 			time.Sleep(time.Second)

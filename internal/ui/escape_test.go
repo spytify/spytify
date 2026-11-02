@@ -9,6 +9,7 @@ import (
 
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // pressEscape is Escape as Fyne 2.8.2's window sends it: to the control
@@ -74,8 +75,8 @@ func TestEscapeClosesEveryModal(t *testing.T) {
 		a.render()
 		quit := false
 		a.quitApp = func() { quit = true }
-		closesOnEscapeEverywhere(t, a, "Quit Spytify?", a.quit, func() bool { return !quit })
-		closesOnEscapeEverywhere(t, a, "Restart spytifyd?", a.player.restart, nil)
+		closesOnEscapeEverywhere(t, a, lang.Quit, a.quit, func() bool { return !quit })
+		closesOnEscapeEverywhere(t, a, lang.RestartRecorderAsk, a.player.restart, nil)
 		closesOnEscapeEverywhere(t, a, "an error", func() { a.showError(errors.New("boom")) }, nil)
 	})
 
@@ -85,9 +86,9 @@ func TestEscapeClosesEveryModal(t *testing.T) {
 		connect(t, a, m, true)
 		failCheck(a, m)
 		l := a.screens[tabLogs].(*logsScreen)
-		closesOnEscapeEverywhere(t, a, "Diagnostics", a.showDiagnostics, func() bool { return !l.open })
+		closesOnEscapeEverywhere(t, a, lang.Diagnostics, a.showDiagnostics, func() bool { return !l.open })
 		answer := "none"
-		closesOnEscapeEverywhere(t, a, "Send to the developers", func() {
+		closesOnEscapeEverywhere(t, a, lang.SendToDevelopers, func() {
 			answer = "none"
 			a.sendChecks(a.last, func(ok bool) { answer = "sent" })
 		}, func() bool { return answer == "none" })
@@ -98,12 +99,12 @@ func TestEscapeClosesEveryModal(t *testing.T) {
 		a, _ := privacyApp(t, srv, true)
 		prefs := a.fa.Preferences()
 		closed := false
-		closesOnEscapeEverywhere(t, a, "Before you record", func() {
+		closesOnEscapeEverywhere(t, a, lang.BeforeYouRecord, func() {
 			closed = false
 			prefs.SetBool(firstRunKey, false)
 			a.maybeShowFirstRun(func() { closed = true })
 		}, func() bool { return closed && prefs.Bool(firstRunKey) })
-		closesOnEscapeEverywhere(t, a, "Help fix issues", func() {
+		closesOnEscapeEverywhere(t, a, lang.HelpFixIssues, func() {
 			closed = false
 			prefs.SetBool(privacySeenKey, false)
 			a.askPrivacy(func() { closed = true })

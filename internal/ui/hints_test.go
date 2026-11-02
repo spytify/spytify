@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -186,7 +187,7 @@ func TestRFollowsTheButton(t *testing.T) {
 	start := time.Now()
 	holdUntilShown(t, a, start)
 	before := a.action.Size().Width
-	a.setAction("Stop now", theme.MediaStopIcon(), widget.DangerImportance)
+	a.setAction(lang.StopNow, theme.MediaStopIcon(), widget.DangerImportance)
 	a.bar.Refresh()
 	if a.action.Size().Width <= before {
 		t.Fatalf("Stop now is %v wide, Record %v", a.action.Size().Width, before)
