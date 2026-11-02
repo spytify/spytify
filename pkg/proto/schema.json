@@ -526,6 +526,9 @@
         "path": {
           "type": "string"
         },
+        "pause_fade": {
+          "type": "boolean"
+        },
         "tagged": {
           "type": "boolean"
         },

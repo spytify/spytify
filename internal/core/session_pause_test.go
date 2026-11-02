@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/spytify/spytify/internal/fake"
@@ -60,10 +61,86 @@ func TestPinnedPauses(t *testing.T) {
 	}
 }
 
+// fade plays the next ms of music seed fading out, or in, as a player does
+// when it pauses and when it resumes.
+func (r *rig) fade(seed, ms int64, out bool) {
+	from := r.played[seed]
+	r.played[seed] = from + ms
+	data := pcm.Synth{Seed: seed, FadeInMs: 30}.Render(r.f, r.f.FramesFromMs(from+ms))
+	way := "in"
+	if out {
+		way = "out"
+	}
+	r.play(fmt.Sprintf("music %d at %dms fading %s", seed, from, way), fading(r.f, data[r.f.FramesFromMs(from)*int64(r.f.FrameBytes()):], out))
+}
+
+// fadesAroundAPause plays A paused once by a player that fades out over
+// 150 ms when paused and in over 60 ms when resumed: the fades meet where
+// the pause is cut out, a dip of 26 dB that is heard, so A is saved marked
+// (pause fade).
+func fadesAroundAPause(r *rig) {
+	a, b := info("/x/a", "A", 3000), info("/x/b", "B", 3000)
+	r.status(meta.Playing)
+	r.track(a, 0)
+	r.quiet(500)
+	r.sound(1, 1000)
+	r.status(meta.Paused)
+	r.fade(1, 150, true)
+	r.quiet(500)
+	r.status(meta.Playing)
+	r.fade(1, 60, false)
+	r.sound(1, 1790)
+	r.quiet(500)
+	r.track(b, 0)
+	r.sound(2, 3000)
+	r.quiet(1500)
+	r.status(meta.Stopped)
+}
+
+// recorder.pause_fade_db is the dip that marks a take: at 20 the 26 dB
+// fades mark A, at 30 they don't, and 0 never marks a take.
+func TestThePauseFadeThresholdSetting(t *testing.T) {
+	for limit, marked := range map[float64]bool{20: true, 30: false, 0: false} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			t.Parallel()
+			r := newRig(t, map[string]any{"recorder.pause_fade_db": limit}, SessionOptions{EndOnStop: true})
+			fadesAroundAPause(r)
+			got := r.result("pause fade threshold")
+			if !strings.Contains(got, `job t-001 "A"`) {
+				t.Fatalf("A was not saved:\n%s", got)
+			}
+			if strings.Contains(got, "pause-fade") != marked {
+				t.Errorf("at %v dB, A marked %v, want %v:\n%s", limit, !marked, marked, got)
+			}
+		})
+	}
+}
+
 // Pauses the timelines cannot play.
 func TestPinnedPauseCases(t *testing.T) {
 	a, b := info("/x/a", "A", 3000), info("/x/b", "B", 3000)
 	scripts := map[string]func(r *rig){
+		"fades-around-a-pause": fadesAroundAPause,
+		// The same, Playing noticed 200 ms after the sound came back, as
+		// from a player that is polled.
+		"fades-around-a-pause-resume-noticed-late": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.sound(1, 1000)
+			r.status(meta.Paused)
+			r.fade(1, 150, true)
+			r.quiet(500)
+			r.fade(1, 60, false)
+			r.sound(1, 140)
+			r.status(meta.Playing)
+			r.sound(1, 1650)
+			r.quiet(500)
+			r.track(b, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
 		// Next pressed while paused: B is named during the pause. Today's
 		// behavior, which looks odd: 1 s before A's declared end, the skip
 		// is taken for A's natural end, and with no silence in the window

@@ -61,6 +61,8 @@ var (
 	RecorderSilenceDb = Key{"recorder.silence_db"}
 	// RecorderBoundaryWindowMs is recorder.boundary_window_ms, "Boundary search window (ms)" in Settings.
 	RecorderBoundaryWindowMs = Key{"recorder.boundary_window_ms"}
+	// RecorderPauseFadeDb is recorder.pause_fade_db, "Pause fade threshold (dB, 0 = off)" in Settings.
+	RecorderPauseFadeDb = Key{"recorder.pause_fade_db"}
 	// RecorderSessionTimer is recorder.session_timer, "Stop the session after (0s = never)" in Settings.
 	RecorderSessionTimer = Key{"recorder.session_timer"}
 	// RecorderTargetLufs is recorder.target_lufs, "Target loudness (LUFS)" in Settings.
