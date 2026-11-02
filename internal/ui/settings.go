@@ -67,12 +67,12 @@ type field struct {
 
 func newSettingsScreen(a *App) *settingsScreen {
 	s := &settingsScreen{app: a, fields: map[string]*field{}, advanced: map[string]*fold{}, open: map[string]bool{}}
-	s.search = newKeyEntry(a)
-	s.search.SetPlaceHolder("Search settings")
-	s.search.ActionItem = widget.NewIcon(theme.SearchIcon())
-	s.search.OnChanged = func(string) { s.layout() }
+	s.search = newSearch(a, "Search settings", func(string) { s.layout() })
 	s.sections = container.New(layout.NewCustomPaddedVBoxLayout(theme.Padding() * 3))
-	s.scroll = container.NewVScroll(container.NewPadded(s.sections))
+	// The cards off the window's sides, the scroll bar at its edge, as the
+	// Record screen's and the Library's.
+	pad := theme.Padding()
+	s.scroll = container.NewVScroll(container.New(layout.NewCustomPaddedLayout(pad, pad*2, pad*2, pad*2), s.sections))
 	s.player = newPlayerCard(a)
 	s.player.relayout = func() { relayout(s.scroll) }
 	for i := range settings.Table {
@@ -80,8 +80,8 @@ func newSettingsScreen(a *App) *settingsScreen {
 		s.fields[d.Key] = s.newField(d)
 	}
 	s.layout()
-	// The search is a white field on the page, as the cards are.
-	search := container.NewThemeOverride(container.NewPadded(s.search), cardTheme{input: colorCard})
+	// The search sits as the Library's does.
+	search := inset(squareFields(s.search))
 	// Lighter shadows at the scrolled edges, as in the cards.
 	s.root = inReadingOrder(search, nil, nil, nil, container.NewThemeOverride(s.scroll, cardTheme{}))
 	return s

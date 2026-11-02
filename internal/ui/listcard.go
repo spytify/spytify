@@ -47,8 +47,9 @@ func newCardList(length func() int, create func() fyne.CanvasObject, update func
 	return l
 }
 
-// rowSide keeps the rows off the window's sides: a row's cover, the line
-// above it and the highlight under the pointer start there.
+// rowSide keeps a row's content off the window's sides: its cover and the
+// line above it start there, while the highlight under the pointer runs
+// from one side to the other.
 func rowSide() float32 { return theme.Padding() * 3 }
 
 // cardHeight is the card's for n rows: a padding between them and two
@@ -92,8 +93,6 @@ func (l *cardList) place(all bool) {
 	}
 	l.shown = l.shown[:0]
 	objs := []fyne.CanvasObject{l.card}
-	side := rowSide()
-	width := l.page.Size().Width - 2*side
 	for id := first; id <= last; id++ {
 		row, ok := old[id]
 		if ok {
@@ -102,8 +101,8 @@ func (l *cardList) place(all bool) {
 			row = l.spareRow()
 		}
 		row.setLook(id == 0, l.focused && id == l.cursor)
-		row.box.Move(fyne.NewPos(side, float32(id)*step))
-		row.box.Resize(fyne.NewSize(width, l.itemMin.Height))
+		row.box.Move(fyne.NewPos(0, float32(id)*step))
+		row.box.Resize(fyne.NewSize(l.page.Size().Width, l.itemMin.Height))
 		if all || !ok {
 			l.update(id, row.content)
 		}
@@ -282,19 +281,23 @@ type cardRowRenderer struct{ r *cardRow }
 func (rr *cardRowRenderer) Layout(s fyne.Size) {
 	r := rr.r
 	r.hover.Resize(s)
+	side := rowSide()
 	// The line sits in the middle of the padding above the row.
 	thick := theme.SizeForWidget(theme.SizeNameSeparatorThickness, r)
-	r.line.Move(fyne.NewPos(0, -(theme.Padding()+thick)/2))
-	r.line.Resize(fyne.NewSize(s.Width, thick))
-	r.content.Resize(s)
+	r.line.Move(fyne.NewPos(side, -(theme.Padding()+thick)/2))
+	r.line.Resize(fyne.NewSize(s.Width-2*side, thick))
+	r.content.Move(fyne.NewPos(side, 0))
+	r.content.Resize(fyne.NewSize(s.Width-2*side, s.Height))
 }
 
-func (rr *cardRowRenderer) MinSize() fyne.Size { return rr.r.content.MinSize() }
+func (rr *cardRowRenderer) MinSize() fyne.Size {
+	return rr.r.content.MinSize().AddWidthHeight(2*rowSide(), 0)
+}
 
 func (rr *cardRowRenderer) Refresh() {
 	r := rr.r
+	// Square, as it meets the window's sides.
 	r.hover.FillColor = theme.ColorForWidget(theme.ColorNameHover, r)
-	r.hover.CornerRadius = theme.SizeForWidget(theme.SizeNameSelectionRadius, r)
 	r.hover.Hidden = !r.hovered && !r.focus
 	r.hover.Refresh()
 	r.line.Hidden = r.first

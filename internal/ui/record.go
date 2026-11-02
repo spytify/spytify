@@ -168,7 +168,9 @@ func newRecordScreen(a *App) *recordScreen {
 		func() int { return len(r.rows) },
 		func() fyne.CanvasObject {
 			status := newBadge("Skipped: duplicate", colorSkippedBadge, "", colorOnSkippedBadge)
-			keep := container.NewCenter(outlined(newButton("Keep anyway", nil)))
+			keepBtn := newIconButton("Keep anyway", theme.DocumentSaveIcon(), nil)
+			keepBtn.Importance = widget.LowImportance
+			keep := container.NewCenter(keepBtn)
 			keep.Hide()
 			reveal := newIconButton("", theme.SearchIcon(), nil)
 			reveal.Importance = widget.LowImportance
@@ -189,7 +191,7 @@ func newRecordScreen(a *App) *recordScreen {
 			fill, ink := badgeColors(row)
 			right.Objects[0].(*fyne.Container).Objects[0].(*badge).set(row.StatusText(), fill, ink)
 			keep := right.Objects[1].(*fyne.Container)
-			keepBtn := keep.Objects[0].(*panel).content.(*button)
+			keepBtn := keep.Objects[0].(*button)
 			revealBtn := right.Objects[2].(*fyne.Container).Objects[0].(*button)
 			playBtn := right.Objects[3].(*fyne.Container).Objects[0].(*button)
 			if row.Keepable {
@@ -434,11 +436,10 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 		r.progress.SetValue(0)
 		setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds()))
 	}
-	v := (level.RMSDBFS + 60) / 60
-	if v < 0 || session != proto.StateRecording {
-		v = 0
+	// The meter shows only while recording.
+	if session == proto.StateRecording {
+		r.meter.SetLevel(level.RMSDBFS)
 	}
-	r.meter.SetLevel(v)
 }
 
 // relayout lays the screen out again when a part appeared or went away, or
