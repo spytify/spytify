@@ -1,6 +1,6 @@
 # Contributing
 
-Issues and pull requests are welcome. Run `gofmt` and `go test -race ./...` before you push: CI runs the tests with `-race`, builds every platform, runs the PipeWire scenarios, and runs the tests and the shipped executables on Windows.
+Issues and pull requests are welcome. Run `gofmt` and `go test -race -timeout 20m ./...` before you push: CI runs the tests with `-race`, builds every platform, runs the PipeWire scenarios, and runs the tests and the shipped executables on Windows.
 
 A change to what the bug tracker sends or scrubs (`internal/telemetry`) updates [PRIVACY.md](PRIVACY.md) in the same pull request.
 
@@ -59,8 +59,10 @@ Clients speak newline-delimited JSON-RPC 2.0 on the socket, or on TCP with `spyt
 ## Tests
 
 ```sh
-go test -race ./...    # unit tests, the fake-player scenarios, the CLI end to end
+go test -race -timeout 20m ./...    # unit tests, the fake-player scenarios, the CLI end to end
 ```
+
+`internal/ui` takes 7 to 10 minutes under `-race`, and `go test` stops a package at 10 by default: give it 20, as CI does.
 
 - **Scenarios.** [`testdata/timelines`](testdata/timelines) drive the real core with a scripted player: notifications from 300 ms early to 800 ms late, gapless albums, ads, a sample-rate change, a pause, duplicates, skips, seeks. Each file must match its source by cross-correlation: peak within 2 ms of zero, residual under −50 dBFS. `spytifyd --fake <timeline>` plays one by hand.
 - **Real PipeWire and MPRIS**, through `cmd/fakeplayer`; CI runs it in a container with no sound card:
