@@ -54,6 +54,10 @@ type Row struct {
 	// saved (track.keep); Partial is one that was.
 	Keepable bool
 	Partial  bool
+	// PausedFor is how long the track was paused before the pause going on,
+	// which began at PausedAt.
+	PausedFor time.Duration
+	PausedAt  time.Time
 }
 
 // StatusText is the chip label: "Saved", "Skipped: duplicate".
@@ -244,6 +248,7 @@ func (m *Model) SetStatus(st proto.SessionStatusResult) {
 			s.Current = &Row{ID: st.Track.ID, Artist: st.Track.Artist, Title: st.Track.Title, Album: st.Track.Album,
 				LengthMs: st.Track.LengthMs, CoverURL: st.Track.CoverURL, Started: m.now(), Status: Recording}
 		}
+		m.trackPause(s)
 	})
 }
 
@@ -357,6 +362,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 			s.Rows, s.Current, s.LastError = nil, nil, nil
 		}
 		s.Session = e.State
+		m.trackPause(s)
 		// Waiting means the core follows no item: what was playing ended.
 		if e.State == proto.StateIdle || e.State == proto.StateWaiting {
 			m.retire(s)
@@ -382,6 +388,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		if e.Source != nil {
 			s.Current.SourceRate, s.Current.SourceChannels = e.Source.SampleRate, e.Source.Channels
 		}
+		m.trackPause(s)
 	case proto.EventTrackFinished:
 		var e proto.TrackFinishedEvent
 		if ev.Decode(&e) != nil {
@@ -480,12 +487,34 @@ func (m *Model) edit(s *State, id string, fn func(*Row)) {
 	}
 }
 
-// Elapsed is how long the current track has been recording.
+// trackPause times the current track's pauses as the session enters and
+// leaves Paused.
+func (m *Model) trackPause(s *State) {
+	c := s.Current
+	if c == nil {
+		return
+	}
+	paused := s.Session == proto.StatePaused
+	switch {
+	case paused && c.PausedAt.IsZero():
+		c.PausedAt = m.now()
+	case !paused && !c.PausedAt.IsZero():
+		c.PausedFor += m.now().Sub(c.PausedAt)
+		c.PausedAt = time.Time{}
+	}
+}
+
+// Elapsed is how long the current track has been recording, without its
+// pauses: the core cuts them out of the take.
 func (m *Model) Elapsed(r Row) time.Duration {
 	if r.Started.IsZero() {
 		return 0
 	}
-	d := m.now().Sub(r.Started)
+	end := m.now()
+	if !r.PausedAt.IsZero() {
+		end = r.PausedAt
+	}
+	d := end.Sub(r.Started) - r.PausedFor
 	if r.LengthMs > 0 && d > time.Duration(r.LengthMs)*time.Millisecond {
 		return time.Duration(r.LengthMs) * time.Millisecond
 	}
