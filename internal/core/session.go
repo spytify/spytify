@@ -46,6 +46,12 @@ const (
 	dipDB = 15
 	// Silence this long while paused is the pause, not a quiet note.
 	pauseRunMs = 20
+	// Where a pause was cut out, the 10 ms on each side of the cut this
+	// many dB under the music seamSideMs away on that side are the player's
+	// fades. In a real take its five fades measured 31 to 36 dB at the cut;
+	// a cut with no fade measures under 5.
+	seamSideMs = 300
+	fadeDipDB  = 20
 	// After a skip, the next track starts where the peak level of 1 ms
 	// windows drops this far under its median.
 	skipDipDB = 20
@@ -418,6 +424,7 @@ func (s *Session) onChunk(ch capture.Chunk) {
 			s.cur.partial = true
 		}
 	}
+	s.checkSeam()
 	s.meter(peak, rms, len(ch.Data)/ch.Format.Sample.Bytes())
 	s.progress()
 }
@@ -892,7 +899,7 @@ func (s *Session) announce(seg *segment) {
 	}
 	s.deps.emit(proto.EventTrackStarted, ev)
 	switch seg.reason {
-	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
+	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked, proto.SkipPauseFade:
 		s.deps.fin.skip(seg.id, seg.reason)
 	}
 }
@@ -1011,6 +1018,33 @@ func (s *Session) trimPause() {
 	s.trim(s.ring, s.pauseFloor(), s.silenceDB)
 }
 
+// checkSeam looks at the last pause cut out, once the ring holds
+// seamSideMs past it. If the player's fades meet there, the take is not
+// saved, as one moved along its track bar: it goes on to its end and is
+// held for track.keep. A cut outside the take, or during a track change,
+// is let go.
+func (s *Session) checkSeam() {
+	at := s.seam
+	if at == 0 || s.ring.End() < at+s.ms(seamSideMs) {
+		return
+	}
+	s.seam = 0
+	c := s.cur
+	if c == nil || c.ghost || c.provisional || c.awaitStart || c.reason != "" || s.pend != nil || at-s.ms(seamSideMs) < c.start {
+		return
+	}
+	dip, faded := fadedSeam(s.ring, at)
+	if !faded {
+		s.deps.log.Debugf("%q: a pause was cut out at %d ms, %.0f dB under the music", c.info.Title, s.ring.Format().MsFromFrames(at), dip)
+		return
+	}
+	s.deps.log.Infof("%q: the player faded out and in around a pause, %.0f dB under the music where it was cut; this take is not saved", c.info.Title, dip)
+	c.reason = proto.SkipPauseFade
+	if c.announced {
+		s.deps.fin.skip(c.id, c.reason)
+	}
+}
+
 // endOfPlayback closes the current segment with everything captured: the
 // player stopped, unloaded the item, or went away.
 func (s *Session) endOfPlayback() {
@@ -1104,6 +1138,7 @@ func (s *Session) finish() {
 func (s *Session) formatChange(f pcm.Format) {
 	old := s.ring
 	s.ring = NewRing(f, ringSeconds)
+	s.seam = 0
 	s.tune(f)
 	if old == nil {
 		return

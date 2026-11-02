@@ -60,10 +60,63 @@ func TestPinnedPauses(t *testing.T) {
 	}
 }
 
+// fade plays the next ms of music seed fading out, or in, as a player does
+// when it pauses and when it resumes.
+func (r *rig) fade(seed, ms int64, out bool) {
+	from := r.played[seed]
+	r.played[seed] = from + ms
+	data := pcm.Synth{Seed: seed, FadeInMs: 30}.Render(r.f, r.f.FramesFromMs(from+ms))
+	way := "in"
+	if out {
+		way = "out"
+	}
+	r.play(fmt.Sprintf("music %d at %dms fading %s", seed, from, way), fading(r.f, data[r.f.FramesFromMs(from)*int64(r.f.FrameBytes()):], out))
+}
+
 // Pauses the timelines cannot play.
 func TestPinnedPauseCases(t *testing.T) {
 	a, b := info("/x/a", "A", 3000), info("/x/b", "B", 3000)
 	scripts := map[string]func(r *rig){
+		// The player fades out over 150 ms when paused and in over 60 ms
+		// when resumed: the fades meet where the pause is cut out, a dip
+		// that is heard, so A is not saved.
+		"fades-around-a-pause": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.sound(1, 1000)
+			r.status(meta.Paused)
+			r.fade(1, 150, true)
+			r.quiet(500)
+			r.status(meta.Playing)
+			r.fade(1, 60, false)
+			r.sound(1, 1790)
+			r.quiet(500)
+			r.track(b, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// The same, Playing noticed 200 ms after the sound came back, as
+		// from a player that is polled.
+		"fades-around-a-pause-resume-noticed-late": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.sound(1, 1000)
+			r.status(meta.Paused)
+			r.fade(1, 150, true)
+			r.quiet(500)
+			r.fade(1, 60, false)
+			r.sound(1, 140)
+			r.status(meta.Playing)
+			r.sound(1, 1650)
+			r.quiet(500)
+			r.track(b, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
 		// Next pressed while paused: B is named during the pause. Today's
 		// behavior, which looks odd: 1 s before A's declared end, the skip
 		// is taken for A's natural end, and with no silence in the window

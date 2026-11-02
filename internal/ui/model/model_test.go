@@ -168,6 +168,23 @@ func TestALowQualityTakeSaysSo(t *testing.T) {
 	}
 }
 
+// A take with a pause's fades in it says so while it plays, and offers
+// Keep once it ends.
+func TestAPauseFadeTakeSaysSo(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(started(t, "a", "First"))
+	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "a", Reason: proto.SkipPauseFade}))
+	if c := m.Snapshot().Current; c == nil || c.StatusText() != "Skipped: fade-in/out detected after resume" {
+		t.Fatalf("while it plays: %+v", c)
+	}
+	m.Apply(started(t, "b", "Second"))
+	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a", Keepable: true}))
+	if r := m.Snapshot().Rows[0]; !r.Keepable || r.StatusText() != "Skipped: fade-in/out detected after resume" {
+		t.Fatalf("once it ended %+v, %q", r, r.StatusText())
+	}
+}
+
 func TestSettingsLogsAndErrors(t *testing.T) {
 	m := New()
 	m.SetSettings(map[string]any{"encode.format": "mp3", "output.dir": "/m"})

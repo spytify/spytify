@@ -98,7 +98,7 @@ func TestTheContractNamesEachSkipReason(t *testing.T) {
 			doc = e.Doc
 		}
 	}
-	for _, r := range []SkipReason{SkipDuplicate, SkipTooShort, SkipAd, SkipIncomplete, SkipSeeked, SkipLowQuality} {
+	for _, r := range []SkipReason{SkipDuplicate, SkipTooShort, SkipAd, SkipIncomplete, SkipSeeked, SkipLowQuality, SkipPauseFade} {
 		if !strings.Contains(doc, string(r)) {
 			t.Errorf("track.skipped's doc %q lacks %s", doc, r)
 		}
