@@ -11,9 +11,9 @@
     {"artist": "Velvet Static", "title": "After the Break - Remastered", "album": "Intermission", "length_ms": 4000, "gap_ms": 1000}
   ],
   "expect": [
-    {"item": 0, "saved": false, "reason": "paused"},
-    {"item": 1, "saved": false, "reason": "paused"},
-    {"item": 2, "saved": false, "reason": "paused"},
+    {"item": 0, "saved": true},
+    {"item": 1, "saved": true},
+    {"item": 2, "saved": true},
     {"item": 3, "saved": true}
   ]
 }

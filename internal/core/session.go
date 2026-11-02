@@ -47,6 +47,12 @@ const (
 	dipDB = 15
 	// Silence this long while paused is the pause, not a quiet note.
 	pauseRunMs = 20
+	// Where a pause was cut out, the 10 ms on each side of the cut this
+	// many dB under the music seamSideMs away on that side are the player's
+	// fades. In a real take its five fades measured 31 to 36 dB at the cut;
+	// a cut with no fade measures under 5.
+	seamSideMs = 300
+	fadeDipDB  = 20
 	// After a skip, the next track starts where the peak level of 1 ms
 	// windows drops this far under its median.
 	skipDipDB = 20
@@ -100,6 +106,9 @@ type segment struct {
 	provisional   bool
 	announced     bool
 	partial       bool
+	// pauseFade is a take a pause was cut out of, where the player's
+	// fades meet: its file is marked " (pause fade)".
+	pauseFade bool
 	// cut is how the take's start was found, for track.started.
 	cut *proto.TrackCut
 }
@@ -421,7 +430,7 @@ func (s *Session) onChunk(ch capture.Chunk) {
 			s.cur.partial = true
 		}
 	}
-	s.skipPausedTake()
+	s.checkSeam()
 	s.meter(peaks, rms, len(ch.Data)/ch.Format.FrameBytes())
 	s.progress()
 }
@@ -907,7 +916,7 @@ func (s *Session) announce(seg *segment) {
 	}
 	s.deps.emit(proto.EventTrackStarted, ev)
 	switch seg.reason {
-	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked, proto.SkipPaused:
+	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
 		s.deps.fin.skip(seg.id, seg.reason)
 	}
 }
@@ -936,14 +945,15 @@ func (s *Session) closeSegment(c *segment, end int64) {
 		info.ArtURL = coverURL(p)
 	}
 	s.deps.fin.enqueue(finishJob{
-		id:       c.id,
-		info:     info,
-		tmp:      path,
-		format:   c.format,
-		played:   played,
-		length:   c.length,
-		partial:  c.partial,
-		rejected: c.reason,
+		id:        c.id,
+		info:      info,
+		tmp:       path,
+		format:    c.format,
+		played:    played,
+		length:    c.length,
+		partial:   c.partial,
+		rejected:  c.reason,
+		pauseFade: c.pauseFade,
 	})
 	if s.opts.SingleTrack {
 		s.stop = stopGraceful
@@ -1026,26 +1036,28 @@ func (s *Session) trimPause() {
 	s.trim(s.ring, s.pauseFloor(), s.silenceDB)
 }
 
-// skipPausedTake lets the take go once a pause was cut out of it: the
-// player fades out before a pause and in after it, and the two fades meet
-// where the pause was cut, a dip that is heard. The take goes on to its
-// end, as one moved along its track bar, and is held for track.keep. A cut
-// before the take's first sound, or during a track change, is let go.
-func (s *Session) skipPausedTake() {
+// checkSeam looks at the last pause cut out, once the ring holds
+// seamSideMs past it. If the player's fades meet there, a dip that is
+// heard, the take is saved marked " (pause fade)"; a player that does not
+// fade leaves no mark. A cut outside the take, or during a track change,
+// is let go.
+func (s *Session) checkSeam() {
 	at := s.seam
-	if at == 0 {
+	if at == 0 || s.ring.End() < at+s.ms(seamSideMs) {
 		return
 	}
 	s.seam = 0
 	c := s.cur
-	if c == nil || c.ghost || c.provisional || c.awaitStart || c.reason != "" || s.pend != nil || at <= c.start {
+	if c == nil || c.ghost || c.provisional || c.awaitStart || c.reason != "" || s.pend != nil || at-s.ms(seamSideMs) < c.start {
 		return
 	}
-	s.deps.log.Infof("%q: paused mid-track, so the player's fades around the pause are in the take; it is not saved", c.info.Title)
-	c.reason = proto.SkipPaused
-	if c.announced {
-		s.deps.fin.skip(c.id, c.reason)
+	dip, faded := fadedSeam(s.ring, at)
+	if !faded {
+		s.deps.log.Debugf("%q: a pause was cut out at %d ms, %.0f dB under the music", c.info.Title, s.ring.Format().MsFromFrames(at), dip)
+		return
 	}
+	s.deps.log.Infof("%q: the player faded out and in around a pause, %.0f dB under the music where it was cut; the file is marked (pause fade)", c.info.Title, dip)
+	c.pauseFade = true
 }
 
 // endOfPlayback closes the current segment with everything captured: the
@@ -1141,6 +1153,7 @@ func (s *Session) finish() {
 func (s *Session) formatChange(f pcm.Format) {
 	old := s.ring
 	s.ring = NewRing(f, ringSeconds)
+	s.seam = 0
 	s.tune(f)
 	if old == nil {
 		return

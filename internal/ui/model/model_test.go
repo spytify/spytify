@@ -170,20 +170,16 @@ func TestALowQualityTakeSaysSo(t *testing.T) {
 	}
 }
 
-// A take paused mid-track says so while it plays, and offers Keep once it
-// ends.
-func TestAPausedTakeSaysSo(t *testing.T) {
+// A take saved with the player's fades around a pause in it reads "Saved:
+// pause fade".
+func TestAPauseFadeSaysSo(t *testing.T) {
 	m := New()
 	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(started(t, "a", "First"))
-	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "a", Reason: proto.SkipPaused}))
-	if c := m.Snapshot().Current; c == nil || c.StatusText() != fmt.Sprintf(lang.SkippedFor, lang.ReasonPaused) {
-		t.Fatalf("while it plays: %+v", c)
-	}
 	m.Apply(started(t, "b", "Second"))
-	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a", Keepable: true}))
-	if r := m.Snapshot().Rows[0]; !r.Keepable || r.StatusText() != fmt.Sprintf(lang.SkippedFor, lang.ReasonPaused) {
-		t.Fatalf("once it ended %+v, %q", r, r.StatusText())
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (pause fade).flac", PauseFade: true}))
+	if r := m.Snapshot().Rows[0]; r.Status != Saved || r.StatusText() != lang.SavedPauseFade {
+		t.Fatalf("saved %+v, %q", r, r.StatusText())
 	}
 }
 

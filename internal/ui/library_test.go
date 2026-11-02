@@ -95,13 +95,16 @@ func holdTags(t *testing.T, l *libraryScreen) func() {
 }
 
 // Keep anyway names a take "<title> (partial)" or "<title> (low quality)",
-// with underscores for spaces when the setting says so, and a number after
-// it when the name was taken; every other file is a complete take.
+// and a take with a pause fade is "<title> (pause fade)", with underscores
+// for spaces when the setting says so, and a number after it when the name
+// was taken; every other file is a complete take.
 func TestTakesAreToldApartByTheirName(t *testing.T) {
 	for name, want := range map[string]string{
 		"M83 - Wait (partial).flac":                     takePartial,
 		"M83 - Reunion (low quality).mp3":               takeLowQuality,
 		"M83_-_Reunion_(low_quality).mp3":               takeLowQuality,
+		"M83 - Lune (pause fade).mp3":                   takePauseFade,
+		"M83_-_Lune_(pause_fade)_2.mp3":                 takePauseFade,
 		"M83 - Wait (partial) 2.flac":                   takePartial,
 		"004 M83 - Wait (Partial).m4a":                  takePartial,
 		"Wait (partial) - M83.wav":                      takePartial,
@@ -109,6 +112,7 @@ func TestTakesAreToldApartByTheirName(t *testing.T) {
 		"Partial/M83 - Midnight City.flac":              takeComplete,
 		"M83 - Partial Eclipse.mp3":                     takeComplete,
 		"M83 - Low Quality Dreams (Extended Mix).flac":  takeComplete,
+		"M83 - Pause Fade.flac":                         takeComplete,
 		"M83 - Wait (partial)/M83 - Midnight City.flac": takeComplete,
 	} {
 		if got := takeKind(name); got != want {
@@ -127,6 +131,7 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 		"M83 - Reunion (low quality).mp3",
 		"M83 - Outro.flac",
 		"M83 - Wait (partial) 2.flac",
+		"M83 - Lune (pause fade).mp3",
 	}
 	files := map[string]string{}
 	for _, name := range order {
@@ -139,10 +144,11 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 		want   []string
 		count  string
 	}{
-		{[]string{takeComplete, takePartial, takeLowQuality}, lang.AllFiles, order, fmt.Sprintf(lang.FilesIn, 5, "")},
-		{[]string{takeComplete}, lang.Complete, []string{"M83 - Midnight City.flac", "M83 - Outro.flac"}, fmt.Sprintf(lang.SomeFilesIn, 2, 5, "")},
-		{[]string{takePartial, takeLowQuality}, lang.Partial + ", " + lang.LowQuality, []string{"M83 - Wait (partial).flac", "M83 - Reunion (low quality).mp3", "M83 - Wait (partial) 2.flac"}, fmt.Sprintf(lang.SomeFilesIn, 3, 5, "")},
-		{[]string{takeLowQuality}, lang.LowQuality, []string{"M83 - Reunion (low quality).mp3"}, fmt.Sprintf(lang.SomeFilesIn, 1, 5, "")},
+		{takeKinds, lang.AllFiles, order, fmt.Sprintf(lang.FilesIn, 6, "")},
+		{[]string{takeComplete}, lang.Complete, []string{"M83 - Midnight City.flac", "M83 - Outro.flac"}, fmt.Sprintf(lang.SomeFilesIn, 2, 6, "")},
+		{[]string{takePartial, takeLowQuality}, lang.Partial + ", " + lang.LowQuality, []string{"M83 - Wait (partial).flac", "M83 - Reunion (low quality).mp3", "M83 - Wait (partial) 2.flac"}, fmt.Sprintf(lang.SomeFilesIn, 3, 6, "")},
+		{[]string{takeLowQuality}, lang.LowQuality, []string{"M83 - Reunion (low quality).mp3"}, fmt.Sprintf(lang.SomeFilesIn, 1, 6, "")},
+		{[]string{takePauseFade}, lang.PauseFade, []string{"M83 - Lune (pause fade).mp3"}, fmt.Sprintf(lang.SomeFilesIn, 1, 6, "")},
 	} {
 		tick(lib, c.ticked...)
 		if got := lib.kinds.Selected; got != c.label {
@@ -156,7 +162,7 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 		}
 	}
 	// The filter and the search go together.
-	tick(lib, takePartial, takeLowQuality)
+	tick(lib, takePartial, takeLowQuality, takePauseFade)
 	lib.search.SetText("wait")
 	if got := rowNames(lib); !slices.Equal(got, []string{"M83 - Wait (partial).flac", "M83 - Wait (partial) 2.flac"}) {
 		t.Errorf("the partial takes matching wait: %q", got)
@@ -164,32 +170,32 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	lib.search.SetText("")
 	a.render()
 	shown := texts(lib.list)
-	for _, want := range []string{"Wait", "Wait 2", "Reunion", takePartial, takeLowQuality} {
+	for _, want := range []string{"Wait", "Wait 2", "Reunion", "Lune", takePartial, takeLowQuality, takePauseFade} {
 		if !slices.Contains(shown, want) {
 			t.Errorf("the rows show %q, without %q", shown, want)
 		}
 	}
-	if contains(shown, "(partial)") || contains(shown, "(low quality)") {
+	if contains(shown, "(partial)") || contains(shown, "(low quality)") || contains(shown, "(pause fade)") {
 		t.Errorf("a title keeps its marker: %q", shown)
 	}
-	setCaption(lib.count, pluralFiles(3, 5, "/Users/listener/Music/Spytify"))
+	setCaption(lib.count, pluralFiles(4, 6, "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-partial-takes")
 
 	// Its boxes, in a dropdown that stays open while they are ticked.
-	tick(lib, takeComplete, takePartial, takeLowQuality)
+	tick(lib, takeKinds...)
 	test.Tap(lib.kinds)
 	top := a.win.Canvas().Overlays().Top()
-	if top == nil || !contains(texts(top), takeLowQuality) {
+	if top == nil || !contains(texts(top), takePauseFade) {
 		t.Fatal("the filter shows no boxes")
 	}
 	test.Tap(lib.takes[takeComplete])
 	if a.win.Canvas().Overlays().Top() != top {
 		t.Error("the dropdown closed on the first box")
 	}
-	if got := lib.kinds.Selected; got != lang.Partial+", "+lang.LowQuality || len(lib.rows) != 3 {
+	if got := lib.kinds.Selected; got != lang.Partial+", "+lang.LowQuality+", "+lang.PauseFade || len(lib.rows) != 4 {
 		t.Errorf("Complete unticked in the dropdown: the filter says %q, %d rows", got, len(lib.rows))
 	}
-	setCaption(lib.count, pluralFiles(3, 5, "/Users/listener/Music/Spytify"))
+	setCaption(lib.count, pluralFiles(4, 6, "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-filter")
 	a.win.Canvas().Overlays().Remove(top)
 
@@ -258,7 +264,9 @@ func TestTheFilterWorksFromTheKeyboard(t *testing.T) {
 	}{
 		{fyne.KeyDown, takePartial},
 		{fyne.KeyDown, takeLowQuality},
-		{fyne.KeyDown, takeLowQuality},
+		{fyne.KeyDown, takePauseFade},
+		{fyne.KeyDown, takePauseFade},
+		{fyne.KeyUp, takeLowQuality},
 		{fyne.KeyUp, takePartial},
 	} {
 		key(step.key)
@@ -267,7 +275,7 @@ func TestTheFilterWorksFromTheKeyboard(t *testing.T) {
 		}
 	}
 	space()
-	if lib.takes[takePartial].Checked || lib.kinds.Selected != takeComplete+", "+takeLowQuality || len(lib.rows) != 1 {
+	if lib.takes[takePartial].Checked || lib.kinds.Selected != takeComplete+", "+takeLowQuality+", "+takePauseFade || len(lib.rows) != 1 {
 		t.Errorf("Space on Partial: ticked %v, the filter says %q, %d rows", lib.takes[takePartial].Checked, lib.kinds.Selected, len(lib.rows))
 	}
 

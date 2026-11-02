@@ -74,11 +74,6 @@ const (
 	// under 44.1 kHz or in mono, as from a Bluetooth headset in a call. It
 	// can still be saved with track.keep.
 	SkipLowQuality SkipReason = "low_quality"
-	// SkipPaused is a track paused and resumed mid-take. The pause is cut
-	// out, but the player fades out before it and in after it, and the two
-	// fades meet where it was, a dip that is heard. It can still be saved
-	// with track.keep.
-	SkipPaused SkipReason = "paused"
 )
 
 // Player transport commands accepted by player.control.
@@ -261,6 +256,11 @@ type TrackFinishedEvent struct {
 	// Partial is a take saved with track.keep: only the part that played,
 	// or all of one recorded in low quality.
 	Partial bool `json:"partial,omitempty"`
+	// PauseFade is a take paused mid-track whose player faded out before
+	// the pause and in after it: the pause is cut out, but the two fades
+	// meet where it was, a dip that is heard. Its name ends in
+	// " (pause fade)".
+	PauseFade bool `json:"pause_fade,omitempty"`
 }
 
 // FinishTimings are the steps between the end of a track and its file.
@@ -279,9 +279,9 @@ type TrackSkippedEvent struct {
 }
 
 // TrackKeepableEvent says whether a skipped take can still be saved with
-// track.keep. Only the last take cut short, stopped, paused, moved along its
-// track bar or recorded in low quality can: its audio is let go once
-// another track is saved.
+// track.keep. Only the last take cut short, stopped, moved along its track
+// bar or recorded in low quality can: its audio is let go once another
+// track is saved.
 type TrackKeepableEvent struct {
 	ID       string `json:"id"`
 	Keepable bool   `json:"keepable"`

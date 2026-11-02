@@ -18,9 +18,7 @@
     4650ms  state paused
     5850ms  > player Playing pos=3850 (ring at 191835)
     5850ms  state recording
-    5860ms  log info: "Track A": paused mid-track, so the player's fades around the pause are in the take; it is not saved
-    5860ms  skipped t-001 paused
-    5860ms  take t-001 "Track A" start=22058(500.18ms) length=176400(4000ms) reason=paused
+    6150ms  log debug: "Track A": a pause was cut out at 4350 ms, -100 dB under the music
     6500ms  > player TrackChanged "Track B" id=/com/fake/track/2 length=3000ms pos=0 (ring at 220500)
     6500ms  log debug: cut for "Track B" at 4500 ms (kind 1, noticed at 5000 ms, window 4200..4802 ms)
     6500ms  started t-002 "Track B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
@@ -31,6 +29,6 @@
    10500ms  state idle
    10500ms  take none
 --- jobs
-job t-001 "Track A" played=176391(3999.8ms) length=176400(4000ms) wav=176391 crc=80bab7df rejected=paused
+job t-001 "Track A" played=176391(3999.8ms) length=176400(4000ms) wav=176391 crc=80bab7df
 job t-002 "Track B" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=44925533
---- end: idle, 1 skipped, 0 ads, 0 overruns
+--- end: idle, 0 skipped, 0 ads, 0 overruns

@@ -99,11 +99,11 @@ const (
 	SkippedFor       = "Skipped: %s"
 	SavedLowQuality  = "Saved: low quality"
 	SavedPartial     = "Saved: partial"
+	SavedPauseFade   = "Saved: pause fade"
 	ReasonTooShort   = "too short"
 	ReasonIncomplete = "incomplete"
 	ReasonSeeked     = "track bar moved"
 	ReasonLowQuality = "low quality"
-	ReasonPaused     = "paused mid-track"
 )
 
 // The Library: its search, whose ✕ Settings' search shares, its sorts, the
@@ -118,14 +118,15 @@ const (
 	Complete        = "Complete"
 	Partial         = "Partial"
 	LowQuality      = "Low quality"
+	PauseFade       = "Pause fade"
 	NoFiles         = "No files"
 	Rescan          = "Rescan"
 	AllFiles        = "All files"
 	NoRecordingsYet = "No recordings yet"
 	LibraryEmpty    = "Recorded tracks land in %s."
 	TickAKind       = "Tick a kind of file to show."
-	NoTakesYet      = "None yet: Keep anyway saves a take cut short or in low quality."
-	OnlyTakes       = "Every file here is a take cut short or in low quality."
+	NoTakesYet      = "None yet: Keep anyway saves takes cut short or in low quality; takes with a pause fade are marked."
+	OnlyTakes       = "Every file here is a take cut short, in low quality or with a pause fade."
 	NothingMatches  = `Nothing matches "%s".`
 	OneFile         = "1 file"
 	Files           = "%d files"

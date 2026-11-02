@@ -712,27 +712,20 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	}
 }
 
-// A take paused mid-track says so on the card while it plays, then offers
-// Keep anyway in the list.
-func TestRecordScreenSaysATakeWasPaused(t *testing.T) {
+// A take saved with the player's fades around a pause in it says so in the
+// list.
+func TestRecordScreenSaysATakeHasAPauseFade(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	// s-004 is the track playing.
-	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipPaused}))
-	a.render()
-	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.StateNotRecorded, lang.ReasonPaused)) {
-		t.Errorf("the card does not say why: %v", all)
-	}
-	snapshot(t, a, "record-paused-playing")
-
+	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-004", Path: "/Users/listener/Music/Spytify/M83/Midnight City (pause fade).flac", DurationMs: 243000, Bytes: 31_400_000, Tagged: true, TaggedBy: "lastfm", PauseFade: true}))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
-	m.Apply(event(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "s-004", Keepable: true}))
 	a.render()
 	a.screens[tabRecord].(*recordScreen).list.ScrollToBottom()
-	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.SkippedFor, lang.ReasonPaused)) || !contains(all, lang.KeepAnyway) {
-		t.Errorf("no Keep anyway on the take: %v", all)
+	if all := texts(a.win.Content()); !contains(all, lang.SavedPauseFade) {
+		t.Errorf("the take does not say it has a pause fade: %v", all)
 	}
-	snapshot(t, a, "record-paused-keep")
+	snapshot(t, a, "record-pause-fade")
 }
 
 func TestWaitingOffersToRestartTheTrack(t *testing.T) {
