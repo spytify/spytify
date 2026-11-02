@@ -9,9 +9,12 @@
 
 **Records an application's audio, splits it into tracks and tags them.**
 
-![Spytify recording a session: the current track with its progress and level, and the files already saved](assets/recording.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/recording-dark.png">
+  <img alt="Spytify recording a session: the current track on its cover's colours with its progress, and the files already saved" src="assets/recording.png">
+</picture>
 
-Spytify records the sound one application plays, nothing else, and saves each track as its own file, cut at the right sample and tagged with the title, artist, album and cover the application reports. It runs on Linux and macOS 14.2 or later; a first Windows build is being tested.
+Spytify records the sound one application plays, nothing else, and saves each track as its own file, cut at the right sample and tagged with the title, artist, album and cover the application reports. It runs on Linux, macOS 14.2 or later and Windows 10 version 2004 or later.
 
 **[Download](https://github.com/spytify/spytify/releases)** · [Install](https://spytify.github.io/spytify/v2/install.html) · [Documentation](https://spytify.github.io/spytify/v2/overview.html) · [FAQ](https://spytify.github.io/spytify/v2/faq.html)
 
