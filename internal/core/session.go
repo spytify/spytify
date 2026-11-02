@@ -47,12 +47,12 @@ const (
 	dipDB = 15
 	// Silence this long while paused is the pause, not a quiet note.
 	pauseRunMs = 20
-	// Where a pause was cut out, the 10 ms on each side of the cut this
-	// many dB under the music seamSideMs away on that side are the player's
-	// fades. In a real take its five fades measured 31 to 36 dB at the cut;
-	// a cut with no fade measures under 5.
+	// Where a pause was cut out, the 10 ms on each side of the cut are
+	// measured against the music this far away on that side; the dip that
+	// makes the player's fades is recorder.pause_fade_db. In a real take
+	// its five fades measured 31 to 36 dB at the cut; a cut with no fade
+	// measures under 5.
 	seamSideMs = 300
-	fadeDipDB  = 20
 	// After a skip, the next track starts where the peak level of 1 ms
 	// windows drops this far under its median.
 	skipDipDB = 20
@@ -1048,10 +1048,11 @@ func (s *Session) checkSeam() {
 	}
 	s.seam = 0
 	c := s.cur
-	if c == nil || c.ghost || c.provisional || c.awaitStart || c.reason != "" || s.pend != nil || at-s.ms(seamSideMs) < c.start {
+	limit := s.deps.values().Float(settings.RecorderPauseFadeDb)
+	if limit <= 0 || c == nil || c.ghost || c.provisional || c.awaitStart || c.reason != "" || s.pend != nil || at-s.ms(seamSideMs) < c.start {
 		return
 	}
-	dip, faded := fadedSeam(s.ring, at)
+	dip, faded := fadedSeam(s.ring, at, limit)
 	if !faded {
 		s.deps.log.Debugf("%q: a pause was cut out at %d ms, %.0f dB under the music", c.info.Title, s.ring.Format().MsFromFrames(at), dip)
 		return

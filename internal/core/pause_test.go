@@ -160,7 +160,7 @@ func TestFadedSeam(t *testing.T) {
 			for _, a := range c.audio {
 				r.Append(a)
 			}
-			if dip, faded := fadedSeam(r, f.FramesFromMs(c.seam)); faded != c.faded {
+			if dip, faded := fadedSeam(r, f.FramesFromMs(c.seam), 20); faded != c.faded {
 				t.Fatalf("faded %v (%.1f dB under the music), want %v", faded, dip, c.faded)
 			}
 		})

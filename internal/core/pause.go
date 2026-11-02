@@ -91,10 +91,10 @@ func (p *pauseExcision) excise(f pcm.Format, data []byte, r *Ring, floor func() 
 
 // fadedSeam reports whether the audio falls into seam, where a pause was
 // cut out, and rises out of it, as a player's fade-out and fade-in do: the
-// 10 ms on each side of the cut are fadeDipDB or more under the music on
+// 10 ms on each side of the cut are limitDB or more under the music on
 // that side, seamSideMs away. The ring must still hold that much on each
 // side.
-func fadedSeam(r *Ring, seam int64) (dipDB float64, faded bool) {
+func fadedSeam(r *Ring, seam int64, limitDB float64) (dipDB float64, faded bool) {
 	ms := r.Format().FramesFromMs
 	side, win := ms(seamSideMs), ms(10)
 	if seam-side < r.Start() || seam+side > r.End() {
@@ -103,5 +103,5 @@ func fadedSeam(r *Ring, seam int64) (dipDB float64, faded bool) {
 	out := r.MedianRMS(seam-side, seam-side/2, win) - r.RMS(seam-win, seam)
 	in := r.MedianRMS(seam+side/2, seam+side, win) - r.RMS(seam, seam+win)
 	dipDB = min(out, in)
-	return dipDB, dipDB >= fadeDipDB
+	return dipDB, dipDB >= limitDB
 }
