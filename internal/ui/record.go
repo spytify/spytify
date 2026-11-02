@@ -434,11 +434,10 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 		r.progress.SetValue(0)
 		setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds()))
 	}
-	v := (level.RMSDBFS + 60) / 60
-	if v < 0 || session != proto.StateRecording {
-		v = 0
+	// The meter shows only while recording.
+	if session == proto.StateRecording {
+		r.meter.SetLevel(level.RMSDBFS)
 	}
-	r.meter.SetLevel(v)
 }
 
 // relayout lays the screen out again when a part appeared or went away, or

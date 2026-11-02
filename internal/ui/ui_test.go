@@ -1520,7 +1520,7 @@ func TestTheMeterWaitsUnderADialog(t *testing.T) {
 	a.render()
 	meter := a.screens[tabRecord].(*recordScreen).meter
 	before := meter.lit
-	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -3}))
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -30}))
 	d := dialog.NewInformation("A dialog", "covering the meter", a.win)
 	d.Show()
 	a.renderLevel()
