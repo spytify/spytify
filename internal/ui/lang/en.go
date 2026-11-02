@@ -102,10 +102,11 @@ const (
 	ReasonLowQuality = "low quality"
 )
 
-// The Library: its sorts, the kinds of file its filter ticks, and what it
-// says when it shows nothing.
+// The Library: its search, whose ✕ Settings' search shares, its sorts, the
+// kinds of file its filter ticks, and what it says when it shows nothing.
 const (
 	SearchLibrary   = "Search artist, title or album"
+	ClearSearch     = "Clear the search"
 	Newest          = "Newest"
 	Name            = "Name"
 	Album           = "Album"

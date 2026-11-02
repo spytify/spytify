@@ -113,7 +113,7 @@ func focusName(a *App, f fyne.Focusable) string {
 	case *button:
 		return icon(&w.Button)
 	case *litButton:
-		return icon(&w.Button)
+		return icon(&w.Button.Button)
 	case *toggle:
 		return setting(w)
 	case *tabKeys:

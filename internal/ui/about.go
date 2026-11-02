@@ -37,7 +37,10 @@ func newAboutScreen(a *App) *aboutScreen {
 	legal := widget.NewLabelWithStyle(lang.Disclaimer, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	legal.Wrapping = fyne.TextWrapWord
 	legal.SizeName = theme.SizeNameCaptionText
+	// The spacers above and below share what room is left, so the content
+	// stays in the middle, the disclaimer at the bottom.
 	s.root = plain(container.NewCenter(container.NewGridWrap(fyne.NewSize(520, 420), container.NewVBox(
+		layout.NewSpacer(),
 		container.NewCenter(logo),
 		tagline,
 		container.NewCenter(s.versions),

@@ -39,7 +39,7 @@ type libraryFile struct {
 type libraryScreen struct {
 	app    *App
 	root   fyne.CanvasObject
-	search *widget.Entry
+	search *keyEntry
 	sortBy *widget.Select
 	list   *cardList
 	count  *widget.RichText
@@ -98,9 +98,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	}
 	l.covers = newCovers(loaded)
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
-	l.search = widget.NewEntry()
-	l.search.SetPlaceHolder(lang.SearchLibrary)
-	l.search.OnChanged = func(string) { l.filter() }
+	l.search = newSearch(a, lang.SearchLibrary, func(string) { l.filter() })
 	l.sortBy = widget.NewSelect([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
 	// Keep anyway saves a take cut short or in low quality: the filter hides
 	// those files, or shows them alone to clean them up, a box per kind of
@@ -181,8 +179,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 	)
 	// SetSelected runs the callback, which needs the list and the count.
 	l.sortBy.SetSelected(lang.Newest)
-	// The search and the sort are white fields on the page, as in Settings.
-	top := container.NewThemeOverride(container.NewBorder(nil, nil, nil, container.NewHBox(l.sortBy, l.kinds), l.search), cardTheme{input: colorCard})
+	// The search and the two dropdowns, as wide as each other, are square
+	// white fields on the page, as in Settings.
+	top := squareFields(container.NewBorder(nil, nil, nil, container.NewGridWithColumns(2, l.sortBy, l.kinds), l.search))
 	// The files from one side of the window to the other, their count and
 	// folder at the bottom, as the Record screen's session.
 	l.root = inReadingOrder(inset(top), footerBar(l.count, container.NewHBox(rescan, openFolder)), nil, nil, container.NewStack(l.list, l.empty))

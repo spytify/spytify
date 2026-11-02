@@ -2,7 +2,6 @@ package ui
 
 import (
 	"image/color"
-	"math"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -124,8 +123,17 @@ type levelMeter struct {
 	color fyne.ThemeColorName
 }
 
-// levelHeights are the meter's bars, shortest first.
-var levelHeights = []float32{5, 7, 9, 11, 12}
+// levelSteps are the RMS levels, in dBFS over the tenth of a second the
+// recorder measures, from which each bar after the first lights: the first
+// alone is silence or close to it, two classical music, three to five a
+// song's vocals and guitars, all six loud rock. Recorded songs, which the
+// player brings to a like loudness, spend most of their time from -21 to
+// -14.
+var levelSteps = []float64{-40, -27, -21, -18, -15}
+
+// levelHeights are the meter's bars, shortest first: a stub for level 0,
+// then one per step.
+var levelHeights = []float32{2, 4, 6, 8, 10, 12}
 
 func newLevelMeter(color fyne.ThemeColorName) *levelMeter {
 	m := &levelMeter{color: color}
@@ -133,11 +141,16 @@ func newLevelMeter(color fyne.ThemeColorName) *levelMeter {
 	return m
 }
 
-// SetLevel lights the bars up to v, from 0 to 1. The level comes ten times
-// a second: the meter is drawn again only when another bar lights or goes
-// out.
-func (m *levelMeter) SetLevel(v float64) {
-	lit := int(math.Round(max(0, min(1, v)) * float64(len(levelHeights))))
+// SetLevel lights the bars for an RMS level in dBFS: the stub, then one
+// more for each step reached. The level comes ten times a second: the meter
+// is drawn again only when another bar lights or goes out.
+func (m *levelMeter) SetLevel(rmsDBFS float64) {
+	lit := 1
+	for _, step := range levelSteps {
+		if rmsDBFS >= step {
+			lit++
+		}
+	}
 	if lit == m.lit {
 		return
 	}
