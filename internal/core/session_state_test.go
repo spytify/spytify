@@ -239,13 +239,37 @@ func TestPinnedStarts(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		}},
-		// Today's behavior, which looks odd: Play names no track, so A is
-		// not recorded, and B, named with no take open, starts at the
-		// first sound in the second before its notice: A's last 500 ms.
+		// Play names no track: the one the stopped player showed is
+		// recorded from its first sound, and B is cut at the end of A.
 		"session-starts-on-a-stopped-player-with-a-track": {endOnStop, nil, func(r *rig) {
 			r.track(trackA, 0)
 			r.status(meta.Stopped)
 			r.quiet(300)
+			r.status(meta.Playing)
+			r.sound(1, 3000)
+			r.quiet(500)
+			r.track(trackB, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		}},
+		// B is chosen before Play: A is not recorded, B is.
+		"session-starts-on-a-stopped-player-then-another-track": {endOnStop, nil, func(r *rig) {
+			r.track(trackA, 0)
+			r.status(meta.Stopped)
+			r.quiet(300)
+			r.track(trackB, 0)
+			r.status(meta.Playing)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		}},
+		// Play names A again: one take of A.
+		"session-starts-on-a-stopped-player-named-again-on-play": {endOnStop, nil, func(r *rig) {
+			r.track(trackA, 0)
+			r.status(meta.Stopped)
+			r.quiet(300)
+			r.track(trackA, 0)
 			r.status(meta.Playing)
 			r.sound(1, 3000)
 			r.quiet(500)
