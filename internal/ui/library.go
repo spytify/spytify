@@ -251,6 +251,11 @@ func (l *libraryScreen) scan() {
 	go func() {
 		files := scanAudio(dir)
 		fyne.Do(func() {
+			// The output folder changed while this one was read: the read
+			// of the new one fills the list.
+			if dir != l.folder {
+				return
+			}
 			l.all = files
 			l.filter()
 		})
