@@ -423,10 +423,11 @@ func (r *recordScreen) render(s model.State) {
 			r.session.Hide()
 			return
 		}
-		title, text := lang.ReadyToRecord, fmt.Sprintf(lang.ReadyText, player, r.folder)
+		folder := settings.ShortHome(r.folder)
+		title, text := lang.ReadyToRecord, fmt.Sprintf(lang.ReadyText, player, folder)
 		blocked := checkFails(s.Info.Checks, proto.CheckOutputWritable)
 		if blocked {
-			title, text = lang.RecordIsOff, fmt.Sprintf(lang.RecordIsOffText, r.folder)
+			title, text = lang.RecordIsOff, fmt.Sprintf(lang.RecordIsOffText, folder)
 		}
 		setLabel(r.idleTitle, title)
 		setLabel(r.idleText, text)

@@ -251,6 +251,11 @@ func (l *libraryScreen) scan() {
 	go func() {
 		files := scanAudio(dir)
 		fyne.Do(func() {
+			// The output folder changed while this one was read: the read
+			// of the new one fills the list.
+			if dir != l.folder {
+				return
+			}
 			l.all = files
 			l.filter()
 		})
@@ -319,11 +324,12 @@ func (l *libraryScreen) filter() {
 		l.kinds.Selected = label
 		l.kinds.Refresh()
 	}
-	setCaption(l.count, pluralFiles(len(shown), len(l.all), l.folder))
+	folder := settings.ShortHome(l.folder)
+	setCaption(l.count, pluralFiles(len(shown), len(l.all), folder))
 	l.list.Refresh()
 	switch {
 	case len(l.all) == 0:
-		l.hint.SetText(fmt.Sprintf(lang.LibraryEmpty, l.folder))
+		l.hint.SetText(fmt.Sprintf(lang.LibraryEmpty, folder))
 		l.empty.Show()
 	case len(shown) == 0 && q == "" && !slices.ContainsFunc(takeKinds, func(k string) bool { return l.takes[k].Checked }):
 		l.hint.SetText(lang.TickAKind)
