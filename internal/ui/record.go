@@ -263,7 +263,8 @@ func newRecordScreen(a *App) *recordScreen {
 			} else {
 				keep.Hide()
 			}
-			if row.Path != "" && row.Status == model.Saved {
+			// A track already recorded has its file from before.
+			if row.Path != "" {
 				path := row.Path
 				revealBtn.OnTapped = func() { a.noteAction("show a track in its folder"); _ = reveal(path) }
 				playBtn.OnTapped = func() { a.noteAction("play a track"); _ = openPath(path) }
@@ -323,7 +324,7 @@ func rowDetails(r model.Row) string {
 	if ms := rowLength(r); ms > 0 {
 		parts = append(parts, fmtDuration(ms))
 	}
-	if r.Path != "" {
+	if r.Path != "" && r.Status == model.Saved {
 		parts = append(parts, strings.ToUpper(strings.TrimPrefix(filepath.Ext(r.Path), ".")))
 	}
 	if r.Bytes > 0 {

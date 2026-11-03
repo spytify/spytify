@@ -282,6 +282,11 @@ type FinishTimings struct {
 type TrackSkippedEvent struct {
 	ID     string     `json:"id"`
 	Reason SkipReason `json:"reason"`
+	// Path is the file a track skipped as already recorded has. While
+	// that file is being saved by a take of this session, Of is that
+	// take's ID instead, and its track.finished names the file.
+	Path string `json:"path,omitempty"`
+	Of   string `json:"of,omitempty"`
 }
 
 // TrackKeepableEvent says whether a skipped take can still be saved with

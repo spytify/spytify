@@ -91,6 +91,9 @@ type segment struct {
 	drained int64
 	w       *pcm.WAVWriter
 	reason  proto.SkipReason
+	// recorded is where the file of a track skipped as already recorded
+	// is.
+	recorded recordedFile
 	// soundAt is the first frame above silence at or after start, or -1.
 	// A player that leaves a gap between items starts the item there; a
 	// player that streams items back to back starts it at start. The next
@@ -872,19 +875,21 @@ func (s *Session) newSegment(info meta.TrackInfo, start int64) *segment {
 // classify decides whether a segment is recorded, and opens its temp file.
 func (s *Session) classify(seg *segment) {
 	v := s.deps.values()
-	seg.reason = ""
+	seg.reason, seg.recorded = "", recordedFile{}
 	short := v.Int(settings.RecorderSkipShortUntitled)
 	if seg.info.IsAdvert() || (short > 0 && seg.info.LengthMs > 0 && seg.info.LengthMs < short*1000 && seg.info.Album == "") {
 		seg.reason = proto.SkipAd
 	}
-	if seg.reason == "" && v.String(settings.RecorderDuplicates) == "skip" && s.deps.fin.recorded(seg.info, v) {
-		seg.reason = proto.SkipDuplicate
-		if v.Bool(settings.RecorderSkipDuplicatesForward) {
-			go func() {
-				if err := s.deps.control(proto.CmdNext); err != nil {
-					s.deps.log.Infof("skip to next: %v", err)
-				}
-			}()
+	if seg.reason == "" && v.String(settings.RecorderDuplicates) == "skip" {
+		if f, ok := s.deps.fin.find(seg.info, v); ok {
+			seg.reason, seg.recorded = proto.SkipDuplicate, f
+			if v.Bool(settings.RecorderSkipDuplicatesForward) {
+				go func() {
+					if err := s.deps.control(proto.CmdNext); err != nil {
+						s.deps.log.Infof("skip to next: %v", err)
+					}
+				}()
+			}
 		}
 	}
 	if seg.reason == "" && !seg.ghost && !seg.provisional {
@@ -946,8 +951,10 @@ func (s *Session) announce(seg *segment) {
 	}
 	s.deps.emit(proto.EventTrackStarted, ev)
 	switch seg.reason {
-	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
+	case proto.SkipAd, proto.SkipSeeked:
 		s.deps.fin.skip(seg.id, seg.reason)
+	case proto.SkipDuplicate:
+		s.deps.fin.skipped(proto.TrackSkippedEvent{ID: seg.id, Reason: seg.reason, Path: seg.recorded.path, Of: seg.recorded.of})
 	}
 }
 

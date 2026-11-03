@@ -227,13 +227,14 @@ func TestRecorded(t *testing.T) {
 	root := t.TempDir()
 	o := opts()
 	p := Build(base, o)
-	if Recorded(root, p, o) {
+	if _, ok := Recorded(root, p, o); ok {
 		t.Fatal("found in an empty folder")
 	}
-	if err := os.WriteFile(filepath.Join(root, "007 Artist - Title - Live.mp3"), []byte{1}, 0o600); err != nil {
+	file := filepath.Join(root, "007 Artist - Title - Live.mp3")
+	if err := os.WriteFile(file, []byte{1}, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if !Recorded(root, p, o) {
-		t.Fatal("counter-prefixed copy not found")
+	if got, ok := Recorded(root, p, o); !ok || got != file {
+		t.Fatalf("counter-prefixed copy: %q, %v, want %q", got, ok, file)
 	}
 }

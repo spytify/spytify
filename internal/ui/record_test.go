@@ -283,6 +283,46 @@ func TestRecordScreenSaysATakeHasAPauseFade(t *testing.T) {
 	snapshot(t, a, "record-pause-fade")
 }
 
+// A track skipped as already recorded shows and plays the file it has,
+// which the recorder names; its details stay its length.
+func TestAnAlreadyRecordedRowShowsAndPlaysItsFile(t *testing.T) {
+	var revealed, played []string
+	defer func(r, o func(string) error) { reveal, openPath = r, o }(reveal, openPath)
+	reveal = func(p string) error { revealed = append(revealed, p); return nil }
+	openPath = func(p string) error { played = append(played, p); return nil }
+
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	r := a.screens[tabRecord].(*recordScreen)
+	a.render()
+	if n := len(iconButtons(r.list, theme.SearchIcon())); n != 2 {
+		t.Fatalf("%d magnifiers before the recorder names Wait's file, want the 2 saved tracks'", n)
+	}
+	file := "/Users/listener/Music/Spytify/M83/Wait.flac"
+	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-003", Reason: proto.SkipDuplicate, Path: file}))
+	a.render()
+	if got := words(drawnRows(t, r.list)["Wait"].lines); !slices.Equal(got, []string{"Wait", "M83", "2:54"}) {
+		t.Errorf("Wait's row reads %q", got)
+	}
+	search, play := iconButtons(r.list, theme.SearchIcon()), iconButtons(r.list, theme.MediaPlayIcon())
+	if len(search) != 3 || len(play) != 3 {
+		t.Fatalf("%d magnifiers and %d play buttons, want 3 of each", len(search), len(play))
+	}
+	for i := range search {
+		test.Tap(search[i])
+		test.Tap(play[i])
+	}
+	if !slices.Contains(revealed, file) || !slices.Contains(played, file) {
+		t.Errorf("revealed %v and played %v, want %s in both", revealed, played, file)
+	}
+	snapshot(t, a, "record-already-recorded")
+	light := defaults()
+	light["app.theme"] = "light"
+	m.SetSettings(light)
+	a.render()
+	snapshot(t, a, "record-already-recorded-light")
+}
+
 func TestWaitingOffersToRestartTheTrack(t *testing.T) {
 	a, m := connectedTestApp(t, defaults())
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
