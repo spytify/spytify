@@ -1252,8 +1252,19 @@ func (s *Session) formatChange(f pcm.Format) {
 		// stream.
 		s.dropWriter(c)
 		s.ring = saved
+		// Unless the take held sound for longer than the cut's window: the
+		// track was playing, and the stream was recreated for another
+		// reason, such as a call taking the headset. It plays on in the
+		// new stream for what is left of its length, and what the old
+		// stream held is lost from its file.
+		heard := c.soundAt >= 0 && old.End()-c.soundAt > old.Format().FramesFromMs(f.MsFromFrames(s.window))
+		lostMs := int64(0)
+		if heard {
+			lostMs = old.Format().MsFromFrames(old.End() - c.soundAt)
+		}
 		c.format, c.start, c.origin, c.drained, c.soundAt = f, 0, 0, 0, -1
-		c.length = f.FramesFromMs(c.info.LengthMs)
+		c.length = f.FramesFromMs(max(0, c.info.LengthMs-lostMs))
+		c.partial = lostMs > completeToleranceMs
 		c.awaitStart, c.startDeadline = true, s.ms(startTimeoutMs)
 		if c.reason == "" {
 			if w, err := s.tempWAV(c.id, f); err == nil {
