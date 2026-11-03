@@ -780,7 +780,7 @@ func (s *Session) onTrack(info meta.TrackInfo, at int64, restart bool) {
 	if s.pend != nil {
 		s.tryResolve(true)
 	}
-	s.pend = s.plan(s.ring, s.cur, info, at, restart)
+	s.pend = s.plan(s.ring, s.cur, info, at, restart, s.status == meta.Paused)
 }
 
 func maxInt(a, b int64) int64 {
