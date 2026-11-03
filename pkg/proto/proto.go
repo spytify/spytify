@@ -74,6 +74,9 @@ const (
 	// under 44.1 kHz or in mono, as from a Bluetooth headset in a call. It
 	// can still be saved with track.keep.
 	SkipLowQuality SkipReason = "low_quality"
+	// SkipSilent is a track whose take held only silence, as when the
+	// player is muted in its own volume: there is nothing to keep.
+	SkipSilent SkipReason = "silent"
 )
 
 // Player transport commands accepted by player.control.
