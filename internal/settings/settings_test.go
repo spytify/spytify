@@ -349,3 +349,34 @@ func TestHomeRelativePaths(t *testing.T) {
 		}
 	}
 }
+
+// The window writes a path in the home folder from ~, as ExpandHome reads
+// it, and any other path as it is.
+func TestShortHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	sep := string(filepath.Separator)
+	other := filepath.Join(t.TempDir(), "Spytify")
+	for in, want := range map[string]string{
+		home:                           "~",
+		filepath.Join(home, "Spytify"): "~" + sep + "Spytify",
+		filepath.Join(home, "Music", "Spytify") + sep: "~" + sep + filepath.Join("Music", "Spytify"),
+		// A folder beside the home folder, whose name starts the same.
+		home + "-x" + sep + "Spytify": home + "-x" + sep + "Spytify",
+		other:                         other,
+		"":                            "",
+	} {
+		if got := ShortHome(in); got != want {
+			t.Errorf("ShortHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := ShortHome(ExpandHome("~/Spytify")); got != "~"+sep+"Spytify" {
+		t.Errorf("the default folder comes back as %q", got)
+	}
+	if runtime.GOOS == "windows" {
+		if got := ShortHome(strings.ToUpper(home) + `\Spytify`); got != `~\Spytify` {
+			t.Errorf("ShortHome in upper case = %q", got)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -459,6 +460,25 @@ func TestScrubberOutput(t *testing.T) {
 	s.SetOutput(string(filepath.Separator))
 	if got := s.String(dir); got != dir {
 		t.Errorf("String = %q with the root as the output folder", got)
+	}
+}
+
+// The window writes an output folder in the home folder from ~: the
+// folder is left out that way too, and the home folder alone stays ~.
+func TestScrubberOutputFromHome(t *testing.T) {
+	home := t.TempDir()
+	s := &Scrubber{home: []string{home}}
+	s.SetOutput(filepath.Join(home, "Mixtapes"))
+	shown := filepath.Join("~", "Mixtapes")
+	if got, want := s.String(filepath.Join(shown, "a.flac")), filepath.Join("<output>", "a.flac"); got != want {
+		t.Errorf("String = %q, want %q", got, want)
+	}
+	if got, want := s.Spans("land in "+shown+"."), [][2]int{{8, 8 + len(shown)}}; !slices.Equal(got, want) {
+		t.Errorf("Spans = %v, want %v", got, want)
+	}
+	s.SetOutput(home)
+	if got := s.String(filepath.Join("~", "Music")); got != filepath.Join("~", "Music") {
+		t.Errorf("String = %q with the home folder as the output folder", got)
 	}
 }
 
