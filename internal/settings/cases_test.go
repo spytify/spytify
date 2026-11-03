@@ -20,6 +20,7 @@ var cases = map[string][]string{
 	"app.check_updates":                {"internal/ui:TestTheUpdateCheckFollowsTheSetting"},
 	"output.dir":                       {"internal/core:TestOutputFolderGoneStopsTheRecording", "internal/core:TestNoRecordingStartsWithoutAnOutputFolder"},
 	"output.group_by":                  {"internal/core:TestOutputLayoutForEverySetting", "internal/core:TestFlatAndArtistFolders"},
+	"output.playlist":                  {"internal/core:TestASessionWritesItsPlaylist", "internal/ui:TestThePlaylistSwitchIsUnderGroupByFolders"},
 	"output.template":                  {"internal/core:TestOutputPathsOfTheSettingsTimeline"},
 	"output.underscores":               {"internal/core:TestOutputLayoutForEverySetting"},
 	"output.ascii_filenames":           {"internal/core:TestOutputLayoutForEverySetting"},

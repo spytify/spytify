@@ -304,6 +304,9 @@
     },
     "SessionStateEvent": {
       "properties": {
+        "playlist": {
+          "type": "string"
+        },
         "state": {
           "type": "string"
         }

@@ -130,6 +130,8 @@ type sessionDeps struct {
 	// silence tells that the capture hears only silence while the player
 	// plays (true), or sound (false).
 	silence func(on bool)
+	// playlist is the session's playlist file as it ends, "" for none.
+	playlist func() string
 }
 
 // Session turns a stream of frames and now-playing events into track files.
@@ -233,7 +235,11 @@ func (s *Session) setState(st proto.SessionState) {
 			// The player's sound is due from now, not from before the ad.
 			s.lastSound = time.Now()
 		}
-		s.deps.emit(proto.EventSessionState, proto.SessionStateEvent{State: st})
+		ev := proto.SessionStateEvent{State: st}
+		if st == proto.StateIdle && s.deps.playlist != nil {
+			ev.Playlist = s.deps.playlist()
+		}
+		s.deps.emit(proto.EventSessionState, ev)
 		s.muteAds(st)
 	}
 }

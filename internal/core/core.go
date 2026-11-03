@@ -68,6 +68,9 @@ type Core struct {
 	// plays, across sessions until it hears sound: the player heard check
 	// fails.
 	silent atomic.Bool
+	// playlist is the last session's (output.playlist), which keeps
+	// following track.keep until the next session starts.
+	playlist atomic.Pointer[playlist]
 
 	mu       sync.Mutex
 	sess     *Session
@@ -114,6 +117,9 @@ func (c *Core) SetShutdown(fn func()) {
 }
 
 func (c *Core) emit(method string, payload any) {
+	if list := c.playlist.Load(); list != nil {
+		list.observe(payload)
+	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return
@@ -446,7 +452,15 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		return "", proto.Errorf(proto.CodeTargetNotRunning, "capture: %v", err)
 	}
 
-	id := time.Now().Format("20060102-150405")
+	started := time.Now()
+	id := started.Format("20060102-150405")
+	// The playlist follows the session's tracks, and the ones track.keep
+	// saves after it, until the next session.
+	var list *playlist
+	if v := c.store.Values(); v.Bool(settings.OutputPlaylist) {
+		list = newPlaylist(v.Path(settings.OutputDir), started, c.log)
+	}
+	c.playlist.Store(list)
 	fin := c.newFinisher()
 	// Not on the finisher's goroutine: stopping waits for it.
 	fin.full = func() { go func() { _, _ = c.StopSession(true) }() }
@@ -459,6 +473,12 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		mute:         adMuter(np),
 		watchSilence: true,
 		silence:      c.silent.Store,
+		playlist: func() string {
+			if list == nil {
+				return ""
+			}
+			return list.name()
+		},
 	}, opts)
 	restore := c.pinVolume(np)
 	if c.store.Values().Bool(settings.PlayerMuteOutput) && runtime.GOOS == "windows" {
