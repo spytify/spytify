@@ -13,10 +13,12 @@
        0ms  take t-001 "A" start=0(0ms) length=132300(3000ms)
        0ms  > player TrackChanged "C" id=/x/c length=3000ms pos=0 (ring at 0)
        0ms  log debug: cut for "B" at 0 ms (kind 2, noticed at 0 ms, window 0..300 ms)
+       0ms  skipped t-001 incomplete
        0ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=interrupt/silence offset=0ms source=44100/2
        0ms  take t-002 "B" start=0(0ms) length=132300(3000ms)
        0ms  > audio silence, 22050(500ms)
      320ms  log debug: cut for "C" at 0 ms (kind 2, noticed at 0 ms, window 0..300 ms)
+     320ms  skipped t-002 incomplete
      320ms  started t-003 "C" artist="Artist" album="Album" length=3000ms cut=interrupt/silence offset=0ms source=44100/2
      320ms  take t-003 "C" start=0(0ms) length=132300(3000ms)
      500ms  > audio music 3 at 0ms, 132300(3000ms)
@@ -27,7 +29,5 @@
     5000ms  state idle
     5000ms  take none
 --- jobs
-job t-001 "A" played=0(0ms) length=132300(3000ms) wav=0 crc=00000000
-job t-002 "B" played=0(0ms) length=132300(3000ms) wav=0 crc=00000000
 job t-003 "C" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=0130b55d
---- end: idle, 0 skipped, 0 ads, 0 overruns
+--- end: idle, 2 skipped, 0 ads, 0 overruns

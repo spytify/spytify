@@ -1,0 +1,29 @@
+# pausecases/session-starts-paused-at-zero-then-next
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at -)
+       0ms  > player Paused pos=-1 (ring at 0)
+       0ms  state paused
+       0ms  take t-001 "A" start=0(0ms) length=132300(3000ms) awaiting-sound
+       0ms  > audio silence, 22050(500ms)
+     500ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 0)
+     500ms  take none
+     500ms  > audio silence, 22050(500ms)
+    1000ms  > player Playing pos=-1 (ring at 0)
+    1000ms  state waiting
+    1000ms  > audio music 2 at 0ms, 132300(3000ms)
+    1010ms  log debug: cut for "B" at 0 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+    1010ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=0ms source=44100/2
+    1010ms  state recording
+    1010ms  take t-002 "B" start=0(0ms) length=132300(3000ms)
+    4000ms  > audio silence, 66150(1500ms)
+    5500ms  > player Stopped pos=-1 (ring at 198345)
+    5500ms  state waiting
+    5500ms  state stopping
+    5500ms  state idle
+    5500ms  take none
+--- jobs
+job t-002 "B" played=132772(3010.7ms) length=132300(3000ms) wav=132772 crc=2a7321f4
+--- end: idle, 0 skipped, 0 ads, 0 overruns

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/pkg/proto"
@@ -85,8 +86,8 @@ func TestPinnedStops(t *testing.T) {
 			r.track(trackB, 0)
 			r.sound(2, 1000)
 		}},
-		// Today's behavior, which looks odd: the take is held for
-		// track.keep with nothing played but the silence it waited in.
+		// Nothing played but the silence the take waited in: it is said
+		// skipped, and nothing is kept for track.keep.
 		"stop-now-while-awaiting-the-first-sound": {endOnStop, nil, func(r *rig) {
 			r.track(trackA, 100)
 			r.status(meta.Playing)
@@ -238,13 +239,37 @@ func TestPinnedStarts(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		}},
-		// Today's behavior, which looks odd: Play names no track, so A is
-		// not recorded, and B, named with no take open, starts at the
-		// first sound in the second before its notice: A's last 500 ms.
+		// Play names no track: the one the stopped player showed is
+		// recorded from its first sound, and B is cut at the end of A.
 		"session-starts-on-a-stopped-player-with-a-track": {endOnStop, nil, func(r *rig) {
 			r.track(trackA, 0)
 			r.status(meta.Stopped)
 			r.quiet(300)
+			r.status(meta.Playing)
+			r.sound(1, 3000)
+			r.quiet(500)
+			r.track(trackB, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		}},
+		// B is chosen before Play: A is not recorded, B is.
+		"session-starts-on-a-stopped-player-then-another-track": {endOnStop, nil, func(r *rig) {
+			r.track(trackA, 0)
+			r.status(meta.Stopped)
+			r.quiet(300)
+			r.track(trackB, 0)
+			r.status(meta.Playing)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		}},
+		// Play names A again: one take of A.
+		"session-starts-on-a-stopped-player-named-again-on-play": {endOnStop, nil, func(r *rig) {
+			r.track(trackA, 0)
+			r.status(meta.Stopped)
+			r.quiet(300)
+			r.track(trackA, 0)
 			r.status(meta.Playing)
 			r.sound(1, 3000)
 			r.quiet(500)
@@ -603,4 +628,23 @@ func TestPinnedDuplicateSkipsForward(t *testing.T) {
 	thenB(r)
 	r.check("states/duplicate-skips-forward")
 	waitFor(t, func() bool { return len(r.sent()) == 1 && r.sent()[0] == proto.CmdNext }, "player.control next")
+}
+
+// Already recorded and paused at its start when the session begins, a
+// track sends next once it plays: on a paused player, next would start
+// the next track before Play was pressed.
+func TestADuplicatePausedAtItsStartSkipsOnceItPlays(t *testing.T) {
+	r := newRig(t, map[string]any{"recorder.duplicates": "skip", "recorder.skip_duplicates_forward": true}, endOnStop)
+	r.alreadyRecorded("Artist", "A")
+	r.track(info("/x/a", "A", 3000), 0)
+	r.status(meta.Paused)
+	r.quiet(500)
+	time.Sleep(100 * time.Millisecond)
+	if sent := r.sent(); len(sent) != 0 {
+		t.Fatalf("sent %v while the player was paused", sent)
+	}
+	r.status(meta.Playing)
+	r.sound(1, 3000)
+	waitFor(t, func() bool { return len(r.sent()) == 1 && r.sent()[0] == proto.CmdNext }, "player.control next")
+	r.stop(true)
 }
