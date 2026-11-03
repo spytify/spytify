@@ -21,6 +21,7 @@
     4050ms  > player TrackChanged "C" id=/x/c length=3000ms pos=0 (ring at 178605)
     4050ms  > audio music 3 at 0ms, 132300(3000ms)
     4370ms  log debug: cut for "C" at 3500 ms (kind 2, noticed at 4050 ms, window 3500..4350 ms)
+    4370ms  skipped t-002 incomplete
     4370ms  started t-003 "C" artist="Artist" album="Album" length=3000ms cut=interrupt/silence offset=-550ms source=44100/2
     4370ms  take t-003 "C" start=154350(3500ms) length=132300(3000ms)
     7050ms  > audio silence, 66150(1500ms)
@@ -31,6 +32,5 @@
     8550ms  take none
 --- jobs
 job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060
-job t-002 "B" played=0(0ms) length=132300(3000ms) wav=0 crc=00000000
 job t-003 "C" played=157082(3561.95ms) length=132300(3000ms) wav=157082 crc=765c1f36
---- end: idle, 0 skipped, 0 ads, 0 overruns
+--- end: idle, 1 skipped, 0 ads, 0 overruns

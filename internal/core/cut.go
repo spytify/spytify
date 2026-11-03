@@ -50,16 +50,22 @@ type cutFinder struct {
 }
 
 // plan places the search window for a track change noticed at sample at,
-// c being the take it ends, if any.
-func (cf *cutFinder) plan(r *Ring, c *segment, info meta.TrackInfo, at int64, restart bool) *change {
+// c being the take it ends, if any. A playing player may name the next
+// track up to earlySlackMs before the take's end; a paused one stopped
+// where it was, so a change it names short of the end is a skip.
+func (cf *cutFinder) plan(r *Ring, c *segment, info meta.TrackInfo, at int64, restart, paused bool) *change {
 	ms := r.Format().FramesFromMs
 	ch := &change{info: info, at: at, restart: restart}
+	slack := ms(earlySlackMs)
+	if paused {
+		slack = 0
+	}
 	switch {
 	case c == nil:
 		ch.kind = changeFirst
 		ch.lo = at - ms(lateNotifyMs)
 		ch.expected = at
-	case c.length > 0 && at >= c.origin+c.length-cf.window-ms(earlySlackMs):
+	case c.length > 0 && at >= c.origin+c.length-cf.window-slack:
 		// At its end, the same item again is a new take (repeat), and the
 		// one before it is complete.
 		ch.restart = false
