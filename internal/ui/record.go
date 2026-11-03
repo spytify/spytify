@@ -588,8 +588,9 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 		r.progress.SetValue(0)
 		setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds()))
 	}
-	// The meter moves only while recording: paused or stopped, it is out.
-	if session == proto.StateRecording {
+	// The meter moves only while recording, the track a stop waits for
+	// included: paused, stopped or with the take dropped, it is out.
+	if session == proto.StateRecording || session == proto.StateStopping && c.Status != model.Skipped {
 		r.meter.SetLevel(level)
 	} else {
 		r.meter.Clear()

@@ -150,6 +150,28 @@ func TestAPausedTrackHasTheInfoBarAboveItsCard(t *testing.T) {
 	}
 }
 
+// Stop pressed mid-track: the track plays to its end and is recorded to it,
+// its badge saying so and its meter moving. A stop now drops the take, and
+// the meter goes out.
+func TestTheMeterMovesWhileAStopWaitsForTheTrack(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateStopping}))
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{RMSDBFS: -12}))
+	a.render()
+	r := a.screens[tabRecord].(*recordScreen)
+	if r.state.text != lang.StateStopping || r.meter.lit == [2]float32{} {
+		t.Errorf("stop pending: badge %q, meter lit %v", r.state.text, r.meter.lit)
+	}
+	snapshot(t, a, "record-stopping")
+
+	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipIncomplete}))
+	a.render()
+	if r.meter.lit != [2]float32{} {
+		t.Errorf("take dropped: meter lit %v", r.meter.lit)
+	}
+}
+
 // A finished track's row has its title, its artist, then its length, format
 // and size, each on a line of its own and in a style of its own; a track with
 // no artist has two lines, centred in a row as tall as the others. At the

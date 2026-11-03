@@ -508,7 +508,8 @@ func (s *Session) meter(peaks, rms []float64, frames int) {
 	if time.Since(s.lastLevel) < 100*time.Millisecond {
 		return
 	}
-	if st := s.state(); st == proto.StateRecording && s.count > 0 {
+	// A stop that waits for the track's end still records it.
+	if st := s.state(); (st == proto.StateRecording || st == proto.StateStopping) && s.count > 0 {
 		e := proto.LevelEvent{PeakDBFS: pcm.Silence}
 		var sum float64
 		for c := range s.peak {
