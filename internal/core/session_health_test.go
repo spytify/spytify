@@ -498,7 +498,9 @@ func TestPinnedSkipForwardFailure(t *testing.T) {
 	r := bareRig(t, map[string]any{"recorder.duplicates": "skip", "recorder.skip_duplicates_forward": true}, endOnStop)
 	r.alreadyRecorded("Artist", "A")
 	r.s.deps.control = func(string) error { return errors.New("not now") }
-	r.s.classify(&segment{info: trackA, format: f44})
+	seg := &segment{info: trackA, format: f44}
+	r.s.classify(seg)
+	r.s.announce(seg)
 	waitFor(t, func() bool { return slices.Contains(r.lines(), "log info: skip to next: not now") }, "log of the refused skip")
 }
 

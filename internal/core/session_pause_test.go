@@ -172,8 +172,9 @@ func TestPinnedPauseCases(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		},
-		// Today's behavior, which looks odd: a track at 0 but paused is
-		// taken for one already playing, and is not recorded.
+		// A track at 0 but paused, as a player opened with a track loaded:
+		// Record, then Play, records it from its start. It is announced
+		// once it plays.
 		"session-starts-paused-at-zero": func(r *rig) {
 			r.track(a, 0)
 			r.status(meta.Paused)
@@ -185,6 +186,39 @@ func TestPinnedPauseCases(t *testing.T) {
 			r.sound(2, 3000)
 			r.quiet(1500)
 			r.status(meta.Stopped)
+		},
+		// The same, Play pressed 10 s later: the pause is not in A.
+		"session-starts-paused-at-zero-for-10s": func(r *rig) {
+			r.track(a, 0)
+			r.status(meta.Paused)
+			r.quiet(10000)
+			r.status(meta.Playing)
+			r.sound(1, 3000)
+			r.quiet(500)
+			r.track(b, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// Next pressed before A ever played: A leaves no take, and B is
+		// recorded from its first sound.
+		"session-starts-paused-at-zero-then-next": func(r *rig) {
+			r.track(a, 0)
+			r.status(meta.Paused)
+			r.quiet(500)
+			r.track(b, 0)
+			r.quiet(500)
+			r.status(meta.Playing)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// Stop before A ever played: nothing is announced or skipped.
+		"session-starts-paused-at-zero-then-stop": func(r *rig) {
+			r.track(a, 0)
+			r.status(meta.Paused)
+			r.quiet(500)
+			r.stop(true)
 		},
 		// Paused before the first track's first sound, while its start is
 		// still searched.

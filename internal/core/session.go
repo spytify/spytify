@@ -531,6 +531,7 @@ func (s *Session) makeRoom(n int64) {
 		}
 		if c.awaitStart {
 			c.awaitStart = false
+			s.announce(c)
 		}
 		if c.length > 0 && need > c.start+c.length-s.window {
 			if !s.warnedLen {
@@ -766,6 +767,12 @@ func (s *Session) onTrack(info meta.TrackInfo, at int64, restart bool) {
 		s.adopt(c, info)
 		return
 	}
+	// Another track before the one paused at its start ever played: that
+	// one leaves no take, and this one starts as the session's first.
+	if c := s.cur; c != nil && !c.announced && !c.ghost {
+		s.dropWriter(c)
+		s.cur = nil
+	}
 	if s.pend != nil {
 		s.tryResolve(true)
 	}
@@ -850,6 +857,7 @@ func (s *Session) tryStart(c *segment, force bool) {
 	}
 	s.deps.log.Debugf("%q starts at its first sound, %d ms", c.info.Title, s.ring.Format().MsFromFrames(at))
 	c.start, c.drained, c.awaitStart, c.soundAt = at, at, false, -1
+	s.announce(c)
 }
 
 func (s *Session) newSegment(info meta.TrackInfo, start int64) *segment {
@@ -879,13 +887,6 @@ func (s *Session) classify(seg *segment) {
 	}
 	if seg.reason == "" && v.String(settings.RecorderDuplicates) == "skip" && s.deps.fin.recorded(seg.info, v) {
 		seg.reason = proto.SkipDuplicate
-		if v.Bool(settings.RecorderSkipDuplicatesForward) {
-			go func() {
-				if err := s.deps.control(proto.CmdNext); err != nil {
-					s.deps.log.Infof("skip to next: %v", err)
-				}
-			}()
-		}
 	}
 	if seg.reason == "" && !seg.ghost && !seg.provisional {
 		if free, ok := diskFree(v.Path(settings.OutputDir)); ok && free < minFreeBytes {
@@ -949,10 +950,24 @@ func (s *Session) announce(seg *segment) {
 	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
 		s.deps.fin.skip(seg.id, seg.reason)
 	}
+	// A duplicate is skipped once announced: one paused at its start waits
+	// for Play, as next would make a paused player play the next track.
+	if seg.reason == proto.SkipDuplicate && s.deps.values().Bool(settings.RecorderSkipDuplicatesForward) {
+		go func() {
+			if err := s.deps.control(proto.CmdNext); err != nil {
+				s.deps.log.Infof("skip to next: %v", err)
+			}
+		}()
+	}
 }
 
 func (s *Session) closeSegment(c *segment, end int64) {
 	if c.ghost || c.provisional {
+		return
+	}
+	// The window was never told of the take: it never played.
+	if !c.announced {
+		s.dropWriter(c)
 		return
 	}
 	played := end - c.start
@@ -1028,12 +1043,16 @@ func (s *Session) startFromInitial(st meta.Status, at int64) {
 	}
 	f := s.ring.Format()
 	pos := s.initPos
-	if st == meta.Playing && pos >= 0 && pos <= freshStartMs {
+	if (st == meta.Playing || st == meta.Paused) && pos >= 0 && pos <= freshStartMs {
 		seg := s.newSegment(*info, at)
 		seg.awaitStart = true
 		seg.startDeadline = at + s.ms(startTimeoutMs)
 		s.cur = seg
-		s.announce(seg)
+		// Paused at its start, the track is announced once it plays: a
+		// track changed or a session ended before then leaves no take.
+		if st == meta.Playing {
+			s.announce(seg)
+		}
 		return
 	}
 	ghost := &segment{id: s.id + "-pre", info: *info, format: f, ghost: true, start: at, drained: at, soundAt: -1}
