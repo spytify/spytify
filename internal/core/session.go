@@ -639,6 +639,9 @@ func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 			s.initial, s.initPos = &info, ev.PositionMs
 			return
 		}
+		// Named once the player said its status, a track replaces the one
+		// a stopped player showed.
+		s.initial = nil
 		if ev.Restart {
 			s.deps.log.Debugf("%q started over: the player is at %d ms", ev.Track.Title, ev.PositionMs)
 		}
@@ -651,6 +654,7 @@ func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 		s.deps.log.Infof("player interface gone")
 		// A player that is gone plays nothing, whatever it said last.
 		s.status = meta.Stopped
+		s.initial = nil
 		s.endOfPlayback()
 	case meta.Seeked:
 		s.deps.log.Debugf("%q: the player jumped to %d ms", ev.Track.Title, ev.PositionMs)
@@ -1007,7 +1011,7 @@ func (s *Session) closeSegment(c *segment, end int64) {
 
 func (s *Session) onStatus(st meta.Status, positionMs, at int64, first bool) {
 	s.status = st
-	if first {
+	if s.initial != nil {
 		s.startFromInitial(st, at)
 	}
 	switch st {
@@ -1038,11 +1042,20 @@ func (s *Session) onStatus(st meta.Status, positionMs, at int64, first bool) {
 func (s *Session) startFromInitial(st meta.Status, at int64) {
 	info := s.initial
 	s.initial = nil
-	if info == nil || info.Empty() || st == meta.Stopped {
+	if info == nil || info.Empty() {
+		return
+	}
+	pos := s.initPos
+	if st == meta.Stopped {
+		// A stopped player plays the track it shows from its start, and
+		// Play names no track: the track waits for Play, unless another
+		// is named first.
+		if pos <= freshStartMs {
+			s.initial, s.initPos = info, 0
+		}
 		return
 	}
 	f := s.ring.Format()
-	pos := s.initPos
 	if (st == meta.Playing || st == meta.Paused) && pos >= 0 && pos <= freshStartMs {
 		seg := s.newSegment(*info, at)
 		seg.awaitStart = true

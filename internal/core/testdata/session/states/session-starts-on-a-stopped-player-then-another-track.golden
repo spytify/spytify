@@ -1,0 +1,25 @@
+# states/session-starts-on-a-stopped-player-then-another-track
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at -)
+       0ms  > player Stopped pos=-1 (ring at 0)
+       0ms  > audio silence, 13230(300ms)
+     300ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 13230)
+     300ms  > player Playing pos=-1 (ring at 13230)
+     300ms  > audio music 2 at 0ms, 132300(3000ms)
+     310ms  log debug: cut for "B" at 300 ms (kind 0, noticed at 300 ms, window 0..0 ms)
+     310ms  started t-001 "B" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=0ms source=44100/2
+     310ms  state recording
+     310ms  take t-001 "B" start=13242(300.27ms) length=132300(3000ms)
+    3300ms  > audio silence, 66150(1500ms)
+    4800ms  > player Stopped pos=-1 (ring at 211680)
+    4800ms  state waiting
+    4800ms  state stopping
+    4800ms  state idle
+    4800ms  take none
+--- jobs
+job t-001 "B" played=132772(3010.7ms) length=132300(3000ms) wav=132772 crc=50b67051
+--- end: idle, 0 skipped, 0 ads, 0 overruns
