@@ -35,3 +35,25 @@ func TestNoWindowNotifiesWhatToInstall(t *testing.T) {
 		}
 	}
 }
+
+// With no display, there is nothing to install: the app says where to
+// open it from.
+func TestNoWindowSaysWhereToOpenItWithNoDisplay(t *testing.T) {
+	fa := &notified{App: test.NewTempApp(t)}
+	tel := untracked(t, fa.Preferences())
+	t.Cleanup(tel.Close)
+	noDisplay := fmt.Errorf("%w: PlatformUnavailable: Failed to detect any supported platform", opengl.ErrNoDisplay)
+	NoWindow(fa, tel, nil, noDisplay)
+	if len(fa.sent) != 1 {
+		t.Fatalf("%d notifications, want 1", len(fa.sent))
+	}
+	got := fa.sent[0].Content
+	for _, want := range []string{"no display answers", "desktop session", "PlatformUnavailable"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("notification %q lacks %q", got, want)
+		}
+	}
+	if strings.Contains(got, "apt install") {
+		t.Errorf("notification %q says to install OpenGL drivers", got)
+	}
+}

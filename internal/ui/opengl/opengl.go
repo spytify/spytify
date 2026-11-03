@@ -10,6 +10,11 @@ import "errors"
 // ErrNoDriver is what Check finds when no graphics driver offers OpenGL.
 var ErrNoDriver = errors.New("no graphics driver offers OpenGL")
 
+// ErrNoDisplay is what Check finds on Linux when no display answers: the
+// app was started out of the desktop session, over SSH or from a text
+// console.
+var ErrNoDisplay = errors.New("no display answers")
+
 // SoftwareEnv set to "software" makes the app draw with Mesa's OpenGL, in
 // software. The app sets it for the copy of itself it starts when no
 // graphics driver offers OpenGL.
