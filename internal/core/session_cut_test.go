@@ -136,8 +136,8 @@ func TestPinnedCutsForEachWindow(t *testing.T) {
 
 // A track shorter than the 300 ms search window, between two others.
 // Today's behavior, which looks odd: between two gaps, the cut after it
-// lands at the start of the gap before it, so its take is empty and its
-// audio goes into the next one's.
+// lands at the start of the gap before it, so its audio goes into the next
+// one's. Its take, empty, is said skipped, with nothing to keep.
 func TestPinnedCutsAroundATrackShorterThanTheWindow(t *testing.T) {
 	for _, gap := range []int64{0, 300, 1000} {
 		for _, off := range []int64{0, 300} {
@@ -168,9 +168,8 @@ func TestPinnedCutsOfTheScenarioTimelines(t *testing.T) {
 }
 
 // Two changes back to back: the second comes before the first could be
-// cut, so the first is cut at once with what the ring holds. Today's
-// behavior, which looks odd: the take in between can be empty, and is
-// announced and handed over all the same.
+// cut, so the first is cut at once with what the ring holds. The take in
+// between can be empty: it is said skipped, with nothing to keep.
 func TestPinnedBackToBackChanges(t *testing.T) {
 	a, b, c := info("/x/a", "A", 3000), info("/x/b", "B", 3000), info("/x/c", "C", 3000)
 	scripts := map[string]func(r *rig){
