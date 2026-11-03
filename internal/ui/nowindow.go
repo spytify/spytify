@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -8,6 +9,7 @@ import (
 
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/lang"
+	"github.com/spytify/spytify/internal/ui/opengl"
 )
 
 // NoWindow says why the app cannot open its window, err being what
@@ -17,8 +19,11 @@ import (
 func NoWindow(fa fyne.App, tel *telemetry.Client, privacy map[string]any, err error) {
 	on, _ := privacy[trackerKey].(bool)
 	tel.SetEnabled(on && fa.Preferences().Bool(privacySeenKey))
-	tel.Problem("no_opengl", err.Error())
-	text := lang.NoWindow + "\n\n" + noWindowHelp
+	reason, text := "no_opengl", lang.NoWindow+"\n\n"+noWindowHelp
+	if errors.Is(err, opengl.ErrNoDisplay) {
+		reason, text = "no_display", lang.NoDisplay
+	}
+	tel.Problem(reason, err.Error())
 	fmt.Fprintln(os.Stderr, "spytify:", err)
 	fmt.Fprintln(os.Stderr, text)
 	tell(fa, lang.Spytify, text+"\n\n("+err.Error()+")")

@@ -12,7 +12,7 @@ import (
 // Check opens, hidden, the window Fyne opens, with the same OpenGL
 // context: when GLFW cannot make it, Fyne keeps running with no window.
 // Fyne may draw on Wayland or on X11, so one that works is enough. With no
-// display to try, it says nothing and lets Fyne try.
+// display at all, Fyne's first window panics: Check says so instead.
 func Check() error {
 	// Init hints outlive Terminate: Fyne's Init gets GLFW's own choices
 	// back. The hidden window needs no decorations, and libdecor's start
@@ -22,23 +22,42 @@ func Check() error {
 		glfw.InitHint(glfw.WaylandLibdecor, glfw.WaylandPreferLibdecor)
 	}()
 	glfw.InitHint(glfw.WaylandLibdecor, glfw.WaylandDisableLibdecor)
-	var errs []error
-	for _, p := range platforms() {
+	var errs, unanswered []error
+	try := func(p glfw.Platform) bool {
 		glfw.InitHint(glfw.PlatformHint, int(p))
-		if glfw.Init() != nil {
-			continue
+		if err := glfw.Init(); err != nil {
+			unanswered = append(unanswered, err)
+			return false
 		}
 		err := probe()
 		glfw.Terminate()
-		if err == nil {
+		if err != nil {
+			errs = append(errs, err)
+		}
+		return err == nil
+	}
+	for _, p := range platforms() {
+		if try(p) {
 			return nil
 		}
-		errs = append(errs, err)
 	}
-	if len(errs) == 0 {
+	// None the session names answered, or it names none. Told no
+	// platform, Fyne lets GLFW look for one, and it may find one, such as
+	// Wayland's default socket.
+	if len(errs) == 0 && !told() && try(glfw.AnyPlatform) {
 		return nil
 	}
+	if len(errs) == 0 {
+		return fmt.Errorf("%w: %w", ErrNoDisplay, errors.Join(unanswered...))
+	}
 	return fmt.Errorf("%w: %w", ErrNoDriver, errors.Join(errs...))
+}
+
+// told reports whether FYNE_PLATFORM names the one display system Fyne
+// starts GLFW on.
+func told() bool {
+	p := os.Getenv("FYNE_PLATFORM")
+	return p == "x11" || p == "wayland"
 }
 
 // platforms are the display systems Fyne may draw on: the one FYNE_PLATFORM
