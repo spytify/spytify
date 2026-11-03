@@ -17,20 +17,20 @@
     1510ms  error capture_low_quality "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call" source=16000/1
     1510ms  log info: stream format changed from s16le 44100 Hz 2ch to s16le 16000 Hz 1ch
     1510ms  log debug: "A" starts at its first sound, 0 ms
-    1510ms  take t-001 "A" start=0(0ms) length=48000(3000ms) format=16000/1
+    1510ms  take t-001 "A" start=0(0ms) length=32048(2003ms) format=16000/1
     3500ms  > audio silence, 8000(500ms)
     4000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 40000)
+    4000ms  log debug: cut for "B" at 2000 ms (kind 1, noticed at 2500 ms, window 1703..2303 ms)
+    4000ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=16000/1
+    4000ms  take t-002 "B" start=32000(2000ms) length=48000(3000ms) format=16000/1
     4000ms  > audio music 2 at 0ms, 16000(1000ms)
-    4820ms  log debug: cut for "B" at 3000 ms (kind 1, noticed at 2500 ms, window 2700..3300 ms)
-    4820ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/length offset=500ms source=16000/1
-    4820ms  take t-002 "B" start=48000(3000ms) length=48000(3000ms) format=16000/1
     5000ms  > the stream is now s16le 44100 Hz 2ch
     5000ms  > audio music 2 at 1000ms, 88200(2000ms)
     5010ms  log info: the capture is s16le 44100 Hz 2ch, fit for music again
     5010ms  error capture_low_quality ""
     5010ms  log info: stream format changed from s16le 16000 Hz 1ch to s16le 44100 Hz 2ch
     5010ms  log debug: "B" starts at its first sound, 0 ms
-    5010ms  take t-002 "B" start=0(0ms) length=132300(3000ms)
+    5010ms  take t-002 "B" start=0(0ms) length=88288(2002ms)
     7000ms  > audio silence, 66150(1500ms)
     8500ms  > player Stopped pos=-1 (ring at 154350)
     8500ms  state waiting
@@ -38,6 +38,6 @@
     8500ms  state idle
     8500ms  take none
 --- jobs
-job t-001 "A" played=48000(3000ms) length=48000(3000ms) wav=48000 crc=903bbfeb format=16000/1
-job t-002 "B" played=119070(2700ms) length=132300(3000ms) wav=119070 crc=9012e39b
+job t-001 "A" played=32000(2000ms) length=32048(2003ms) wav=32000 crc=d1cfa007 format=16000/1
+job t-002 "B" played=88760(2012.7ms) length=88288(2002ms) wav=88760 crc=52456b8b
 --- end: idle, 0 skipped, 0 ads, 0 overruns
