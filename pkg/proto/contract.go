@@ -37,7 +37,7 @@ var Events = []EventSpec{
 	{EventSessionState, SessionStateEvent{}, "every transition"},
 	{EventTrackStarted, TrackStartedEvent{}, "boundary committed"},
 	{EventTrackFinished, TrackFinishedEvent{}, "file closed and tagged"},
-	{EventTrackSkipped, TrackSkippedEvent{}, "decision made: duplicate, too_short, ad, incomplete, seeked, low_quality"},
+	{EventTrackSkipped, TrackSkippedEvent{}, "decision made: duplicate, too_short, ad, incomplete, seeked, low_quality, too_quiet"},
 	{EventTrackKeepable, TrackKeepableEvent{}, "a take cut short, stopped, moved along its track bar or recorded in low quality can be saved with track.keep, or no longer"},
 	{EventLevel, LevelEvent{}, "10 Hz while recording"},
 	{EventSettingsChanged, SettingsValues{}, "after any successful settings.set or settings.reset"},

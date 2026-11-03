@@ -276,23 +276,26 @@ func (f *finisher) complete(t *take) bool {
 	return true
 }
 
-// trim finds where the sound starts and ends, when recorder.trim_silence is
-// on. What is left may be too short to keep.
+// trim finds where the sound starts and ends, and skips a take with no
+// sound above recorder.silence_db. With recorder.trim_silence on, the file
+// keeps only the sound, and what is left may be too short to keep.
 func (f *finisher) trim(t *take) bool {
 	t.keptFrames = t.played
-	if !t.v.Bool(settings.RecorderTrimSilence) {
-		return true
-	}
 	step := time.Now()
-	s, e, ok, err := scanTrim(t.tmp, t.v.Float(settings.RecorderSilenceDb))
+	db := t.v.Float(settings.RecorderSilenceDb)
+	s, e, ok, err := scanTrim(t.tmp, db)
 	t.timings.TrimMs = msSince(step)
 	if err != nil {
 		f.fail(t.finishJob, "read", err)
 		return false
 	}
 	if !ok {
-		f.skip(t.id, proto.SkipTooShort)
+		f.log.Infof("%q: no sound above %g dB, not kept", t.info.Title, db)
+		f.skip(t.id, proto.SkipTooQuiet)
 		return false
+	}
+	if !t.v.Bool(settings.RecorderTrimSilence) {
+		return true
 	}
 	t.trimStart, t.trimEnd, t.keptFrames = s, e, e-s
 	if t.tooShort(t.keptFrames) {

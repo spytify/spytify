@@ -74,6 +74,9 @@ const (
 	// under 44.1 kHz or in mono, as from a Bluetooth headset in a call. It
 	// can still be saved with track.keep.
 	SkipLowQuality SkipReason = "low_quality"
+	// SkipTooQuiet is a take with no sound above recorder.silence_db in
+	// its whole length, as from a player muted after the first track.
+	SkipTooQuiet SkipReason = "too_quiet"
 )
 
 // Player transport commands accepted by player.control.

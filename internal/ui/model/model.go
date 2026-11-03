@@ -100,6 +100,8 @@ func ReasonText(r proto.SkipReason) string {
 		return lang.ReasonSeeked
 	case proto.SkipLowQuality:
 		return lang.ReasonLowQuality
+	case proto.SkipTooQuiet:
+		return lang.ReasonTooQuiet
 	}
 	return string(r)
 }

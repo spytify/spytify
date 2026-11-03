@@ -170,6 +170,10 @@ type Session struct {
 	// silent is set once a capture that delivers only silence while the
 	// player plays was reported; heard once the capture brought sound.
 	silent, heard bool
+	// firstEnded is set once the session's first track, not an ad, ended.
+	// Only silence is watched until then: later, a quiet stretch is the
+	// music's, and a take with no sound is skipped as too quiet.
+	firstEnded bool
 	// lowFormat is set while the capture's format is too poor for music.
 	lowFormat bool
 	// peak and sum are each channel's since the last level reported, over
@@ -355,8 +359,9 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 var captureStall = 10 * time.Second
 
 // captureSilent is how long the player may play with only silence arriving
-// before the session says so.
-var captureSilent = 10 * time.Second
+// before the session says so, during its first track: longer than the
+// quiet end of a song.
+var captureSilent = 30 * time.Second
 
 // diskFree reports the free space of a folder's disk; tests replace it.
 var diskFree = freeBytes
@@ -383,7 +388,7 @@ func (s *Session) onTick() {
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: msg})
 	}
 	// An ad may be silent, muted by the session or not.
-	if s.deps.watchSilence && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
+	if s.deps.watchSilence && !s.firstEnded && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
 		s.silent = true
 		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureSilent)
 		s.deps.log.Errorf("%s", msg)
@@ -954,6 +959,9 @@ func (s *Session) announce(seg *segment) {
 func (s *Session) closeSegment(c *segment, end int64) {
 	if c.ghost || c.provisional {
 		return
+	}
+	if c.reason != proto.SkipAd {
+		s.firstEnded = true
 	}
 	played := end - c.start
 	if c.awaitStart || played < 0 {

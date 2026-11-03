@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -219,5 +220,28 @@ func TestTracksAreSavedOnceTheCaptureIsFitAgain(t *testing.T) {
 	}
 	if got := keepable(s, tl.Items[0].Title); !slices.Equal(got, []bool{true, false}) {
 		t.Fatalf("keepable %v: the take in low quality is held until a track is saved", got)
+	}
+}
+
+// A track played with no sound at all, as from a player muted after the
+// first track, is skipped as too quiet, whether recorder.trim_silence cuts
+// the files or not. The tracks around it are saved.
+func TestATrackWithNoSoundIsSkippedAsTooQuiet(t *testing.T) {
+	for _, trim := range []bool{true, false} {
+		t.Run(fmt.Sprintf("trim_silence=%v", trim), func(t *testing.T) {
+			tl := loadTimeline(t, "basic")
+			mid := &tl.Items[1]
+			f := tl.Format()
+			mid.WAV = testkit.WriteWAV(t, filepath.Join(t.TempDir(), "silence.wav"), f, make([]byte, f.FramesFromMs(mid.LengthMs)*int64(f.FrameBytes())))
+			s := newScenario(t, tl, map[string]any{"recorder.trim_silence": trim})
+			s.run(t, tl)
+			saved, skipped := outcome(t, s)
+			slices.Sort(saved)
+			want := []string{tl.Items[0].Title, tl.Items[2].Title}
+			slices.Sort(want)
+			if !slices.Equal(saved, want) || len(skipped) != 1 || skipped[mid.Title] != proto.SkipTooQuiet {
+				t.Errorf("saved %q, skipped %v; want %q saved and %q skipped as %s", saved, skipped, want, mid.Title, proto.SkipTooQuiet)
+			}
+		})
 	}
 }
