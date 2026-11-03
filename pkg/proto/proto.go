@@ -215,6 +215,9 @@ type Empty struct{}
 
 type SessionStateEvent struct {
 	State SessionState `json:"state"`
+	// Playlist is, as the session ends, the .m3u8 written for it
+	// (output.playlist), or the one its tracks still being saved go to.
+	Playlist string `json:"playlist,omitempty"`
 }
 
 type TrackStartedEvent struct {

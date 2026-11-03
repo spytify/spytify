@@ -127,10 +127,12 @@ type State struct {
 	HaveInfo  bool
 	Session   proto.SessionState
 	SessionID string
-	Current   *Row
-	Rows      []Row // newest first
-	Level     proto.LevelEvent
-	Target    proto.TargetStateEvent
+	// Playlist is the .m3u8 the session that ended wrote.
+	Playlist string
+	Current  *Row
+	Rows     []Row // newest first
+	Level    proto.LevelEvent
+	Target   proto.TargetStateEvent
 	// TargetKnown is set once a target.state event arrived; until then
 	// the core.info check is all there is.
 	TargetKnown bool
@@ -382,9 +384,12 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		if s.Session == proto.StateIdle && e.State != proto.StateIdle {
 			// A new session starts a new list.
-			s.Rows, s.Current, s.LastError = nil, nil, nil
+			s.Rows, s.Current, s.LastError, s.Playlist = nil, nil, nil, ""
 		}
 		s.Session = e.State
+		if e.State == proto.StateIdle {
+			s.Playlist = e.Playlist
+		}
 		m.trackPause(s)
 		// Waiting means the core follows no item: what was playing ended.
 		if e.State == proto.StateIdle || e.State == proto.StateWaiting {
