@@ -18,7 +18,7 @@
     3500ms  > audio music 1 at 0ms, 132300(3000ms)
     3820ms  log debug: cut for "A" at 3501 ms (kind 1, noticed at 3500 ms, window 3200..3801 ms)
     3820ms  started t-002 "A" artist="Artist" album="Album" length=3000ms cut=boundary/length offset=1ms source=44100/2
-    3820ms  skipped t-002 duplicate
+    3820ms  skipped t-002 duplicate of=t-001
     3820ms  take t-002 "A" start=154378(3500.63ms) length=132300(3000ms) no-file reason=duplicate
     6500ms  > audio silence, 66150(1500ms)
     8000ms  > player Stopped pos=-1 (ring at 352800)

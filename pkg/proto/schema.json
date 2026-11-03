@@ -576,6 +576,12 @@
         "id": {
           "type": "string"
         },
+        "of": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
         "reason": {
           "type": "string"
         }

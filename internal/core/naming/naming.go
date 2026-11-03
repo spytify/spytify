@@ -173,27 +173,28 @@ func FreeSuffix(dir, name string, underscores bool, exists func(string) bool) st
 	}
 }
 
-// Recorded reports whether a file for plan already exists under root,
-// ignoring a counter or album-track prefix and a duplicate suffix of 1.
-func Recorded(root string, p Plan, o Options) bool {
+// Recorded finds the file for plan already under root, ignoring a counter
+// or album-track prefix and a duplicate suffix of 1, and reports whether
+// there is one.
+func Recorded(root string, p Plan, o Options) (string, bool) {
 	dir := filepath.Join(root, p.Dir)
 	want := p.Base + "." + o.Extension
 	if _, err := os.Stat(filepath.Join(dir, want)); err == nil {
-		return true
+		return filepath.Join(dir, want), true
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return false
+		return "", false
 	}
 	prefixed := regexp.MustCompile(`^\d+[ _]` + regexp.QuoteMeta(want) + `$`)
 	for _, e := range entries {
 		// macOS and some network drives return accents decomposed (NFD);
 		// want is composed.
 		if name := norm.NFC.String(e.Name()); !e.IsDir() && (name == want || prefixed.MatchString(name)) {
-			return true
+			return filepath.Join(dir, e.Name()), true
 		}
 	}
-	return false
+	return "", false
 }
 
 var placeholder = regexp.MustCompile(`\{([a-z_]+)\}`)

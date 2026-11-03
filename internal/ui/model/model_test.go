@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -224,6 +225,41 @@ func TestAPauseFadeSaysSo(t *testing.T) {
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (pause fade).flac", PauseFade: true}))
 	if r := m.Snapshot().Rows[0]; r.Status != Saved || r.StatusText() != lang.SavedPauseFade {
 		t.Fatalf("saved %+v, %q", r, r.StatusText())
+	}
+}
+
+// A track skipped as already recorded has the file the recorder names, or,
+// played again while this session's take of it was being saved, that
+// take's file once it is there.
+func TestASkippedTrackHasItsFile(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(started(t, "a", "First"))
+	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "a", Reason: proto.SkipDuplicate, Path: "/m/First.flac"}))
+	// b is saved before c, the same track, is skipped.
+	m.Apply(started(t, "b", "Second"))
+	m.Apply(started(t, "c", "Second"))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "b", Path: "/m/Second.flac"}))
+	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "c", Reason: proto.SkipDuplicate, Of: "b"}))
+	// e, the same track as d, is skipped while d is being saved.
+	m.Apply(started(t, "d", "Third"))
+	m.Apply(started(t, "e", "Third"))
+	m.Apply(ev(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "e", Reason: proto.SkipDuplicate, Of: "d"}))
+	paths := func() map[string]string {
+		s := m.Snapshot()
+		got := map[string]string{s.Current.ID: s.Current.Path}
+		for _, r := range s.Rows {
+			got[r.ID] = r.Path
+		}
+		return got
+	}
+	if got := paths(); got["e"] != "" {
+		t.Fatalf("e has %q before d is saved", got["e"])
+	}
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "d", Path: "/m/Third.flac"}))
+	want := map[string]string{"a": "/m/First.flac", "b": "/m/Second.flac", "c": "/m/Second.flac", "d": "/m/Third.flac", "e": "/m/Third.flac"}
+	if got := paths(); !maps.Equal(got, want) {
+		t.Errorf("paths %v, want %v", got, want)
 	}
 }
 
