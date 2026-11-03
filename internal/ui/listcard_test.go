@@ -257,3 +257,81 @@ func TestTheArrowsReachARowsButtons(t *testing.T) {
 		t.Errorf("Right lit %v; once unfocused, lit %v, column %d", lit, l.lit, l.col)
 	}
 }
+
+// Rows may each have a height of their own: the list places them one under
+// the other, builds only those in view, and scrolls one into view whole,
+// as it does rows of one height.
+func TestTheListHoldsRowsOfDifferentHeights(t *testing.T) {
+	n := 100
+	l, _ := testCardList(t, &n)
+	row, pad := l.itemMin.Height, theme.Padding()
+	// Every third row is half as tall.
+	slim := row / 2
+	l.height = func(id widget.ListItemID) float32 {
+		if id%3 == 2 {
+			return slim
+		}
+		return 0
+	}
+	l.Refresh()
+	near := func(a, b float32) bool { return a-b < 0.01 && b-a < 0.01 }
+	if want := 67*(row+pad) + 33*(slim+pad) + pad; !near(l.card.Size().Height, want) {
+		t.Errorf("the card is %v high, want %v", l.card.Size().Height, want)
+	}
+	second, third := rowAt(l, 2), rowAt(l, 3)
+	if second.box.Size().Height != slim || !near(second.box.Position().Y, 2*(row+pad)) {
+		t.Errorf("row 2 is %v high at %v", second.box.Size().Height, second.box.Position().Y)
+	}
+	if third.box.Size().Height != row || !near(third.box.Position().Y, 2*(row+pad)+slim+pad) {
+		t.Errorf("row 3 is %v high at %v, under a slim row", third.box.Size().Height, third.box.Position().Y)
+	}
+
+	for _, id := range []widget.ListItemID{60, 62, 8} {
+		l.ScrollTo(id)
+		r := rowAt(l, id)
+		if r == nil {
+			t.Fatalf("scrolled to row %d, rows %v are drawn", id, drawnIDs(l))
+		}
+		top := r.box.Position().Y - l.scroll.Offset.Y
+		if top < 0 || top+r.box.Size().Height > l.scroll.Size().Height+0.01 {
+			t.Errorf("row %d shows from %v to %v, out of a page %v high", id, top, top+r.box.Size().Height, l.scroll.Size().Height)
+		}
+		if ids := drawnIDs(l); len(ids) > 12 {
+			t.Errorf("at row %d, rows %v of 100 are drawn", id, ids)
+		}
+	}
+	l.ScrollToBottom()
+	if ids := drawnIDs(l); len(ids) == 0 || ids[len(ids)-1] != 99 {
+		t.Errorf("at the bottom, rows %v of 100 are drawn", ids)
+	}
+}
+
+// A run of rows on a band is one block of its colour, over the gaps
+// between its rows, with the lines between them but none at its ends.
+func TestABandIsOneBlockWithoutLinesAtItsEnds(t *testing.T) {
+	n := 8
+	l, _ := testCardList(t, &n)
+	l.band = func(id widget.ListItemID) fyne.ThemeColorName {
+		if id >= 2 && id <= 4 {
+			return colorAdBand
+		}
+		return ""
+	}
+	l.Refresh()
+	pad := theme.Padding()
+	for id, want := range map[widget.ListItemID]bool{1: true, 2: false, 3: true, 4: true, 5: false, 6: true} {
+		if line := !rowAt(l, id).line.Hidden; line != want {
+			t.Errorf("row %d: line above %v, want %v", id, line, want)
+		}
+	}
+	if r := rowAt(l, 1); !r.back.Hidden {
+		t.Error("a row off the band has a background")
+	}
+	top, inside := rowAt(l, 2), rowAt(l, 3)
+	if top.back.Hidden || top.back.FillColor != cardColors[colorAdBand][0] || top.back.Position().Y != 0 {
+		t.Errorf("the band's first row: hidden %v, %v, at %v", top.back.Hidden, top.back.FillColor, top.back.Position().Y)
+	}
+	if inside.back.Position().Y != -pad || inside.back.Size().Height != inside.box.Size().Height+pad {
+		t.Errorf("a row inside the band leaves the gap above it: at %v, %v high", inside.back.Position().Y, inside.back.Size().Height)
+	}
+}

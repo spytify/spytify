@@ -24,6 +24,17 @@ const (
 	colorOnSkippedBadge fyne.ThemeColorName = "spytifyOnSkippedBadge"
 )
 
+// An ad break in the session list: its rows on a light blue block, a
+// night blue on the dark theme, the ads' text in blue, a deep blue line on
+// each side of its pill, and the pill a deeper blue under the same text.
+const (
+	colorAdBand   fyne.ThemeColorName = "spytifyAdBand"
+	colorAdText   fyne.ThemeColorName = "spytifyAdText"
+	colorAdRule   fyne.ThemeColorName = "spytifyAdRule"
+	colorAdPill   fyne.ThemeColorName = "spytifyAdPill"
+	colorOnAdPill fyne.ThemeColorName = "spytifyOnAdPill"
+)
+
 // A screen's footer, on a grey of its own under the list, and a button
 // under the pointer there: white on the light grey, charcoal on the dark.
 const (
@@ -61,6 +72,11 @@ var cardColors = map[fyne.ThemeColorName][2]color.NRGBA{
 	colorOnSavedBadge:   {{R: 0x1e, G: 0x4d, B: 0x30, A: 0xff}, {R: 0xb5, G: 0xe3, B: 0xc5, A: 0xff}},
 	colorSkippedBadge:   {{R: 0xf8, G: 0xec, B: 0xd4, A: 0xff}, {R: 0x3d, G: 0x2f, B: 0x12, A: 0xff}},
 	colorOnSkippedBadge: {{R: 0x5a, G: 0x42, B: 0x12, A: 0xff}, {R: 0xf2, G: 0xd9, B: 0xa6, A: 0xff}},
+	colorAdBand:         {{R: 0xee, G: 0xf3, B: 0xfd, A: 0xff}, {R: 0x18, G: 0x22, B: 0x3a, A: 0xff}},
+	colorAdText:         {{R: 0x1d, G: 0x3f, B: 0x8f, A: 0xff}, {R: 0xb9, G: 0xcd, B: 0xf6, A: 0xff}},
+	colorAdRule:         {{R: 0x2f, G: 0x5b, B: 0xc4, A: 0xff}, {R: 0x5b, G: 0x7f, B: 0xd0, A: 0xff}},
+	colorAdPill:         {{R: 0xcf, G: 0xdc, B: 0xf8, A: 0xff}, {R: 0x24, G: 0x36, B: 0x5e, A: 0xff}},
+	colorOnAdPill:       {{R: 0x1d, G: 0x3f, B: 0x8f, A: 0xff}, {R: 0xc9, G: 0xd9, B: 0xfa, A: 0xff}},
 	colorFooter:         {{R: 0xeb, G: 0xeb, B: 0xef, A: 0xff}, {R: 0x14, G: 0x14, B: 0x16, A: 0xff}},
 	colorFooterHover:    {{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, {R: 0x2e, G: 0x2e, B: 0x32, A: 0xff}},
 	colorPage:           {{R: 0xf2, G: 0xf2, B: 0xf5, A: 0xff}, {R: 0x0f, G: 0x0f, B: 0x10, A: 0xff}},
