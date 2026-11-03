@@ -218,6 +218,9 @@ type Empty struct{}
 
 type SessionStateEvent struct {
 	State SessionState `json:"state"`
+	// Playlist is, as the session ends, the .m3u8 written for it
+	// (output.playlist), or the one its tracks still being saved go to.
+	Playlist string `json:"playlist,omitempty"`
 }
 
 type TrackStartedEvent struct {
@@ -285,6 +288,11 @@ type FinishTimings struct {
 type TrackSkippedEvent struct {
 	ID     string     `json:"id"`
 	Reason SkipReason `json:"reason"`
+	// Path is the file a track skipped as already recorded has. While
+	// that file is being saved by a take of this session, Of is that
+	// take's ID instead, and its track.finished names the file.
+	Path string `json:"path,omitempty"`
+	Of   string `json:"of,omitempty"`
 }
 
 // TrackKeepableEvent says whether a skipped take can still be saved with

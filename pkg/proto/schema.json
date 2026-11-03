@@ -304,6 +304,9 @@
     },
     "SessionStateEvent": {
       "properties": {
+        "playlist": {
+          "type": "string"
+        },
         "state": {
           "type": "string"
         }
@@ -574,6 +577,12 @@
     "TrackSkippedEvent": {
       "properties": {
         "id": {
+          "type": "string"
+        },
+        "of": {
+          "type": "string"
+        },
+        "path": {
           "type": "string"
         },
         "reason": {

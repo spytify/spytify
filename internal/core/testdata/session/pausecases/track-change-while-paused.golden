@@ -19,9 +19,9 @@
     3500ms  > player Playing pos=-1 (ring at 110250)
     3500ms  state recording
     3500ms  > audio music 2 at 0ms, 132300(3000ms)
-    4820ms  log debug: cut for "B" at 3501 ms (kind 1, noticed at 2500 ms, window 3200..3801 ms)
-    4820ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/length offset=1001ms source=44100/2
-    4820ms  take t-002 "B" start=154378(3500.63ms) length=132300(3000ms)
+    3820ms  log debug: cut for "B" at 2506 ms (kind 2, noticed at 2500 ms, window 1500..2800 ms)
+    3820ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=interrupt/edge offset=6ms source=44100/2
+    3820ms  take t-002 "B" start=110511(2505.92ms) length=132300(3000ms)
     6500ms  > audio silence, 66150(1500ms)
     8000ms  > player Stopped pos=-1 (ring at 308595)
     8000ms  state waiting
@@ -29,6 +29,6 @@
     8000ms  state idle
     8000ms  take none
 --- jobs
-job t-001 "A" played=132317(3000.39ms) length=132300(3000ms) wav=132317 crc=6678dcba
-job t-002 "B" played=119070(2700ms) length=132300(3000ms) wav=119070 crc=e6ff3aca
+job t-001 "A" played=88450(2005.67ms) length=132300(3000ms) wav=88450 crc=bcf43b9d
+job t-002 "B" played=132551(3005.69ms) length=132300(3000ms) wav=132551 crc=06ac4ac3
 --- end: idle, 0 skipped, 0 ads, 0 overruns

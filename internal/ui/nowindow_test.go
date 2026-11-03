@@ -53,6 +53,20 @@ func TestNoWindowIsReportedOnceTheChoiceWasShown(t *testing.T) {
 	}
 }
 
+// A launch with no display is counted apart from one with no OpenGL.
+func TestNoDisplayIsReportedByItsOwnReason(t *testing.T) {
+	srv := fakesentry.New(t)
+	fa := test.NewTempApp(t)
+	fa.Preferences().SetBool(privacySeenKey, true)
+	tel := telemetry.New(telemetry.Options{DSN: srv.DSN(), Prefs: fa.Preferences(), ProblemSampleRate: 1})
+	t.Cleanup(tel.Close)
+	NoWindow(fa, tel, map[string]any{trackerKey: true}, fmt.Errorf("%w: PlatformUnavailable", opengl.ErrNoDisplay))
+	tel.Flush(2 * time.Second)
+	if ev := srv.Wait(t, "event", 1)[0].JSON(); ev["message"] != "blocked: no_display" {
+		t.Errorf("message %v", ev["message"])
+	}
+}
+
 func TestTheLaunchSaysWhetherTheWindowIsDrawnInSoftware(t *testing.T) {
 	for _, software := range []bool{false, true} {
 		t.Run(strconv.FormatBool(software), func(t *testing.T) {

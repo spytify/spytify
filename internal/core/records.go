@@ -16,31 +16,38 @@ import (
 
 // records is what a finisher knows of the tracks already recorded: the
 // takes it is saving, the index of the files it saved, and the files in
-// the output folder. The session asks it whether a track is recorded
-// before it records it, and the finisher whether a name is taken as it
-// names a file.
+// the output folder. The session asks it whether a track is recorded, and
+// where, before it records it, and the finisher whether a name is taken
+// as it names a file.
 type records struct {
 	// mu guards claims: the session reads them while the finisher's jobs
 	// run.
 	mu sync.Mutex
 	// claims are the tracks whose jobs were handed to the finisher and are
-	// not done: their files are not there yet.
-	claims map[string]bool
+	// not done, by the ID of their take: their files are not there yet.
+	claims map[string]string
 	index  *recordIndex
+}
+
+// recordedFile is where a recorded track's file is: its path, or, while a
+// job saves it, the ID of that job's take, whose track.finished names it.
+type recordedFile struct {
+	path string
+	of   string
 }
 
 func openRecords(root string) *records {
 	return &records{
-		claims: map[string]bool{},
+		claims: map[string]string{},
 		index:  openIndex(filepath.Join(root, ".spytify", "recorded.jsonl")),
 	}
 }
 
-// claim marks a track as being saved, from the moment its job is handed
-// over, so the same track played again meanwhile is a duplicate.
-func (r *records) claim(info meta.TrackInfo) {
+// claim marks a track as being saved by take id, from the moment its job
+// is handed over, so the same track played again meanwhile is a duplicate.
+func (r *records) claim(id string, info meta.TrackInfo) {
 	r.mu.Lock()
-	r.claims[trackKey(info.Artist(), info.Title)] = true
+	r.claims[trackKey(info.Artist(), info.Title)] = id
 	r.mu.Unlock()
 }
 
@@ -51,20 +58,24 @@ func (r *records) release(info meta.TrackInfo) {
 	r.mu.Unlock()
 }
 
-// recorded reports whether a track is already saved or being saved: a job
-// claimed it, the index has its file, or a file is where the settings put
-// it, whatever its prefix.
-func (r *records) recorded(info meta.TrackInfo, v settings.Values) bool {
+// find reports whether a track is already saved or being saved, and
+// where: a job claimed it, the index has its file, or a file is where the
+// settings put it, whatever its prefix.
+func (r *records) find(info meta.TrackInfo, v settings.Values) (recordedFile, bool) {
 	key := trackKey(info.Artist(), info.Title)
 	r.mu.Lock()
-	claimed := r.claims[key]
+	of, claimed := r.claims[key]
 	r.mu.Unlock()
-	if claimed || r.index.has(key) {
-		return true
+	if claimed {
+		return recordedFile{of: of}, true
+	}
+	if path, ok := r.index.lookup(key); ok {
+		return recordedFile{path: path}, true
 	}
 	o := namingOptions(v)
 	local := tag.FromLocal(info, tagOptions(v))
-	return naming.Recorded(v.Path(settings.OutputDir), naming.Build(namingTrack(local, info), o), o)
+	path, ok := naming.Recorded(v.Path(settings.OutputDir), naming.Build(namingTrack(local, info), o), o)
+	return recordedFile{path: path}, ok
 }
 
 // taken reports whether a file is at path, the name the finisher picked
@@ -111,15 +122,18 @@ func openIndex(path string) *recordIndex {
 	return idx
 }
 
-func (i *recordIndex) has(key string) bool {
+// lookup is the file the index has for key, while it is there.
+func (i *recordIndex) lookup(key string) (string, bool) {
 	i.mu.Lock()
 	p, ok := i.m[key]
 	i.mu.Unlock()
 	if !ok {
-		return false
+		return "", false
 	}
-	_, err := os.Stat(p)
-	return err == nil
+	if _, err := os.Stat(p); err != nil {
+		return "", false
+	}
+	return p, true
 }
 
 func (i *recordIndex) add(key, path string) {

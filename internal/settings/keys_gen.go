@@ -19,6 +19,8 @@ var (
 	OutputDir = Key{"output.dir"}
 	// OutputGroupBy is output.group_by, "Group by folders" in Settings.
 	OutputGroupBy = Key{"output.group_by"}
+	// OutputPlaylist is output.playlist, "Write a playlist for each session" in Settings.
+	OutputPlaylist = Key{"output.playlist"}
 	// OutputTemplate is output.template, "File name template" in Settings.
 	OutputTemplate = Key{"output.template"}
 	// OutputUnderscores is output.underscores, "Underscores instead of spaces" in Settings.

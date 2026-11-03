@@ -86,8 +86,8 @@ func TestEveryNamingCombinationGivesAValidName(t *testing.T) {
 						if err := os.WriteFile(path, nil, 0o644); err != nil {
 							t.Fatalf("%s: %v", what, err)
 						}
-						if !Recorded(root, Build(tr, o), o) {
-							t.Errorf("%s: %s saved but not found as recorded", what, filepath.Join(p.Dir, name))
+						if got, ok := Recorded(root, Build(tr, o), o); !ok || got != path {
+							t.Errorf("%s: %s saved but found as %q, %v", what, filepath.Join(p.Dir, name), got, ok)
 						}
 					}
 				}

@@ -20,7 +20,7 @@ func TestRecordedFindsADecomposedName(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, name), nil, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if !Recorded(root, Build(tr, o), o) {
+		if _, ok := Recorded(root, Build(tr, o), o); !ok {
 			t.Errorf("prefix %s: %q not found as recorded", prefix, name)
 		}
 	}

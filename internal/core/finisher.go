@@ -103,7 +103,7 @@ func (f *finisher) enqueue(j finishJob) {
 	// duplicate of itself, nor does one with a pause's fades in it: the
 	// track can still be recorded clean.
 	if !j.partial && j.rejected == "" && !j.pauseFade {
-		f.records.claim(j.info)
+		f.records.claim(j.id, j.info)
 	}
 	f.wg.Add(1)
 	f.jobs <- j
@@ -129,19 +129,25 @@ func (f *finisher) addOverruns(n int64) {
 }
 
 func (f *finisher) skip(id string, reason proto.SkipReason) {
+	f.skipped(proto.TrackSkippedEvent{ID: id, Reason: reason})
+}
+
+// skipped counts a take skipped and reports it, with the file a track
+// already recorded has.
+func (f *finisher) skipped(ev proto.TrackSkippedEvent) {
 	f.mu.Lock()
 	f.cnt.Skipped++
-	if reason == proto.SkipAd {
+	if ev.Reason == proto.SkipAd {
 		f.cnt.Ads++
 	}
 	f.mu.Unlock()
-	f.emit(proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: id, Reason: reason})
+	f.emit(proto.EventTrackSkipped, ev)
 }
 
-// recorded reports whether a track is already saved or being saved: the
-// session asks before it records one.
-func (f *finisher) recorded(info meta.TrackInfo, v settings.Values) bool {
-	return f.records.recorded(info, v)
+// find reports whether a track is already saved or being saved, and
+// where: the session asks before it records one.
+func (f *finisher) find(info meta.TrackInfo, v settings.Values) (recordedFile, bool) {
+	return f.records.find(info, v)
 }
 
 func namingOptions(v settings.Values) naming.Options {
@@ -389,8 +395,8 @@ func (f *finisher) pickName(t *take) bool {
 	case "suffix":
 		name = naming.FreeSuffix(dir, name, t.o.Underscores, f.records.taken)
 	case "skip":
-		if f.records.taken(filepath.Join(dir, name)) {
-			f.skip(t.id, proto.SkipDuplicate)
+		if path := filepath.Join(dir, name); f.records.taken(path) {
+			f.skipped(proto.TrackSkippedEvent{ID: t.id, Reason: proto.SkipDuplicate, Path: path})
 			return false
 		}
 	}

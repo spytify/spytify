@@ -61,19 +61,22 @@ func TestPlanPlacesTheSearchWindow(t *testing.T) {
 		name                    string
 		c                       *segment
 		atMs                    int64
-		restart                 bool
+		restart, paused         bool
 		kind                    changeKind
 		lo, hi, expected, ready int64
 		wantRestart             bool
 	}{
-		{"first", nil, 2500, false, changeFirst, ms(1500), ms(1500), ms(2500), ms(1500), false},
-		{"first, the ring holding less than 1 s", nil, 500, false, changeFirst, 0, 0, ms(500), 0, false},
-		{"natural end", takeFrom(f, 0, 2000), 1900, true, changeBoundary, ms(1700), ms(2300), ms(2000), ms(2300) + ms(frameMs)/2 + 1, false},
-		{"skip", takeFrom(f, 0, 2800), 1000, false, changeInterrupt, 1, ms(1300), ms(1000), ms(1300) + ms(frameMs)/2 + 1, false},
-		{"skip, the same track again", takeFrom(f, 0, 2800), 1000, true, changeInterrupt, 1, ms(1300), ms(1000), ms(1300) + ms(frameMs)/2 + 1, true},
+		{"first", nil, 2500, false, false, changeFirst, ms(1500), ms(1500), ms(2500), ms(1500), false},
+		{"first, the ring holding less than 1 s", nil, 500, false, false, changeFirst, 0, 0, ms(500), 0, false},
+		{"natural end", takeFrom(f, 0, 2000), 1900, true, false, changeBoundary, ms(1700), ms(2300), ms(2000), ms(2300) + ms(frameMs)/2 + 1, false},
+		{"natural end, named early", takeFrom(f, 0, 2000), 1500, false, false, changeBoundary, ms(1700), ms(2300), ms(2000), ms(2300) + ms(frameMs)/2 + 1, false},
+		{"the same, paused", takeFrom(f, 0, 2000), 1500, false, true, changeInterrupt, ms(500), ms(1800), ms(1500), ms(1800) + ms(frameMs)/2 + 1, false},
+		{"natural end, paused", takeFrom(f, 0, 2000), 1900, false, true, changeBoundary, ms(1700), ms(2300), ms(2000), ms(2300) + ms(frameMs)/2 + 1, false},
+		{"skip", takeFrom(f, 0, 2800), 1000, false, false, changeInterrupt, 1, ms(1300), ms(1000), ms(1300) + ms(frameMs)/2 + 1, false},
+		{"skip, the same track again", takeFrom(f, 0, 2800), 1000, true, false, changeInterrupt, 1, ms(1300), ms(1000), ms(1300) + ms(frameMs)/2 + 1, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			p := cf.plan(r, c.c, next, ms(c.atMs), c.restart)
+			p := cf.plan(r, c.c, next, ms(c.atMs), c.restart, c.paused)
 			if p.kind != c.kind || p.lo != c.lo || p.hi != c.hi || p.expected != c.expected || p.ready != c.ready || p.restart != c.wantRestart {
 				t.Fatalf("planned %+v", *p)
 			}
@@ -82,7 +85,7 @@ func TestPlanPlacesTheSearchWindow(t *testing.T) {
 	t.Run("no earlier than what was drained", func(t *testing.T) {
 		c := takeFrom(f, 0, 2800)
 		c.drained = ms(800)
-		if p := cf.plan(r, c, next, ms(1000), false); p.lo != ms(800) {
+		if p := cf.plan(r, c, next, ms(1000), false, false); p.lo != ms(800) {
 			t.Fatalf("lo %d, want %d", p.lo, ms(800))
 		}
 	})
@@ -128,7 +131,7 @@ func TestResolveFindsTheCut(t *testing.T) {
 		{"notice", ringOf(f, wave(ms(2000), 0.25)), takeFrom(f, 0, 3000), 1000, "notice", ms(1000)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			p := cf.plan(c.ring, c.c, meta.TrackInfo{Title: "B"}, ms(c.atMs), false)
+			p := cf.plan(c.ring, c.c, meta.TrackInfo{Title: "B"}, ms(c.atMs), false, false)
 			cut, by, ok := cf.resolve(c.ring, p, c.c, false)
 			if !ok || by != c.by || cut != c.cutAt {
 				t.Fatalf("cut at %d by %q (%v), want %d by %q", cut, by, ok, c.cutAt, c.by)
@@ -145,7 +148,7 @@ func TestResolveWaitsForItsAudio(t *testing.T) {
 	cf := finderFor(f)
 	r := ringOf(f, tone(f, 2000, 1), hush(f, 200))
 	c := takeFrom(f, 0, 2000)
-	p := cf.plan(r, c, meta.TrackInfo{Title: "B"}, ms(2100), false)
+	p := cf.plan(r, c, meta.TrackInfo{Title: "B"}, ms(2100), false, false)
 	if _, _, ok := cf.resolve(r, p, c, false); ok {
 		t.Fatal("resolved before the ring held the window")
 	}
@@ -154,7 +157,7 @@ func TestResolveWaitsForItsAudio(t *testing.T) {
 	}
 
 	quiet := ringOf(f, hush(f, 1500))
-	first := cf.plan(quiet, nil, meta.TrackInfo{Title: "A"}, ms(1000), false)
+	first := cf.plan(quiet, nil, meta.TrackInfo{Title: "A"}, ms(1000), false, false)
 	if _, _, ok := cf.resolve(quiet, first, nil, false); ok {
 		t.Fatal("a first track with no sound resolved before the start timeout")
 	}
@@ -171,7 +174,7 @@ func TestResolveKeepsWhatWasDrained(t *testing.T) {
 	cf := finderFor(f)
 	r := ringOf(f, tone(f, 2000, 1), hush(f, 500), tone(f, 1000, 2))
 	c := takeFrom(f, 0, 2000)
-	p := cf.plan(r, c, meta.TrackInfo{Title: "B"}, ms(2500), false)
+	p := cf.plan(r, c, meta.TrackInfo{Title: "B"}, ms(2500), false, false)
 	c.drained = ms(2200)
 	if cut, _, _ := cf.resolve(r, p, c, false); cut != ms(2200) {
 		t.Fatalf("cut at %d, want %d", cut, ms(2200))

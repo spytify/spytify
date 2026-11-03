@@ -76,6 +76,9 @@ type recordScreen struct {
 	// blocked leads to the diagnostics once a session ended for want of
 	// an output folder.
 	blocked *litButton
+	// showPlaylist shows the playlist the session that ended wrote.
+	showPlaylist *button
+	playlist     string
 
 	rows []model.Row
 	// items is the list's lines: the rows, each run of ads one pill, and
@@ -189,12 +192,19 @@ func newRecordScreen(a *App) *recordScreen {
 	r.startAgain = newLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, a.StartDaemon)
 	// Until spytifyd goes: the screen's width counts every button shown.
 	show(r.startAgain, false)
+	r.showPlaylist = newIconButton(lang.ShowPlaylist, theme.SearchIcon(), func() {
+		a.noteAction("show the playlist")
+		if r.playlist != "" {
+			_ = reveal(r.playlist)
+		}
+	})
+	show(r.showPlaylist, false)
 	// What the session waits for is an outlined info alert, as MUI draws
 	// one in the app's green: an outline and icon around green text, the
 	// page showing through, the next step on the right. Its corners are
 	// square, as the cards'.
 	infoIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.InfoIcon(), theme.ColorNamePrimary)))
-	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch.lit, r.play.lit, r.restart, r.blocked.lit, r.startAgain.lit),
+	alert := container.NewBorder(nil, nil, infoIcon, container.NewHBox(r.launch.lit, r.play.lit, r.restart, r.showPlaylist, r.blocked.lit, r.startAgain.lit),
 		container.NewVBox(layout.NewSpacer(), r.waiting, layout.NewSpacer()))
 	r.waitRow = inset(newPanel("", theme.ColorNamePrimary, 0, fyne.NewSize(pad*2, pad*1.5), alert))
 	// The recorder's warning is the same alert in the error red, its text
@@ -263,7 +273,8 @@ func newRecordScreen(a *App) *recordScreen {
 			} else {
 				keep.Hide()
 			}
-			if row.Path != "" && row.Status == model.Saved {
+			// A track already recorded has its file from before.
+			if row.Path != "" {
 				path := row.Path
 				revealBtn.OnTapped = func() { a.noteAction("show a track in its folder"); _ = reveal(path) }
 				playBtn.OnTapped = func() { a.noteAction("play a track"); _ = openPath(path) }
@@ -323,7 +334,7 @@ func rowDetails(r model.Row) string {
 	if ms := rowLength(r); ms > 0 {
 		parts = append(parts, fmtDuration(ms))
 	}
-	if r.Path != "" {
+	if r.Path != "" && r.Status == model.Saved {
 		parts = append(parts, strings.ToUpper(strings.TrimPrefix(filepath.Ext(r.Path), ".")))
 	}
 	if r.Bytes > 0 {
@@ -475,6 +486,8 @@ func (r *recordScreen) render(s model.State) {
 	waits := !gone && (s.Session == proto.StateIdle || s.Session == proto.StateWaiting || s.Session == proto.StatePaused)
 	down := c == nil && waits && !blocked && !playerRunning(s)
 	paused := waits && s.Session == proto.StatePaused && !down
+	// The session ended with a playlist: the alert names it.
+	ended := !gone && s.Session == proto.StateIdle && s.Playlist != ""
 	text := waitingText(s.Session)
 	switch {
 	case gone:
@@ -485,6 +498,8 @@ func (r *recordScreen) render(s model.State) {
 		text = fmt.Sprintf(lang.NothingRecordedNotRunning, player)
 	case paused:
 		text = fmt.Sprintf(lang.NothingRecordedPaused, player)
+	case ended:
+		text = fmt.Sprintf(lang.SessionEndedPlaylist, filepath.Join(filepath.Base(filepath.Dir(s.Playlist)), filepath.Base(s.Playlist)))
 	}
 	setCaption(r.waiting, text)
 	r.launch.SetText(fmt.Sprintf(lang.Open, player))
@@ -493,6 +508,8 @@ func (r *recordScreen) render(s model.State) {
 	show(r.restart, waits && c == nil && s.Session == proto.StateWaiting && !down)
 	show(r.blocked, blocked)
 	show(r.startAgain, gone)
+	r.playlist = s.Playlist
+	show(r.showPlaylist, ended && !blocked && !down)
 	show(r.waitRow, c == nil || paused)
 	show(r.card, c != nil)
 	if c != nil {
@@ -571,8 +588,9 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 		r.progress.SetValue(0)
 		setCaption(r.elapsed, fmtDuration(elapsed.Milliseconds()))
 	}
-	// The meter moves only while recording: paused or stopped, it is out.
-	if session == proto.StateRecording {
+	// The meter moves only while recording, the track a stop waits for
+	// included: paused, stopped or with the take dropped, it is out.
+	if session == proto.StateRecording || session == proto.StateStopping && c.Status != model.Skipped {
 		r.meter.SetLevel(level)
 	} else {
 		r.meter.Clear()

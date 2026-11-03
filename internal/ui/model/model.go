@@ -46,10 +46,14 @@ type Row struct {
 	Started        time.Time
 	Status         RowStatus
 	Reason         proto.SkipReason
-	Path           string
-	DurationMs     int64
-	Bytes          int64
-	TaggedBy       string
+	// Path is the row's file: the one saved, or the one a track skipped as
+	// already recorded has. RecordedBy is the take of this session whose
+	// file that is, while it is still being saved.
+	Path       string
+	RecordedBy string
+	DurationMs int64
+	Bytes      int64
+	TaggedBy   string
 	// Keepable is a take cut short or in low quality that can still be
 	// saved (track.keep); Partial is one that was.
 	Keepable bool
@@ -125,10 +129,12 @@ type State struct {
 	HaveInfo  bool
 	Session   proto.SessionState
 	SessionID string
-	Current   *Row
-	Rows      []Row // newest first
-	Level     proto.LevelEvent
-	Target    proto.TargetStateEvent
+	// Playlist is the .m3u8 the session that ended wrote.
+	Playlist string
+	Current  *Row
+	Rows     []Row // newest first
+	Level    proto.LevelEvent
+	Target   proto.TargetStateEvent
 	// TargetKnown is set once a target.state event arrived; until then
 	// the core.info check is all there is.
 	TargetKnown bool
@@ -380,9 +386,12 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		if s.Session == proto.StateIdle && e.State != proto.StateIdle {
 			// A new session starts a new list.
-			s.Rows, s.Current, s.LastError = nil, nil, nil
+			s.Rows, s.Current, s.LastError, s.Playlist = nil, nil, nil, ""
 		}
 		s.Session = e.State
+		if e.State == proto.StateIdle {
+			s.Playlist = e.Playlist
+		}
 		m.trackPause(s)
 		// Waiting means the core follows no item: what was playing ended.
 		if e.State == proto.StateIdle || e.State == proto.StateWaiting {
@@ -419,12 +428,27 @@ func (m *Model) apply(s *State, ev proto.Event) {
 			r.Status, r.Path, r.DurationMs, r.Bytes, r.TaggedBy = Saved, e.Path, e.DurationMs, e.Bytes, e.TaggedBy
 			r.Partial, r.PauseFade, r.Keepable = e.Partial, e.PauseFade, false
 		})
+		// The tracks played again while this take was being saved have its
+		// file now.
+		eachRow(s, func(r *Row) {
+			if r.RecordedBy == e.ID && r.Path == "" {
+				r.Path = e.Path
+			}
+		})
 	case proto.EventTrackSkipped:
 		var e proto.TrackSkippedEvent
 		if ev.Decode(&e) != nil {
 			return
 		}
-		m.edit(s, e.ID, func(r *Row) { r.Status, r.Reason = Skipped, e.Reason })
+		path := e.Path
+		if e.Of != "" {
+			eachRow(s, func(r *Row) {
+				if r.ID == e.Of && r.Status == Saved {
+					path = r.Path
+				}
+			})
+		}
+		m.edit(s, e.ID, func(r *Row) { r.Status, r.Reason, r.Path, r.RecordedBy = Skipped, e.Reason, path, e.Of })
 	case proto.EventTrackKeepable:
 		var e proto.TrackKeepableEvent
 		if ev.Decode(&e) != nil {
@@ -493,6 +517,16 @@ func (m *Model) retire(s *State) {
 
 // edit changes the row with id, current or listed. A skip of the current
 // track (an advert, a duplicate) keeps it current: it is still playing.
+// eachRow calls fn with each row of the list and the current track's.
+func eachRow(s *State, fn func(*Row)) {
+	if s.Current != nil {
+		fn(s.Current)
+	}
+	for i := range s.Rows {
+		fn(&s.Rows[i])
+	}
+}
+
 func (m *Model) edit(s *State, id string, fn func(*Row)) {
 	if s.Current != nil && s.Current.ID == id {
 		fn(s.Current)
