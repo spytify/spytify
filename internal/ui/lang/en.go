@@ -65,6 +65,8 @@ const (
 	NoFilesYet                = "No files yet"
 	NoFilesYetText            = "Each track becomes a file here when it ends."
 	SessionEnded              = "Session ended."
+	SessionEndedPlaylist      = "Session ended. Playlist: %s"
+	ShowPlaylist              = "Show playlist"
 	SessionEndedBlocked       = "Session ended: Spytify cannot write to the output folder, so Record is off."
 	FinishingLastFiles        = "Finishing the last files…"
 	WaitingNextTrack          = "Waiting for the next track to start."
@@ -296,8 +298,9 @@ const (
 )
 
 // The message when no graphics driver offers OpenGL, then what to do on
-// Linux or Windows.
+// Linux or Windows; on Linux, the one when no display answers.
 const (
+	NoDisplay     = "Spytify can't open its window: no display answers. Open it from your desktop session, not over SSH or from a text console."
 	NoWindow      = "Spytify can't open its window. It draws it with OpenGL, and no graphics driver on this computer offers it."
 	NoWindowLinux = "Install Mesa's OpenGL drivers, which draw with the graphics card or, without one, with the processor, then open Spytify again:\n" +
 		"Debian, Ubuntu: sudo apt install libgl1-mesa-dri libglx-mesa0 libegl-mesa0\n" +

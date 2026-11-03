@@ -164,8 +164,9 @@ func TestPlayerHeardCheck(t *testing.T) {
 }
 
 // The level meter reports the highest peak and the RMS of every sample
-// since its last report, at most every 100 ms, and only while recording.
-// The clock is moved by setting when the last report went.
+// since its last report, at most every 100 ms, and only while recording,
+// the track a stop waits for included. The clock is moved by setting when
+// the last report went.
 func TestPinnedMeter(t *testing.T) {
 	r := bareRig(t, nil, endOnStop)
 	s := r.s
@@ -192,6 +193,10 @@ func TestPinnedMeter(t *testing.T) {
 	// Stereo: each channel's, left then right, and the whole's.
 	s.lastLevel = time.Time{}
 	s.meter([]float64{-6, -20}, []float64{-12, -30}, 100)
+	// Stop pressed: the track plays to its end, and is recorded to it.
+	s.setState(proto.StateStopping)
+	s.lastLevel = time.Time{}
+	mono(-25, -25, 100)
 	one := func(peak, rms float64) proto.LevelEvent {
 		return proto.LevelEvent{PeakDBFS: peak, RMSDBFS: rms, Channels: []proto.ChannelLevel{{PeakDBFS: peak, RMSDBFS: rms}}}
 	}
@@ -201,6 +206,7 @@ func TestPinnedMeter(t *testing.T) {
 		one(-120, -120),
 		one(-30, -30),
 		{PeakDBFS: -6, RMSDBFS: -14.9, Channels: []proto.ChannelLevel{{PeakDBFS: -6, RMSDBFS: -12}, {PeakDBFS: -20, RMSDBFS: -30}}},
+		one(-25, -25),
 	}
 	r.mu.Lock()
 	got := append([]proto.LevelEvent(nil), r.levels...)
@@ -255,10 +261,10 @@ func TestPinnedFormats(t *testing.T) {
 	f48 := pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.S16LE}
 	a, b := info("/x/a", "A", 3000), info("/x/b", "B", 3000)
 	scripts := map[string]func(r *rig){
-		// A call takes the headset during A, and ends during B. Today's
-		// behavior, which looks odd: 1 s after A's cut, the new stream is
-		// taken for A's start; A loses its first second, and its length,
-		// counted from there, puts B's cut 500 ms late.
+		// A call takes the headset 1 s into A, and ends 1 s into B. Each
+		// plays on in the new stream for what is left of its length: its
+		// file misses the second in the other format, and B is cut at A's
+		// end.
 		"call-during-a-track": func(r *rig) {
 			r.status(meta.Playing)
 			r.track(a, 0)
@@ -271,6 +277,21 @@ func TestPinnedFormats(t *testing.T) {
 			r.sound(2, 1000)
 			r.setFormat(f44)
 			r.sound(2, 2000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// The call comes 2.5 s into a 6 s A: more than the 2 s a take may
+		// miss, so A is cut short. B is still cut at A's end.
+		"call-2.5s-into-a-track": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(info("/x/a", "A", 6000), 0)
+			r.quiet(500)
+			r.sound(1, 2500)
+			r.setFormat(call)
+			r.sound(1, 3500)
+			r.quiet(500)
+			r.track(b, 0)
+			r.sound(2, 3000)
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		},
@@ -498,7 +519,9 @@ func TestPinnedSkipForwardFailure(t *testing.T) {
 	r := bareRig(t, map[string]any{"recorder.duplicates": "skip", "recorder.skip_duplicates_forward": true}, endOnStop)
 	r.alreadyRecorded("Artist", "A")
 	r.s.deps.control = func(string) error { return errors.New("not now") }
-	r.s.classify(&segment{info: trackA, format: f44})
+	seg := &segment{info: trackA, format: f44}
+	r.s.classify(seg)
+	r.s.announce(seg)
 	waitFor(t, func() bool { return slices.Contains(r.lines(), "log info: skip to next: not now") }, "log of the refused skip")
 }
 

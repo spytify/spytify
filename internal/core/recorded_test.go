@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -109,7 +110,8 @@ func (b *bench) open(ff *encode.FFmpeg) *finisher {
 }
 
 func (b *bench) recorded(fin *finisher, info meta.TrackInfo) bool {
-	return fin.recorded(info, b.store.Values())
+	_, ok := fin.find(info, b.store.Values())
+	return ok
 }
 
 // file writes data at rel, under the output folder.
@@ -179,6 +181,19 @@ func (b *bench) outcome(id string) (saved string, skipped proto.SkipReason) {
 		}
 	}
 	return saved, skipped
+}
+
+// skippedFile is the file take id was skipped for, as already recorded,
+// relative to the output folder.
+func (b *bench) skippedFile(id string) string {
+	for _, ev := range b.rec.all() {
+		var s proto.TrackSkippedEvent
+		if ev.Method == proto.EventTrackSkipped && ev.Decode(&s) == nil && s.ID == id && s.Path != "" {
+			rel, _ := filepath.Rel(b.out, s.Path)
+			return rel
+		}
+	}
+	return ""
 }
 
 // caseBlind reports whether the file system under dir finds a name in
@@ -303,8 +318,8 @@ func TestAJobInFlightClaimsItsTrack(t *testing.T) {
 	release := b.hold()
 	// Cut short, it is skipped once it runs, and nothing is saved.
 	fin.enqueue(finishJob{id: "s-1", info: ferry, format: cd, played: cd.FramesFromMs(1000), length: cd.FramesFromMs(60_000)})
-	if !b.recorded(fin, ferry) {
-		t.Error("in flight: not recorded")
+	if f, ok := fin.find(ferry, b.store.Values()); !ok || f != (recordedFile{of: "s-1"}) {
+		t.Errorf("in flight: %+v, %v, want its take", f, ok)
 	}
 	if !b.recorded(fin, meta.TrackInfo{Title: "MIDNIGHT ferry ", Artists: []string{" Neon HARBOR"}}) {
 		t.Error("in flight, asked in another case: not recorded")
@@ -375,6 +390,9 @@ func TestTheFinisherSkipsATakeWhoseFileIsThere(t *testing.T) {
 			fin.wait()
 			if saved, why := b.outcome("s-1"); saved != "" || why != proto.SkipDuplicate {
 				t.Fatalf("saved %q, skipped %q; want skipped as a duplicate", saved, why)
+			}
+			if got := b.skippedFile("s-1"); got != c.file {
+				t.Errorf("skipped for %q, want the file there, %q", got, c.file)
 			}
 			if got := b.read(c.file); got != "before" {
 				t.Errorf("the file there became %q", got)
@@ -621,8 +639,8 @@ func TestASavedTrackStaysRecorded(t *testing.T) {
 	if saved, why := b.outcome("s-1"); saved != ferryName {
 		t.Fatalf("saved %q, skipped %q", saved, why)
 	}
-	if !b.recorded(fin, ferry) {
-		t.Error("not recorded once saved")
+	if f, ok := fin.find(ferry, b.store.Values()); !ok || f != (recordedFile{path: filepath.Join(b.out, ferryName)}) {
+		t.Errorf("once saved: %+v, %v, want its file", f, ok)
 	}
 	if rej := b.store.Override(map[string]any{"output.group_by": "artist/album", "encode.format": "flac"}); len(rej) > 0 {
 		t.Fatal(rej)
@@ -636,5 +654,40 @@ func TestASavedTrackStaysRecorded(t *testing.T) {
 	}
 	if b.recorded(next, ferry) {
 		t.Error("recorded once its file was deleted")
+	}
+}
+
+// The session's skip names the file a track already recorded has: the one
+// at its name, whatever its prefix, or the one the index has. A track
+// played again while a take of the session saves it names that take
+// instead (states/duplicate-skipped).
+func TestASkippedTrackNamesTheFileItHas(t *testing.T) {
+	for _, c := range []struct {
+		name, file string
+		indexed    bool
+	}{
+		{"its file at its name", "Artist - B.wav", false},
+		{"a counter prefix", "007 Artist - B.wav", false},
+		{"in the index, its file elsewhere", filepath.Join("Old", "B.flac"), true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := newRig(t, map[string]any{"recorder.duplicates": "skip"}, endOnStop)
+			path := filepath.Join(r.out, c.file)
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte("before"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if c.indexed {
+				r.fin.records.saved(trackB, path)
+			}
+			playA(r)
+			thenB(r)
+			r.endCapture()
+			if want := "skipped t-002 duplicate path=" + r.clean(path); !slices.Contains(r.lines(), want) {
+				t.Errorf("no %q in\n%s", want, strings.Join(r.lines(), "\n"))
+			}
+		})
 	}
 }

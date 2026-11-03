@@ -168,6 +168,12 @@ func (r *rig) emit(method string, payload any) {
 		}
 	case proto.TrackSkippedEvent:
 		line = fmt.Sprintf("skipped %s %s", p.ID, p.Reason)
+		if p.Path != "" {
+			line += " path=" + r.clean(p.Path)
+		}
+		if p.Of != "" {
+			line += " of=" + p.Of
+		}
 	case proto.ErrorEvent:
 		msg := p.Msg
 		switch p.Code {
@@ -715,7 +721,7 @@ func info(id, title string, lengthMs int64) meta.TrackInfo {
 // alreadyRecorded makes the finisher take a track for one saved before.
 func (r *rig) alreadyRecorded(artist, title string) {
 	r.fin.records.mu.Lock()
-	r.fin.records.claims[trackKey(artist, title)] = true
+	r.fin.records.claims[trackKey(artist, title)] = ""
 	r.fin.records.mu.Unlock()
 	r.describe("%s - %s is already recorded", artist, title)
 }

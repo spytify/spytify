@@ -96,4 +96,4 @@ Signing turns on once the repository has the secrets, otherwise the files ship u
 
 ## Site
 
-The site is built by GitHub Pages from the `gh-pages` branch. `v2/settings.md` and the protocol section come from the code: `go run ./internal/tools/gendocs -out <gh-pages checkout>`.
+The site is built by GitHub Pages from the `gh-pages` branch. `v2/settings.md` and the protocol section come from the code: `go run ./internal/tools/gendocs -out <gh-pages checkout>`. The release workflow's **site** job fails when they differ from what gendocs writes for the release; the draft is made all the same.

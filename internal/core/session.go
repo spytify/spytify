@@ -91,6 +91,9 @@ type segment struct {
 	drained int64
 	w       *pcm.WAVWriter
 	reason  proto.SkipReason
+	// recorded is where the file of a track skipped as already recorded
+	// is.
+	recorded recordedFile
 	// soundAt is the first frame above silence at or after start, or -1.
 	// A player that leaves a gap between items starts the item there; a
 	// player that streams items back to back starts it at start. The next
@@ -127,6 +130,8 @@ type sessionDeps struct {
 	// silence tells that the capture hears only silence while the player
 	// plays (true), or sound (false).
 	silence func(on bool)
+	// playlist is the session's playlist file as it ends, "" for none.
+	playlist func() string
 }
 
 // Session turns a stream of frames and now-playing events into track files.
@@ -230,7 +235,11 @@ func (s *Session) setState(st proto.SessionState) {
 			// The player's sound is due from now, not from before the ad.
 			s.lastSound = time.Now()
 		}
-		s.deps.emit(proto.EventSessionState, proto.SessionStateEvent{State: st})
+		ev := proto.SessionStateEvent{State: st}
+		if st == proto.StateIdle && s.deps.playlist != nil {
+			ev.Playlist = s.deps.playlist()
+		}
+		s.deps.emit(proto.EventSessionState, ev)
 		s.muteAds(st)
 	}
 }
@@ -499,7 +508,8 @@ func (s *Session) meter(peaks, rms []float64, frames int) {
 	if time.Since(s.lastLevel) < 100*time.Millisecond {
 		return
 	}
-	if st := s.state(); st == proto.StateRecording && s.count > 0 {
+	// A stop that waits for the track's end still records it.
+	if st := s.state(); (st == proto.StateRecording || st == proto.StateStopping) && s.count > 0 {
 		e := proto.LevelEvent{PeakDBFS: pcm.Silence}
 		var sum float64
 		for c := range s.peak {
@@ -531,6 +541,7 @@ func (s *Session) makeRoom(n int64) {
 		}
 		if c.awaitStart {
 			c.awaitStart = false
+			s.announce(c)
 		}
 		if c.length > 0 && need > c.start+c.length-s.window {
 			if !s.warnedLen {
@@ -638,6 +649,9 @@ func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 			s.initial, s.initPos = &info, ev.PositionMs
 			return
 		}
+		// Named once the player said its status, a track replaces the one
+		// a stopped player showed.
+		s.initial = nil
 		if ev.Restart {
 			s.deps.log.Debugf("%q started over: the player is at %d ms", ev.Track.Title, ev.PositionMs)
 		}
@@ -650,6 +664,7 @@ func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 		s.deps.log.Infof("player interface gone")
 		// A player that is gone plays nothing, whatever it said last.
 		s.status = meta.Stopped
+		s.initial = nil
 		s.endOfPlayback()
 	case meta.Seeked:
 		s.deps.log.Debugf("%q: the player jumped to %d ms", ev.Track.Title, ev.PositionMs)
@@ -766,10 +781,16 @@ func (s *Session) onTrack(info meta.TrackInfo, at int64, restart bool) {
 		s.adopt(c, info)
 		return
 	}
+	// Another track before the one paused at its start ever played: that
+	// one leaves no take, and this one starts as the session's first.
+	if c := s.cur; c != nil && !c.announced && !c.ghost {
+		s.dropWriter(c)
+		s.cur = nil
+	}
 	if s.pend != nil {
 		s.tryResolve(true)
 	}
-	s.pend = s.plan(s.ring, s.cur, info, at, restart)
+	s.pend = s.plan(s.ring, s.cur, info, at, restart, s.status == meta.Paused)
 }
 
 func maxInt(a, b int64) int64 {
@@ -850,6 +871,7 @@ func (s *Session) tryStart(c *segment, force bool) {
 	}
 	s.deps.log.Debugf("%q starts at its first sound, %d ms", c.info.Title, s.ring.Format().MsFromFrames(at))
 	c.start, c.drained, c.awaitStart, c.soundAt = at, at, false, -1
+	s.announce(c)
 }
 
 func (s *Session) newSegment(info meta.TrackInfo, start int64) *segment {
@@ -872,19 +894,14 @@ func (s *Session) newSegment(info meta.TrackInfo, start int64) *segment {
 // classify decides whether a segment is recorded, and opens its temp file.
 func (s *Session) classify(seg *segment) {
 	v := s.deps.values()
-	seg.reason = ""
+	seg.reason, seg.recorded = "", recordedFile{}
 	short := v.Int(settings.RecorderSkipShortUntitled)
 	if seg.info.IsAdvert() || (short > 0 && seg.info.LengthMs > 0 && seg.info.LengthMs < short*1000 && seg.info.Album == "") {
 		seg.reason = proto.SkipAd
 	}
-	if seg.reason == "" && v.String(settings.RecorderDuplicates) == "skip" && s.deps.fin.recorded(seg.info, v) {
-		seg.reason = proto.SkipDuplicate
-		if v.Bool(settings.RecorderSkipDuplicatesForward) {
-			go func() {
-				if err := s.deps.control(proto.CmdNext); err != nil {
-					s.deps.log.Infof("skip to next: %v", err)
-				}
-			}()
+	if seg.reason == "" && v.String(settings.RecorderDuplicates) == "skip" {
+		if f, ok := s.deps.fin.find(seg.info, v); ok {
+			seg.reason, seg.recorded = proto.SkipDuplicate, f
 		}
 	}
 	if seg.reason == "" && !seg.ghost && !seg.provisional {
@@ -946,13 +963,29 @@ func (s *Session) announce(seg *segment) {
 	}
 	s.deps.emit(proto.EventTrackStarted, ev)
 	switch seg.reason {
-	case proto.SkipAd, proto.SkipDuplicate, proto.SkipSeeked:
+	case proto.SkipAd, proto.SkipSeeked:
 		s.deps.fin.skip(seg.id, seg.reason)
+	case proto.SkipDuplicate:
+		s.deps.fin.skipped(proto.TrackSkippedEvent{ID: seg.id, Reason: seg.reason, Path: seg.recorded.path, Of: seg.recorded.of})
+	}
+	// A duplicate is skipped once announced: one paused at its start waits
+	// for Play, as next would make a paused player play the next track.
+	if seg.reason == proto.SkipDuplicate && s.deps.values().Bool(settings.RecorderSkipDuplicatesForward) {
+		go func() {
+			if err := s.deps.control(proto.CmdNext); err != nil {
+				s.deps.log.Infof("skip to next: %v", err)
+			}
+		}()
 	}
 }
 
 func (s *Session) closeSegment(c *segment, end int64) {
 	if c.ghost || c.provisional {
+		return
+	}
+	// The window was never told of the take: it never played.
+	if !c.announced {
+		s.dropWriter(c)
 		return
 	}
 	played := end - c.start
@@ -962,6 +995,15 @@ func (s *Session) closeSegment(c *segment, end int64) {
 	if c.w == nil {
 		if c.reason == proto.SkipIncomplete && c.announced {
 			s.deps.fin.skip(c.id, c.reason)
+		}
+		return
+	}
+	// Cut at its own start, as when the player names the next track at
+	// once, the take holds nothing: it is skipped, with nothing to keep.
+	if played == 0 {
+		s.dropWriter(c)
+		if c.reason == "" {
+			s.deps.fin.skip(c.id, proto.SkipIncomplete)
 		}
 		return
 	}
@@ -992,7 +1034,7 @@ func (s *Session) closeSegment(c *segment, end int64) {
 
 func (s *Session) onStatus(st meta.Status, positionMs, at int64, first bool) {
 	s.status = st
-	if first {
+	if s.initial != nil {
 		s.startFromInitial(st, at)
 	}
 	switch st {
@@ -1023,17 +1065,30 @@ func (s *Session) onStatus(st meta.Status, positionMs, at int64, first bool) {
 func (s *Session) startFromInitial(st meta.Status, at int64) {
 	info := s.initial
 	s.initial = nil
-	if info == nil || info.Empty() || st == meta.Stopped {
+	if info == nil || info.Empty() {
+		return
+	}
+	pos := s.initPos
+	if st == meta.Stopped {
+		// A stopped player plays the track it shows from its start, and
+		// Play names no track: the track waits for Play, unless another
+		// is named first.
+		if pos <= freshStartMs {
+			s.initial, s.initPos = info, 0
+		}
 		return
 	}
 	f := s.ring.Format()
-	pos := s.initPos
-	if st == meta.Playing && pos >= 0 && pos <= freshStartMs {
+	if (st == meta.Playing || st == meta.Paused) && pos >= 0 && pos <= freshStartMs {
 		seg := s.newSegment(*info, at)
 		seg.awaitStart = true
 		seg.startDeadline = at + s.ms(startTimeoutMs)
 		s.cur = seg
-		s.announce(seg)
+		// Paused at its start, the track is announced once it plays: a
+		// track changed or a session ended before then leaves no take.
+		if st == meta.Playing {
+			s.announce(seg)
+		}
 		return
 	}
 	ghost := &segment{id: s.id + "-pre", info: *info, format: f, ghost: true, start: at, drained: at, soundAt: -1}
@@ -1211,8 +1266,19 @@ func (s *Session) formatChange(f pcm.Format) {
 		// stream.
 		s.dropWriter(c)
 		s.ring = saved
+		// Unless the take held sound for longer than the cut's window: the
+		// track was playing, and the stream was recreated for another
+		// reason, such as a call taking the headset. It plays on in the
+		// new stream for what is left of its length, and what the old
+		// stream held is lost from its file.
+		heard := c.soundAt >= 0 && old.End()-c.soundAt > old.Format().FramesFromMs(f.MsFromFrames(s.window))
+		lostMs := int64(0)
+		if heard {
+			lostMs = old.Format().MsFromFrames(old.End() - c.soundAt)
+		}
 		c.format, c.start, c.origin, c.drained, c.soundAt = f, 0, 0, 0, -1
-		c.length = f.FramesFromMs(c.info.LengthMs)
+		c.length = f.FramesFromMs(max(0, c.info.LengthMs-lostMs))
+		c.partial = lostMs > completeToleranceMs
 		c.awaitStart, c.startDeadline = true, s.ms(startTimeoutMs)
 		if c.reason == "" {
 			if w, err := s.tempWAV(c.id, f); err == nil {
