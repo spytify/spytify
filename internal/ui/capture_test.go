@@ -13,10 +13,10 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// TestTheReadmeCapture draws LIGHT.png and DARK.png at the repository's root,
-// the pictures of the README and of the site's Overview: a FLAC session 1:33
-// into its fifth track, three files saved, one skipped as already recorded,
-// and no ads.
+// TestTheReadmeCapture draws assets/recording-light.png and
+// assets/recording-dark.png, the pictures of the README and of the site's
+// Overview: a FLAC session 1:33 into its fifth track, three files saved, one
+// skipped as already recorded, and no ads.
 func TestTheReadmeCapture(t *testing.T) {
 	if os.Getenv("SPYTIFY_README_CAPTURE") == "" {
 		t.Skip("only for the README's pictures: SPYTIFY_README_CAPTURE=1 go test -run TestTheReadmeCapture ./internal/ui/")
@@ -63,7 +63,7 @@ func TestTheReadmeCapture(t *testing.T) {
 		size := a.win.Canvas().Size()
 		a.win.Resize(size.Add(fyne.NewSize(1, 1)))
 		a.win.Resize(size)
-		writeCapture(t, a, filepath.Join("..", "..", map[string]string{"light": "LIGHT.png", "dark": "DARK.png"}[look]))
+		writeCapture(t, a, filepath.Join("..", "..", "assets", "recording-"+look+".png"))
 	}
 	if s := m.Snapshot(); s.Current == nil || m.Elapsed(*s.Current) != 93*time.Second {
 		t.Error("the current track is not 1:33 in")
