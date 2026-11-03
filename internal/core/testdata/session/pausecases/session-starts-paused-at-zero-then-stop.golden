@@ -1,0 +1,16 @@
+# pausecases/session-starts-paused-at-zero-then-stop
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at -)
+       0ms  > player Paused pos=-1 (ring at 0)
+       0ms  state paused
+       0ms  take t-001 "A" start=0(0ms) length=132300(3000ms) awaiting-sound
+       0ms  > audio silence, 22050(500ms)
+     500ms  > session.stop now
+     500ms  state stopping
+     500ms  state idle
+     500ms  take none
+--- jobs
+--- end: idle, 0 skipped, 0 ads, 0 overruns

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/pkg/proto"
@@ -603,4 +604,23 @@ func TestPinnedDuplicateSkipsForward(t *testing.T) {
 	thenB(r)
 	r.check("states/duplicate-skips-forward")
 	waitFor(t, func() bool { return len(r.sent()) == 1 && r.sent()[0] == proto.CmdNext }, "player.control next")
+}
+
+// Already recorded and paused at its start when the session begins, a
+// track sends next once it plays: on a paused player, next would start
+// the next track before Play was pressed.
+func TestADuplicatePausedAtItsStartSkipsOnceItPlays(t *testing.T) {
+	r := newRig(t, map[string]any{"recorder.duplicates": "skip", "recorder.skip_duplicates_forward": true}, endOnStop)
+	r.alreadyRecorded("Artist", "A")
+	r.track(info("/x/a", "A", 3000), 0)
+	r.status(meta.Paused)
+	r.quiet(500)
+	time.Sleep(100 * time.Millisecond)
+	if sent := r.sent(); len(sent) != 0 {
+		t.Fatalf("sent %v while the player was paused", sent)
+	}
+	r.status(meta.Playing)
+	r.sound(1, 3000)
+	waitFor(t, func() bool { return len(r.sent()) == 1 && r.sent()[0] == proto.CmdNext }, "player.control next")
+	r.stop(true)
 }
