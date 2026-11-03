@@ -16,5 +16,4 @@
      300ms  state idle
      300ms  take none
 --- jobs
-job t-001 "A" played=0(0ms) length=132300(3000ms) wav=13230 crc=55e13685 rejected=incomplete
 --- end: idle, 1 skipped, 0 ads, 0 overruns

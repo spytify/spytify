@@ -984,6 +984,15 @@ func (s *Session) closeSegment(c *segment, end int64) {
 		}
 		return
 	}
+	// Cut at its own start, as when the player names the next track at
+	// once, the take holds nothing: it is skipped, with nothing to keep.
+	if played == 0 {
+		s.dropWriter(c)
+		if c.reason == "" {
+			s.deps.fin.skip(c.id, proto.SkipIncomplete)
+		}
+		return
+	}
 	path := c.w.Path()
 	if err := c.w.Close(); err != nil {
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "write", Msg: err.Error()})

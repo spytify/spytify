@@ -86,8 +86,8 @@ func TestPinnedStops(t *testing.T) {
 			r.track(trackB, 0)
 			r.sound(2, 1000)
 		}},
-		// Today's behavior, which looks odd: the take is held for
-		// track.keep with nothing played but the silence it waited in.
+		// Nothing played but the silence the take waited in: it is said
+		// skipped, and nothing is kept for track.keep.
 		"stop-now-while-awaiting-the-first-sound": {endOnStop, nil, func(r *rig) {
 			r.track(trackA, 100)
 			r.status(meta.Playing)
