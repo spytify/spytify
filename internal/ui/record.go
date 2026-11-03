@@ -78,7 +78,13 @@ type recordScreen struct {
 	blocked *litButton
 
 	rows []model.Row
-	list *cardList
+	// items is the list's lines: the rows, each run of ads one pill, and
+	// its ads under it while open has its key. slim is the height of an ad
+	// break's lines.
+	items []sessionItem
+	open  map[string]bool
+	slim  float32
+	list  *cardList
 	// shape is which parts the screen last showed; it is laid out again
 	// only when that changes.
 	shape string
@@ -202,7 +208,7 @@ func newRecordScreen(a *App) *recordScreen {
 		container.NewBorder(nil, nil, errorIcon, container.NewCenter(r.alertDiagnose.lit), container.NewVBox(layout.NewSpacer(), r.alert, layout.NewSpacer()))))
 
 	r.list = newCardList(
-		func() int { return len(r.rows) },
+		func() int { return len(r.items) },
 		func() fyne.CanvasObject {
 			status := newBadge(fmt.Sprintf(lang.SkippedFor, lang.ReasonDuplicate), colorSkippedBadge, "", colorOnSkippedBadge)
 			keep := container.NewCenter(newRowButton(lang.KeepAnyway, theme.DocumentSaveIcon()))
@@ -210,16 +216,38 @@ func newRecordScreen(a *App) *recordScreen {
 			reveal := newRowButton("", theme.SearchIcon())
 			play := newRowButton("", theme.MediaPlayIcon())
 			play.main = true
-			// The title, the artist, then the length, format and size.
-			return trackRow(3, container.NewHBox(container.NewCenter(status), keep, container.NewCenter(reveal), container.NewCenter(play)))
+			// The title, the artist, then the length, format and size; or an
+			// ad break's pill, or one of its ads.
+			track := trackRow(3, container.NewHBox(container.NewCenter(status), keep, container.NewCenter(reveal), container.NewCenter(play)))
+			brk, ad := newAdBreak(), newAdLine()
+			brk.Hide()
+			ad.Hide()
+			return container.NewStack(track, brk, ad)
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
-			if id >= len(r.rows) {
+			if id >= len(r.items) {
 				return
 			}
-			row := r.rows[id]
+			item := r.items[id]
+			parts := o.(*fyne.Container).Objects
 			// Border layout: center first, then the leading and trailing parts.
-			box := o.(*fyne.Container)
+			box, brk, ad := parts[0].(*fyne.Container), parts[1].(*fyne.Container), parts[2].(*fyne.Container)
+			show(box, item.kind == itemTrack)
+			show(brk, item.kind == itemBreak)
+			show(ad, item.kind == itemAd)
+			switch item.kind {
+			case itemBreak:
+				key := item.brk
+				setAdBreak(brk, fmt.Sprintf(lang.AdBreak, fmtDuration(item.length)), r.open[key], func() { r.toggle(key) })
+				// The pill's text changed width: lay the row out again.
+				brk.Refresh()
+				return
+			case itemAd:
+				setAdLine(ad, adName(item.n, item.row.Title), fmtDuration(item.length))
+				ad.Refresh()
+				return
+			}
+			row := item.row
 			right := box.Objects[2].(*fyne.Container)
 			setTrackRow(box, a.covers.get(row.CoverURL).row, row.Title, row.Artist, rowDetails(row))
 			fill, ink := badgeColors(row)
@@ -250,6 +278,20 @@ func newRecordScreen(a *App) *recordScreen {
 		},
 	)
 
+	r.list.height = func(id widget.ListItemID) float32 {
+		if id < len(r.items) && r.items[id].kind != itemTrack {
+			return r.slimHeight()
+		}
+		return 0
+	}
+	// An ad break, open or not, is one blue block between its tracks.
+	r.list.band = func(id widget.ListItemID) fyne.ThemeColorName {
+		if id < len(r.items) && r.items[id].kind != itemTrack {
+			return colorAdBand
+		}
+		return ""
+	}
+
 	r.totals = caption("")
 	r.totals.Segments[0].(*widget.TextSegment).Style.ColorName = colorLabel
 	openFolder := newIconButton(lang.OpenFolder, theme.FolderOpenIcon(), func() {
@@ -278,10 +320,8 @@ func newRecordScreen(a *App) *recordScreen {
 // parts not known: "3:56 · FLAC · 29.6 MB".
 func rowDetails(r model.Row) string {
 	var parts []string
-	if r.DurationMs > 0 {
-		parts = append(parts, fmtDuration(r.DurationMs))
-	} else if r.LengthMs > 0 {
-		parts = append(parts, fmtDuration(r.LengthMs))
+	if ms := rowLength(r); ms > 0 {
+		parts = append(parts, fmtDuration(ms))
 	}
 	if r.Path != "" {
 		parts = append(parts, strings.ToUpper(strings.TrimPrefix(filepath.Ext(r.Path), ".")))
@@ -290,6 +330,34 @@ func rowDetails(r model.Row) string {
 		parts = append(parts, fmtBytes(r.Bytes))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// rowLength is how long a row's file plays, or its track when it has none.
+func rowLength(r model.Row) int64 {
+	if r.DurationMs > 0 {
+		return r.DurationMs
+	}
+	return r.LengthMs
+}
+
+// toggle opens an ad break's pill, or closes it.
+func (r *recordScreen) toggle(key string) {
+	r.app.noteAction("open or close an ad break")
+	if r.open == nil {
+		r.open = map[string]bool{}
+	}
+	r.open[key] = !r.open[key]
+	r.items = sessionItems(r.rows, r.open)
+	r.list.Refresh()
+}
+
+// slimHeight is an ad break's lines': as tall as an ad's line, the pill
+// fitting in it.
+func (r *recordScreen) slimHeight() float32 {
+	if r.slim == 0 {
+		r.slim = max(newAdLine().MinSize().Height, newAdBreak().MinSize().Height)
+	}
+	return r.slim
 }
 
 // badgeColors is a row's status badge: green for a saved file, sand for a
@@ -434,6 +502,7 @@ func (r *recordScreen) render(s model.State) {
 	r.rows = s.Rows
 	if shown := fmt.Sprint(r.rows, r.app.covers.loads()); shown != r.shown {
 		r.shown = shown
+		r.items = sessionItems(r.rows, r.open)
 		r.list.Refresh()
 	}
 	show(r.noRows, len(r.rows) == 0)

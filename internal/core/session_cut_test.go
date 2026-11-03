@@ -9,6 +9,7 @@ import (
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/testkit"
 )
 
 // junction is what the audio does where one track gives way to the next.
@@ -71,7 +72,7 @@ func junctionTimeline(t *testing.T, j junction, offsetMs int64) *fake.Timeline {
 				// The quiet passage is the end of the track's own length.
 				audio = audio[:f.FramesFromMs(length-400)*int64(f.FrameBytes())]
 			}
-			it.WAV = writeWAV(t, f, append(audio, j.tail(f)...))
+			it.WAV = testkit.WriteWAV(t, filepath.Join(t.TempDir(), "item.wav"), f, append(audio, j.tail(f)...))
 		}
 		tl.Items = append(tl.Items, it)
 	}
@@ -92,22 +93,6 @@ func square(f pcm.Format, frames int64, amp float64) []byte {
 		}
 	}
 	return b
-}
-
-func writeWAV(t *testing.T, f pcm.Format, data []byte) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "item.wav")
-	w, err := pcm.CreateWAV(path, f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Write(data); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return path
 }
 
 // Where each track starts and ends, for every kind of junction and every

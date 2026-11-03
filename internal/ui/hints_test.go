@@ -61,7 +61,7 @@ func underItsTarget(t *testing.T, a *App, h *hint, target fyne.CanvasObject) {
 // under Record and 1 to 5 under the tabs, once held for hintHold; letting
 // it go hides them.
 func TestHoldingTheShortcutKeyShowsEachKey(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	start := time.Now()
 	for _, at := range []time.Duration{0, hintPoll, hintHold - time.Millisecond} {
 		a.watchKeys(shortcutKey, start.Add(at))
@@ -99,7 +99,7 @@ func TestHoldingTheShortcutKeyShowsEachKey(t *testing.T) {
 // With another modifier, or let go before hintHold, the shortcut key shows
 // nothing: Cmd+Shift+Z, or Cmd+C typed in one go.
 func TestOnlyTheShortcutKeyHeldAloneShowsTheKeys(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	start := time.Now()
 	other := fyne.KeyModifierControl
 	if shortcutKey == fyne.KeyModifierControl {
@@ -183,7 +183,7 @@ func TestNoKeyShowsWhereItDoesNothing(t *testing.T) {
 // R stays under the app bar's button as it goes from Record to the wider
 // Stop now.
 func TestRFollowsTheButton(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	start := time.Now()
 	holdUntilShown(t, a, start)
 	before := a.action.Size().Width
@@ -199,7 +199,7 @@ func TestRFollowsTheButton(t *testing.T) {
 // S shows under the search field of the Library and of the Settings, and
 // on no other screen, following the tab shown while the key is held.
 func TestSShowsUnderTheSearch(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	start := time.Now()
 	holdUntilShown(t, a, start)
 	if shownKeys(a)["S"] != nil {
@@ -231,26 +231,15 @@ func TestSShowsUnderTheSearch(t *testing.T) {
 // The hints take no click, no hover and no focus: Fyne gives them to what
 // is under the mouse that takes them, so they go to what a hint covers.
 func TestHintsTakeNoClick(t *testing.T) {
-	a, _ := connectedTestApp(t)
+	a, _ := connectedTestApp(t, defaults())
 	holdUntilShown(t, a, time.Now())
-	var walk func(o fyne.CanvasObject)
-	walk = func(o fyne.CanvasObject) {
+	walk(a.hints, func(o fyne.CanvasObject) bool {
 		switch o.(type) {
 		case fyne.Tappable, fyne.SecondaryTappable, fyne.DoubleTappable, fyne.Draggable, fyne.Focusable, fyne.Scrollable, desktop.Hoverable, desktop.Mouseable:
 			t.Errorf("%T takes the mouse or the keys", o)
 		}
-		switch w := o.(type) {
-		case *fyne.Container:
-			for _, c := range w.Objects {
-				walk(c)
-			}
-		case fyne.Widget:
-			for _, c := range test.WidgetRenderer(w).Objects() {
-				walk(c)
-			}
-		}
-	}
-	walk(a.hints)
+		return true
+	})
 	h := shownKeys(a)["1"]
 	test.MoveMouse(a.win.Canvas(), a.fa.Driver().AbsolutePositionForObject(h).AddXY(h.Size().Width/2, h.Size().Height/2))
 	if hovered(t, a.win.Canvas()) == reflect.ValueOf(h).Pointer() {
@@ -264,7 +253,7 @@ func TestShortcutHintSnapshots(t *testing.T) {
 	if os.Getenv("SPYTIFY_UI_SNAPSHOTS") == "" {
 		t.Skip("only for the pictures")
 	}
-	a, m := connectedTestApp(t)
+	a, m := connectedTestApp(t, defaults())
 	feedSession(t, m)
 	for _, look := range []string{"light", "dark"} {
 		values := defaults()

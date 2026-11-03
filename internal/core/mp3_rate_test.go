@@ -5,15 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
 // A Mac whose output runs at 96 kHz delivers 96 kHz audio: an MP3 of it,
 // which cannot be at that rate, is saved at 48 kHz.
 func TestAnMP3OfA96kHzSourceIsSaved(t *testing.T) {
-	if _, err := exec.LookPath("ffprobe"); err != nil {
-		t.Skip("ffprobe not installed")
-	}
+	testkit.Need(t, "ffprobe", exec.LookPath)
 	tl := loadTimeline(t, "basic")
 	tl.Rate, tl.Sample = 96000, "f32"
 	s := newScenario(t, tl, map[string]any{"encode.format": "mp3"})

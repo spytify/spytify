@@ -26,6 +26,13 @@ var openInNewSVG []byte
 // Design's open_in_new, like Fyne's own icons, in the button's colour.
 var openInNewIcon = theme.NewThemedResource(fyne.NewStaticResource("open-in-new.svg", openInNewSVG))
 
+//go:embed assets/campaign.svg
+var campaignSVG []byte
+
+// adIcon marks an ad break and its ads in the session list: Material
+// Design's campaign, a megaphone, in the text's colour.
+var adIcon = theme.NewThemedResource(fyne.NewStaticResource("campaign.svg", campaignSVG))
+
 //go:embed assets/heart.png
 var heartPNG []byte
 

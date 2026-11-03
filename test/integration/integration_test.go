@@ -7,10 +7,8 @@
 package integration
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,7 +18,7 @@ import (
 	"time"
 
 	"github.com/spytify/spytify/internal/fake"
-	"github.com/spytify/spytify/pkg/proto"
+	"github.com/spytify/spytify/internal/testkit"
 )
 
 var bin string
@@ -158,7 +156,7 @@ func record(t *testing.T, name string, v fake.Variant) {
 	if v.Files != nil {
 		files = *v.Files
 	}
-	if problems := fake.Verify(tl, v.Expect, files, out, readEvents(t, events)); len(problems) > 0 {
+	if problems := fake.Verify(tl, v.Expect, files, out, testkit.ReadEvents(t, events)); len(problems) > 0 {
 		for _, p := range problems {
 			t.Error(p)
 		}
@@ -179,23 +177,4 @@ func waitFor(ctx context.Context, t *testing.T, name string, cmd *exec.Cmd, log 
 		cmd.Process.Kill()
 		t.Fatalf("%s did not finish\n%s", name, log)
 	}
-}
-
-func readEvents(t *testing.T, path string) []proto.Event {
-	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	var out []proto.Event
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 1<<20), 1<<20)
-	for sc.Scan() {
-		var ev proto.Event
-		if err := json.Unmarshal(sc.Bytes(), &ev); err == nil {
-			out = append(out, ev)
-		}
-	}
-	return out
 }

@@ -80,6 +80,11 @@ func (r Row) StatusText() string {
 	return string(r.Status)
 }
 
+// IsAd says the row is an ad the session skipped.
+func (r Row) IsAd() bool {
+	return r.Status == Skipped && r.Reason == proto.SkipAd
+}
+
 // ReasonText says why a track was skipped: "too short", "already recorded".
 func ReasonText(r proto.SkipReason) string {
 	switch r {
@@ -145,7 +150,7 @@ func (s State) Totals() Totals {
 		case r.Status == Saved:
 			t.Saved++
 			t.Bytes += r.Bytes
-		case r.Status == Skipped && r.Reason == proto.SkipAd:
+		case r.IsAd():
 			t.Ads++
 			t.Skipped++
 		case r.Status == Skipped:

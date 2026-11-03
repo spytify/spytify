@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"sort"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -11,18 +12,27 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// cardList shows rows of one height on the card's colour, square and from
-// one side of the window to the other, on a page that scrolls as Settings'
-// does: its scroll bar is at the window's edge, where a widget.List puts
-// its own inside the card. Like widget.List, it builds only the rows in
-// view, as a library holds thousands of files, and Tab stops on it for the
-// arrows to move a highlight from row to row, then from a row to its
-// buttons, which Tab passes over.
+// cardList shows rows of one height, or of the heights height gives them,
+// on the card's colour, square and from one side of the window to the
+// other, on a page that scrolls as Settings' does: its scroll bar is at the
+// window's edge, where a widget.List puts its own inside the card. Like
+// widget.List, it builds only the rows in view, as a library holds
+// thousands of files, and Tab stops on it for the arrows to move a
+// highlight from row to row, then from a row to its buttons, which Tab
+// passes over.
 type cardList struct {
 	widget.BaseWidget
 	length func() int
 	create func() fyne.CanvasObject
 	update func(id widget.ListItemID, o fyne.CanvasObject)
+	// height, when set, gives a row a height of its own, 0 keeping the
+	// rows' own; sizeRows then adds up where each row starts. Without it,
+	// as for the Library's files, that is a multiplication.
+	height        func(id widget.ListItemID) float32
+	tops, heights []float32
+	// band, when set, names a row's background, "" for the card's: a run of
+	// rows on one is a single block, without a line at its ends.
+	band func(id widget.ListItemID) fyne.ThemeColorName
 
 	scroll  *container.Scroll
 	page    *fyne.Container
@@ -30,6 +40,8 @@ type cardList struct {
 	itemMin fyne.Size
 	shown   []shownRow
 	spare   []*cardRow
+	// look is the theme's text and background the spare rows were drawn in.
+	look [2]color.Color
 	// cursor is the row the arrows highlight while the list has the focus,
 	// col where on it: 0 the row itself, then its buttons left to right.
 	// lit is the button col shows focused.
@@ -63,8 +75,59 @@ func (l *cardList) cardHeight(n int) float32 {
 	if n == 0 {
 		return 0
 	}
+	return l.rowTop(n) + theme.Padding()
+}
+
+// sizeRows adds up the heights of n rows when height gives them, for
+// rowTop, rowHeight and rowAt.
+func (l *cardList) sizeRows(n int) {
+	if l.height == nil {
+		return
+	}
 	pad := theme.Padding()
-	return float32(n)*(l.itemMin.Height+pad) + pad
+	l.tops, l.heights = l.tops[:0], l.heights[:0]
+	var y float32
+	for id := range n {
+		h := l.height(id)
+		if h <= 0 {
+			h = l.itemMin.Height
+		}
+		l.tops, l.heights = append(l.tops, y), append(l.heights, h)
+		y += h + pad
+	}
+	l.tops = append(l.tops, y)
+}
+
+// rowTop is where row id starts on the page; past the last row, where one
+// more would.
+func (l *cardList) rowTop(id int) float32 {
+	if l.height == nil {
+		return float32(id) * (l.itemMin.Height + theme.Padding())
+	}
+	return l.tops[min(id, len(l.tops)-1)]
+}
+
+func (l *cardList) rowHeight(id int) float32 {
+	if l.height == nil || id >= len(l.heights) {
+		return l.itemMin.Height
+	}
+	return l.heights[id]
+}
+
+// rowAt is the row of n at y on the page, n past the last one.
+func (l *cardList) rowAt(y float32, n int) int {
+	if l.height == nil {
+		return int(y / (l.itemMin.Height + theme.Padding()))
+	}
+	return sort.Search(n, func(i int) bool { return l.tops[i+1] > y })
+}
+
+// bandOf is the background band names for row id, "" without one.
+func (l *cardList) bandOf(id widget.ListItemID) fyne.ThemeColorName {
+	if l.band == nil || id < 0 || id >= l.length() {
+		return ""
+	}
+	return l.band(id)
 }
 
 func (l *cardList) CreateRenderer() fyne.WidgetRenderer {
@@ -86,11 +149,11 @@ func (l *cardList) place(all bool) {
 		return
 	}
 	n := l.length()
-	step := l.itemMin.Height + theme.Padding()
+	l.sizeRows(n)
 	first, last := 0, -1
-	if view := l.scroll.Size().Height; n > 0 && step > 0 && view > 0 {
-		first = max(0, int(l.scroll.Offset.Y/step))
-		last = min(n-1, int((l.scroll.Offset.Y+view)/step))
+	if view := l.scroll.Size().Height; n > 0 && l.rowTop(n) > 0 && view > 0 {
+		first = max(0, l.rowAt(l.scroll.Offset.Y, n))
+		last = min(n-1, l.rowAt(l.scroll.Offset.Y+view, n))
 	}
 	old := make(map[widget.ListItemID]*cardRow, len(l.shown))
 	for _, s := range l.shown {
@@ -105,9 +168,10 @@ func (l *cardList) place(all bool) {
 		} else {
 			row = l.spareRow()
 		}
-		row.setLook(id == 0, l.focused && id == l.cursor)
-		row.box.Move(fyne.NewPos(0, float32(id)*step))
-		row.box.Resize(fyne.NewSize(l.page.Size().Width, l.itemMin.Height))
+		fill, above := l.bandOf(id), l.bandOf(id-1)
+		row.setLook(id == 0 || fill != above, l.focused && id == l.cursor, fill, id > 0 && fill != "" && fill == above)
+		row.box.Move(fyne.NewPos(0, l.rowTop(id)))
+		row.box.Resize(fyne.NewSize(l.page.Size().Width, l.rowHeight(id)))
 		if all || !ok {
 			l.update(id, row.content)
 		}
@@ -161,6 +225,8 @@ func rowButtons(o fyne.CanvasObject) []*rowButton {
 			buttons = append(buttons, rowButtons(child)...)
 		}
 		return buttons
+	case *container.ThemeOverride:
+		return rowButtons(o.Content)
 	}
 	return nil
 }
@@ -185,7 +251,7 @@ func (l *cardList) spareRow() *cardRow {
 		l.spare = l.spare[:n-1]
 		return row
 	}
-	row := &cardRow{content: l.create(), line: widget.NewSeparator(), hover: canvas.NewRectangle(color.Transparent)}
+	row := &cardRow{content: l.create(), line: widget.NewSeparator(), back: canvas.NewRectangle(color.Transparent), hover: canvas.NewRectangle(color.Transparent)}
 	row.ExtendBaseWidget(row)
 	row.box = container.NewThemeOverride(row, cardTheme{input: colorCardInput, surface: colorCard})
 	return row
@@ -254,10 +320,11 @@ func (l *cardList) ScrollTo(id widget.ListItemID) {
 	if l.scroll == nil {
 		return
 	}
-	top := float32(id) * (l.itemMin.Height + theme.Padding())
+	l.sizeRows(l.length())
+	top, height := l.rowTop(id), l.rowHeight(id)
 	off := l.scroll.Offset
-	if view := l.scroll.Size().Height; top+l.itemMin.Height > off.Y+view {
-		off.Y = top + l.itemMin.Height - view
+	if view := l.scroll.Size().Height; top+height > off.Y+view {
+		off.Y = top + height - view
 	}
 	off.Y = min(off.Y, top)
 	// The offset moved by hand tells OnScrolled nothing.
@@ -304,6 +371,11 @@ func (r *cardListRenderer) MinSize() fyne.Size {
 func (r *cardListRenderer) Refresh() {
 	l := r.l
 	r.measure()
+	// The rows put aside missed the refresh a new theme gives the rows in
+	// view: drawn again, they kept the former theme's icons and badges.
+	if look := [2]color.Color{theme.ColorForWidget(theme.ColorNameForeground, l), theme.ColorForWidget(theme.ColorNameBackground, l)}; look != l.look {
+		l.look, l.spare = look, nil
+	}
 	l.card.FillColor = theme.ColorForWidget(colorCard, l)
 	l.card.Refresh()
 	l.cursor = max(0, min(l.cursor, l.length()-1))
@@ -324,27 +396,33 @@ type cardPage struct{ l *cardList }
 func (p cardPage) Layout([]fyne.CanvasObject, fyne.Size) { p.l.place(false) }
 
 func (p cardPage) MinSize([]fyne.CanvasObject) fyne.Size {
-	return fyne.NewSize(p.l.itemMin.Width+2*rowSide(), p.l.cardHeight(p.l.length()))
+	n := p.l.length()
+	p.l.sizeRows(n)
+	return fyne.NewSize(p.l.itemMin.Width+2*rowSide(), p.l.cardHeight(n))
 }
 
 // cardRow is a row of a cardList: its content, a line above it but on the
 // first row, and a highlight under the pointer or the arrows, as
-// widget.List draws them.
+// widget.List draws them; on a band, its background, over the gap above
+// when the row above is on the band too, and no line at the band's ends.
 type cardRow struct {
 	widget.BaseWidget
 	content fyne.CanvasObject
 	line    *widget.Separator
+	back    *canvas.Rectangle
 	hover   *canvas.Rectangle
 	// box is the row in the card's theme, as the list lays it out.
-	box                   fyne.CanvasObject
-	first, focus, hovered bool
+	box                    fyne.CanvasObject
+	noLine, focus, hovered bool
+	fill                   fyne.ThemeColorName
+	joined                 bool
 }
 
 var _ desktop.Hoverable = (*cardRow)(nil)
 
-func (r *cardRow) setLook(first, focus bool) {
-	if r.first != first || r.focus != focus {
-		r.first, r.focus = first, focus
+func (r *cardRow) setLook(noLine, focus bool, fill fyne.ThemeColorName, joined bool) {
+	if r.noLine != noLine || r.focus != focus || r.fill != fill || r.joined != joined {
+		r.noLine, r.focus, r.fill, r.joined = noLine, focus, fill, joined
 		r.Refresh()
 	}
 }
@@ -371,6 +449,12 @@ type cardRowRenderer struct{ r *cardRow }
 
 func (rr *cardRowRenderer) Layout(s fyne.Size) {
 	r := rr.r
+	r.back.Move(fyne.NewPos(0, 0))
+	r.back.Resize(s)
+	if r.joined {
+		r.back.Move(fyne.NewPos(0, -theme.Padding()))
+		r.back.Resize(s.AddWidthHeight(0, theme.Padding()))
+	}
 	r.hover.Resize(s)
 	side := rowSide()
 	// The line sits in the middle of the padding above the row.
@@ -391,13 +475,18 @@ func (rr *cardRowRenderer) Refresh() {
 	r.hover.FillColor = theme.ColorForWidget(theme.ColorNameHover, r)
 	r.hover.Hidden = !r.hovered && !r.focus
 	r.hover.Refresh()
-	r.line.Hidden = r.first
+	r.back.Hidden = r.fill == ""
+	if r.fill != "" {
+		r.back.FillColor = theme.ColorForWidget(r.fill, r)
+	}
+	r.back.Refresh()
+	r.line.Hidden = r.noLine
 	r.line.Refresh()
 	rr.Layout(r.Size())
 }
 
 func (rr *cardRowRenderer) Objects() []fyne.CanvasObject {
-	return []fyne.CanvasObject{rr.r.hover, rr.r.line, rr.r.content}
+	return []fyne.CanvasObject{rr.r.back, rr.r.hover, rr.r.line, rr.r.content}
 }
 
 func (rr *cardRowRenderer) Destroy() {}

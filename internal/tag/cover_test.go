@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/testkit"
 )
 
 func jpegCover(t *testing.T, w, h int) []byte {
@@ -75,20 +76,11 @@ func TestCoverIsResizedToItsSetting(t *testing.T) {
 
 // The cover in the file has the size the setting asks for.
 func TestTheEmbeddedCoverHasItsSize(t *testing.T) {
-	ffmpeg, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		t.Skip("ffmpeg not installed")
-	}
-	ffprobe, err := exec.LookPath("ffprobe")
-	if err != nil {
-		t.Skip("ffprobe not installed")
-	}
+	ffmpeg := testkit.Need(t, "ffmpeg", exec.LookPath)
+	ffprobe := testkit.Need(t, "ffprobe", exec.LookPath)
 	dir := t.TempDir()
 	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
-	in := filepath.Join(dir, "in.wav")
-	w, _ := pcm.CreateWAV(in, f)
-	w.Write(pcm.Synth{Seed: 1}.Render(f, 22050))
-	w.Close()
+	in := testkit.WriteWAV(t, filepath.Join(dir, "in.wav"), f, pcm.Synth{Seed: 1}.Render(f, 22050))
 	cover := jpegCover(t, 1400, 1400)
 	for size, want := range map[string]string{"small": "300x300", "medium": "640x640", "large": "1400x1400"} {
 		out := filepath.Join(dir, size+".mp3")

@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -27,13 +28,7 @@ func newTestCore(t *testing.T, running bool) (*Core, *recorder) {
 func newTestCoreAt(t *testing.T, running, realtime bool) (*Core, *recorder) {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rej := store.Override(map[string]any{"output.dir": filepath.Join(dir, "out")}); len(rej) > 0 {
-		t.Fatal(rej)
-	}
+	store := testStore(t, dir, map[string]any{"output.dir": filepath.Join(dir, "out")})
 	tl := loadTimeline(t, "basic")
 	player, err := fake.NewPlayer(tl, realtime)
 	if err != nil {
@@ -123,9 +118,8 @@ func TestSettingsActions(t *testing.T) {
 }
 
 func TestSessionErrors(t *testing.T) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not installed: session.start refuses before it looks for the player")
-	}
+	// Without ffmpeg, session.start refuses before it looks for the player.
+	testkit.Need(t, "ffmpeg", encode.Find)
 	c, _ := newTestCore(t, false)
 	if err := call(t, c, proto.MethodSessionStart, nil, nil); code(err) != proto.CodeTargetNotRunning {
 		t.Fatalf("start without player: %v", err)

@@ -13,6 +13,7 @@ import (
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/testkit"
 	"github.com/spytify/spytify/pkg/proto"
 	"golang.org/x/text/unicode/norm"
 )
@@ -54,14 +55,8 @@ type bench struct {
 func newBench(t *testing.T, extra map[string]any) *bench {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := settings.Open(filepath.Join(dir, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	out := filepath.Join(dir, "out")
-	if rej := store.Override(mergeSettings(baseSettings, extra, map[string]any{"output.dir": out})); len(rej) > 0 {
-		t.Fatalf("settings rejected: %v", rej)
-	}
+	store := testStore(t, dir, baseSettings, extra, map[string]any{"output.dir": out})
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -165,18 +160,8 @@ func indexLine(key, path string) string {
 // wholeTake is a second of sound for info, played to its end.
 func (b *bench) wholeTake(id string, info meta.TrackInfo) finishJob {
 	b.t.Helper()
-	path := filepath.Join(b.t.TempDir(), id+".wav")
-	w, err := pcm.CreateWAV(path, cd)
-	if err != nil {
-		b.t.Fatal(err)
-	}
 	frames := cd.FramesFromMs(1000)
-	if _, err := w.Write(pcm.Synth{Seed: 1}.Render(cd, frames)); err != nil {
-		b.t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		b.t.Fatal(err)
-	}
+	path := testkit.WriteWAV(b.t, filepath.Join(b.t.TempDir(), id+".wav"), cd, pcm.Synth{Seed: 1}.Render(cd, frames))
 	return finishJob{id: id, info: info, tmp: path, format: cd, played: frames, length: frames}
 }
 
@@ -194,15 +179,6 @@ func (b *bench) outcome(id string) (saved string, skipped proto.SkipReason) {
 		}
 	}
 	return saved, skipped
-}
-
-func needFFmpeg(t *testing.T) *encode.FFmpeg {
-	t.Helper()
-	ff, err := encode.Find("ffmpeg")
-	if err != nil {
-		t.Skip(err)
-	}
-	return ff
 }
 
 // caseBlind reports whether the file system under dir finds a name in
@@ -423,7 +399,7 @@ func TestTheFinisherSkipsATakeWhoseFileIsThere(t *testing.T) {
 // number does not skip the take, which is saved under its own number. The
 // session is the one that finds such a file, before it records.
 func TestTheFinisherSkipComparesTheWholeName(t *testing.T) {
-	ff := needFFmpeg(t)
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	b := newBench(t, map[string]any{"recorder.duplicates": "skip", "output.prefix": "counter", "output.counter_next": 8})
 	b.file("007 "+ferryName, "before")
 	fin := b.open(ff)
@@ -446,7 +422,7 @@ func TestTheFinisherSkipComparesTheWholeName(t *testing.T) {
 // whose name differs in case or in how its accents are written is the
 // same file where the file system says so.
 func TestTheFinisherSkipFollowsTheFileSystem(t *testing.T) {
-	ff := needFFmpeg(t)
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	for _, c := range []struct {
 		name, file string
 		info       meta.TrackInfo
@@ -475,7 +451,7 @@ func TestTheFinisherSkipFollowsTheFileSystem(t *testing.T) {
 // In suffix mode the take gets the first free number, from 2; the files
 // there stay as they were.
 func TestSuffixModeTakesTheFirstFreeNumber(t *testing.T) {
-	ff := needFFmpeg(t)
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	for _, c := range []struct {
 		name     string
 		settings map[string]any
@@ -513,7 +489,7 @@ func TestSuffixModeTakesTheFirstFreeNumber(t *testing.T) {
 // In overwrite mode the take replaces the file of its name, and only that
 // one: a file under another counter number stays.
 func TestOverwriteModeReplacesTheFileOfItsName(t *testing.T) {
-	ff := needFFmpeg(t)
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	for _, c := range []struct {
 		name     string
 		settings map[string]any
@@ -548,7 +524,7 @@ func TestOverwriteModeReplacesTheFileOfItsName(t *testing.T) {
 // suffix in every mode. It goes in no index, so it never makes the whole
 // track a duplicate.
 func TestAKeptTakeTakesASuffixInEveryMode(t *testing.T) {
-	ff := needFFmpeg(t)
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	partial := ferry
 	partial.Title += " (partial)"
 	for _, mode := range []string{"skip", "suffix", "overwrite"} {
@@ -581,7 +557,7 @@ func TestAKeptTakeTakesASuffixInEveryMode(t *testing.T) {
 // U+001F, and the path is the file's. Older and newer versions read each
 // other's lines, and a line whose file is gone stays.
 func TestTheIndexFileFormat(t *testing.T) {
-	ff := needFFmpeg(t)
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	b := newBench(t, nil)
 	gone := `{"Key":"copper lanterns\u001fhollow moon","Path":` + quoted(filepath.Join(b.out, "Gone.wav")) + "}\n"
 	b.writeIndex(gone)
@@ -607,7 +583,7 @@ func quoted(s string) string {
 // its name and its title tag, and leaves its track unrecorded, so it can
 // still be recorded clean.
 func TestAPauseFadeIsMarkedAndLeavesItsTrackUnrecorded(t *testing.T) {
-	ff := needFFmpeg(t)
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	b := newBench(t, nil)
 	fin := b.open(ff)
 	j := b.wholeTake("s-1", ferry)
@@ -637,7 +613,7 @@ func TestAPauseFadeIsMarkedAndLeavesItsTrackUnrecorded(t *testing.T) {
 // finds it through the index after the settings moved its name. Once its
 // file is deleted, it is not.
 func TestASavedTrackStaysRecorded(t *testing.T) {
-	ff := needFFmpeg(t)
+	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	b := newBench(t, nil)
 	fin := b.open(ff)
 	fin.enqueue(b.wholeTake("s-1", ferry))
