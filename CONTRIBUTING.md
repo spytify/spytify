@@ -97,3 +97,5 @@ Signing turns on once the repository has the secrets, otherwise the files ship u
 ## Site
 
 The site is built by GitHub Pages from the `gh-pages` branch. `v2/settings.md` and the protocol section come from the code: `go run ./internal/tools/gendocs -out <gh-pages checkout>`. The release workflow's **site** job fails when they differ from what gendocs writes for the release; the draft is made all the same.
+
+The README's pictures, [`LIGHT.png`](LIGHT.png) and [`DARK.png`](DARK.png), come from the UI's test window: `SPYTIFY_README_CAPTURE=1 go test -run TestTheReadmeCapture ./internal/ui/` draws them again. The site's Overview loads them from `main`, so it shows the new ones once they are merged.

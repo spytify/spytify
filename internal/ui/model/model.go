@@ -187,6 +187,14 @@ func New() *Model {
 	return &Model{s: State{Session: proto.StateIdle, Settings: map[string]any{}}, now: time.Now, cleared: map[string]bool{}}
 }
 
+// SetClock replaces the clock a track's elapsed time is read from, for the
+// README's pictures, which show a track part way through.
+func (m *Model) SetClock(now func() time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.now = now
+}
+
 // ClearRows empties the list of finished tracks; the current one stays.
 func (m *Model) ClearRows() {
 	m.update(func(s *State) {

@@ -10,8 +10,8 @@
 **Records an application's audio, splits it into tracks and tags them.**
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/recording-dark.png">
-  <img alt="Spytify recording a session: the current track on its cover's colours with its progress and its L and R level, and the files already saved, with the ad break between two of them in one blue row" src="assets/recording.png">
+  <source media="(prefers-color-scheme: dark)" srcset="DARK.png">
+  <img alt="Spytify recording a session in FLAC: the current track on its cover's colours at 1:33 of 3:10 with its L and R level, three files saved and one skipped as already recorded" src="LIGHT.png">
 </picture>
 
 Spytify records the sound one application plays, nothing else, and saves each track as its own file, cut at the right sample and tagged with the title, artist, album and cover the application reports. It runs on Linux, macOS 14.2 or later and Windows 10 version 2004 or later.
