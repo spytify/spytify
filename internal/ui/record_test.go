@@ -686,3 +686,19 @@ func TestRecordSaysSpytifydIsGoneDuringASession(t *testing.T) {
 		t.Errorf("spytifyd back: card %v, waiting row %v", r.card.Visible(), r.waitRow.Visible())
 	}
 }
+
+// A take recorded with no sound says so in the list.
+func TestRecordScreenSaysATakeIsTooQuiet(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	// s-004 is the track playing.
+	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipTooQuiet}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Raconte-moi une histoire", Album: "Hurry Up, We're Dreaming", LengthMs: 270000, CoverURL: generatedCover(t, 5)}}))
+	a.render()
+	a.screens[tabRecord].(*recordScreen).list.ScrollToBottom()
+	all := texts(a.win.Content())
+	if !contains(all, fmt.Sprintf(lang.SkippedFor, lang.ReasonTooQuiet)) {
+		t.Errorf("the take does not say it is too quiet: %v", all)
+	}
+	snapshot(t, a, "record-too-quiet")
+}
