@@ -289,6 +289,25 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 	}
 }
 
+// A take that held only silence, as when the player is muted in its own
+// volume, says so on its row, under the alert that the player is not
+// heard, with nothing to keep.
+func TestASilentTakeSaysSo(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: "only silence from the capture for 10s while the player plays"}))
+	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipSilent}))
+	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000, CoverURL: generatedCover(t, 5)}}))
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -120, RMSDBFS: -120,
+		Channels: []proto.ChannelLevel{{PeakDBFS: -120, RMSDBFS: -120}, {PeakDBFS: -120, RMSDBFS: -120}}}))
+	a.render()
+	all := texts(a.win.Content())
+	if !contains(all, fmt.Sprintf(lang.SkippedFor, lang.ReasonSilent)) || contains(all, lang.KeepAnyway) {
+		t.Errorf("the silent take's row: %v", all)
+	}
+	snapshot(t, a, "record-silent-take")
+}
+
 // A take saved with the player's fades around a pause in it says so in the
 // list.
 func TestRecordScreenSaysATakeHasAPauseFade(t *testing.T) {
@@ -747,20 +766,4 @@ func TestRecordSaysSpytifydIsGoneDuringASession(t *testing.T) {
 	if !r.card.Visible() || r.waitRow.Visible() {
 		t.Errorf("spytifyd back: card %v, waiting row %v", r.card.Visible(), r.waitRow.Visible())
 	}
-}
-
-// A take recorded with no sound says so in the list.
-func TestRecordScreenSaysATakeIsTooQuiet(t *testing.T) {
-	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	feedSession(t, m)
-	// s-004 is the track playing.
-	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipTooQuiet}))
-	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Raconte-moi une histoire", Album: "Hurry Up, We're Dreaming", LengthMs: 270000, CoverURL: generatedCover(t, 5)}}))
-	a.render()
-	a.screens[tabRecord].(*recordScreen).list.ScrollToBottom()
-	all := texts(a.win.Content())
-	if !contains(all, fmt.Sprintf(lang.SkippedFor, lang.ReasonTooQuiet)) {
-		t.Errorf("the take does not say it is too quiet: %v", all)
-	}
-	snapshot(t, a, "record-too-quiet")
 }

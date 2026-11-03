@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -223,25 +223,42 @@ func TestTracksAreSavedOnceTheCaptureIsFitAgain(t *testing.T) {
 	}
 }
 
-// A track played with no sound at all, as from a player muted after the
-// first track, is skipped as too quiet, whether recorder.trim_silence cuts
-// the files or not. The tracks around it are saved.
-func TestATrackWithNoSoundIsSkippedAsTooQuiet(t *testing.T) {
-	for _, trim := range []bool{true, false} {
-		t.Run(fmt.Sprintf("trim_silence=%v", trim), func(t *testing.T) {
-			tl := loadTimeline(t, "basic")
-			mid := &tl.Items[1]
-			f := tl.Format()
-			mid.WAV = testkit.WriteWAV(t, filepath.Join(t.TempDir(), "silence.wav"), f, make([]byte, f.FramesFromMs(mid.LengthMs)*int64(f.FrameBytes())))
-			s := newScenario(t, tl, map[string]any{"recorder.trim_silence": trim})
-			s.run(t, tl)
-			saved, skipped := outcome(t, s)
-			slices.Sort(saved)
-			want := []string{tl.Items[0].Title, tl.Items[2].Title}
-			slices.Sort(want)
-			if !slices.Equal(saved, want) || len(skipped) != 1 || skipped[mid.Title] != proto.SkipTooQuiet {
-				t.Errorf("saved %q, skipped %v; want %q saved and %q skipped as %s", saved, skipped, want, mid.Title, proto.SkipTooQuiet)
+// A capture that hears only silence, as from a player muted in its own
+// volume, records each track as silence. None is saved, with silence
+// trimmed or not, and each says it held only silence, not that it was too
+// short. None is held for track.keep, not even the one Stop cut short,
+// which keeps the session's reason.
+func TestTracksHeardAsSilenceAreSkippedAsSilent(t *testing.T) {
+	cases := []struct {
+		timeline string
+		trim     bool
+		stopAtMs int64
+		want     map[string]proto.SkipReason
+	}{
+		// Paper Lanterns starts at 6.5 s: Stop 3 s into it.
+		{"basic", true, 9500, map[string]proto.SkipReason{"Midnight Ferry": proto.SkipSilent, "Paper Lanterns": proto.SkipIncomplete}},
+		{"basic", false, 9500, map[string]proto.SkipReason{"Midnight Ferry": proto.SkipSilent, "Paper Lanterns": proto.SkipIncomplete}},
+		// Next 10 s into Fast Forward cuts it short.
+		{"control", true, 0, map[string]proto.SkipReason{"Fast Forward": proto.SkipSilent, "Stay Awhile (Radio Edit)": proto.SkipSilent}},
+	}
+	for _, c := range cases {
+		tl := loadTimeline(t, c.timeline)
+		for i := range tl.Items {
+			tl.Items[i].LeadMs = tl.Items[i].LengthMs
+		}
+		s := newScenario(t, tl, map[string]any{"recorder.trim_silence": c.trim})
+		if c.stopAtMs > 0 {
+			s.player.At(c.stopAtMs, func() { _, _ = s.core.StopSession(true) })
+		}
+		s.run(t, tl)
+		saved, skipped := outcome(t, s)
+		if len(saved) != 0 || len(fake.AudioFiles(s.out)) != 0 || !maps.Equal(skipped, c.want) {
+			t.Errorf("%s, trim %v: saved %v, files %v, skipped %v", c.timeline, c.trim, saved, fake.AudioFiles(s.out), skipped)
+		}
+		for title := range c.want {
+			if k := keepable(s, title); len(k) != 0 {
+				t.Errorf("%s, trim %v: %q keepable %v", c.timeline, c.trim, title, k)
 			}
-		})
+		}
 	}
 }

@@ -177,7 +177,7 @@ type Session struct {
 	silent, heard bool
 	// firstEnded is set once the session's first track, not an ad, ended.
 	// Only silence is watched until then: later, a quiet stretch is the
-	// music's, and a take with no sound is skipped as too quiet.
+	// music's, and a take with no sound is skipped as silent.
 	firstEnded bool
 	// lowFormat is set while the capture's format is too poor for music.
 	lowFormat bool

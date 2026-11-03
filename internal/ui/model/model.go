@@ -104,8 +104,8 @@ func ReasonText(r proto.SkipReason) string {
 		return lang.ReasonSeeked
 	case proto.SkipLowQuality:
 		return lang.ReasonLowQuality
-	case proto.SkipTooQuiet:
-		return lang.ReasonTooQuiet
+	case proto.SkipSilent:
+		return lang.ReasonSilent
 	}
 	return string(r)
 }
@@ -187,6 +187,14 @@ type Model struct {
 // New returns an empty, disconnected model.
 func New() *Model {
 	return &Model{s: State{Session: proto.StateIdle, Settings: map[string]any{}}, now: time.Now, cleared: map[string]bool{}}
+}
+
+// SetClock replaces the clock a track's elapsed time is read from, for the
+// README's pictures, which show a track part way through.
+func (m *Model) SetClock(now func() time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.now = now
 }
 
 // ClearRows empties the list of finished tracks; the current one stays.

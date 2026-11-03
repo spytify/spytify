@@ -52,11 +52,11 @@ func TestEachSkipReasonHasItsText(t *testing.T) {
 			}
 		}
 	}
-	if len(reasons) < 6 {
+	if len(reasons) < 7 {
 		t.Fatalf("found %d skip reasons in package proto: %v", len(reasons), reasons)
 	}
 	lexicon := map[string]bool{lang.ReasonDuplicate: true, lang.ReasonTooShort: true, lang.ReasonAd: true,
-		lang.ReasonIncomplete: true, lang.ReasonSeeked: true, lang.ReasonLowQuality: true, lang.ReasonTooQuiet: true}
+		lang.ReasonIncomplete: true, lang.ReasonSeeked: true, lang.ReasonLowQuality: true, lang.ReasonSilent: true}
 	for _, r := range reasons {
 		if got := ReasonText(r); !lexicon[got] {
 			t.Errorf("a track skipped as %q shows %q, not a text of the lexicon", r, got)

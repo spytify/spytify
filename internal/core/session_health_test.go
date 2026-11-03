@@ -154,7 +154,7 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 
 // Only silence is watched until the session's first track ends: after it,
 // a quiet stretch, such as the end of a quiet song, brings no warning, and
-// a take with no sound is skipped as too quiet instead. An ad first is not
+// a take with no sound is skipped as silent instead. An ad first is not
 // that first track.
 func TestNoSilenceWarningAfterTheFirstTrack(t *testing.T) {
 	for _, c := range []struct {
