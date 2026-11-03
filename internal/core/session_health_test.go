@@ -164,8 +164,9 @@ func TestPlayerHeardCheck(t *testing.T) {
 }
 
 // The level meter reports the highest peak and the RMS of every sample
-// since its last report, at most every 100 ms, and only while recording.
-// The clock is moved by setting when the last report went.
+// since its last report, at most every 100 ms, and only while recording,
+// the track a stop waits for included. The clock is moved by setting when
+// the last report went.
 func TestPinnedMeter(t *testing.T) {
 	r := bareRig(t, nil, endOnStop)
 	s := r.s
@@ -192,6 +193,10 @@ func TestPinnedMeter(t *testing.T) {
 	// Stereo: each channel's, left then right, and the whole's.
 	s.lastLevel = time.Time{}
 	s.meter([]float64{-6, -20}, []float64{-12, -30}, 100)
+	// Stop pressed: the track plays to its end, and is recorded to it.
+	s.setState(proto.StateStopping)
+	s.lastLevel = time.Time{}
+	mono(-25, -25, 100)
 	one := func(peak, rms float64) proto.LevelEvent {
 		return proto.LevelEvent{PeakDBFS: peak, RMSDBFS: rms, Channels: []proto.ChannelLevel{{PeakDBFS: peak, RMSDBFS: rms}}}
 	}
@@ -201,6 +206,7 @@ func TestPinnedMeter(t *testing.T) {
 		one(-120, -120),
 		one(-30, -30),
 		{PeakDBFS: -6, RMSDBFS: -14.9, Channels: []proto.ChannelLevel{{PeakDBFS: -6, RMSDBFS: -12}, {PeakDBFS: -20, RMSDBFS: -30}}},
+		one(-25, -25),
 	}
 	r.mu.Lock()
 	got := append([]proto.LevelEvent(nil), r.levels...)
