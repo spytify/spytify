@@ -8,6 +8,8 @@ project_name: spytify
 owner_name: spytify
 owner_url: "https://github.com/spytify"
 repository_url: "https://github.com/spytify/spytify"
+# main's files, such as the README's pictures in assets/.
+repository_main: "https://raw.githubusercontent.com/spytify/spytify/main"
 repository_download: "https://github.com/spytify/spytify/releases"
 # v1 builds stay where they were published.
 v1_download: "https://github.com/jwallet/spy-spotify/releases/latest"

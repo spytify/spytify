@@ -6,8 +6,8 @@ title: Overview
 Spytify records the sound one application sends to your speakers, nothing else, and saves each track it plays as its own file: cut at the right sample, encoded with ffmpeg, and tagged with the title, artist, album and cover the application itself reports.
 
 <p align="center">
-  <a href="{{ '/assets/images/v2/recording.png' | relative_url }}"><img width="48%" alt="Spytify recording, light theme: the current track on its cover's colours with its progress and its L and R level, and the files already saved, with the ad break between two of them in one blue row" src="{{ '/assets/images/v2/recording.png' | relative_url }}" /></a>
-  <a href="{{ '/assets/images/v2/recording-dark.png' | relative_url }}"><img width="48%" alt="The same session in the dark theme" src="{{ '/assets/images/v2/recording-dark.png' | relative_url }}" /></a>
+  <a href="{{ site.repository_main }}/assets/recording-light.png"><img width="48%" alt="Spytify recording in FLAC in a macOS window, light theme: the current track on its cover's colours at 1:33 of 3:10 with its L and R level, three files saved and one skipped as already recorded" src="{{ site.repository_main }}/assets/recording-light.png" /></a>
+  <a href="{{ site.repository_main }}/assets/recording-dark.png"><img width="48%" alt="The same session in the dark theme" src="{{ site.repository_main }}/assets/recording-dark.png" /></a>
 </p>
 
 It runs on Linux, macOS 14.2 or later and Windows 10 version 2004 or later. [Download it]({{ site.repository_download }}) and see [Install](install.html).
