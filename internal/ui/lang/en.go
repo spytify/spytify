@@ -110,6 +110,7 @@ const (
 	ReasonIncomplete = "incomplete"
 	ReasonSeeked     = "track bar moved"
 	ReasonLowQuality = "low quality"
+	ReasonSilent     = "only silence"
 )
 
 // An ad break in the session list. AdBreak, its pill, takes the ads'

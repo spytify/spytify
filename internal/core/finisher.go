@@ -210,12 +210,15 @@ type take struct {
 	// the temp WAV.
 	held bool
 
-	trimStart, trimEnd int64
-	keptFrames         int64
-	tags               tag.Track
-	counter            int64
-	final, part        string
-	tagged             bool
+	// soundStart and soundEnd are the take's first and last frames above
+	// recorder.silence_db; trimStart and trimEnd are what trim keeps of it.
+	soundStart, soundEnd int64
+	trimStart, trimEnd   int64
+	keptFrames           int64
+	tags                 tag.Track
+	counter              int64
+	final, part          string
+	tagged               bool
 }
 
 // process makes j's file, one step after the other. A step that reports
@@ -260,12 +263,29 @@ func (t *take) tooShort(frames int64) bool {
 }
 
 // complete reports whether the take is to be saved. One the session
-// rejected is held for track.keep, one cut short is skipped and held, and
-// one too short is skipped.
+// rejected is held for track.keep, one with only silence is skipped
+// whatever its length or recorder.trim_silence, one cut short is skipped
+// and held, and one too short is skipped.
 func (f *finisher) complete(t *take) bool {
 	playedMs := t.format.MsFromFrames(t.played)
+	heard, err := f.sound(t)
 	if t.rejected != "" {
+		// The session said why; a take that cannot be read is held all
+		// the same, as before it was read.
+		if !heard && err == nil {
+			f.log.Infof("%q: only silence, nothing to keep", t.info.Title)
+			return false
+		}
 		t.held = f.keep.hold(t.finishJob, t.rejected)
+		return false
+	}
+	if err != nil {
+		f.fail(t.finishJob, "read", err)
+		return false
+	}
+	if !heard {
+		f.log.Infof("%q: only silence, not kept", t.info.Title)
+		f.skip(t.id, proto.SkipSilent)
 		return false
 	}
 	if !t.keep && (t.partial || (t.length > 0 && t.played < t.length-t.format.FramesFromMs(completeToleranceMs))) {
@@ -282,25 +302,25 @@ func (f *finisher) complete(t *take) bool {
 	return true
 }
 
-// trim finds where the sound starts and ends, when recorder.trim_silence is
-// on. What is left may be too short to keep.
+// sound finds the take's first and last frames above recorder.silence_db.
+// It reports false for a take that held only silence, as from a player
+// muted in its own volume.
+func (f *finisher) sound(t *take) (bool, error) {
+	step := time.Now()
+	s, e, ok, err := scanTrim(t.tmp, t.v.Float(settings.RecorderSilenceDb))
+	t.timings.TrimMs = msSince(step)
+	t.soundStart, t.soundEnd = s, e
+	return ok, err
+}
+
+// trim keeps the take from its first sound to its last, when
+// recorder.trim_silence is on. What is left may be too short to keep.
 func (f *finisher) trim(t *take) bool {
 	t.keptFrames = t.played
 	if !t.v.Bool(settings.RecorderTrimSilence) {
 		return true
 	}
-	step := time.Now()
-	s, e, ok, err := scanTrim(t.tmp, t.v.Float(settings.RecorderSilenceDb))
-	t.timings.TrimMs = msSince(step)
-	if err != nil {
-		f.fail(t.finishJob, "read", err)
-		return false
-	}
-	if !ok {
-		f.skip(t.id, proto.SkipTooShort)
-		return false
-	}
-	t.trimStart, t.trimEnd, t.keptFrames = s, e, e-s
+	t.trimStart, t.trimEnd, t.keptFrames = t.soundStart, t.soundEnd, t.soundEnd-t.soundStart
 	if t.tooShort(t.keptFrames) {
 		f.skip(t.id, proto.SkipTooShort)
 		return false
