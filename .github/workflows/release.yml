@@ -186,6 +186,29 @@ jobs:
           name: release-windows
           path: dist/*.zip
 
+  # The site's settings page and protocol section are what gendocs writes
+  # from the code, deployed to gh-pages by hand: this job fails when they
+  # no longer match the release's code. It does not hold the draft back.
+  site:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: site
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: The site matches the code
+        run: |
+          go run ./internal/tools/gendocs -out site
+          if [ -n "$(git -C site status --porcelain)" ]; then
+            git -C site --no-pager diff
+            echo "::error title=The site is behind::v2/settings.md or _includes/v2-protocol.md on gh-pages is not what gendocs writes for this release. Run go run ./internal/tools/gendocs -out <gh-pages checkout> from this commit, then deploy gh-pages."
+            exit 1
+          fi
+
   draft:
     needs: [version, linux, macos, windows]
     runs-on: ubuntu-24.04
