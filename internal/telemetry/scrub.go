@@ -26,7 +26,8 @@ type Scrubber struct {
 }
 
 // SetOutput names the output folder, whose name the user chose and can
-// be their own; "" names none. A drive's root is left as it is.
+// be their own; "" names none. A drive's root is left as it is. The window
+// writes a folder in the home folder from ~: that way too.
 func (s *Scrubber) SetOutput(dir string) {
 	if s == nil {
 		return
@@ -34,8 +35,15 @@ func (s *Scrubber) SetOutput(dir string) {
 	var output []string
 	if dir = filepath.Clean(dir); dir != "." && filepath.Dir(dir) != dir {
 		output = []string{dir}
-		if slash := filepath.ToSlash(dir); slash != dir {
-			output = append(output, slash)
+		if len(s.home) > 0 {
+			if home := filepath.Clean(s.home[0]); len(dir) > len(home) && dir[len(home)] == filepath.Separator && strings.EqualFold(dir[:len(home)], home) {
+				output = append(output, "~"+dir[len(home):])
+			}
+		}
+		for _, o := range output {
+			if slash := filepath.ToSlash(o); slash != o {
+				output = append(output, slash)
+			}
 		}
 	}
 	s.mu.Lock()

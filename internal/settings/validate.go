@@ -188,6 +188,33 @@ func homeRelative(s string) (string, bool) {
 	return "", false
 }
 
+// ShortHome writes a path in the home folder from ~, as ExpandHome reads
+// it, for the window: the rest of the path names no one. Any other path
+// is left as it is.
+func ShortHome(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || len(home) <= 1 {
+		return p
+	}
+	clean, home := filepath.Clean(p), filepath.Clean(home)
+	switch {
+	case samePath(clean, home):
+		return "~"
+	case len(clean) > len(home) && clean[len(home)] == filepath.Separator && samePath(clean[:len(home)], home):
+		return "~" + clean[len(home):]
+	}
+	return p
+}
+
+// samePath compares two clean paths as the system does: Windows ignores
+// case.
+func samePath(a, b string) bool {
+	if filepath.Separator == '\\' {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
 func validTemplate(s string) (string, error) {
 	if strings.TrimSpace(s) == "" {
 		return "", fmt.Errorf("template is empty")
