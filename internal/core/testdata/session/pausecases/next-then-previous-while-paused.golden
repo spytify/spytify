@@ -1,0 +1,40 @@
+# pausecases/next-then-previous-while-paused
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > player Paused pos=-1 (ring at 66150)
+    1500ms  state paused
+    1500ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 66150)
+    1500ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 66150)
+    1500ms  > player Playing pos=-1 (ring at 66150)
+    1500ms  state recording
+    1500ms  > audio music 1 at 0ms, 132300(3000ms)
+    1820ms  log debug: cut for "A" at 1501 ms (kind 2, noticed at 1500 ms, window 1500..1800 ms)
+    1820ms  started t-002 "A" artist="Artist" album="Album" length=3000ms cut=interrupt/edge offset=1ms source=44100/2
+    1820ms  take t-002 "A" start=66205(1501.25ms) length=132300(3000ms)
+    4500ms  > audio silence, 22050(500ms)
+    5000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 220500)
+    5000ms  log debug: cut for "B" at 4500 ms (kind 1, noticed at 5000 ms, window 4201..4803 ms)
+    5000ms  started t-003 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    5000ms  take t-003 "B" start=198450(4500ms) length=132300(3000ms)
+    5000ms  > audio music 2 at 0ms, 132300(3000ms)
+    8000ms  > audio silence, 66150(1500ms)
+    9500ms  > player Stopped pos=-1 (ring at 418950)
+    9500ms  state waiting
+    9500ms  state stopping
+    9500ms  state idle
+    9500ms  take none
+--- jobs
+job t-001 "A" played=44144(1001ms) length=132300(3000ms) wav=44144 crc=c17a1476 partial
+job t-002 "A" played=132245(2998.75ms) length=132300(3000ms) wav=132245 crc=18f76947
+job t-003 "B" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=c244853d
+--- end: idle, 0 skipped, 0 ads, 0 overruns
