@@ -6,6 +6,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
+	"github.com/spytify/spytify/internal/settings"
 )
 
 func TestThemeFollowsTheSetting(t *testing.T) {
@@ -51,7 +52,7 @@ func TestAFootersButtonLightsUpUnderThePointer(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
 	clear := a.screens[tabRecord].(*recordScreen).clear
-	for i, mode := range []string{"light", "dark"} {
+	for i, mode := range []settings.Theme{settings.ThemeLight, settings.ThemeDark} {
 		a.fa.Settings().SetTheme(spytifyTheme{mode: mode})
 		a.render()
 		hover, footer := theme.ColorForWidget(theme.ColorNameHover, clear), cardColors[colorFooter][i]

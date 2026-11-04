@@ -3,6 +3,8 @@ package naming
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/spytify/spytify/internal/settings"
 )
 
 // The folder grouping. With none every file is at the root. The main
@@ -18,7 +20,7 @@ func TestArtistFolders(t *testing.T) {
 		{Artists: []string{"Lumen"}, AlbumArtists: []string{"Various Artists"}, Title: "Hit", Album: "Summer"},
 		{Artists: []string{"Band", "Other"}, AlbumArtists: []string{"Band", "Other"}, Title: "Split", Album: "EP"},
 	}
-	for group, want := range map[string][]string{
+	for group, want := range map[settings.GroupBy][]string{
 		"none":          {"", "", "", "", ""},
 		"artist":        {"Neon Harbor", "Neon Harbor", "Lumen", "Various Artists", "Band"},
 		"artist/album":  {"Neon Harbor/Lights (2024)", "Neon Harbor/Lights (2024)", "Lumen/Days", "Various Artists/Summer", "Band/EP"},

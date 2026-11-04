@@ -21,7 +21,7 @@ type countingNP struct {
 	controls *atomic.Int32
 }
 
-func (c countingNP) Control(cmd string) error {
+func (c countingNP) Control(cmd proto.PlayerCmd) error {
 	if cmd == proto.CmdNext {
 		c.controls.Add(1)
 	}

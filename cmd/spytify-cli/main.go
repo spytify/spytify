@@ -377,9 +377,9 @@ func (a *app) controlCmd() *cobra.Command {
 		Use:       "control play|pause|next|previous|restart",
 		Short:     "Send a transport command to the player",
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart},
+		ValidArgs: []string{string(proto.CmdPlay), string(proto.CmdPause), string(proto.CmdNext), string(proto.CmdPrevious), string(proto.CmdRestart)},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.call(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: args[0]}, nil)
+			return a.call(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.PlayerCmd(args[0])}, nil)
 		},
 	}
 }

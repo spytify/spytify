@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 // The poll script runs for real, against a player that is not installed;
@@ -33,7 +34,7 @@ func TestPollScriptWithAbsentPlayer(t *testing.T) {
 	if got[0].Kind != TrackChanged || !got[0].Track.Empty() || got[1].Kind != StatusChanged || got[1].Status != Stopped {
 		t.Fatalf("events = %+v", got)
 	}
-	for _, cmd := range []string{"next", "restart"} {
+	for _, cmd := range []proto.PlayerCmd{proto.CmdNext, proto.CmdRestart} {
 		if err := j.Control(cmd); err != ErrNoPlayer {
 			t.Fatalf("Control(%q) on an absent player: %v", cmd, err)
 		}

@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/spytify/spytify/internal/settings"
 )
 
 // The plain colour fills the padding above the tabs and their bar, across
@@ -45,7 +46,7 @@ func TestThePlainColourIsBehindTheTabBarOnly(t *testing.T) {
 			t.Errorf("tab %d: the bar's keys are %v at %v, over a colour %v at %v", i, keys.Size(), keys.Position(), back.Size(), back.Position())
 		}
 	}
-	for i, mode := range []string{"light", "dark"} {
+	for i, mode := range []settings.Theme{settings.ThemeLight, settings.ThemeDark} {
 		fa.Settings().SetTheme(spytifyTheme{mode: mode})
 		view.Refresh()
 		if back.FillColor != cardColors[colorPlain][i] {

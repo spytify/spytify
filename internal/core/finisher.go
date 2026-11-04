@@ -153,8 +153,8 @@ func (f *finisher) find(info meta.TrackInfo, v settings.Values) (recordedFile, b
 func namingOptions(v settings.Values) naming.Options {
 	p, _ := encode.PresetFor(v.String(settings.EncodeFormat))
 	return naming.Options{
-		GroupBy:         v.String(settings.OutputGroupBy),
-		Prefix:          v.String(settings.OutputPrefix),
+		GroupBy:         v.GroupBy(),
+		Prefix:          v.Prefix(),
 		Underscores:     v.Bool(settings.OutputUnderscores),
 		Template:        v.String(settings.OutputTemplate),
 		CounterWidth:    int(v.Int(settings.OutputCounterWidth)),
@@ -168,7 +168,7 @@ func tagOptions(v settings.Values) tag.Options {
 	return tag.Options{
 		ExtraToSubtitle: v.Bool(settings.TagsExtraToSubtitle),
 		ArtistSeparator: v.String(settings.TagsArtistSeparator),
-		CoverSize:       v.String(settings.TagsCoverSize),
+		CoverSize:       v.CoverSize(),
 		Cover:           v.Bool(settings.TagsCover),
 	}
 }
@@ -280,7 +280,7 @@ func (f *finisher) complete(t *take) bool {
 		return false
 	}
 	if err != nil {
-		f.fail(t.finishJob, "read", err)
+		f.fail(t.finishJob, proto.ErrorRead, err)
 		return false
 	}
 	if !heard {
@@ -368,12 +368,12 @@ func (f *finisher) fetchCover(ctx context.Context, t *take) {
 // moves on. Past the last number its digits allow, the file is not saved
 // and the recording stops, as v1's did.
 func (f *finisher) takeNumber(t *take) bool {
-	if t.o.Prefix != "counter" {
+	if t.o.Prefix != settings.PrefixCounter {
 		return true
 	}
 	t.counter = t.v.Int(settings.OutputCounterNext)
 	if limit := naming.CounterLimit(t.o.CounterWidth); t.counter > limit {
-		f.fail(t.finishJob, "counter_full", fmt.Errorf("the counter is past %d, the last number of %d digits: raise Counter digits or set Next counter number back", limit, t.o.CounterWidth))
+		f.fail(t.finishJob, proto.ErrorCounterFull, fmt.Errorf("the counter is past %d, the last number of %d digits: raise Counter digits or set Next counter number back", limit, t.o.CounterWidth))
 		if f.full != nil {
 			f.full()
 		}
@@ -399,19 +399,19 @@ func (f *finisher) pickName(t *take) bool {
 	root := t.v.Path(settings.OutputDir)
 	dir := filepath.Join(root, plan.Dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		f.fail(t.finishJob, "output_dir", err)
+		f.fail(t.finishJob, proto.ErrorOutputDir, err)
 		return false
 	}
 	name := naming.FileName(plan, t.o, t.counter, t.tags.Track)
-	duplicates := t.v.String(settings.RecorderDuplicates)
+	duplicates := t.v.Duplicates()
 	if t.keep {
 		// A partial file never replaces a file, nor is it skipped.
-		duplicates = "suffix"
+		duplicates = settings.DuplicatesSuffix
 	}
 	switch duplicates {
-	case "suffix":
+	case settings.DuplicatesSuffix:
 		name = naming.FreeSuffix(dir, name, t.o.Underscores, f.records.taken)
-	case "skip":
+	case settings.DuplicatesSkip:
 		if path := filepath.Join(dir, name); f.records.taken(path) {
 			f.skipped(proto.TrackSkippedEvent{ID: t.id, Reason: proto.SkipDuplicate, Path: path})
 			return false
@@ -440,7 +440,7 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 	t.timings.EncodeMs = msSince(step)
 	if err != nil {
 		os.Remove(t.part)
-		f.fail(t.finishJob, "encode", err)
+		f.fail(t.finishJob, proto.ErrorEncode, err)
 		return false
 	}
 	if short != nil {
@@ -477,7 +477,7 @@ func (f *finisher) save(t *take) {
 	}
 	if err := os.Rename(t.part, t.final); err != nil {
 		os.Remove(t.part)
-		f.fail(t.finishJob, "rename", err)
+		f.fail(t.finishJob, proto.ErrorRename, err)
 		return
 	}
 	var size int64
@@ -488,7 +488,7 @@ func (f *finisher) save(t *take) {
 	f.cnt.Recorded++
 	f.cnt.Bytes += size
 	f.mu.Unlock()
-	if t.o.Prefix == "counter" && f.advance != nil {
+	if t.o.Prefix == settings.PrefixCounter && f.advance != nil {
 		f.advance(t.counter + 1)
 	}
 	if !t.keep {
@@ -516,130 +516,18 @@ func (f *finisher) save(t *take) {
 	})
 }
 
-func (f *finisher) fail(j finishJob, code string, err error) {
+func (f *finisher) fail(j finishJob, code proto.ErrorCode, err error) {
 	f.log.Errorf("%q: %s: %v", j.info.Title, code, err)
 	msg := fmt.Sprintf("%s: %v", j.info.Title, err)
 	// Only once a file failed is the output folder looked at: gone with
 	// its drive, nothing more can be saved, and the recording stops.
 	lost := false
 	if _, gone := os.Stat(f.values().Path(settings.OutputDir)); gone != nil {
-		code, msg, lost = "output_dir", "the output folder cannot be reached, so the recording stopped: "+msg, true
+		code, msg, lost = proto.ErrorOutputDir, "the output folder cannot be reached, so the recording stopped: "+msg, true
 	}
 	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg})
 	f.skip(j.id, proto.SkipIncomplete)
 	if lost && f.lost != nil {
 		f.lost()
 	}
-}
-
-// scanTrim returns the frame range [start, end) of a WAV file between its
-// first and last sample above db. A sample only counts when the 10 ms
-// around it is above db too, so an isolated click does not stop the trim.
-func scanTrim(path string, db float64) (start, end int64, ok bool, err error) {
-	w, err := pcm.OpenWAV(path)
-	if err != nil {
-		return 0, 0, false, err
-	}
-	defer w.Close()
-	format := w.Format()
-	fw := &frameWindow{w: w, size: format.FramesFromMs(4000)}
-	block := format.FramesFromMs(10)
-	total := w.Frames()
-	thr := math.Pow(10, db/20)
-	loudFrame := func(i int64) bool {
-		b := fw.frames(i, i+1)
-		for c := 0; c < format.Channels; c++ {
-			if math.Abs(format.SampleAt(b, c)) > thr {
-				return true
-			}
-		}
-		return false
-	}
-	loudSpan := func(from, to int64) bool {
-		_, rms := format.Level(fw.frames(from, to))
-		return rms > db
-	}
-	start = -1
-	for i := int64(0); i < total; i++ {
-		if loudFrame(i) && loudSpan(i, i+block) {
-			start = i
-			break
-		}
-	}
-	if start < 0 {
-		return 0, 0, false, fw.err
-	}
-	end = start + 1
-	for j := total - 1; j >= start; j-- {
-		if loudFrame(j) && loudSpan(j+1-block, j+1) {
-			end = j + 1
-			break
-		}
-	}
-	// silence_db finds the sound; the fade around it is kept down to 12 dB
-	// under it, until 1 ms of quieter samples.
-	floor := thr / 4
-	quietRun := format.FramesFromMs(1)
-	maxExtend := format.FramesFromMs(100)
-	above := func(i int64) bool {
-		b := fw.frames(i, i+1)
-		for c := 0; c < format.Channels; c++ {
-			if math.Abs(format.SampleAt(b, c)) > floor {
-				return true
-			}
-		}
-		return false
-	}
-	for i, quiet := start-1, int64(0); i >= 0 && start-i <= maxExtend && quiet < quietRun; i-- {
-		if above(i) {
-			start, quiet = i, 0
-		} else {
-			quiet++
-		}
-	}
-	for i, quiet := end, int64(0); i < total && i-end <= maxExtend && quiet < quietRun; i++ {
-		if above(i) {
-			end, quiet = i+1, 0
-		} else {
-			quiet++
-		}
-	}
-	return start, end, true, fw.err
-}
-
-// frameWindow keeps a few seconds of a WAV file around the frames asked
-// for, loading ahead or behind as the scan moves, so trimming a long take
-// does not load it whole.
-type frameWindow struct {
-	w    *pcm.WAVFile
-	size int64
-	from int64
-	data []byte
-	err  error
-}
-
-// frames returns frames [from, to) of the file, clamped to it.
-func (fw *frameWindow) frames(from, to int64) []byte {
-	from, to = max(from, 0), min(to, fw.w.Frames())
-	if to <= from {
-		return nil
-	}
-	fb := int64(fw.w.Format().FrameBytes())
-	if from < fw.from || to > fw.from+int64(len(fw.data))/fb {
-		lo := from
-		if from < fw.from {
-			// Moving back: the window ends where the scan is.
-			lo = min(from, to-fw.size)
-		}
-		lo = max(lo, 0)
-		data, err := fw.w.ReadFrames(lo, max(to, lo+fw.size))
-		if err != nil {
-			if fw.err == nil {
-				fw.err = err
-			}
-			lo, data = from, make([]byte, (to-from)*fb)
-		}
-		fw.from, fw.data = lo, data
-	}
-	return fw.data[(from-fw.from)*fb : (to-fw.from)*fb]
 }

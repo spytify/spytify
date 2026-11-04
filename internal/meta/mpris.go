@@ -12,6 +12,7 @@ import (
 	"github.com/godbus/dbus/v5"
 
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 const (
@@ -339,11 +340,11 @@ func (m *MPRIS) Target(t target.Target) {
 
 // Control sends a transport command through MPRIS, never through window
 // focus or synthetic keys.
-func (m *MPRIS) Control(cmd string) error {
-	if cmd == "restart" {
+func (m *MPRIS) Control(cmd proto.PlayerCmd) error {
+	if cmd == proto.CmdRestart {
 		return m.restart()
 	}
-	method := map[string]string{"play": "Play", "pause": "Pause", "next": "Next", "previous": "Previous"}[cmd]
+	method := map[proto.PlayerCmd]string{proto.CmdPlay: "Play", proto.CmdPause: "Pause", proto.CmdNext: "Next", proto.CmdPrevious: "Previous"}[cmd]
 	if method == "" {
 		return ErrUnsupported
 	}

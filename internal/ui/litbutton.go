@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/spytify/spytify/internal/settings"
 )
 
 // litButton is a button filled with a colour, the green, the red of Stop
@@ -122,7 +123,7 @@ func (t litTheme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color 
 // litColor is the colour n has on a focused button of importance imp, or
 // nil for the theme's own.
 func litColor(n fyne.ThemeColorName, imp widget.Importance) color.Color {
-	light := spytifyTheme{mode: "light"}
+	light := spytifyTheme{mode: settings.ThemeLight}
 	switch n {
 	case theme.ColorNamePrimary, theme.ColorNameError, theme.ColorNameWarning:
 		return light.Color(theme.ColorNameButton, theme.VariantLight)

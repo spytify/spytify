@@ -373,7 +373,7 @@ func TestAProblemGoesWithThePicture(t *testing.T) {
 	a, m := privacyApp(t, srv, true)
 	connect(t, a, m, true)
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "encode", Msg: "ffmpeg exited with 1"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorEncode, Msg: "ffmpeg exited with 1"}))
 	srv.Wait(t, "event", 1)
 	img := sentScreenshot(t, srv)
 	w, h := a.win.Canvas().PixelCoordinateForPosition(fyne.NewPos(a.win.Canvas().Size().Width, a.win.Canvas().Size().Height))

@@ -1,7 +1,9 @@
 // Command genkeys writes keys_gen.go in internal/settings: a settings.Key
 // for each row of the settings table, named from its key, so that code
 // names a setting with an identifier the compiler checks rather than with a
-// string. It runs through go generate in internal/settings.
+// string. A setting that takes one of a list also gets a type, a constant
+// for each value and a getter on Values. It runs through go generate in
+// internal/settings.
 package main
 
 import (
@@ -51,14 +53,30 @@ func render(table []settings.Def) ([]byte, error) {
 		fmt.Fprintf(&b, "\t// %s is %s, %q in Settings.\n\t%s = Key{%q}\n", name, d.Key, d.Label, name, d.Key)
 	}
 	b.WriteString(")\n")
+	for _, d := range table {
+		if d.Kind != settings.KindEnum {
+			continue
+		}
+		typ := identifier(d.Key[strings.LastIndex(d.Key, ".")+1:])
+		if other, ok := seen[typ]; ok {
+			return nil, fmt.Errorf("%s and %s are both named %s", other, d.Key, typ)
+		}
+		seen[typ] = d.Key
+		fmt.Fprintf(&b, "\n// %s is a value of %s.\ntype %s string\n\n// The values of %s, as Settings names them.\nconst (\n", typ, d.Key, typ, d.Key)
+		for i, v := range d.Enum {
+			fmt.Fprintf(&b, "\t%s %s = %q // %s\n", typ+identifier(v), typ, v, d.Choices[i])
+		}
+		fmt.Fprintf(&b, ")\n\n// %s is the value of %s.\nfunc (v Values) %s() %s { return %s(v.String(%s)) }\n", typ, d.Key, typ, typ, typ, identifier(d.Key))
+	}
 	return format.Source(b.Bytes())
 }
 
 // identifier is the key's Go name: recorder.trim_silence is
-// RecorderTrimSilence.
+// RecorderTrimSilence. An enum's value is named the same way after its
+// type: artist/album is GroupByArtistAlbum.
 func identifier(key string) string {
 	var b strings.Builder
-	for _, word := range strings.FieldsFunc(key, func(r rune) bool { return r == '.' || r == '_' }) {
+	for _, word := range strings.FieldsFunc(key, func(r rune) bool { return r == '.' || r == '_' || r == '/' }) {
 		b.WriteString(strings.ToUpper(word[:1]) + word[1:])
 	}
 	return b.String()

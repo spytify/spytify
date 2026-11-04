@@ -5,6 +5,26 @@ import (
 	"github.com/spytify/spytify/internal/pcm"
 )
 
+const (
+	// A notification may come this late after the audio changed; windows
+	// and the drain hold-back cover it.
+	lateNotifyMs = 1000
+	// A notification this much earlier than the expected end is a skip or
+	// a seek, not jitter.
+	earlySlackMs   = 1000
+	earlyNotifyMs  = 300
+	startTimeoutMs = 2000
+	frameMs        = 20
+	stepMs         = 5
+	blockMs        = 5
+	// A window this many dB under the median of the search window is a
+	// boundary even when it is not silent.
+	dipDB = 15
+	// After a skip, the next track starts where the peak level of 1 ms
+	// windows drops this far under its median.
+	skipDipDB = 20
+)
+
 type changeKind int
 
 const (
@@ -22,6 +42,18 @@ type change struct {
 	ready    int64
 	// restart: the same item started over, so the take before is partial.
 	restart bool
+	// skipLo and skipHi frame the notice of a boundary named before its
+	// window, where a skip would have left its edge; both 0 otherwise.
+	skipLo, skipHi int64
+}
+
+// earliest is the first frame the change's cut may land on: the drain
+// writes no further until it is cut.
+func (ch *change) earliest() int64 {
+	if ch.skipHi > 0 && ch.skipLo < ch.lo {
+		return ch.skipLo
+	}
+	return ch.lo
 }
 
 // String names the kind as track.started's cut says it.
@@ -70,10 +102,27 @@ func (cf *cutFinder) plan(r *Ring, c *segment, info meta.TrackInfo, at int64, re
 		// one before it is complete.
 		ch.restart = false
 		e := c.origin + c.length
-		late := cf.soundAt(r, c) + c.length
+		sound := cf.soundAt(r, c)
+		late := sound + c.length
 		ch.kind, ch.lo, ch.hi, ch.expected = changeBoundary, e-cf.window, late+cf.window, e
+		if at < ch.lo {
+			// Named before its window: Next pressed in the take's last
+			// second, or a notice early for the take's natural end.
+			ch.skipLo, ch.skipHi = at-ms(lateNotifyMs), at+ms(earlyNotifyMs)
+		}
+		if ch.lo < sound && late <= at+ms(earlyNotifyMs) {
+			// Its whole length of sound played before the next was named:
+			// a take shorter than the window ends after its sound, not in
+			// the gap before it.
+			ch.lo = sound
+		}
 	default:
 		ch.kind, ch.lo, ch.hi, ch.expected = changeInterrupt, at-ms(lateNotifyMs), at+ms(earlyNotifyMs), at
+		if paused {
+			// Named while paused, the item changed after the sound stopped
+			// for the pause: none of the audio before it is the new item's.
+			ch.lo = at
+		}
 	}
 	floor := r.Start()
 	if c != nil {
@@ -86,6 +135,9 @@ func (cf *cutFinder) plan(r *Ring, c *segment, info meta.TrackInfo, at int64, re
 	}
 	if ch.lo < floor {
 		ch.lo = floor
+	}
+	if ch.skipHi > 0 && ch.skipLo < floor {
+		ch.skipLo = floor
 	}
 	if ch.hi < ch.lo {
 		ch.hi = ch.lo
@@ -172,6 +224,12 @@ func (cf *cutFinder) resolve(r *Ring, p *change, c *segment, force bool) (cut in
 		edgeOK := false
 		if p.kind == changeInterrupt {
 			at, peak, median := r.QuietestPeak(p.lo, hi, f1ms(r))
+			edge, edgeOK = at, peak <= median-skipDipDB
+		}
+		if p.skipHi > p.skipLo {
+			// With no silence or dip where the take was to end, a skip's
+			// edge near the notice is where it ended.
+			at, peak, median := r.QuietestPeak(p.skipLo, min(p.skipHi, r.End()), f1ms(r))
 			edge, edgeOK = at, peak <= median-skipDipDB
 		}
 		switch {

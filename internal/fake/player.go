@@ -14,6 +14,7 @@ import (
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 // span is a run of frames in one format: part of an item's audio, a gap, or
@@ -543,11 +544,11 @@ func (b *Backend) maybeStart() {
 	}()
 }
 
-func (b *Backend) Frames() <-chan capture.Chunk { return b.frames }
-func (b *Backend) Overruns() int64              { return 0 }
-func (b *Backend) Control(cmd string) error     { return b.p.Control(cmd) }
-func (b *Backend) Volume() (float64, error)     { return b.p.Volume() }
-func (b *Backend) SetVolume(v float64) error    { return b.p.SetVolume(v) }
+func (b *Backend) Frames() <-chan capture.Chunk      { return b.frames }
+func (b *Backend) Overruns() int64                   { return 0 }
+func (b *Backend) Control(cmd proto.PlayerCmd) error { return b.p.Control(string(cmd)) }
+func (b *Backend) Volume() (float64, error)          { return b.p.Volume() }
+func (b *Backend) SetVolume(v float64) error         { return b.p.SetVolume(v) }
 
 func (b *Backend) Close() error {
 	b.mu.Lock()

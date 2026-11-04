@@ -6,18 +6,19 @@ import (
 	"image/jpeg"
 	"image/png"
 
+	"github.com/spytify/spytify/internal/settings"
 	"golang.org/x/image/draw"
 )
 
 // coverSides is the longest side of each tags.cover_size, in pixels. Large
 // keeps the cover as it came; medium matches the usual player artwork.
-var coverSides = map[string]int{"small": 300, "medium": 640}
+var coverSides = map[settings.CoverSize]int{settings.CoverSizeSmall: 300, settings.CoverSizeMedium: 640}
 
 // fitCover shrinks a cover to the longest side its size allows; it never
 // enlarges one, and keeps one it cannot decode as it came.
-func fitCover(data []byte, mime, size string) ([]byte, string) {
+func fitCover(data []byte, mime string, size settings.CoverSize) ([]byte, string) {
 	if size == "" {
-		size = "medium"
+		size = settings.CoverSizeMedium
 	}
 	side := coverSides[size]
 	if side == 0 {

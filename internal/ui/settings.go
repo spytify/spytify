@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -108,6 +109,10 @@ func matches(q string, d settings.Def) bool {
 		strings.Contains(strings.ToLower(strings.Join(d.Choices, " ")), q)
 }
 
+// playerWords are the player card's labels, which the search matches as
+// it matches a setting's.
+var playerWords = strings.ToLower(strings.Join([]string{lang.PlayerProcess, lang.BundleID, lang.MPRISName, lang.LaunchCommand}, " "))
+
 func (s *settingsScreen) layout() {
 	q := strings.ToLower(strings.TrimSpace(s.search.Text))
 	// Remember what the user opened, not what a search opened.
@@ -133,7 +138,7 @@ func (s *settingsScreen) layout() {
 			}
 			keys = append(keys, d.Key)
 		}
-		player := g == "App" && (q == "" || strings.Contains("player process bundle mpris launch", q))
+		player := g == "App" && (q == "" || strings.Contains(playerWords, q))
 		if len(keys) == 0 && !player {
 			continue
 		}
@@ -481,7 +486,8 @@ func (s *settingsScreen) render(st model.State) {
 	}
 	// FLAC and WAV are lossless: a bitrate means nothing for them.
 	if sel, ok := s.fields[settings.EncodeBitrateKbps.String()].input.(*selectField); ok {
-		if format, _ := st.Settings[settings.EncodeFormat.String()].(string); format == "flac" || format == "wav" {
+		format, _ := st.Settings[settings.EncodeFormat.String()].(string)
+		if p, ok := encode.PresetFor(format); ok && !p.Lossy {
 			sel.Disable()
 		} else {
 			sel.Enable()
@@ -492,8 +498,8 @@ func (s *settingsScreen) render(st model.State) {
 	}
 	// The counter's settings mean something only with the counter prefix.
 	prefix, _ := st.Settings[settings.OutputPrefix.String()].(string)
-	s.enable(settings.OutputCounterNext, prefix == "counter")
-	s.enable(settings.OutputCounterWidth, prefix == "counter")
+	s.enable(settings.OutputCounterNext, settings.Prefix(prefix) == settings.PrefixCounter)
+	s.enable(settings.OutputCounterWidth, settings.Prefix(prefix) == settings.PrefixCounter)
 	note := s.app.trayNote()
 	if note == "" {
 		note = s.tray.Note
@@ -534,8 +540,8 @@ func exampleName(v map[string]any) string {
 	whole := func(key settings.Key) int64 { n, _ := get(key).(int64); return n }
 	p, _ := encode.PresetFor(str(settings.EncodeFormat))
 	return naming.Example(naming.Options{
-		GroupBy:         str(settings.OutputGroupBy),
-		Prefix:          str(settings.OutputPrefix),
+		GroupBy:         settings.GroupBy(str(settings.OutputGroupBy)),
+		Prefix:          settings.Prefix(str(settings.OutputPrefix)),
 		Underscores:     on(settings.OutputUnderscores),
 		Template:        str(settings.OutputTemplate),
 		CounterWidth:    int(whole(settings.OutputCounterWidth)),
@@ -636,7 +642,7 @@ func (p *playerCard) save() {
 		"SPYTIFY_TARGET_LAUNCH":    p.launch.Text,
 	}
 	if strings.TrimSpace(values["SPYTIFY_TARGET_PROCESS"]) == "" {
-		p.app.showError(fmt.Errorf("the player process name is required"))
+		p.app.showError(errors.New(lang.PlayerRequired))
 		return
 	}
 	p.app.noteAction("save the player")

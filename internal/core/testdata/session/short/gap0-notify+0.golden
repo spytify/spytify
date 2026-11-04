@@ -19,7 +19,7 @@
     3700ms  log debug: cut for "Track B" at 3500 ms (kind 1, noticed at 3500 ms, window 3200..3801 ms)
     3700ms  started t-002 "Track B" artist="Artist" album="Album" length=200ms cut=boundary/dip offset=0ms source=44100/2
     3700ms  take t-002 "Track B" start=154331(3499.57ms) length=8820(200ms)
-    4020ms  log debug: cut for "Track C" at 3701 ms (kind 1, noticed at 3700 ms, window 3500..4001 ms)
+    4020ms  log debug: cut for "Track C" at 3701 ms (kind 1, noticed at 3700 ms, window 3501..4001 ms)
     4020ms  started t-003 "Track C" artist="Artist" album="Album" length=2000ms cut=boundary/length offset=1ms source=44100/2
     4020ms  take t-003 "Track C" start=163223(3701.2ms) length=88200(2000ms)
     5700ms  > player Stopped pos=-1 (ring at 251370)

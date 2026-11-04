@@ -340,7 +340,7 @@ func rowDetails(r model.Row) string {
 	if r.Bytes > 0 {
 		parts = append(parts, fmtBytes(r.Bytes))
 	}
-	return strings.Join(parts, " · ")
+	return strings.Join(parts, lang.Separator)
 }
 
 // rowLength is how long a row's file plays, or its track when it has none.
@@ -460,7 +460,7 @@ func (r *recordScreen) render(s model.State) {
 	// Only silence is said in a line: why, and what to do, is the player
 	// heard check's in the diagnostics. A recorder gone no longer warns.
 	warns := !gone && s.LastError != nil && s.LastError.Msg != "" && s.Recording()
-	silent := warns && s.LastError.Code == "capture_silent"
+	silent := warns && s.LastError.Code == proto.ErrorCaptureSilent
 	switch {
 	case silent:
 		setCaption(r.alert, fmt.Sprintf(lang.OnlySilenceHeard, player))
@@ -539,7 +539,7 @@ func (r *recordScreen) render(s model.State) {
 func (r *recordScreen) renderCard(c *model.Row, session proto.SessionState) {
 	sub := c.Artist
 	if c.Album != "" {
-		sub += " · " + c.Album
+		sub += lang.Separator + c.Album
 	}
 	setRowText(r.track, c.Title, sub)
 	text, recording := stateText(session, c)
@@ -645,7 +645,9 @@ func sourceParts(rate, channels int) []string {
 	if rate <= 0 {
 		return nil
 	}
-	khz := func(rate int) string { return strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64) + " kHz" }
+	khz := func(rate int) string {
+		return fmt.Sprintf(lang.KHz, strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64))
+	}
 	parts := []string{khz(rate)}
 	switch channels {
 	case 1:

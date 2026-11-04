@@ -88,7 +88,7 @@ func TestOutputFolderGoneStopsTheRecording(t *testing.T) {
 		t.Error("the recording waited for the track to end")
 	}
 	errs := errorsOf(s)
-	if len(errs) != 1 || errs[0].Code != "output_dir" || !strings.HasPrefix(errs[0].Msg, "the output folder cannot be reached") {
+	if len(errs) != 1 || errs[0].Code != proto.ErrorOutputDir || !strings.HasPrefix(errs[0].Msg, "the output folder cannot be reached") {
 		t.Fatalf("errors %+v", errs)
 	}
 }
@@ -152,7 +152,7 @@ func TestASaveWithTheOutputFolderGoneStopsTheRecording(t *testing.T) {
 		var sk proto.TrackSkippedEvent
 		skipped = skipped || (ev.Method == proto.EventTrackSkipped && ev.Decode(&sk) == nil && sk.ID == "s-1" && sk.Reason == proto.SkipIncomplete)
 	}
-	if !lost.Load() || !skipped || len(errs) != 1 || errs[0].Code != "output_dir" || !strings.HasPrefix(errs[0].Msg, "the output folder cannot be reached, so the recording stopped") {
+	if !lost.Load() || !skipped || len(errs) != 1 || errs[0].Code != proto.ErrorOutputDir || !strings.HasPrefix(errs[0].Msg, "the output folder cannot be reached, so the recording stopped") {
 		t.Fatalf("lost %v, skipped %v, errors %+v", lost.Load(), skipped, errs)
 	}
 }
@@ -173,7 +173,7 @@ func TestAFullDiskStopsTheRecording(t *testing.T) {
 				t.Errorf("pause %v: a track was saved on a full disk", pause)
 			}
 			var e proto.ErrorEvent
-			if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == "disk_full" {
+			if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == proto.ErrorDiskFull {
 				full = true
 			}
 		}
@@ -181,7 +181,7 @@ func TestAFullDiskStopsTheRecording(t *testing.T) {
 			t.Errorf("pause %v: no disk_full error", pause)
 		}
 		time.Sleep(100 * time.Millisecond)
-		if got := slices.Contains(s.player.Commands(), proto.CmdPause); got != pause {
+		if got := slices.Contains(s.player.Commands(), string(proto.CmdPause)); got != pause {
 			t.Errorf("pause %v: the player was sent %v", pause, s.player.Commands())
 		}
 	}

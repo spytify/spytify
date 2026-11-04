@@ -103,9 +103,9 @@ func adviceNames(checks []proto.Check) []string {
 
 // problemCodes are the recorder's errors worth a problem report: not a
 // full disk, which is the user's to fix.
-var problemCodes = map[string]bool{
-	"capture_stalled": true, "ring_overflow": true, "write": true, "temp_file": true,
-	"output_dir": true, "read": true, "encode": true, "rename": true,
+var problemCodes = map[proto.ErrorCode]bool{
+	proto.ErrorCaptureStalled: true, proto.ErrorRingOverflow: true, proto.ErrorWrite: true, proto.ErrorTempFile: true,
+	proto.ErrorOutputDir: true, proto.ErrorRead: true, proto.ErrorEncode: true, proto.ErrorRename: true,
 }
 
 // feedTracker turns the recorder's events into breadcrumbs, steps and problem
@@ -177,9 +177,9 @@ func (a *App) feedTracker(ev proto.Event) {
 		if ev.Decode(&e) != nil {
 			return
 		}
-		a.tel.Breadcrumb("error", e.Code, nil)
+		a.tel.Breadcrumb("error", string(e.Code), nil)
 		if problemCodes[e.Code] {
-			a.tel.Problem(e.Code, e.Msg)
+			a.tel.Problem(string(e.Code), e.Msg)
 		}
 	case proto.EventSettingsChanged:
 		var e proto.SettingsValues
@@ -261,7 +261,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 		lines = lines[len(lines)-50:]
 	}
 	for _, l := range lines {
-		log = append(log, l.TS+" "+l.Level+" "+l.Msg)
+		log = append(log, l.TS+" "+string(l.Level)+" "+l.Msg)
 	}
 	// The window as it shows under this dialog, which is not open yet.
 	report := telemetry.Checks{Failing: failing, Log: log, Screenshot: a.picture()}

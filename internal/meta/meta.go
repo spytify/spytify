@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 // Status is the player's playback status.
@@ -102,7 +103,7 @@ type NowPlaying interface {
 	// Watch starts watching the target. The first events describe the
 	// current state: a TrackChanged (possibly empty) then a StatusChanged.
 	Watch(ctx context.Context, t target.Target) (<-chan Event, error)
-	Control(cmd string) error
+	Control(cmd proto.PlayerCmd) error
 	Volume() (float64, error)
 	SetVolume(v float64) error
 }

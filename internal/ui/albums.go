@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // untitled is the folder the recorder files an album with no name in, with
@@ -81,7 +82,7 @@ func (l *libraryScreen) albums(files []libraryFile) (rows []libraryRow, unread [
 			heading = noAlbum
 		}
 		if a.artist != "" {
-			note = a.artist + " · " + note
+			note = a.artist + lang.Separator + note
 		}
 		rows = append(rows, libraryRow{heading: heading, note: note})
 		for _, f := range a.files {

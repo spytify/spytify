@@ -19,7 +19,11 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-var logLevels = []string{"error", "info", "debug"}
+// logLevels are the log filter's choices, levelOf the level each shows.
+var (
+	logLevels = []string{lang.LevelError, lang.LevelInfo, lang.LevelDebug}
+	levelOf   = map[string]proto.LogLevel{lang.LevelError: proto.LogError, lang.LevelInfo: proto.LogInfo, lang.LevelDebug: proto.LogDebug}
+)
 
 // logsScreen is the v1 console, filtered by level, with the diagnostics a
 // button away: the checks core.info runs, in a dialog over the window.
@@ -107,8 +111,8 @@ func newLogsScreen(a *App) *logsScreen {
 				ts = t.Format("15:04:05")
 			}
 			prefix := box.Objects[1].(*widget.Label)
-			prefix.SetText(ts + " " + padLevel(line.Level))
-			if line.Level == "error" {
+			prefix.SetText(ts + " " + padLevel(string(line.Level)))
+			if line.Level == proto.LogError {
 				prefix.Importance = widget.DangerImportance
 			} else {
 				prefix.Importance = widget.MediumImportance
@@ -124,7 +128,7 @@ func newLogsScreen(a *App) *logsScreen {
 		a.noteAction("copy the log")
 		var b strings.Builder
 		for _, line := range l.lines {
-			b.WriteString(line.TS + " " + line.Level + " " + line.Msg + "\n")
+			b.WriteString(line.TS + " " + string(line.Level) + " " + line.Msg + "\n")
 		}
 		a.fa.Clipboard().SetContent(b.String())
 	})
@@ -203,7 +207,7 @@ func (l *logsScreen) render(s model.State) {
 
 // checkDaemon is the app's own check, that spytifyd answers: it runs the
 // others.
-const checkDaemon = "spytifyd running"
+const checkDaemon = lang.RecorderRunning
 
 // diagChecks are the checks the diagnostics show: checkDaemon, then
 // spytifyd's. While it is gone its checks are left out, its last answers
@@ -259,7 +263,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 			start := newRowLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, l.app.StartDaemon)
 			fix = start.lit
 		}
-		if c.Name == "player running" && !c.OK {
+		if c.Name == proto.CheckPlayerRunning && !c.OK {
 			open := newRowLitButton(fmt.Sprintf(lang.Open, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
 			fix = open.lit
 		}
@@ -335,9 +339,9 @@ func (l *logsScreen) renderChecks(s model.State) {
 }
 
 func (l *logsScreen) filter() {
-	shown := map[string]bool{}
+	shown := map[proto.LogLevel]bool{}
 	for _, lv := range l.level.Selected {
-		shown[lv] = true
+		shown[levelOf[lv]] = true
 	}
 	var lines []proto.LogEvent
 	for i := len(l.all) - 1; i >= 0; i-- {

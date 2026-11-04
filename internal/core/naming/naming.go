@@ -14,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/spytify/spytify/internal/settings"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -42,8 +43,8 @@ type Track struct {
 
 // Options are the output.* settings.
 type Options struct {
-	GroupBy         string // none, artist, artist/album, artists, artists/album
-	Prefix          string // none, counter, album_track
+	GroupBy         settings.GroupBy
+	Prefix          settings.Prefix
 	Underscores     bool
 	Template        string
 	CounterWidth    int
@@ -68,13 +69,13 @@ func Build(t Track, o Options) Plan {
 		o.ArtistSeparator = ", "
 	}
 	var dirs []string
-	if o.GroupBy != "none" && o.GroupBy != "" && !t.Unknown {
+	if o.GroupBy != settings.GroupByNone && o.GroupBy != "" && !t.Unknown {
 		artist := mainArtist(t)
-		if strings.HasPrefix(o.GroupBy, "artists") {
+		if o.GroupBy == settings.GroupByArtists || o.GroupBy == settings.GroupByArtistsAlbum {
 			artist = allArtists(t, o.ArtistSeparator)
 		}
 		dirs = append(dirs, component(artist, o.ASCII, sep))
-		if strings.HasSuffix(o.GroupBy, "/album") {
+		if o.GroupBy == settings.GroupByArtistAlbum || o.GroupBy == settings.GroupByArtistsAlbum {
 			album := t.Album
 			if strings.TrimSpace(album) == "" {
 				album = untitledAlbum
@@ -109,14 +110,14 @@ func FileName(p Plan, o Options, counter int64, trackNumber int) string {
 	}
 	prefix := ""
 	switch o.Prefix {
-	case "counter":
+	case settings.PrefixCounter:
 		width := o.CounterWidth
 		if width <= 0 {
 			width = 3
 		}
 		counter = min(max(counter, 0), CounterLimit(width))
 		prefix = fmt.Sprintf("%0*d%s", width, counter, sep)
-	case "album_track":
+	case settings.PrefixAlbumTrack:
 		if trackNumber > 0 {
 			prefix = fmt.Sprintf("%02d%s", trackNumber, sep)
 		}

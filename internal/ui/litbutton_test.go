@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/spytify/spytify/internal/settings"
 )
 
 // over is how Fyne 2.8.2's button draws its focus colour over its fill:
@@ -47,7 +48,7 @@ func TestAFocusedFilledButtonLooksAsAPlainOneFocused(t *testing.T) {
 	tint := func(n fyne.ThemeColorName) color.Color {
 		return over(light(theme.ColorNameButton), withAlpha(nrgba(light(n)), 0x7f))
 	}
-	for _, mode := range []string{"light", "dark"} {
+	for _, mode := range []settings.Theme{settings.ThemeLight, settings.ThemeDark} {
 		fa.Settings().SetTheme(spytifyTheme{mode: mode})
 		c.Focus(plain)
 		if mode == "light" {
