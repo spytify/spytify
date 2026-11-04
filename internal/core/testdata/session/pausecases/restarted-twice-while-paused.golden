@@ -1,0 +1,40 @@
+# pausecases/restarted-twice-while-paused
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=1000 (ring at -)
+       0ms  > player Paused pos=-1 (ring at 0)
+       0ms  log info: "A" is already playing; recording starts with the next track
+       0ms  state paused
+       0ms  take t-pre "A" start=0(0ms) length=88200(2000ms) ghost
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 restart (ring at 0)
+       0ms  log debug: "A" started over: the player is at 0 ms
+       0ms  > player Seeked "A" pos=2000 (ring at 0)
+       0ms  log debug: "A": the player jumped to 2000 ms
+       0ms  take t-pre "A" start=0(0ms) length=44100(1000ms) ghost
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 restart (ring at 0)
+       0ms  log debug: "A" started over: the player is at 0 ms
+       0ms  > player Playing pos=-1 (ring at 0)
+       0ms  state waiting
+       0ms  > audio music 1 at 0ms, 132300(3000ms)
+     320ms  log debug: cut for "A" at 1 ms (kind 2, noticed at 0 ms, window 0..300 ms)
+     320ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=interrupt/edge offset=1ms source=44100/2
+     320ms  state recording
+     320ms  take t-001 "A" start=55(1.25ms) length=132300(3000ms)
+    3000ms  > audio silence, 22050(500ms)
+    3500ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 154350)
+    3500ms  log debug: cut for "B" at 3000 ms (kind 1, noticed at 3500 ms, window 2701..3303 ms)
+    3500ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    3500ms  take t-002 "B" start=132300(3000ms) length=132300(3000ms)
+    3500ms  > audio music 2 at 0ms, 132300(3000ms)
+    6500ms  > audio silence, 66150(1500ms)
+    8000ms  > player Stopped pos=-1 (ring at 352800)
+    8000ms  state waiting
+    8000ms  state stopping
+    8000ms  state idle
+    8000ms  take none
+--- jobs
+job t-001 "A" played=132245(2998.75ms) length=132300(3000ms) wav=132245 crc=18f76947
+job t-002 "B" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=c244853d
+--- end: idle, 0 skipped, 0 ads, 0 overruns

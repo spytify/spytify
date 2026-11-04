@@ -217,7 +217,8 @@ func TestPinnedBackToBackChanges(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		},
-		// Three names within 20 ms before any audio.
+		// Three names within 20 ms before any audio: only C, which plays,
+		// has a take, from its first sound.
 		"before-any-audio": func(r *rig) {
 			r.status(meta.Playing)
 			r.track(a, 0)
