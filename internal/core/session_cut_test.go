@@ -135,9 +135,8 @@ func TestPinnedCutsForEachWindow(t *testing.T) {
 }
 
 // A track shorter than the 300 ms search window, between two others.
-// Today's behavior, which looks odd: between two gaps, the cut after it
-// lands at the start of the gap before it, so its audio goes into the next
-// one's. Its take, empty, is said skipped, with nothing to keep.
+// Between two gaps, the cut after it is searched from its first sound, so
+// it keeps its audio and the next track starts in the gap after it.
 func TestPinnedCutsAroundATrackShorterThanTheWindow(t *testing.T) {
 	for _, gap := range []int64{0, 300, 1000} {
 		for _, off := range []int64{0, 300} {
@@ -498,6 +497,23 @@ func TestPinnedCutCases(t *testing.T) {
 			r.play("square at -12 dBFS", square(r.f, r.f.FramesFromMs(100)-50, 0.25))
 			r.track(b, 0)
 			r.play("square at -12 dBFS", square(r.f, r.f.FramesFromMs(3000), 0.25))
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// S, 200 ms long, is skipped at once: B is named 50 ms after it,
+		// before any sound. S never played, so its take stays empty, and
+		// B starts at its first sound.
+		"short-track-skipped-at-once": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.sound(1, 3000)
+			r.quiet(300)
+			r.track(info("/x/s", "S", 200), 0)
+			r.quiet(50)
+			r.track(b, 0)
+			r.quiet(250)
+			r.sound(2, 3000)
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		},

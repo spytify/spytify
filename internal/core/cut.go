@@ -102,12 +102,19 @@ func (cf *cutFinder) plan(r *Ring, c *segment, info meta.TrackInfo, at int64, re
 		// one before it is complete.
 		ch.restart = false
 		e := c.origin + c.length
-		late := cf.soundAt(r, c) + c.length
+		sound := cf.soundAt(r, c)
+		late := sound + c.length
 		ch.kind, ch.lo, ch.hi, ch.expected = changeBoundary, e-cf.window, late+cf.window, e
 		if at < ch.lo {
 			// Named before its window: Next pressed in the take's last
 			// second, or a notice early for the take's natural end.
 			ch.skipLo, ch.skipHi = at-ms(lateNotifyMs), at+ms(earlyNotifyMs)
+		}
+		if ch.lo < sound && late <= at+ms(earlyNotifyMs) {
+			// Its whole length of sound played before the next was named:
+			// a take shorter than the window ends after its sound, not in
+			// the gap before it.
+			ch.lo = sound
 		}
 	default:
 		ch.kind, ch.lo, ch.hi, ch.expected = changeInterrupt, at-ms(lateNotifyMs), at+ms(earlyNotifyMs), at

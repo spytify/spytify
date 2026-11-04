@@ -19,10 +19,9 @@
     4800ms  started t-002 "Track B" artist="Artist" album="Album" length=200ms cut=boundary/silence offset=-1300ms source=44100/2
     4800ms  take t-002 "Track B" start=154349(3499.98ms) length=8820(200ms)
     6000ms  > player TrackChanged "Track C" id=/com/fake/track/3 length=2000ms pos=0 (ring at 264600)
-    6000ms  log debug: cut for "Track C" at 3500 ms (kind 1, noticed at 6000 ms, window 3500..5002 ms)
-    6000ms  skipped t-002 incomplete
-    6000ms  started t-003 "Track C" artist="Artist" album="Album" length=2000ms cut=boundary/silence offset=-2500ms source=44100/2
-    6000ms  take t-003 "Track C" start=154349(3499.98ms) length=88200(2000ms)
+    6000ms  log debug: cut for "Track C" at 4700 ms (kind 1, noticed at 6000 ms, window 4502..5002 ms)
+    6000ms  started t-003 "Track C" artist="Artist" album="Album" length=2000ms cut=boundary/silence offset=-1300ms source=44100/2
+    6000ms  take t-003 "Track C" start=207269(4699.98ms) length=88200(2000ms)
     8700ms  > player Stopped pos=-1 (ring at 383670)
     8700ms  state waiting
     8700ms  state stopping
@@ -30,5 +29,6 @@
     8700ms  take none
 --- jobs
 job t-001 "Track A" played=132291(2999.8ms) length=132300(3000ms) wav=132291 crc=14ead7b2
-job t-003 "Track C" played=75412(1710.02ms) length=88200(2000ms) wav=75412 crc=681c7f08
---- end: idle, 1 skipped, 0 ads, 0 overruns
+job t-002 "Track B" played=52920(1200ms) length=8820(200ms) wav=52920 crc=e2fbe61a
+job t-003 "Track C" played=132872(3012.97ms) length=88200(2000ms) wav=132872 crc=f086eeef
+--- end: idle, 0 skipped, 0 ads, 0 overruns
