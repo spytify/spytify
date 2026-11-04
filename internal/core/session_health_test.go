@@ -152,41 +152,58 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 	}
 }
 
-// Only silence is watched until the session's first track ends: after it,
-// a quiet stretch, such as the end of a quiet song, brings no warning, and
-// a take with no sound is skipped as silent instead. An ad first is not
-// that first track.
-func TestNoSilenceWarningAfterTheFirstTrack(t *testing.T) {
+// Silence is reported for a track that played captureSilent with no sound
+// since it started, at any point of the session, as when the player is
+// muted between two tracks. The quiet end of a song had sound before it,
+// and the track after it is watched from its own start. The clock is moved
+// by setting when the last sound came and when the track started.
+func TestSilenceWarningIsForATrackSilentFromItsStart(t *testing.T) {
+	long := time.Now().Add(-time.Hour)
 	for _, c := range []struct {
-		name  string
-		first meta.TrackInfo
+		name string
+		// then follows the sound of track A, the session's first.
+		then  func(s *Session, next func())
 		warns bool
 	}{
-		{"after a track", trackA, false},
-		{"after an ad", advert, true},
+		{"the quiet end of a track", func(s *Session, next func()) {
+			s.lastSound, s.trackStarted = long, long
+		}, false},
+		{"the next track, silent from its start", func(s *Session, next func()) {
+			next()
+			s.lastSound, s.trackStarted = long, long
+		}, true},
+		{"the next track, just after a quiet end", func(s *Session, next func()) {
+			s.lastSound = long
+			next()
+		}, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r := bareRig(t, nil, endOnStop)
 			s := r.s
 			s.tmpDir = t.TempDir()
+			// The take still open is closed before its folder is removed,
+			// which Windows refuses for an open file.
+			t.Cleanup(s.finish)
 			s.deps.watchSilence = true
 			ctx := context.Background()
+			s.onMeta(ctx, statusEvent(meta.Playing))
+			s.onMeta(ctx, meta.Event{Kind: meta.TrackChanged, Track: trackA, PositionMs: 0})
 			play := func(data []byte) {
 				step := int(f44.FramesFromMs(10)) * f44.FrameBytes()
 				for i := 0; i < len(data); i += step {
 					s.onChunk(capture.Chunk{Data: data[i:min(i+step, len(data))], Format: f44})
 				}
 			}
-			sound := func(seed int64) []byte { return music(seed).Render(f44, f44.FramesFromMs(3000)) }
-			s.onMeta(ctx, statusEvent(meta.Playing))
-			s.onMeta(ctx, meta.Event{Kind: meta.TrackChanged, Track: c.first, PositionMs: 0})
-			play(sound(1))
-			s.onMeta(ctx, meta.Event{Kind: meta.TrackChanged, Track: trackB, PositionMs: 0})
-			play(sound(2))
-			if !slices.ContainsFunc(r.lines(), func(l string) bool { return strings.HasPrefix(l, `started t-002 "B"`) }) {
-				t.Fatalf("B never started:\n%q", r.lines())
+			play(music(1).Render(f44, f44.FramesFromMs(3000)))
+			// B plays with no sound, and A ends.
+			next := func() {
+				s.onMeta(ctx, meta.Event{Kind: meta.TrackChanged, Track: trackB, PositionMs: 0})
+				play(make([]byte, f44.FramesFromMs(3000)*int64(f44.FrameBytes())))
+				if !slices.ContainsFunc(r.lines(), func(l string) bool { return strings.HasPrefix(l, `started t-002 "B"`) }) {
+					t.Fatalf("B never started:\n%q", r.lines())
+				}
 			}
-			s.lastSound = time.Now().Add(-time.Hour)
+			c.then(s, next)
 			s.onTick()
 			warned := slices.ContainsFunc(r.lines(), func(l string) bool { return strings.HasPrefix(l, "error capture_silent") })
 			if warned != c.warns {
