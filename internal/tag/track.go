@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spytify/spytify/internal/meta"
+	"github.com/spytify/spytify/internal/settings"
 )
 
 // Track is every field spytify writes, as v1's MapperID3 did. A provider
@@ -34,7 +35,7 @@ type Track struct {
 type Options struct {
 	ExtraToSubtitle bool
 	ArtistSeparator string
-	CoverSize       string // small, medium, large
+	CoverSize       settings.CoverSize
 	Cover           bool
 }
 

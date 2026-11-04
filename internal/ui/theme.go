@@ -5,6 +5,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
+	"github.com/spytify/spytify/internal/settings"
 )
 
 // Spytify's green: the logo's on the dark theme, a deeper one on the light
@@ -93,16 +94,16 @@ var cardColors = map[fyne.ThemeColorName][2]color.NRGBA{
 }
 
 // spytifyTheme is Fyne's theme with the green in place of the blue accent.
-// mode is app.theme: "system" follows the OS, "light" and "dark" force it.
+// mode is app.theme: system follows the OS, light and dark force it.
 type spytifyTheme struct {
-	mode string
+	mode settings.Theme
 }
 
 func (t spytifyTheme) variant(v fyne.ThemeVariant) fyne.ThemeVariant {
 	switch t.mode {
-	case "light":
+	case settings.ThemeLight:
 		return theme.VariantLight
-	case "dark":
+	case settings.ThemeDark:
 		return theme.VariantDark
 	}
 	return v

@@ -153,8 +153,8 @@ func (f *finisher) find(info meta.TrackInfo, v settings.Values) (recordedFile, b
 func namingOptions(v settings.Values) naming.Options {
 	p, _ := encode.PresetFor(v.String(settings.EncodeFormat))
 	return naming.Options{
-		GroupBy:         v.String(settings.OutputGroupBy),
-		Prefix:          v.String(settings.OutputPrefix),
+		GroupBy:         v.GroupBy(),
+		Prefix:          v.Prefix(),
 		Underscores:     v.Bool(settings.OutputUnderscores),
 		Template:        v.String(settings.OutputTemplate),
 		CounterWidth:    int(v.Int(settings.OutputCounterWidth)),
@@ -168,7 +168,7 @@ func tagOptions(v settings.Values) tag.Options {
 	return tag.Options{
 		ExtraToSubtitle: v.Bool(settings.TagsExtraToSubtitle),
 		ArtistSeparator: v.String(settings.TagsArtistSeparator),
-		CoverSize:       v.String(settings.TagsCoverSize),
+		CoverSize:       v.CoverSize(),
 		Cover:           v.Bool(settings.TagsCover),
 	}
 }
@@ -368,7 +368,7 @@ func (f *finisher) fetchCover(ctx context.Context, t *take) {
 // moves on. Past the last number its digits allow, the file is not saved
 // and the recording stops, as v1's did.
 func (f *finisher) takeNumber(t *take) bool {
-	if t.o.Prefix != "counter" {
+	if t.o.Prefix != settings.PrefixCounter {
 		return true
 	}
 	t.counter = t.v.Int(settings.OutputCounterNext)
@@ -403,15 +403,15 @@ func (f *finisher) pickName(t *take) bool {
 		return false
 	}
 	name := naming.FileName(plan, t.o, t.counter, t.tags.Track)
-	duplicates := t.v.String(settings.RecorderDuplicates)
+	duplicates := t.v.Duplicates()
 	if t.keep {
 		// A partial file never replaces a file, nor is it skipped.
-		duplicates = "suffix"
+		duplicates = settings.DuplicatesSuffix
 	}
 	switch duplicates {
-	case "suffix":
+	case settings.DuplicatesSuffix:
 		name = naming.FreeSuffix(dir, name, t.o.Underscores, f.records.taken)
-	case "skip":
+	case settings.DuplicatesSkip:
 		if path := filepath.Join(dir, name); f.records.taken(path) {
 			f.skipped(proto.TrackSkippedEvent{ID: t.id, Reason: proto.SkipDuplicate, Path: path})
 			return false
@@ -488,7 +488,7 @@ func (f *finisher) save(t *take) {
 	f.cnt.Recorded++
 	f.cnt.Bytes += size
 	f.mu.Unlock()
-	if t.o.Prefix == "counter" && f.advance != nil {
+	if t.o.Prefix == settings.PrefixCounter && f.advance != nil {
 		f.advance(t.counter + 1)
 	}
 	if !t.keep {

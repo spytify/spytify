@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/spytify/spytify/internal/pcm"
+	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/testkit"
 )
 
@@ -43,7 +44,7 @@ func coverSize(t *testing.T, data []byte) (int, int, string) {
 
 func TestCoverIsResizedToItsSetting(t *testing.T) {
 	big := jpegCover(t, 1400, 1000)
-	for size, want := range map[string][2]int{"small": {300, 214}, "medium": {640, 457}, "large": {1400, 1000}, "": {640, 457}} {
+	for size, want := range map[settings.CoverSize][2]int{settings.CoverSizeSmall: {300, 214}, settings.CoverSizeMedium: {640, 457}, settings.CoverSizeLarge: {1400, 1000}, "": {640, 457}} {
 		data, mime := fitCover(big, "image/jpeg", size)
 		w, h, format := coverSize(t, data)
 		if w != want[0] || h != want[1] || format != "jpeg" || mime != "image/jpeg" {
@@ -55,7 +56,7 @@ func TestCoverIsResizedToItsSetting(t *testing.T) {
 	}
 
 	small := jpegCover(t, 200, 200)
-	for _, size := range []string{"small", "medium", "large"} {
+	for _, size := range []settings.CoverSize{settings.CoverSizeSmall, settings.CoverSizeMedium, settings.CoverSizeLarge} {
 		if data, _ := fitCover(small, "image/jpeg", size); !bytes.Equal(data, small) {
 			t.Errorf("%s: a 200 px cover changed", size)
 		}
@@ -82,8 +83,8 @@ func TestTheEmbeddedCoverHasItsSize(t *testing.T) {
 	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
 	in := testkit.WriteWAV(t, filepath.Join(dir, "in.wav"), f, pcm.Synth{Seed: 1}.Render(f, 22050))
 	cover := jpegCover(t, 1400, 1400)
-	for size, want := range map[string]string{"small": "300x300", "medium": "640x640", "large": "1400x1400"} {
-		out := filepath.Join(dir, size+".mp3")
+	for size, want := range map[settings.CoverSize]string{settings.CoverSizeSmall: "300x300", settings.CoverSizeMedium: "640x640", settings.CoverSizeLarge: "1400x1400"} {
+		out := filepath.Join(dir, string(size)+".mp3")
 		if b, err := exec.Command(ffmpeg, "-loglevel", "error", "-i", in, "-c:a", "libmp3lame", out).CombinedOutput(); err != nil {
 			t.Skipf("cannot encode mp3: %v %s", err, b)
 		}

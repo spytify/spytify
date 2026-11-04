@@ -148,12 +148,12 @@ func (a *App) noticeState(level int) (model.State, bool) {
 func noticeLevel(values map[string]any) int {
 	mode, _ := values[settings.AppNotifications.String()].(string)
 	if mode == "" {
-		mode = settings.Defaults().String(settings.AppNotifications)
+		mode = string(settings.Defaults().Notifications())
 	}
-	switch mode {
-	case "tracks":
+	switch settings.Notifications(mode) {
+	case settings.NotificationsTracks:
 		return noticeTracks
-	case "problems":
+	case settings.NotificationsProblems:
 		return noticeProblems
 	}
 	return noticeOff

@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/spytify/spytify/internal/settings"
 )
 
 // A panel's box fills it and its content sits inset by the padding, which
@@ -52,7 +53,7 @@ func TestAPanelFollowsTheTheme(t *testing.T) {
 	input := newPanel(theme.ColorNameInputBackground, "", 0, fyne.Size{}, widget.NewLabel("input"))
 	test.NewTempWindow(t, container.NewVBox(outlined, plain, line, container.NewThemeOverride(input, cardTheme{input: colorCardInput})))
 	box := func(p *panel) *canvas.Rectangle { return test.TempWidgetRenderer(t, p).(*panelRenderer).box }
-	for i, mode := range []string{"light", "dark"} {
+	for i, mode := range []settings.Theme{settings.ThemeLight, settings.ThemeDark} {
 		fa.Settings().SetTheme(spytifyTheme{mode: mode})
 		if b := box(outlined); b.FillColor != cardColors[colorCard][i] || b.StrokeColor != cardColors[colorCardLine][i] || b.StrokeWidth != 1 || b.CornerRadius != 10 {
 			t.Errorf("%s, outlined: %v, outline %v %v wide, rounded %v", mode, b.FillColor, b.StrokeColor, b.StrokeWidth, b.CornerRadius)

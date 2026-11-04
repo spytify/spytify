@@ -39,9 +39,19 @@ func TestTheNameComesFromTheKey(t *testing.T) {
 		"recorder.trim_silence": "RecorderTrimSilence",
 		"app.theme":             "AppTheme",
 		"encode.bitrate_kbps":   "EncodeBitrateKbps",
+		"artist/album":          "ArtistAlbum",
 	} {
 		if got := identifier(key); got != want {
 			t.Errorf("%s is named %s, want %s", key, got, want)
 		}
+	}
+}
+
+func TestTwoListsThatMakeOneTypeAreRefused(t *testing.T) {
+	enum := func(key string) settings.Def {
+		return settings.Def{Key: key, Kind: settings.KindEnum, Enum: []string{"a"}, Choices: []string{"A"}}
+	}
+	if _, err := render([]settings.Def{enum("output.format"), enum("encode.format")}); err == nil {
+		t.Error("output.format and encode.format both make the type Format, and render took them")
 	}
 }

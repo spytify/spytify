@@ -563,8 +563,8 @@ func inSight(a *App, s *container.Scroll, o fyne.CanvasObject) bool {
 // A switch shows the focus with a ring around it, apart from its track, so
 // that it shows on a switch that is on, whose track is the focus's green.
 func TestTheSwitchShowsItsFocus(t *testing.T) {
-	for _, mode := range []string{"light", "dark"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, mode := range []settings.Theme{settings.ThemeLight, settings.ThemeDark} {
+		t.Run(string(mode), func(t *testing.T) {
 			values := defaults()
 			values["app.theme"] = mode
 			a, _ := connectedTestApp(t, values)
@@ -578,7 +578,7 @@ func TestTheSwitchShowsItsFocus(t *testing.T) {
 					t.Errorf("%s focused, on %v: ring %v", key, sw.on, r.ring.StrokeColor)
 				}
 				if key == "app.check_updates" {
-					snapshot(t, a, "keyboard-switch-focus-"+mode)
+					snapshot(t, a, "keyboard-switch-focus-"+string(mode))
 				}
 				c.Unfocus()
 				if r.ring.StrokeColor != color.Transparent {
