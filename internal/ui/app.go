@@ -21,6 +21,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/ui/lang"
@@ -95,8 +96,8 @@ type App struct {
 	bar     *fyne.Container
 	covers  *covers
 	checked bool
-	// themeMode is the app.theme applied: system, light or dark.
-	themeMode string
+	// themeMode is the app.theme applied.
+	themeMode settings.Theme
 	// outputDir is the output.dir the reports leave out.
 	outputDir string
 	// replaced is set once a recorder of another build was restarted.
@@ -164,7 +165,7 @@ type App struct {
 func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a := &App{fa: fa, m: m, link: l, opts: opts, tel: opts.Telemetry, launch: launchTrace{start: time.Now()}, masks: map[fyne.CanvasObject]bool{}}
 	a.tel.SetScreenshot(a.screenshot)
-	a.applyTheme("system")
+	a.applyTheme(settings.ThemeSystem)
 	a.covers = newCovers(a.scheduleRender)
 	a.win = fa.NewWindow(lang.Spytify)
 	a.win.SetIcon(Logo)
@@ -321,7 +322,7 @@ type fyneStopHook interface {
 // playerRunning is the latest word on the player: the target.state events,
 // or core.info's check until the first one.
 func playerRunning(s model.State) bool {
-	return (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running"))
+	return (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, proto.CheckPlayerRunning))
 }
 
 // launchPlayer asks the recorder to open the player.
@@ -365,7 +366,7 @@ func (a *App) quit() {
 }
 
 // applyTheme switches to the Spytify theme in the given app.theme mode.
-func (a *App) applyTheme(mode string) {
+func (a *App) applyTheme(mode settings.Theme) {
 	a.themeMode = mode
 	a.fa.Settings().SetTheme(spytifyTheme{mode: mode})
 }
@@ -449,8 +450,8 @@ func (a *App) render() {
 	if connected {
 		a.replaceOtherBuild(s)
 	}
-	if mode, _ := s.Settings[settings.AppTheme.String()].(string); mode != "" && mode != a.themeMode {
-		a.applyTheme(mode)
+	if mode, _ := s.Settings[settings.AppTheme.String()].(string); mode != "" && settings.Theme(mode) != a.themeMode {
+		a.applyTheme(settings.Theme(mode))
 	}
 	if dir, _ := s.Settings[settings.OutputDir.String()].(string); dir != "" && dir != a.outputDir {
 		a.outputDir = dir
@@ -608,7 +609,7 @@ func failingChecks(checks []proto.Check) int {
 // the player's, which the app bar already shows, nor advice, which only
 // lowers quality.
 func needsAttention(c proto.Check) bool {
-	return !c.OK && !c.Advice && c.Name != "player running"
+	return !c.OK && !c.Advice && c.Name != proto.CheckPlayerRunning
 }
 
 // checkFails says whether the check named name is there and fails: a
@@ -624,11 +625,11 @@ func checkFails(checks []proto.Check, name string) bool {
 
 func outputText(values map[string]any) string {
 	format, _ := values[settings.EncodeFormat.String()].(string)
-	switch format {
-	case "":
+	if format == "" {
 		return ""
-	case "mp3", "aac":
-		return fmt.Sprintf("%s %v kbps", upper(format), number(values[settings.EncodeBitrateKbps.String()]))
+	}
+	if p, ok := encode.PresetFor(format); ok && p.Lossy {
+		return fmt.Sprintf(lang.FormatBitrate, upper(format), number(values[settings.EncodeBitrateKbps.String()]))
 	}
 	return upper(format)
 }
@@ -695,7 +696,7 @@ func (a *App) recheck(ev proto.Event) {
 	switch ev.Method {
 	case proto.EventError:
 		var e proto.ErrorEvent
-		if ev.Decode(&e) != nil || (e.Code != "output_dir" && e.Code != "capture_silent") {
+		if ev.Decode(&e) != nil || (e.Code != proto.ErrorOutputDir && e.Code != proto.ErrorCaptureSilent) {
 			return
 		}
 	case proto.EventSettingsChanged:

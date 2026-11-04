@@ -16,13 +16,13 @@ func TestPinnedWarnings(t *testing.T) {
 	f8 := &proto.AudioSource{SampleRate: 8000, Channels: 2}
 	var b strings.Builder
 	for _, goos := range []string{"darwin", "windows", "linux"} {
-		fmt.Fprintf(&b, "%s stall: %s\n", goos, WarningText(proto.ErrorEvent{Code: "capture_stalled"}, goos))
-		fmt.Fprintf(&b, "%s silent: %s\n", goos, WarningText(proto.ErrorEvent{Code: "capture_silent"}, goos))
-		fmt.Fprintf(&b, "%s call: %s\n", goos, WarningText(proto.ErrorEvent{Code: "capture_low_quality", Source: call}, goos))
-		fmt.Fprintf(&b, "%s 8 kHz: %s\n", goos, WarningText(proto.ErrorEvent{Code: "capture_low_quality", Source: f8}, goos))
+		fmt.Fprintf(&b, "%s stall: %s\n", goos, WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureStalled}, goos))
+		fmt.Fprintf(&b, "%s silent: %s\n", goos, WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureSilent}, goos))
+		fmt.Fprintf(&b, "%s call: %s\n", goos, WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality, Source: call}, goos))
+		fmt.Fprintf(&b, "%s 8 kHz: %s\n", goos, WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality, Source: f8}, goos))
 	}
 	free := int64(80)
-	fmt.Fprintf(&b, "disk full: %s\n", WarningText(proto.ErrorEvent{Code: "disk_full", FreeMB: &free}, "linux"))
+	fmt.Fprintf(&b, "disk full: %s\n", WarningText(proto.ErrorEvent{Code: proto.ErrorDiskFull, FreeMB: &free}, "linux"))
 	golden, err := os.ReadFile("testdata/warnings.golden")
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestPinnedWarnings(t *testing.T) {
 
 // A system with no advice of its own gets Linux's.
 func TestOtherSystemsGetLinuxsAdvice(t *testing.T) {
-	stalled := proto.ErrorEvent{Code: "capture_stalled"}
+	stalled := proto.ErrorEvent{Code: proto.ErrorCaptureStalled}
 	if got, want := WarningText(stalled, "freebsd"), WarningText(stalled, "linux"); got != want {
 		t.Errorf("freebsd: %q, want %q", got, want)
 	}
@@ -46,9 +46,9 @@ func TestOtherSystemsGetLinuxsAdvice(t *testing.T) {
 // words need, as an older recorder sends, keep the recorder's message.
 func TestWarningsTheLexiconCannotWordKeepTheRecordersMessage(t *testing.T) {
 	for _, e := range []proto.ErrorEvent{
-		{Code: "ring_overflow", Msg: "12 frames lost"},
-		{Code: "capture_low_quality", Msg: "The player's output device runs at 16 kHz mono, not fit for recording"},
-		{Code: "disk_full", Msg: "only 10 MB free in the output folder"},
+		{Code: proto.ErrorRingOverflow, Msg: "12 frames lost"},
+		{Code: proto.ErrorCaptureLowQuality, Msg: "The player's output device runs at 16 kHz mono, not fit for recording"},
+		{Code: proto.ErrorDiskFull, Msg: "only 10 MB free in the output folder"},
 	} {
 		if got := WarningText(e, "darwin"); got != e.Msg {
 			t.Errorf("%s: %q, want the recorder's %q", e.Code, got, e.Msg)
@@ -61,7 +61,7 @@ func TestWarningsTheLexiconCannotWordKeepTheRecordersMessage(t *testing.T) {
 func TestAFailedPlayerHeardCheckSaysTheSilenceWarning(t *testing.T) {
 	for _, goos := range []string{"darwin", "windows", "linux"} {
 		failed := proto.Check{Name: proto.CheckPlayerHeard, Detail: "only silence from the player"}
-		if got, want := CheckDetail(failed, goos), WarningText(proto.ErrorEvent{Code: "capture_silent"}, goos); got != want {
+		if got, want := CheckDetail(failed, goos), WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureSilent}, goos); got != want {
 			t.Errorf("%s: %q, want %q", goos, got, want)
 		}
 	}
@@ -84,7 +84,7 @@ func TestTheSilenceWarningSaysThePlayersVolumeFirst(t *testing.T) {
 		"windows": "Volume mixer",
 		"linux":   "sound settings",
 	} {
-		w := WarningText(proto.ErrorEvent{Code: "capture_silent"}, goos)
+		w := WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureSilent}, goos)
 		volume := strings.Index(w, "the player is not muted in its own volume")
 		if volume < 0 || !strings.Contains(w[volume:], then) {
 			t.Errorf("%s: %q, want the player's own volume, then %q", goos, w, then)

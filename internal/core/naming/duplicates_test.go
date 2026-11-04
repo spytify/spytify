@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spytify/spytify/internal/settings"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -13,7 +14,7 @@ import (
 // drives return them, is still the same name for the duplicate check.
 func TestRecordedFindsADecomposedName(t *testing.T) {
 	tr := Track{Artists: []string{"Zoë"}, Title: "Café"}
-	for _, prefix := range []string{"none", "counter"} {
+	for _, prefix := range []settings.Prefix{settings.PrefixNone, settings.PrefixCounter} {
 		o := Options{GroupBy: "none", Prefix: prefix, Template: "{artist} - {title}", CounterWidth: 3, Extension: "mp3"}
 		root := t.TempDir()
 		name := norm.NFD.String(FileName(Build(tr, o), o, 12, 0))

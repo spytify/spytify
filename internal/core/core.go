@@ -343,7 +343,7 @@ func (c *Core) Info() proto.CoreInfoResult {
 	if running {
 		detail = fmt.Sprintf("pid %d", p.PID)
 	}
-	add("player running", running, detail)
+	add(proto.CheckPlayerRunning, running, detail)
 	if c.ffErr != nil {
 		add("ffmpeg found", false, c.ffErr.Error())
 	} else {
@@ -604,7 +604,7 @@ func (c *Core) Status() proto.SessionStatusResult {
 }
 
 // Control sends a transport command to the player.
-func (c *Core) Control(cmd string) error {
+func (c *Core) Control(cmd proto.PlayerCmd) error {
 	switch cmd {
 	case proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart:
 	default:

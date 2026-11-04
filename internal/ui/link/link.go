@@ -6,6 +6,7 @@ package link
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,23 +15,24 @@ import (
 	"time"
 
 	"github.com/spytify/spytify/internal/bus"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
 // ErrNotConnected is returned by Do while no daemon answers.
-var ErrNotConnected = errors.New("not connected to spytifyd")
+var ErrNotConnected = errors.New(lang.NotConnectedToRecorder)
 
 var (
 	// ErrInArchive is the app started from inside its download: the file
 	// manager unpacked it alone into a temporary folder, without the
 	// recorder.
 	//lint:ignore ST1005 the app shows it to the user as written
-	ErrInArchive = errors.New("Spytify runs from inside the downloaded archive, without the recorder next to it. Extract the whole archive to a folder, then start Spytify from there.")
+	ErrInArchive = errors.New(lang.InArchive)
 	// ErrNoDaemon is the recorder found neither next to the app nor on
 	// PATH.
 	//lint:ignore ST1005 the app shows it to the user as written
-	ErrNoDaemon = errors.New("spytifyd" + exeSuffix + ", the recorder, is not next to Spytify. Extract the whole download again and start Spytify from there; if it is still missing, an antivirus may have removed it.")
+	ErrNoDaemon = fmt.Errorf(lang.NoRecorder, "spytifyd"+exeSuffix)
 )
 
 // Link is the UI's connection to the core.
@@ -74,7 +76,7 @@ func (l *Link) Run(ctx context.Context) {
 		l.Model.SetConn(model.Connecting, lastErr)
 		c, err := bus.Dial(ctx, l.Addr)
 		if err != nil {
-			lastErr = "spytifyd is not running"
+			lastErr = lang.RecorderDown
 			l.Model.SetConn(model.Disconnected, lastErr)
 			if !pause() {
 				return
@@ -108,7 +110,7 @@ func (l *Link) Run(ctx context.Context) {
 			}
 		}
 		l.set(nil)
-		l.Model.SetConn(model.Disconnected, "spytifyd closed the connection")
+		l.Model.SetConn(model.Disconnected, lang.RecorderClosed)
 	}
 }
 
@@ -128,7 +130,7 @@ func (l *Link) sync(ctx context.Context, c *bus.Client) error {
 		return err
 	}
 	if info.Protocol != proto.Protocol {
-		return errors.New("spytifyd speaks another protocol version; update the UI or the daemon")
+		return errors.New(lang.RecorderOtherProtocol)
 	}
 	l.Model.SetInfo(info)
 	var settings proto.SettingsValues
@@ -254,7 +256,7 @@ func (l *Link) StartDaemon() error {
 		if msg == "" && err != nil {
 			msg = err.Error()
 		}
-		return errors.New("spytifyd stopped: " + msg)
+		return fmt.Errorf(lang.RecorderStopped, msg)
 	case <-time.After(1500 * time.Millisecond):
 		// Still running: its log file has the rest. The pipe stays open
 		// until the app quits, so what comes through is dropped.

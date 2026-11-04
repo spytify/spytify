@@ -110,7 +110,7 @@ func (l *Logger) write(level int, format string, args ...any) {
 	}
 	l.mu.Lock()
 	ev := proto.LogEvent{
-		Level: [...]string{"error", "info", "debug"}[level],
+		Level: [...]proto.LogLevel{proto.LogError, proto.LogInfo, proto.LogDebug}[level],
 		Msg:   strings.TrimSpace(fmt.Sprintf(format, args...)),
 		TS:    time.Now().Format(time.RFC3339Nano),
 	}

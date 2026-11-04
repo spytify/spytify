@@ -16,6 +16,7 @@ import (
 
 	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 // smtcPrelude loads the Windows media session API (SMTC) in Windows
@@ -242,9 +243,9 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 	return out, nil
 }
 
-func (m *SMTC) Control(cmd string) error {
+func (m *SMTC) Control(cmd proto.PlayerCmd) error {
 	switch cmd {
-	case "play", "pause", "playpause", "next", "previous", "restart":
+	case proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart:
 	default:
 		return ErrUnsupported
 	}
@@ -254,7 +255,7 @@ func (m *SMTC) Control(cmd string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	out, err := powershell(ctx, smtcScript(names, map[string]string{"cmd": psQuote(cmd)}, smtcControl)).CombinedOutput()
+	out, err := powershell(ctx, smtcScript(names, map[string]string{"cmd": psQuote(string(cmd))}, smtcControl)).CombinedOutput()
 	var ee *exec.ExitError
 	switch {
 	case errors.As(err, &ee) && ee.ExitCode() == 3:

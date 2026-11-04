@@ -138,7 +138,7 @@ func (s *scenario) run(t *testing.T, tl *fake.Timeline) {
 	for _, a := range tl.Actions {
 		cmd := a.Cmd
 		s.player.At(a.AtMs, func() {
-			if err := s.core.Control(cmd); err != nil {
+			if err := s.core.Control(proto.PlayerCmd(cmd)); err != nil {
 				t.Errorf("player.control %s: %v", cmd, err)
 			}
 		})
@@ -416,7 +416,7 @@ func TestTheRecordingStopsWhenTheCounterIsFull(t *testing.T) {
 			}
 		case proto.EventError:
 			var e proto.ErrorEvent
-			if ev.Decode(&e) == nil && e.Code == "counter_full" {
+			if ev.Decode(&e) == nil && e.Code == proto.ErrorCounterFull {
 				full = true
 			}
 		}

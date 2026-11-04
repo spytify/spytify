@@ -37,13 +37,13 @@ func fmtDuration(ms int64) string {
 func fmtBytes(n int64) string {
 	switch {
 	case n >= 1e9:
-		return fmt.Sprintf("%.1f GB", float64(n)/1e9)
+		return fmt.Sprintf(lang.SizeGB, float64(n)/1e9)
 	case n >= 1e6:
-		return fmt.Sprintf("%.1f MB", float64(n)/1e6)
+		return fmt.Sprintf(lang.SizeMB, float64(n)/1e6)
 	case n >= 1e3:
-		return fmt.Sprintf("%.0f kB", float64(n)/1e3)
+		return fmt.Sprintf(lang.SizeKB, float64(n)/1e3)
 	}
-	return fmt.Sprintf("%d B", n)
+	return fmt.Sprintf(lang.SizeB, n)
 }
 
 // heading is a section title.

@@ -26,5 +26,5 @@ func NoWindow(fa fyne.App, tel *telemetry.Client, privacy map[string]any, err er
 	tel.Problem(reason, err.Error())
 	fmt.Fprintln(os.Stderr, "spytify:", err)
 	fmt.Fprintln(os.Stderr, text)
-	tell(fa, lang.Spytify, text+"\n\n("+err.Error()+")")
+	tell(fa, lang.Spytify, fmt.Sprintf(lang.WithError, text, err.Error()))
 }

@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2"
 
 	"github.com/spytify/spytify/internal/service"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/link"
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -69,7 +70,7 @@ const startAnswerTimeout = 15 * time.Second
 
 // errNoAnswer is a spytifyd started that did not answer in time. The
 // launch's telemetry counts it by the error, not by its words.
-var errNoAnswer = errors.New("spytifyd started but does not answer; see its log in Logs")
+var errNoAnswer = errors.New(lang.RecorderNoAnswer)
 
 // startFailed shows the offline screen with why the recorder did not start.
 func (a *App) startFailed(err error) {

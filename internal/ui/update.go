@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // releasesURL lists the newest releases, pre-releases included: GitHub's
@@ -39,7 +41,7 @@ func latestRelease(ctx context.Context) (tag, page string, err error) {
 		return "", "", nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("GitHub answered %s", resp.Status)
+		return "", "", fmt.Errorf(lang.GitHubAnswered, resp.Status)
 	}
 	var list []struct {
 		Tag   string `json:"tag_name"`

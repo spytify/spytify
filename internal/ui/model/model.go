@@ -329,7 +329,7 @@ func (m *Model) Apply(ev proto.Event) {
 		m.s.Level = level
 		levels := append([]func(){}, m.levels...)
 		// Audio is back: the warning that none arrived no longer holds.
-		cleared := m.s.LastError != nil && m.s.LastError.Code == "capture_stalled"
+		cleared := m.s.LastError != nil && m.s.LastError.Code == proto.ErrorCaptureStalled
 		if cleared {
 			m.s.LastError = nil
 		}
@@ -471,7 +471,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 			s.TargetKnown = true
 			// core.info checked once, on connect; keep its answer current.
 			for i := range s.Info.Checks {
-				if s.Info.Checks[i].Name == "player running" {
+				if s.Info.Checks[i].Name == proto.CheckPlayerRunning {
 					s.Info.Checks[i].OK = s.Target.Running
 					s.Info.Checks[i].Detail = lang.NotRunning
 					if s.Target.Running {

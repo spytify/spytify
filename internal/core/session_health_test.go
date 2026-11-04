@@ -580,7 +580,7 @@ func TestPinnedMuteFailure(t *testing.T) {
 func TestPinnedSkipForwardFailure(t *testing.T) {
 	r := bareRig(t, map[string]any{"recorder.duplicates": "skip", "recorder.skip_duplicates_forward": true}, endOnStop)
 	r.alreadyRecorded("Artist", "A")
-	r.s.deps.control = func(string) error { return errors.New("not now") }
+	r.s.deps.control = func(proto.PlayerCmd) error { return errors.New("not now") }
 	seg := &segment{info: trackA, format: f44}
 	r.s.classify(seg)
 	r.s.announce(seg)
