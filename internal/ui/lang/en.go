@@ -39,7 +39,7 @@ const (
 // The window while the recorder is not running.
 const (
 	RecorderNotRunning = "The recorder is not running"
-	RecorderExplained  = "Spytify records through spytifyd, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set."
+	RecorderExplained  = "Spytify records through its recorder, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set."
 	StartRecorder      = "Start the recorder"
 	Player             = "Player"
 )
@@ -47,14 +47,13 @@ const (
 // The connection to the recorder, and why it failed. NoRecorder takes the
 // recorder's file name; RecorderStopped the last line it wrote.
 const (
-	NotConnectedToRecorder = "not connected to spytifyd"
+	NotConnectedToRecorder = "not connected to the recorder"
 	InArchive              = "Spytify runs from inside the downloaded archive, without the recorder next to it. Extract the whole archive to a folder, then start Spytify from there."
 	NoRecorder             = "%s, the recorder, is not next to Spytify. Extract the whole download again and start Spytify from there; if it is still missing, an antivirus may have removed it."
-	RecorderDown           = "spytifyd is not running"
-	RecorderClosed         = "spytifyd closed the connection"
-	RecorderOtherProtocol  = "spytifyd speaks another protocol version; update the UI or the daemon"
-	RecorderStopped        = "spytifyd stopped: %s"
-	RecorderNoAnswer       = "spytifyd started but does not answer; see its log in Logs"
+	RecorderClosed         = "the recorder closed the connection"
+	RecorderOtherProtocol  = "the recorder speaks another protocol version; update Spytify"
+	RecorderStopped        = "the recorder stopped: %s"
+	RecorderNoAnswer       = "the recorder started but does not answer; see its log in Logs"
 )
 
 // The Record screen. ReadyText takes the player, then the output folder.
@@ -63,10 +62,10 @@ const (
 	ReadyText                 = "Press Record, then play music in %s. Each track becomes its own file in %s."
 	RecordIsOff               = "Record is off"
 	RecordIsOffText           = "Spytify cannot write to the output folder, %s. The diagnostics say why."
-	RecordNeedsRecorder       = "Spytify records through spytifyd, which is not running. Start it to record."
+	RecordNeedsRecorder       = "The recorder is not running. Start it to record."
 	AlreadyPlaying            = "A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start."
 	YourPlayer                = "your player"
-	Open                      = "Open %s"
+	OpenPlayer                = "Open %s"
 	OpenThePlayer             = "Open the player"
 	OpenDiagnostics           = "Open diagnostics"
 	Play                      = "Play"
@@ -187,39 +186,39 @@ const (
 	MPRISNameHint       = "org.mpris.MediaPlayer2.<name> (default)"
 	LaunchCommand       = "Launch command"
 	LaunchCommandHint   = "command that starts the player (optional)"
-	PlayerSaved         = "Saved. spytifyd records this player once it restarts."
-	RestartRecorder     = "Restart spytifyd"
-	RestartRecorderAsk  = "Restart spytifyd?"
+	PlayerSaved         = "Saved. The recorder records this player once it restarts."
+	RestartRecorder     = "Restart the recorder"
+	RestartRecorderAsk  = "Restart the recorder?"
 	RestartStopsSession = "A session is recording; restarting stops it now."
 	PlayerRequired      = "the player process name is required"
 )
 
 // Logs and the diagnostics. LevelError, LevelInfo and LevelDebug are the
 // log's filter; RecorderRunning is the window's own check, that the
-// recorder answers. NotRunning and PID are the player running check's
-// detail, kept current between two runs of the checks.
+// recorder answers. DetailNotRunning and DetailPID are the player running
+// check's detail, kept current between two runs of the checks.
 const (
 	LevelError          = "error"
 	LevelInfo           = "info"
 	LevelDebug          = "debug"
-	RecorderRunning     = "spytifyd running"
-	Show                = "Show"
+	RecorderRunning     = "recorder running"
+	ShowLevels          = "Show"
 	Copy                = "Copy"
 	OpenLogFile         = "Open log file"
 	Diagnostics         = "Diagnostics"
 	RunChecksAgain      = "Run the checks again"
 	ChecksPass          = "All %d checks pass."
 	ChecksNeedAttention = "%d of %d checks need attention."
-	NothingElseChecked  = "spytifyd is not running, so nothing else can be checked."
+	NothingElseChecked  = "The recorder is not running, so nothing else can be checked."
 	ChooseAnotherFolder = "Choose another folder"
-	NotRunning          = "not running"
-	PID                 = "pid %s"
+	DetailNotRunning    = "not running"
+	DetailPID           = "pid %s"
 	SendToDevelopers    = "Send to the developers"
 	SendChecksText      = "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
 	SendChecksPicture   = "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
 	SendPicture         = "Send the picture of the window"
 	WhatWillBeSent      = "What will be sent"
-	Comment             = "Comment (optional)"
+	CommentHint         = "Comment (optional)"
 	Send                = "Send"
 	Sent                = "Sent"
 	NotSent             = "Not sent, try again"
@@ -252,7 +251,7 @@ const (
 	CheckSessionBus         = "D-Bus session bus"
 	CheckSampleRates        = "PipeWire sample rates"
 	CheckFakePlayer         = "fake player"
-	CheckRecorderNotRunning = "spytifyd not running"
+	CheckRecorderNotRunning = "recorder not running"
 	TargetProcess           = "SPYTIFY_TARGET_PROCESS=%s"
 	ForFormat               = "for encode.format=%s"
 	NoSilenceHeard          = "no silence heard"
@@ -351,7 +350,7 @@ const (
 	Cancel   = "Cancel"
 	Close    = "Close"
 	Error    = "Error"
-	Quit     = "Quit Spytify?"
+	QuitAsk  = "Quit Spytify?"
 	QuitText = "Recording stops, and the track being recorded is not kept."
 )
 

@@ -31,7 +31,7 @@ func TestTheLogGoesToTheWindowsEdge(t *testing.T) {
 		t.Errorf("the log is at %v, %v wide, in a window %v wide", x, l.list.Size().Width, width)
 	}
 	side := 2 * theme.Padding()
-	show := labelsIn(l.root, func(s string) bool { return s == lang.Show })
+	show := labelsIn(l.root, func(s string) bool { return s == lang.ShowLevels })
 	prefixes := labelsIn(l.list, func(s string) bool { return strings.HasSuffix(s, " info ") })
 	if len(show) != 1 || len(prefixes) == 0 {
 		t.Fatalf("%d Show labels, %d lines", len(show), len(prefixes))

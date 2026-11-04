@@ -202,8 +202,8 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	// With the player closed, Record is off and the screen offers to open it.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
 	a.render()
-	wantOrder(t, a, lang.Donate, "Tabs", fmt.Sprintf(lang.Open, "Player"))
-	tabTo(t, a, fmt.Sprintf(lang.Open, "Player"), 1)
+	wantOrder(t, a, lang.Donate, "Tabs", fmt.Sprintf(lang.OpenPlayer, "Player"))
+	tabTo(t, a, fmt.Sprintf(lang.OpenPlayer, "Player"), 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodPlayerLaunch)
 
@@ -672,7 +672,7 @@ func TestTheKeyboardWorksAbout(t *testing.T) {
 // screen scrolls to them in a short window.
 func TestTheKeyboardWorksTheOfflineScreen(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Disconnected, "spytifyd is not running")
+	m.SetConn(model.Disconnected, "")
 	a.render()
 	order := tabOrder(t, a)
 	if len(order) < 4 || !slices.Equal(order[:3], []string{lang.Donate, lang.StartRecorder, lang.PlayerProcessHint}) ||

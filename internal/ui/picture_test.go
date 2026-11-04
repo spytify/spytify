@@ -389,7 +389,7 @@ func TestARecorderThatDidNotStartGoesWithThePicture(t *testing.T) {
 	srv := fakesentry.New(t)
 	a, m := privacyApp(t, srv, true)
 	connect(t, a, m, true)
-	a.launchFailed(errors.New("spytifyd started but does not answer; see its log in Logs"))
+	a.launchFailed(errors.New(lang.RecorderNoAnswer))
 	a.reports.Wait()
 	ev := srv.Wait(t, "event", 1)[0].JSON()
 	if ev["message"] != "blocked: recorder_start" {

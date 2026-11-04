@@ -446,7 +446,7 @@ func (r *recordScreen) render(s model.State) {
 		// A player that is not running is shown in the app bar and offered
 		// to open here; the diagnostics are for anything else.
 		down := !playerRunning(s)
-		r.openPlayer.SetText(fmt.Sprintf(lang.Open, player))
+		r.openPlayer.SetText(fmt.Sprintf(lang.OpenPlayer, player))
 		show(r.openPlayer, down)
 		show(r.diagnose, failingChecks(s.Info.Checks) > 0)
 		show(r.attention, r.openPlayer.Visible() || r.diagnose.Visible())
@@ -502,7 +502,7 @@ func (r *recordScreen) render(s model.State) {
 		text = fmt.Sprintf(lang.SessionEndedPlaylist, filepath.Join(filepath.Base(filepath.Dir(s.Playlist)), filepath.Base(s.Playlist)))
 	}
 	setCaption(r.waiting, text)
-	r.launch.SetText(fmt.Sprintf(lang.Open, player))
+	r.launch.SetText(fmt.Sprintf(lang.OpenPlayer, player))
 	show(r.launch, down)
 	show(r.play, paused)
 	show(r.restart, waits && c == nil && s.Session == proto.StateWaiting && !down)

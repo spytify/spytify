@@ -62,7 +62,7 @@ func TestEscapeClosesEveryModal(t *testing.T) {
 		a.render()
 		quit := false
 		a.quitApp = func() { quit = true }
-		closesOnEscapeEverywhere(t, a, lang.Quit, a.quit, func() bool { return !quit })
+		closesOnEscapeEverywhere(t, a, lang.QuitAsk, a.quit, func() bool { return !quit })
 		closesOnEscapeEverywhere(t, a, lang.RestartRecorderAsk, a.player.restart, nil)
 		closesOnEscapeEverywhere(t, a, "an error", func() { a.showError(errors.New("boom")) }, nil)
 	})

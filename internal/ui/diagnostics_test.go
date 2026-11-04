@@ -24,7 +24,7 @@ func TestAFailedCheckReadsAsWhatIsWrong(t *testing.T) {
 		proto.CheckPlayerRunning:  {"player running", "player not running"},
 		proto.CheckOutputWritable: {"output folder writable", "output folder not writable"},
 		proto.CheckHelper:         {"capture helper", "capture helper"},
-		model.CheckRecorder:       {"spytifyd running", "spytifyd not running"},
+		model.CheckRecorder:       {"recorder running", "recorder not running"},
 	} {
 		if got := model.CheckName(proto.Check{ID: id, OK: true}); got != want[0] {
 			t.Errorf("a passing %s reads %q, want %q", id, got, want[0])
@@ -140,7 +140,7 @@ func TestNoDiagnosticsForAPlayerThatIsOff(t *testing.T) {
 	m.SetSettings(defaults())
 	a.render()
 	all := texts(a.win.Content())
-	if !contains(all, fmt.Sprintf(lang.Open, "Player")) || contains(all, lang.OpenDiagnostics) {
+	if !contains(all, fmt.Sprintf(lang.OpenPlayer, "Player")) || contains(all, lang.OpenDiagnostics) {
 		t.Errorf("player off: %v", all)
 	}
 	// The check can lag behind the player's state, which the app bar
