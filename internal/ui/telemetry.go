@@ -301,7 +301,7 @@ func (a *App) sendChecks(s model.State, sent func(ok bool)) {
 		content.Add(keep)
 	}
 	message := newCommentEntry()
-	message.SetPlaceHolder(lang.Comment)
+	message.SetPlaceHolder(lang.CommentHint)
 	content.Add(message)
 	showDialog(a.win, lang.SendToDevelopers, content, lang.Cancel, lang.Send, fyne.NewSize(560, 420), func(send bool) {
 		if !send {

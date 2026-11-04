@@ -358,7 +358,7 @@ func (a *App) quit() {
 		a.quitApp()
 		return
 	}
-	ask(a.win, lang.Quit, lang.QuitText, func(ok bool) {
+	ask(a.win, lang.QuitAsk, lang.QuitText, func(ok bool) {
 		if ok {
 			a.quitApp()
 		}

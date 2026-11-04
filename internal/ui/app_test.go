@@ -216,7 +216,7 @@ func TestQuitWhileRecordingAsksFirst(t *testing.T) {
 	a.render()
 	a.quit()
 	top := a.win.Canvas().Overlays().Top()
-	if top == nil || !contains(texts(top), lang.Quit) {
+	if top == nil || !contains(texts(top), lang.QuitAsk) {
 		t.Fatal("quitting during a recording did not ask")
 	}
 }

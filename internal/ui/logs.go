@@ -138,7 +138,7 @@ func newLogsScreen(a *App) *logsScreen {
 		_ = openPath(l.path)
 	})
 	open.Importance = widget.LowImportance
-	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel(lang.Show), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
+	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel(lang.ShowLevels), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
 	l.root = plain(inReadingOrder(inset(tools), nil, nil, nil, l.list))
 	return l
 }
@@ -264,7 +264,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 			fix = start.lit
 		}
 		if c.ID == proto.CheckPlayerRunning && !c.OK {
-			open := newRowLitButton(fmt.Sprintf(lang.Open, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
+			open := newRowLitButton(fmt.Sprintf(lang.OpenPlayer, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
 			fix = open.lit
 		}
 		if c.ID == proto.CheckOutputWritable && !c.OK {

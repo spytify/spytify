@@ -63,9 +63,9 @@ func CheckDetail(c proto.Check, goos string) string {
 		return fmt.Sprintf(lang.TargetProcess, arg(c, 0))
 	case proto.CheckPlayerRunning:
 		if c.OK {
-			return fmt.Sprintf(lang.PID, arg(c, 0))
+			return fmt.Sprintf(lang.DetailPID, arg(c, 0))
 		}
-		return lang.NotRunning
+		return lang.DetailNotRunning
 	case proto.CheckEncoder:
 		return fmt.Sprintf(lang.ForFormat, arg(c, 1))
 	case proto.CheckPlayerHeard:

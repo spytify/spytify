@@ -403,7 +403,7 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	// row offers to open the player.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
 	offers(fmt.Sprintf(lang.NothingRecordedNotRunning, "Player"), r.launch)
-	if r.launch.Text != fmt.Sprintf(lang.Open, "Player") || !a.action.Disabled() || len(r.rows) != 1 {
+	if r.launch.Text != fmt.Sprintf(lang.OpenPlayer, "Player") || !a.action.Disabled() || len(r.rows) != 1 {
 		t.Errorf("the button reads %q, Record disabled %v, %d rows", r.launch.Text, a.action.Disabled(), len(r.rows))
 	}
 	snapshot(t, a, "waiting-player-closed")
@@ -457,13 +457,13 @@ func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	down.Checks[1].OK = false
 	m.SetInfo(down)
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.Open, "Player")) || contains(all, lang.OpenDiagnostics) {
+	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.OpenPlayer, "Player")) || contains(all, lang.OpenDiagnostics) {
 		t.Errorf("player not running: %v", all)
 	}
 	// It starts: the check follows the target's state, and the offer goes.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 99}))
 	a.render()
-	if all := texts(a.win.Content()); contains(all, fmt.Sprintf(lang.Open, "Player")) || !checkOK(m.Snapshot().Info.Checks, proto.CheckPlayerRunning) {
+	if all := texts(a.win.Content()); contains(all, fmt.Sprintf(lang.OpenPlayer, "Player")) || !checkOK(m.Snapshot().Info.Checks, proto.CheckPlayerRunning) {
 		t.Errorf("player started: %v", all)
 	}
 	// Any other failing check sends the user to the diagnostics.

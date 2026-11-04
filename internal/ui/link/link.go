@@ -76,7 +76,7 @@ func (l *Link) Run(ctx context.Context) {
 		l.Model.SetConn(model.Connecting, lastErr)
 		c, err := bus.Dial(ctx, l.Addr)
 		if err != nil {
-			lastErr = lang.RecorderDown
+			lastErr = lang.RecorderNotRunning
 			l.Model.SetConn(model.Disconnected, lastErr)
 			if !pause() {
 				return
