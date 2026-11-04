@@ -118,7 +118,7 @@ func TestThePauseFadeThresholdSetting(t *testing.T) {
 
 // Pauses the timelines cannot play.
 func TestPinnedPauseCases(t *testing.T) {
-	a, b := info("/x/a", "A", 3000), info("/x/b", "B", 3000)
+	a, b, c := info("/x/a", "A", 3000), info("/x/b", "B", 3000), info("/x/c", "C", 3000)
 	scripts := map[string]func(r *rig){
 		"fades-around-a-pause": fadesAroundAPause,
 		// The same, Playing noticed 200 ms after the sound came back, as
@@ -227,6 +227,85 @@ func TestPinnedPauseCases(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		},
+		// The session starts on a track paused mid-way; its track bar is
+		// dragged back to 0, along, and back to 0, all while paused, so no
+		// audio comes between the two starts over. Play then records A
+		// once, whole, with no empty take before it.
+		"restarted-twice-while-paused": func(r *rig) {
+			r.track(a, 1000)
+			r.status(meta.Paused)
+			r.send(meta.Event{Kind: meta.TrackChanged, Track: a, PositionMs: 0, Restart: true})
+			r.send(meta.Event{Kind: meta.Seeked, Track: a, PositionMs: 2000})
+			r.send(meta.Event{Kind: meta.TrackChanged, Track: a, PositionMs: 0, Restart: true})
+			r.status(meta.Playing)
+			r.sound(1, 3000)
+			r.quiet(500)
+			r.track(b, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// Next pressed twice while paused: A is cut where it stopped, B
+		// never played and leaves no take, C is recorded whole.
+		"next-twice-while-paused": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.sound(1, 1000)
+			r.status(meta.Paused)
+			r.track(b, 0)
+			r.track(c, 0)
+			r.status(meta.Playing)
+			r.sound(3, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// Next, then Previous, while paused: A's first take is cut where
+		// it stopped, B leaves no take, and A plays again from its start.
+		"next-then-previous-while-paused": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.sound(1, 1000)
+			r.status(meta.Paused)
+			r.track(b, 0)
+			r.track(a, 0)
+			r.status(meta.Playing)
+			r.rewind(1)
+			r.sound(1, 3000)
+			r.quiet(500)
+			r.track(b, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// A started over, then Next, while paused: A is cut where it
+		// stopped, with no empty take after it, and B is recorded whole.
+		"restart-then-next-while-paused": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.sound(1, 1000)
+			r.status(meta.Paused)
+			r.send(meta.Event{Kind: meta.TrackChanged, Track: a, PositionMs: 0, Restart: true})
+			r.track(b, 0)
+			r.status(meta.Playing)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// The session starts on A paused mid-way; Next twice while still
+		// paused. Only C, which plays, is recorded.
+		"session-starts-paused-mid-track-then-next-twice": func(r *rig) {
+			r.track(a, 1000)
+			r.status(meta.Paused)
+			r.track(b, 0)
+			r.track(c, 0)
+			r.status(meta.Playing)
+			r.sound(3, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
 		// Stop before A ever played: nothing is announced or skipped.
 		"session-starts-paused-at-zero-then-stop": func(r *rig) {
 			r.track(a, 0)
@@ -251,8 +330,8 @@ func TestPinnedPauseCases(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		},
-		// Paused before A was heard, B named during the pause: A's start is
-		// placed where the player named it, which the pause cut away.
+		// Paused before A was heard, B named during the pause: A never
+		// played and leaves no take, and B starts at its first sound.
 		"track-change-while-paused-before-any-sound": func(r *rig) {
 			r.status(meta.Playing)
 			r.quiet(500)

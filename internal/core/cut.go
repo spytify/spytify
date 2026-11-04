@@ -74,6 +74,11 @@ func (cf *cutFinder) plan(r *Ring, c *segment, info meta.TrackInfo, at int64, re
 		ch.kind, ch.lo, ch.hi, ch.expected = changeBoundary, e-cf.window, late+cf.window, e
 	default:
 		ch.kind, ch.lo, ch.hi, ch.expected = changeInterrupt, at-ms(lateNotifyMs), at+ms(earlyNotifyMs), at
+		if paused {
+			// Named while paused, the item changed after the sound stopped
+			// for the pause: none of the audio before it is the new item's.
+			ch.lo = at
+		}
 	}
 	floor := r.Start()
 	if c != nil {

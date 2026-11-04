@@ -19,7 +19,7 @@
     3500ms  > player Playing pos=-1 (ring at 110250)
     3500ms  state recording
     3500ms  > audio music 2 at 0ms, 132300(3000ms)
-    3820ms  log debug: cut for "B" at 2506 ms (kind 2, noticed at 2500 ms, window 1500..2800 ms)
+    3820ms  log debug: cut for "B" at 2506 ms (kind 2, noticed at 2500 ms, window 2500..2800 ms)
     3820ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=interrupt/edge offset=6ms source=44100/2
     3820ms  take t-002 "B" start=110511(2505.92ms) length=132300(3000ms)
     6500ms  > audio silence, 66150(1500ms)
