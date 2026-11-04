@@ -105,8 +105,9 @@ func groups() []string {
 }
 
 func matches(q string, d settings.Def) bool {
-	return q == "" || strings.Contains(strings.ToLower(d.Label), q) || strings.Contains(d.Key, q) ||
-		strings.Contains(strings.ToLower(strings.Join(d.Choices, " ")), q)
+	w := model.SettingWords(d)
+	return q == "" || strings.Contains(strings.ToLower(w.Label), q) || strings.Contains(d.Key, q) ||
+		strings.Contains(strings.ToLower(strings.Join(w.Choices, " ")), q)
 }
 
 // playerWords are the player card's labels, which the search matches as
@@ -138,7 +139,7 @@ func (s *settingsScreen) layout() {
 			}
 			keys = append(keys, d.Key)
 		}
-		player := g == "App" && (q == "" || strings.Contains(playerWords, q))
+		player := g == "app" && (q == "" || strings.Contains(playerWords, q))
 		if len(keys) == 0 && !player {
 			continue
 		}
@@ -168,14 +169,14 @@ func (s *settingsScreen) layout() {
 
 func (s *settingsScreen) header(group string, keys []string) fyne.CanvasObject {
 	if len(keys) == 0 {
-		return sectionTitle(group)
+		return sectionTitle(lang.SettingGroups[group])
 	}
 	reset := newIconButton(lang.Reset, theme.HistoryIcon(), func() {
 		s.app.noteAction("reset " + group)
 		s.resetKeys(keys)
 	})
 	reset.Importance = widget.LowImportance
-	return container.NewBorder(nil, nil, sectionTitle(group), reset)
+	return container.NewBorder(nil, nil, sectionTitle(lang.SettingGroups[group]), reset)
 }
 
 // sectionTitle is a card's title, the strongest text of the screen.
@@ -295,7 +296,7 @@ func (s *settingsScreen) apply(key string, v any) {
 		var res proto.SettingsSetResult
 		err := s.app.link.Do(ctx, proto.MethodSettingsSet, proto.SettingsSetParams{Values: map[string]any{key: v}}, &res)
 		if err == nil && res.Rejected[key] != "" {
-			err = fmt.Errorf("%s: %s", s.fields[key].def.Label, res.Rejected[key])
+			err = fmt.Errorf("%s: %s", model.SettingWords(*s.fields[key].def).Label, res.Rejected[key])
 		}
 		if err != nil {
 			fyne.Do(func() {
@@ -326,8 +327,8 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 		}
 		// The list shows a choice's words, the setting keeps its value.
 		shown := opts
-		if len(d.Choices) == len(opts) {
-			shown = d.Choices
+		if choices := model.SettingWords(*d).Choices; len(choices) == len(opts) {
+			shown = choices
 		}
 		swap := func(s string, from, to []string) string {
 			for i, x := range from {
@@ -391,14 +392,15 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 	if d.Kind == settings.KindTemplate {
 		control = container.New(layout.NewCustomPaddedVBoxLayout(0), f.input, s.unknown)
 	}
-	if d.Note != "" {
-		under = settingNote(d.Note)
+	words := model.SettingWords(*d)
+	if words.Note != "" {
+		under = settingNote(words.Note)
 	}
 	if key == settings.AppMinimizeToTray.String() {
-		s.tray, s.trayNote = d, settingNote(d.Note)
+		s.tray, s.trayNote = d, settingNote(words.Note)
 		under = s.trayNote
 	}
-	f.row = settingRow(d.Label, control, under)
+	f.row = settingRow(words.Label, control, under)
 	return f
 }
 
@@ -502,7 +504,7 @@ func (s *settingsScreen) render(st model.State) {
 	s.enable(settings.OutputCounterWidth, settings.Prefix(prefix) == settings.PrefixCounter)
 	note := s.app.trayNote()
 	if note == "" {
-		note = s.tray.Note
+		note = model.SettingWords(*s.tray).Note
 	}
 	setCaption(s.trayNote, note)
 	s.player.render(st)

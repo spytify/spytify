@@ -49,7 +49,7 @@ func TestTheNameComesFromTheKey(t *testing.T) {
 
 func TestTwoListsThatMakeOneTypeAreRefused(t *testing.T) {
 	enum := func(key string) settings.Def {
-		return settings.Def{Key: key, Kind: settings.KindEnum, Enum: []string{"a"}, Choices: []string{"A"}}
+		return settings.Def{Key: key, Kind: settings.KindEnum, Enum: []string{"a"}}
 	}
 	if _, err := render([]settings.Def{enum("output.format"), enum("encode.format")}); err == nil {
 		t.Error("output.format and encode.format both make the type Format, and render took them")

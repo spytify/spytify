@@ -23,12 +23,12 @@ func TestThePlaylistSwitchIsUnderGroupByFolders(t *testing.T) {
 	if tg, ok := f.input.(*toggle); !ok || tg.on {
 		t.Fatalf("output.playlist is a %T, on %v; want a switch, off", f.input, ok && tg.on)
 	}
-	if folded(s, "Output", f.row) {
+	if folded(s, "output", f.row) {
 		t.Error("under Advanced")
 	}
 	d := fyne.CurrentApp().Driver()
 	y := func(key string) float32 { return d.AbsolutePositionForObject(s.fields[key].row).Y }
-	advanced := d.AbsolutePositionForObject(s.advanced["Output"].header).Y
+	advanced := d.AbsolutePositionForObject(s.advanced["output"].header).Y
 	if !(y("output.group_by") < y("output.playlist") && y("output.playlist") < advanced) {
 		t.Errorf("Group by folders at %v, the playlist at %v, Advanced at %v", y("output.group_by"), y("output.playlist"), advanced)
 	}
