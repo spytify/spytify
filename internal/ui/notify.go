@@ -126,7 +126,7 @@ func (a *App) trackSaved(e proto.TrackFinishedEvent) {
 		if r.ID == e.ID && r.Title != "" {
 			name = r.Title
 			if r.Artist != "" {
-				name += " · " + r.Artist
+				name += lang.Separator + r.Artist
 			}
 		}
 	}

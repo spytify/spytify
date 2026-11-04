@@ -628,7 +628,7 @@ func outputText(values map[string]any) string {
 	case "":
 		return ""
 	case "mp3", "aac":
-		return fmt.Sprintf("%s %v kbps", upper(format), number(values[settings.EncodeBitrateKbps.String()]))
+		return fmt.Sprintf(lang.FormatBitrate, upper(format), number(values[settings.EncodeBitrateKbps.String()]))
 	}
 	return upper(format)
 }
