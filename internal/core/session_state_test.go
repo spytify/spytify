@@ -451,6 +451,20 @@ func TestPinnedTrackChanges(t *testing.T) {
 			playA(r)
 			thenB(r)
 		}},
+		// A named again mid-take under another id: a new take, as for any
+		// other track, and the log names both ids.
+		"same-title-with-another-id": {endOnStop, nil, func(r *rig) {
+			playA(r)
+			again := trackA
+			again.ID = "/x/a-again"
+			r.track(again, 1000)
+			r.sound(1, 2000)
+			r.quiet(500)
+			r.track(trackB, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		}},
 	})
 }
 

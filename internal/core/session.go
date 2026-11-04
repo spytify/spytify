@@ -794,6 +794,13 @@ func (s *Session) onTrack(info meta.TrackInfo, at int64, restart bool) {
 		s.tryResolve(true)
 	}
 	s.pend = s.plan(s.ring, s.cur, info, at, restart, s.status == meta.Paused)
+	// The same title and artists under another id, mid-take, cut it as
+	// another track would. Logged, to tell a player that changes a track's
+	// id from a real change of track.
+	if c := s.cur; c != nil && !restart && !c.ghost && s.pend.kind == changeInterrupt && !sameItem(c.info, info) &&
+		c.info.Title == info.Title && strings.Join(c.info.Artists, ",") == strings.Join(info.Artists, ",") {
+		s.deps.log.Infof("%q is named again under another id, %q after %q: its take is cut", info.Title, info.ID, c.info.ID)
+	}
 }
 
 func maxInt(a, b int64) int64 {
