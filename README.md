@@ -34,6 +34,31 @@ Spytify's bug tracker, Sentry, is on by default. Untick it at the first launch o
 
 Everything the bug tracker sends: [PRIVACY.md](PRIVACY.md).
 
+## Nix
+
+The flake has the Linux packages, a NixOS module and a home-manager module, both `programs.spytify`:
+
+```nix
+# flake.nix
+inputs.spytify.url = "github:spytify/spytify";
+```
+
+```nix
+# A NixOS configuration; in a home-manager one, homeManagerModules.default
+{ inputs, ... }:
+{
+  imports = [ inputs.spytify.nixosModules.default ];
+  programs.spytify = {
+    enable = true;
+    target.process = [ "player" ];    # SPYTIFY_TARGET_PROCESS
+    service.enable = true;            # spytifyd as a systemd user service
+    settings.encode.format = "flac";  # config.toml, read-only: the Settings screen cannot save
+  };
+}
+```
+
+`nix run github:spytify/spytify` opens the app; `packages.<system>.headless` has only spytifyd and spytify-cli. More in [CONTRIBUTING.md](CONTRIBUTING.md#nix).
+
 ## Build and contribute
 
 Building from source, the architecture, the tests and releases: see [CONTRIBUTING.md](CONTRIBUTING.md).

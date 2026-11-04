@@ -48,6 +48,24 @@ Build variables, read from the environment or an untracked `build.env`; CI takes
 
 A version with `dev` or `+` in it, such as CI's, reports as the `development` environment. Run-time variables (`SPYTIFY_TARGET_*`, `SPYTIFY_FFMPEG`, `SPYTIFY_SOCKET`…) are on the [Advanced](https://spytify.github.io/spytify/v2/advanced.html#configuration) page.
 
+### Nix
+
+[`flake.nix`](flake.nix), with [flake-parts](https://flake.parts), for x86_64 and aarch64 Linux:
+
+```sh
+nix develop          # Go, cgo with the app's libraries, ffmpeg, PipeWire, staticcheck, gotestsum; menu lists its commands
+nix build            # packages.default: the three programs, the desktop entry, the icons, spytifyd.service and spytify-cli's completions
+nix build .#headless # spytifyd and spytify-cli only, pure Go, with the completions
+nix flake check      # both packages, gofmt, go vet, the generated files, go test (no -race), the NixOS module, nix fmt
+nix fmt              # nixfmt and gofmt
+```
+
+- The shell ([numtide/devshell](https://github.com/numtide/devshell), [`nix/devshell.nix`](nix/devshell.nix)) has `build`, `generate`, `lint`, `tests` (under `-race`, as CI) and `integration` (the PipeWire scenarios, in [`scripts/pipewire-session.sh`](scripts/pipewire-session.sh)'s session). The session's `dbus-daemon --session` reads `/etc/dbus-1/session.conf`, which NixOS and most distributions have.
+- The package ([`nix/package.nix`](nix/package.nix)), with the app's libraries in [`nix/gui-libs.nix`](nix/gui-libs.nix) which the shell shares, takes `defaultProcess` and `sentryDsn`, the build variables above, empty by default: `packages.x86_64-linux.default.override { sentryDsn = "…"; }`. It runs its own ffmpeg (`SPYTIFY_FFMPEG`, unless set) and falls back on its own PipeWire tools. The app finds the graphics driver in `/run/opengl-driver`, NixOS's `hardware.graphics`; elsewhere, run it with [nixGL](https://github.com/nix-community/nixGL).
+- A Nix build reports `0.0.0-dev+<commit>`. `vendorHash` changes with `go.sum`: after a change to the modules, `nix build` prints the new one.
+- `nix flake check` runs `go test ./...` without `-race` or the `integration` tag, and skips `TestProblemsAreCountedAndSampled`, which needs `/etc/machine-id`, missing in the sandbox.
+- The modules ([`nix/modules`](nix/modules)) share their options: `target` (the `SPYTIFY_TARGET_*` variables, set in the session and in the service), `environment`, `settings` and `service.enable`. With `settings` set, config.toml is in the Nix store, `~/.config/spytify/config.toml` for home-manager and `/etc/spytify/config.toml` through `SPYTIFY_CONFIG` for NixOS, so the Settings screen cannot save. A NixOS user without `service.enable` can still run `systemctl --user enable --now spytifyd`.
+
 ## Settings
 
 Every setting is a row of [`internal/settings/table.go`](internal/settings/table.go). Code reads one through its generated `settings.Key`, such as `v.Bool(settings.RecorderTrimSilence)`, never through a string, so a misspelt or removed setting does not build. A change to the table runs `go generate ./internal/settings` too; CI checks it did.

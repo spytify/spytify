@@ -8,3 +8,8 @@
 build.env
 PLAN.md
 IDEAS.md
+# nix build
+/result
+/result-*
+# nix develop (numtide/devshell)
+/.data/
