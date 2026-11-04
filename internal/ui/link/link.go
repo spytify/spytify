@@ -76,7 +76,9 @@ func (l *Link) Run(ctx context.Context) {
 		l.Model.SetConn(model.Connecting, lastErr)
 		c, err := bus.Dial(ctx, l.Addr)
 		if err != nil {
-			lastErr = lang.RecorderNotRunning
+			// Nothing answers: the window says the recorder is not
+			// running, with no reason to add.
+			lastErr = ""
 			l.Model.SetConn(model.Disconnected, lastErr)
 			if !pause() {
 				return

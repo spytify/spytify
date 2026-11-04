@@ -22,10 +22,10 @@ func TestTheDiagnosticsFollowSpytifyd(t *testing.T) {
 		t.Errorf("spytifyd answers: %v", all)
 	}
 
-	m.SetConn(model.Disconnected, "spytifyd closed the connection")
+	m.SetConn(model.Disconnected, lang.RecorderClosed)
 	a.render()
 	all := texts(d)
-	for _, want := range []string{lang.NothingElseChecked, lang.CheckRecorderNotRunning, "spytifyd closed the connection", lang.StartRecorder} {
+	for _, want := range []string{lang.NothingElseChecked, lang.CheckRecorderNotRunning, lang.RecorderClosed, lang.StartRecorder} {
 		if !contains(all, want) {
 			t.Errorf("%q not in the diagnostics once spytifyd is gone: %v", want, all)
 		}

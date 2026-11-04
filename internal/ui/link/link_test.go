@@ -113,7 +113,9 @@ func TestReconnectsWhenTheDaemonComesBack(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go l.Run(ctx)
-	waitFor(t, m, "disconnected", func(s model.State) bool { return s.Conn == model.Disconnected && s.ConnError != "" })
+	// Nothing answers: no reason, the window says the recorder is not
+	// running.
+	waitFor(t, m, "disconnected", func(s model.State) bool { return s.Conn == model.Disconnected && s.ConnError == "" })
 	fakeCoreAt(t, proto.Protocol, missing)
 	l.Retry()
 	waitFor(t, m, "reconnected", func(s model.State) bool { return s.Conn == model.Connected })

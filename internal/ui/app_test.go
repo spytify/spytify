@@ -18,10 +18,10 @@ import (
 
 func TestOfflineScreen(t *testing.T) {
 	a, m, _ := newTestApp(t, "/tmp/spytify.sock")
-	m.SetConn(model.Disconnected, "spytifyd is not running")
+	m.SetConn(model.Disconnected, "")
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{lang.RecorderNotRunning, "spytifyd is not running", lang.StartRecorder, "/tmp/spytify.sock", lang.PlayerProcess} {
+	for _, want := range []string{lang.RecorderNotRunning, lang.StartRecorder, "/tmp/spytify.sock", lang.PlayerProcess} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the offline screen", want)
 		}
@@ -230,7 +230,7 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	m := model.New()
 	l := link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, AutoStart: true})
-	m.SetConn(model.Disconnected, "spytifyd is not running")
+	m.SetConn(model.Disconnected, "")
 	a.render()
 	snapshot(t, a, "starting")
 	all := texts(a.win.Content())
