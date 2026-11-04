@@ -41,21 +41,21 @@ func (b Backends) Probe() []proto.Check {
 	}
 	switch {
 	case tools("pw-record", "pw-dump"):
-		checks = append(checks, proto.Check{Name: "capture", OK: true, Detail: "PipeWire (pw-record)"})
+		checks = append(checks, proto.Check{ID: proto.CheckCapture, Name: "capture", OK: true, Detail: "PipeWire (pw-record)", Args: []string{"pipewire"}})
 		if tools("pw-metadata") {
 			checks = append(checks, rateCheck())
 		}
 	case tools("parec", "pactl"):
-		checks = append(checks, proto.Check{Name: "capture", OK: true, Detail: "PulseAudio (parec)"})
+		checks = append(checks, proto.Check{ID: proto.CheckCapture, Name: "capture", OK: true, Detail: "PulseAudio (parec)", Args: []string{"pulseaudio"}})
 	default:
-		checks = append(checks, proto.Check{Name: "capture", OK: false, Detail: "install pipewire-bin (pw-record, pw-dump) or pulseaudio-utils"})
+		checks = append(checks, proto.Check{ID: proto.CheckCapture, Name: "capture", OK: false, Detail: "install pipewire-bin (pw-record, pw-dump) or pulseaudio-utils"})
 	}
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
-		checks = append(checks, proto.Check{Name: "D-Bus session bus", OK: false, Detail: err.Error()})
+		checks = append(checks, proto.Check{ID: proto.CheckSessionBus, Name: "D-Bus session bus", OK: false, Detail: err.Error()})
 	} else {
 		conn.Close()
-		checks = append(checks, proto.Check{Name: "D-Bus session bus", OK: true})
+		checks = append(checks, proto.Check{ID: proto.CheckSessionBus, Name: "D-Bus session bus", OK: true})
 	}
 	return checks
 }
@@ -77,15 +77,15 @@ func rateCheck() proto.Check {
 func ratesCheck(settings []byte) proto.Check {
 	m := allowedRates.FindSubmatch(settings)
 	if m == nil {
-		return proto.Check{Name: "PipeWire sample rates", OK: true, Advice: true, Detail: "allowed rates unknown"}
+		return proto.Check{ID: proto.CheckSampleRates, Name: "PipeWire sample rates", OK: true, Advice: true, Detail: "allowed rates unknown"}
 	}
 	rates := strings.Fields(strings.ReplaceAll(string(m[1]), ",", " "))
 	for _, r := range rates {
 		if r == "44100" {
-			return proto.Check{Name: "PipeWire sample rates", OK: true, Advice: true, Detail: strings.Join(rates, ", ") + " Hz"}
+			return proto.Check{ID: proto.CheckSampleRates, Name: "PipeWire sample rates", OK: true, Advice: true, Detail: strings.Join(rates, ", ") + " Hz", Args: rates}
 		}
 	}
-	return proto.Check{Name: "PipeWire sample rates", OK: false, Advice: true, Detail: "only " + strings.Join(rates, ", ") +
+	return proto.Check{ID: proto.CheckSampleRates, Name: "PipeWire sample rates", OK: false, Advice: true, Args: rates, Detail: "only " + strings.Join(rates, ", ") +
 		" Hz: 44.1 kHz tracks are resampled once. To record them unchanged, put context.properties = { default.clock.allowed-rates = [ 44100 48000 ] }" +
 		" in a .conf file under ~/.config/pipewire/pipewire.conf.d/, then log out and back in"}
 }

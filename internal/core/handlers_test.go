@@ -15,6 +15,7 @@ import (
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/internal/testkit"
+	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -196,6 +197,16 @@ func TestCoreInfoAndLogs(t *testing.T) {
 	}
 	if !checks["target configured"] || !checks["player running"] || !checks["output folder writable"] {
 		t.Fatalf("checks = %+v", info.Checks)
+	}
+	// The window words each check from its ID and Args: as the recorder
+	// names it, and as its detail says.
+	for _, c := range info.Checks {
+		if got := model.CheckDetail(c, runtime.GOOS); c.ID == "" || got != c.Detail {
+			t.Errorf("%s (%q) reads %q, the recorder says %q", c.ID, c.Name, got, c.Detail)
+		}
+		if got := model.CheckName(c); c.OK && got != c.Name {
+			t.Errorf("a passing %s is named %q, the recorder says %q", c.ID, got, c.Name)
+		}
 	}
 	var tail proto.LogTailResult
 	if err := call(t, c, proto.MethodLogTail, proto.LogTailParams{Lines: 50}, &tail); err != nil {

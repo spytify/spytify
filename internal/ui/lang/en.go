@@ -3,10 +3,11 @@
 // values through fmt.Sprintf, in the order its comment gives.
 //
 // Not here: the settings' labels and notes, which settings.Table keeps by
-// their key; the checks' names and details, and the errors, which come from
-// the recorder or are written where they are made, but for the recorder's
-// warnings, which model.WarningText words from their code; and log lines,
-// telemetry names and preference keys, which the window never shows.
+// their key; the facts the recorder sends, as a path, a version or an
+// error, which the window shows as they come, inside these texts when they
+// word them: the checks by their ID (model.CheckName, model.CheckDetail),
+// the recorder's warnings by their code (model.WarningText); and log
+// lines, telemetry names and preference keys, which the window never shows.
 package lang
 
 // The app and its tabs.
@@ -211,7 +212,7 @@ const (
 	NothingElseChecked  = "spytifyd is not running, so nothing else can be checked."
 	ChooseAnotherFolder = "Choose another folder"
 	NotRunning          = "not running"
-	PID                 = "pid %d"
+	PID                 = "pid %s"
 	SendToDevelopers    = "Send to the developers"
 	SendChecksText      = "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
 	SendChecksPicture   = "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
@@ -221,6 +222,51 @@ const (
 	Send                = "Send"
 	Sent                = "Sent"
 	NotSent             = "Not sent, try again"
+)
+
+// The checks, by their ID (model.CheckName, model.CheckDetail): a name,
+// one when the check fails if it says so, then the details that word what
+// the recorder found. CheckEncoder takes the encoder; TargetProcess the
+// process names; ForFormat the format; MacOSVersion the version;
+// WindowsBuild the build; HelperMacOS and PowerShellReads a path;
+// NoCaptureBackend the system; Rates and RatesOnly the allowed rates.
+const (
+	CheckTarget             = "target configured"
+	CheckNoTarget           = "target not configured"
+	CheckPlayerRunning      = "player running"
+	CheckPlayerNotRunning   = "player not running"
+	CheckFFmpeg             = "ffmpeg found"
+	CheckNoFFmpeg           = "ffmpeg not found"
+	CheckEncoder            = "encoder %s"
+	CheckPlayerHeard        = "player heard"
+	CheckPlayerNotHeard     = "player not heard"
+	CheckOutputWritable     = "output folder writable"
+	CheckOutputNotWritable  = "output folder not writable"
+	CheckMacOS              = "macOS 14.2 or later"
+	CheckWindows            = "Windows 10 2004 or later"
+	CheckHelper             = "capture helper"
+	CheckAppleScript        = "AppleScript"
+	CheckPowerShell         = "Windows PowerShell"
+	CheckCapture            = "capture"
+	CheckSessionBus         = "D-Bus session bus"
+	CheckSampleRates        = "PipeWire sample rates"
+	CheckFakePlayer         = "fake player"
+	CheckRecorderNotRunning = "spytifyd not running"
+	TargetProcess           = "SPYTIFY_TARGET_PROCESS=%s"
+	ForFormat               = "for encode.format=%s"
+	NoSilenceHeard          = "no silence heard"
+	MacOSVersion            = "macOS %s"
+	WindowsBuild            = "build %s"
+	HelperMacOS             = "%s; macOS asks once for System Audio Recording permission"
+	AppleScriptAsks         = "macOS asks once to let spytify control the player"
+	PowerShellReads         = "%s; reads what plays through the media session API"
+	CapturePipeWire         = "PipeWire (pw-record)"
+	CapturePulseAudio       = "PulseAudio (parec)"
+	InstallCapture          = "install pipewire-bin (pw-record, pw-dump) or pulseaudio-utils"
+	NoCaptureBackend        = "no %s capture backend in the alpha (Linux only)"
+	RatesUnknown            = "allowed rates unknown"
+	Rates                   = "%s Hz"
+	RatesOnly               = "only %s Hz: 44.1 kHz tracks are resampled once. To record them unchanged, put context.properties = { default.clock.allowed-rates = [ 44100 48000 ] } in a .conf file under ~/.config/pipewire/pipewire.conf.d/, then log out and back in"
 )
 
 // The recorder's warnings, by their code (model.WarningText), in the Record

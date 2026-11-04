@@ -217,10 +217,10 @@ func TestSilenceWarningIsForATrackSilentFromItsStart(t *testing.T) {
 // window words why, as the silence warning (model.CheckDetail).
 func TestPlayerHeardCheck(t *testing.T) {
 	same := func(a, b proto.Check) bool { return a.Name == b.Name && a.OK == b.OK && a.Detail == b.Detail }
-	if got, want := playerHeardCheck(false), (proto.Check{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"}); !same(got, want) {
+	if got, want := playerHeardCheck(false), (proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", OK: true, Detail: "no silence heard"}); !same(got, want) {
 		t.Errorf("with sound: %+v, want %+v", got, want)
 	}
-	if got, want := playerHeardCheck(true), (proto.Check{Name: proto.CheckPlayerHeard, Detail: "only silence from the capture while the player played"}); !same(got, want) {
+	if got, want := playerHeardCheck(true), (proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", Detail: "only silence from the capture while the player played"}); !same(got, want) {
 		t.Errorf("with only silence: %+v, want %+v", got, want)
 	}
 }

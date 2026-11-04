@@ -79,7 +79,7 @@ func TestACheckFixIsReachedByTheArrowsNotTab(t *testing.T) {
 	a, m := privacyApp(t, srv, true)
 	connect(t, a, m, true)
 	in := info()
-	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: "permission denied"})
+	in.Checks = append(in.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: "permission denied"})
 	m.SetInfo(in)
 	a.render()
 	diagnostics(t, a)

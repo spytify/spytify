@@ -162,7 +162,7 @@ func TestTheLaunchSaysWhereTheOutputFolderIs(t *testing.T) {
 	srv := fakesentry.New(t)
 	a, m := privacyApp(t, srv, true)
 	in := info()
-	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, OK: true, Detail: "/music",
+	in.Checks = append(in.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", OK: true, Detail: "/music",
 		Facts: map[string]string{"output.drive": "fixed", "output.cloud": "OneDrive"}})
 	m.SetConn(model.Connected, "")
 	m.SetInfo(in)

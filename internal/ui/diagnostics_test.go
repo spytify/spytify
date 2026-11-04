@@ -19,16 +19,22 @@ import (
 )
 
 func TestAFailedCheckReadsAsWhatIsWrong(t *testing.T) {
-	for name, want := range map[string]string{
-		"ffmpeg found": "ffmpeg not found", "player running": "player not running",
-		"output folder writable": "output folder not writable", "capture helper": "capture helper",
+	for id, want := range map[proto.CheckID][2]string{
+		proto.CheckFFmpeg:         {"ffmpeg found", "ffmpeg not found"},
+		proto.CheckPlayerRunning:  {"player running", "player not running"},
+		proto.CheckOutputWritable: {"output folder writable", "output folder not writable"},
+		proto.CheckHelper:         {"capture helper", "capture helper"},
+		model.CheckRecorder:       {"spytifyd running", "spytifyd not running"},
 	} {
-		if got := checkLabel(proto.Check{Name: name}); got != want {
-			t.Errorf("checkLabel(%q) = %q, want %q", name, got, want)
+		if got := model.CheckName(proto.Check{ID: id, OK: true}); got != want[0] {
+			t.Errorf("a passing %s reads %q, want %q", id, got, want[0])
 		}
-		if got := checkLabel(proto.Check{Name: name, OK: true}); got != name {
-			t.Errorf("a passing %q reads %q", name, got)
+		if got := model.CheckName(proto.Check{ID: id}); got != want[1] {
+			t.Errorf("a failing %s reads %q, want %q", id, got, want[1])
 		}
+	}
+	if got := model.CheckName(proto.Check{ID: "newer", Name: "a newer check"}); got != "a newer check" {
+		t.Errorf("a check the window does not know reads %q, not its name", got)
 	}
 }
 
@@ -73,7 +79,7 @@ func TestAFailedChecksReasonShowsWholeUnderItsName(t *testing.T) {
 	m.SetConn(model.Connected, "")
 	reason := `mkdir \\nas\shared\Music\Recordings from the radio, every Saturday night since the spring of 2019\Spytify: The system cannot find the path specified.`
 	in := info()
-	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: reason})
+	in.Checks = append(in.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: reason})
 	// Few enough rows to fit without scrolling, spytifyd's own check
 	// included.
 	in.Checks, in.Warnings = in.Checks[1:], nil
