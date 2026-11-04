@@ -15,14 +15,14 @@ import (
 )
 
 // lowRates is the advice PipeWire's default gives: 48 kHz only.
-var lowRates = proto.Check{Name: "PipeWire sample rates", Advice: true, Detail: "only 48000 Hz: 44.1 kHz tracks are resampled once. To record them unchanged, " +
+var lowRates = proto.Check{ID: proto.CheckSampleRates, Name: "PipeWire sample rates", Advice: true, Args: []string{"48000"}, Detail: "only 48000 Hz: 44.1 kHz tracks are resampled once. To record them unchanged, " +
 	"put context.properties = { default.clock.allowed-rates = [ 44100 48000 ] } in a .conf file under ~/.config/pipewire/pipewire.conf.d/, then log out and back in"}
 
 // linuxInfo is info on Linux, where PipeWire captures.
 func linuxInfo() proto.CoreInfoResult {
 	in := info()
 	in.Platform = "linux/amd64"
-	in.Checks[3] = proto.Check{Name: "capture", OK: true, Detail: "PipeWire (pw-record)"}
+	in.Checks[3] = proto.Check{ID: proto.CheckCapture, Name: "capture", OK: true, Detail: "PipeWire (pw-record)", Args: []string{"pipewire"}}
 	return in
 }
 
@@ -54,7 +54,7 @@ func TestAdviceNeedsNoAttention(t *testing.T) {
 	}
 	snapshot(t, a, "logs-advice")
 
-	withAdvice(proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
+	withAdvice(proto.Check{ID: proto.CheckFFmpeg, Name: "ffmpeg found", Detail: "not on PATH"})
 	if all := texts(overlay(t, a)); !contains(all, fmt.Sprintf(lang.ChecksNeedAttention, 1, 6)) {
 		t.Errorf("a check fails beside the advice: %v", all)
 	}

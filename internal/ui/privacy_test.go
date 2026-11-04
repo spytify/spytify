@@ -58,7 +58,7 @@ func connect(t *testing.T, a *App, m *model.Model, on bool) {
 // failCheck makes ffmpeg's check fail.
 func failCheck(a *App, m *model.Model) {
 	in := info()
-	in.Checks = append(in.Checks, proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
+	in.Checks = append(in.Checks, proto.Check{ID: proto.CheckFFmpeg, Name: "ffmpeg found", Detail: "not on PATH"})
 	m.SetInfo(in)
 	a.render()
 }

@@ -25,7 +25,7 @@ func TestTheDiagnosticsOpenOnTheirChecks(t *testing.T) {
 	for i := range 12 {
 		in.Checks = append(in.Checks, proto.Check{Name: fmt.Sprintf("check %d", i), OK: true})
 	}
-	in.Checks = append(in.Checks, proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
+	in.Checks = append(in.Checks, proto.Check{ID: proto.CheckFFmpeg, Name: "ffmpeg found", Detail: "not on PATH"})
 	m.SetInfo(in)
 	a.render()
 	d := diagnostics(t, a)
@@ -79,7 +79,7 @@ func TestACheckFixIsReachedByTheArrowsNotTab(t *testing.T) {
 	a, m := privacyApp(t, srv, true)
 	connect(t, a, m, true)
 	in := info()
-	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: "permission denied"})
+	in.Checks = append(in.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: "permission denied"})
 	m.SetInfo(in)
 	a.render()
 	diagnostics(t, a)

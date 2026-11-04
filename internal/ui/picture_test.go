@@ -252,7 +252,7 @@ func TestThePictureCoversThePaths(t *testing.T) {
 
 	in := info()
 	detail := "mkdir " + out + ": permission denied"
-	in.Checks = append(in.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: detail})
+	in.Checks = append(in.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: detail})
 	m.SetInfo(in)
 	a.render()
 	d := diagnostics(t, a)

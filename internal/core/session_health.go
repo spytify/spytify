@@ -26,9 +26,9 @@ var diskFree = freeBytes
 // its failure as the only silence warning (model.CheckDetail).
 func playerHeardCheck(silent bool) proto.Check {
 	if silent {
-		return proto.Check{Name: proto.CheckPlayerHeard, Detail: "only silence from the capture while the player played"}
+		return proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", Detail: "only silence from the capture while the player played"}
 	}
-	return proto.Check{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"}
+	return proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", OK: true, Detail: "no silence heard"}
 }
 
 func (s *Session) onTick() {

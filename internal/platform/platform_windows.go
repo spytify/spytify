@@ -65,16 +65,16 @@ func (x mixer) SetVolume(v float64) error {
 // Probe checks what the Windows backends need.
 func (b Backends) Probe() []proto.Check {
 	build := capture.WindowsBuild()
-	checks := []proto.Check{{Name: "Windows 10 2004 or later", OK: capture.LoopbackSupported(build), Detail: fmt.Sprintf("build %d", build)}}
+	checks := []proto.Check{{ID: proto.CheckWindows, Name: "Windows 10 2004 or later", OK: capture.LoopbackSupported(build), Detail: fmt.Sprintf("build %d", build), Args: []string{fmt.Sprint(build)}}}
 	if p, err := capture.FindTapHelper(b.TapHelper); err != nil {
-		checks = append(checks, proto.Check{Name: "capture helper", OK: false, Detail: err.Error()})
+		checks = append(checks, proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: false, Detail: err.Error()})
 	} else {
-		checks = append(checks, proto.Check{Name: "capture helper", OK: true, Detail: p})
+		checks = append(checks, proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: true, Detail: p, Args: []string{p}})
 	}
 	if p, err := exec.LookPath("powershell.exe"); err != nil {
-		checks = append(checks, proto.Check{Name: "Windows PowerShell", OK: false, Detail: err.Error()})
+		checks = append(checks, proto.Check{ID: proto.CheckPowerShell, Name: "Windows PowerShell", OK: false, Detail: err.Error()})
 	} else {
-		checks = append(checks, proto.Check{Name: "Windows PowerShell", OK: true, Detail: p + "; reads what plays through the media session API"})
+		checks = append(checks, proto.Check{ID: proto.CheckPowerShell, Name: "Windows PowerShell", OK: true, Detail: p + "; reads what plays through the media session API", Args: []string{p}})
 	}
 	return checks
 }

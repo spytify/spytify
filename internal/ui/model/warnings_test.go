@@ -60,13 +60,13 @@ func TestWarningsTheLexiconCannotWordKeepTheRecordersMessage(t *testing.T) {
 // passed, and like every other check, it keeps the recorder's detail.
 func TestAFailedPlayerHeardCheckSaysTheSilenceWarning(t *testing.T) {
 	for _, goos := range []string{"darwin", "windows", "linux"} {
-		failed := proto.Check{Name: proto.CheckPlayerHeard, Detail: "only silence from the player"}
+		failed := proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", Detail: "only silence from the player"}
 		if got, want := CheckDetail(failed, goos), WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureSilent}, goos); got != want {
 			t.Errorf("%s: %q, want %q", goos, got, want)
 		}
 	}
 	for _, c := range []proto.Check{
-		{Name: proto.CheckPlayerHeard, OK: true, Detail: "no silence heard"},
+		{ID: proto.CheckPlayerHeard, Name: "player heard", OK: true, Detail: "no silence heard"},
 		{Name: "ffmpeg found", Detail: "not on PATH"},
 	} {
 		if got := CheckDetail(c, "darwin"); got != c.Detail {

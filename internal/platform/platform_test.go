@@ -7,6 +7,7 @@ import (
 
 	"github.com/spytify/spytify/internal/fake"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/internal/ui/model"
 )
 
 // Every check has a name, and one that fails says what to fix: the Logs
@@ -63,5 +64,25 @@ func TestFakeBackends(t *testing.T) {
 	c.Close()
 	if checks := f.Probe(); len(checks) != 1 || !checks[0].OK || checks[0].Detail != "basic" {
 		t.Errorf("checks %+v", checks)
+	}
+}
+
+// The window words a check from its ID and Args (model.CheckName and
+// CheckDetail): it must read as the recorder's own name and detail, here
+// for the checks this system makes.
+func TestTheWindowWordsEachCheckAsTheRecorder(t *testing.T) {
+	checks := Backends{TapHelper: filepath.Join(t.TempDir(), "no-such-helper")}.Probe()
+	checks = append(checks, Fake{Timeline: &fake.Timeline{Name: "two tracks"}}.Probe()...)
+	checks = append(checks, ratesChecks()...)
+	for _, c := range checks {
+		if c.ID == "" {
+			t.Errorf("%q has no ID", c.Name)
+		}
+		if got := model.CheckDetail(c, runtime.GOOS); got != c.Detail {
+			t.Errorf("%s reads %q, the recorder says %q", c.ID, got, c.Detail)
+		}
+		if got := model.CheckName(c); c.OK && got != c.Name {
+			t.Errorf("a passing %s is named %q, the recorder says %q", c.ID, got, c.Name)
+		}
 	}
 }

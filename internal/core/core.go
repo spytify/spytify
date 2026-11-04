@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -334,22 +335,21 @@ func (c *Core) Info() proto.CoreInfoResult {
 	if runtime.GOOS == "linux" {
 		info.Target.MPRIS = joinNames(t.MPRISNames())
 	}
-	add := func(name string, ok bool, detail string) {
-		info.Checks = append(info.Checks, proto.Check{Name: name, OK: ok, Detail: detail})
+	add := func(id proto.CheckID, name string, ok bool, detail string, args ...string) {
+		info.Checks = append(info.Checks, proto.Check{ID: id, Name: name, OK: ok, Detail: detail, Args: args})
 	}
-	add("target configured", len(t.ProcessNames) > 0, "SPYTIFY_TARGET_PROCESS="+joinNames(t.ProcessNames))
-	p, running := c.find(t)
-	detail := "not running"
-	if running {
-		detail = fmt.Sprintf("pid %d", p.PID)
-	}
-	add(proto.CheckPlayerRunning, running, detail)
-	if c.ffErr != nil {
-		add("ffmpeg found", false, c.ffErr.Error())
+	add(proto.CheckTarget, "target configured", len(t.ProcessNames) > 0, "SPYTIFY_TARGET_PROCESS="+joinNames(t.ProcessNames), joinNames(t.ProcessNames))
+	if p, running := c.find(t); running {
+		add(proto.CheckPlayerRunning, "player running", true, fmt.Sprintf("pid %d", p.PID), strconv.Itoa(p.PID))
 	} else {
-		add("ffmpeg found", true, c.ffmpeg.Version)
+		add(proto.CheckPlayerRunning, "player running", false, "not running")
+	}
+	if c.ffErr != nil {
+		add(proto.CheckFFmpeg, "ffmpeg found", false, c.ffErr.Error())
+	} else {
+		add(proto.CheckFFmpeg, "ffmpeg found", true, c.ffmpeg.Version)
 		if preset, ok := encode.PresetFor(v.String(settings.EncodeFormat)); ok && preset.Encoder != "" && preset.Encoder != "flac" {
-			add("encoder "+preset.Encoder, c.ffmpeg.HasEncoder(preset.Encoder), "for encode.format="+preset.Format)
+			add(proto.CheckEncoder, "encoder "+preset.Encoder, c.ffmpeg.HasEncoder(preset.Encoder), "for encode.format="+preset.Format, preset.Encoder, preset.Format)
 		}
 	}
 	info.Checks = append(info.Checks, c.backends.Probe()...)
@@ -358,10 +358,10 @@ func (c *Core) Info() proto.CoreInfoResult {
 	err := outputWritable(dir)
 	facts := outputFacts(dir, err, v.String(settings.OutputDir) == settings.Defaults().String(settings.OutputDir))
 	if err != nil {
-		info.Checks = append(info.Checks, proto.Check{Name: proto.CheckOutputWritable, Detail: err.Error(), Facts: facts})
+		info.Checks = append(info.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: err.Error(), Facts: facts})
 		c.log.Infof("output folder not writable: %v (%s)", err, formatFacts(facts))
 	} else {
-		info.Checks = append(info.Checks, proto.Check{Name: proto.CheckOutputWritable, OK: true, Detail: dir, Facts: facts})
+		info.Checks = append(info.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", OK: true, Detail: dir, Facts: facts})
 	}
 	if c.crashed != "" {
 		info.Warnings = append(info.Warnings, c.crashed)

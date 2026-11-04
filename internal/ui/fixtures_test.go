@@ -54,10 +54,10 @@ func info() proto.CoreInfoResult {
 		Version: "v2.0.0-alpha", Protocol: proto.Protocol, Platform: "darwin/arm64",
 		Target: proto.TargetInfo{Process: "Player", BundleID: "org.example.player"},
 		Checks: []proto.Check{
-			{Name: "target configured", OK: true, Detail: "SPYTIFY_TARGET_PROCESS=Player"},
-			{Name: "player running", OK: true, Detail: "pid 4242"},
-			{Name: "ffmpeg found", OK: true, Detail: "ffmpeg version 9.0.2"},
-			{Name: "capture helper", OK: true, Detail: "/Applications/Spytify.app/Contents/MacOS/spytify-tap"},
+			{ID: proto.CheckTarget, Name: "target configured", OK: true, Detail: "SPYTIFY_TARGET_PROCESS=Player", Args: []string{"Player"}},
+			{ID: proto.CheckPlayerRunning, Name: "player running", OK: true, Detail: "pid 4242", Args: []string{"4242"}},
+			{ID: proto.CheckFFmpeg, Name: "ffmpeg found", OK: true, Detail: "ffmpeg version 9.0.2"},
+			{ID: proto.CheckHelper, Name: "capture helper", OK: true, Detail: "/Applications/Spytify.app/Contents/MacOS/spytify-tap", Args: []string{"/Applications/Spytify.app/Contents/MacOS/spytify-tap"}},
 		},
 		Warnings: []string{"turn crossfade and gapless playback off in the player"},
 	}
@@ -67,7 +67,7 @@ func info() proto.CoreInfoResult {
 // unplugged.
 func outputGone() proto.CoreInfoResult {
 	i := info()
-	i.Checks = append(i.Checks, proto.Check{Name: proto.CheckOutputWritable, OK: false, Detail: `mkdir L:\Music: The system cannot find the path specified.`})
+	i.Checks = append(i.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", OK: false, Detail: `mkdir L:\Music: The system cannot find the path specified.`})
 	return i
 }
 
@@ -308,7 +308,7 @@ func (c *recordingCore) handle(ctx context.Context, method string, params json.R
 		}
 		if silent {
 			i := info()
-			i.Checks = append(i.Checks, proto.Check{Name: proto.CheckPlayerHeard, Detail: "only silence from the capture while the player played"})
+			i.Checks = append(i.Checks, proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", Detail: "only silence from the capture while the player played"})
 			return i, nil
 		}
 		return info(), nil

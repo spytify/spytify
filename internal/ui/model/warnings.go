@@ -63,13 +63,3 @@ func WarningText(e proto.ErrorEvent, goos string) string {
 	}
 	return found + " " + advice
 }
-
-// CheckDetail is a check's detail as the window words it: the recorder's,
-// but for the player heard check, which fails with the only silence
-// warning's words.
-func CheckDetail(c proto.Check, goos string) string {
-	if c.Name == proto.CheckPlayerHeard && !c.OK {
-		return WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureSilent}, goos)
-	}
-	return c.Detail
-}

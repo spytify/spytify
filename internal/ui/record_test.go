@@ -463,7 +463,7 @@ func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	// It starts: the check follows the target's state, and the offer goes.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 99}))
 	a.render()
-	if all := texts(a.win.Content()); contains(all, fmt.Sprintf(lang.Open, "Player")) || !checkOK(m.Snapshot().Info.Checks, "player running") {
+	if all := texts(a.win.Content()); contains(all, fmt.Sprintf(lang.Open, "Player")) || !checkOK(m.Snapshot().Info.Checks, proto.CheckPlayerRunning) {
 		t.Errorf("player started: %v", all)
 	}
 	// Any other failing check sends the user to the diagnostics.
