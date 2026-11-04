@@ -2,8 +2,9 @@
 // written once under the name the code uses. A text with %s or %d takes its
 // values through fmt.Sprintf, in the order its comment gives.
 //
-// Not here: the settings' labels and notes, which settings.Table keeps by
-// their key; the facts the recorder sends, as a path, a version or an
+// The settings' labels, notes and choices are in settings.go, by their key.
+//
+// Not here: the facts the recorder sends, as a path, a version or an
 // error, which the window shows as they come, inside these texts when they
 // word them: the checks by their ID (model.CheckName, model.CheckDetail),
 // the recorder's warnings by their code (model.WarningText); and log
@@ -378,7 +379,8 @@ const (
 
 // Sizes, rates and formats. Separator joins a title and its artist, or
 // album, and a stream's badges; FormatBitrate takes a format, then its
-// bitrate.
+// bitrate; BitrateChoice a bitrate, then the megabytes a minute of it
+// takes, so an hour's cost shows before picking one.
 const (
 	SizeGB        = "%.1f GB"
 	SizeMB        = "%.1f MB"
@@ -386,6 +388,7 @@ const (
 	SizeB         = "%d B"
 	KHz           = "%s kHz"
 	FormatBitrate = "%s %v kbps"
+	BitrateChoice = "%d kbps · ~ %.1f MB/min"
 	Separator     = " · "
 )
 

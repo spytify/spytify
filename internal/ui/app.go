@@ -382,7 +382,7 @@ func (a *App) showOutputSetting() {
 	a.showTab(tabSettings)
 	if set, ok := a.screens[tabSettings].(*settingsScreen); ok {
 		d, _ := settings.Lookup(settings.OutputDir.String())
-		set.search.SetText(d.Label)
+		set.search.SetText(model.SettingWords(*d).Label)
 	}
 }
 

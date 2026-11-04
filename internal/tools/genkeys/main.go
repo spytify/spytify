@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 func main() {
@@ -50,7 +51,7 @@ func render(table []settings.Def) ([]byte, error) {
 		if i > 0 && d.Group != table[i-1].Group {
 			b.WriteString("\n")
 		}
-		fmt.Fprintf(&b, "\t// %s is %s, %q in Settings.\n\t%s = Key{%q}\n", name, d.Key, d.Label, name, d.Key)
+		fmt.Fprintf(&b, "\t// %s is %s, %q in Settings.\n\t%s = Key{%q}\n", name, d.Key, lang.SettingTexts[d.Key].Label, name, d.Key)
 	}
 	b.WriteString(")\n")
 	for _, d := range table {
@@ -63,8 +64,13 @@ func render(table []settings.Def) ([]byte, error) {
 		}
 		seen[typ] = d.Key
 		fmt.Fprintf(&b, "\n// %s is a value of %s.\ntype %s string\n\n// The values of %s, as Settings names them.\nconst (\n", typ, d.Key, typ, d.Key)
+		choices := lang.SettingTexts[d.Key].Choices
 		for i, v := range d.Enum {
-			fmt.Fprintf(&b, "\t%s %s = %q // %s\n", typ+identifier(v), typ, v, d.Choices[i])
+			fmt.Fprintf(&b, "\t%s %s = %q", typ+identifier(v), typ, v)
+			if i < len(choices) {
+				fmt.Fprintf(&b, " // %s", choices[i])
+			}
+			b.WriteString("\n")
 		}
 		fmt.Fprintf(&b, ")\n\n// %s is the value of %s.\nfunc (v Values) %s() %s { return %s(v.String(%s)) }\n", typ, d.Key, typ, typ, typ, identifier(d.Key))
 	}

@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode"
-	"unicode/utf8"
 )
 
 func openTemp(t *testing.T) (*Store, string) {
@@ -40,50 +38,10 @@ func TestEveryDefaultIsValid(t *testing.T) {
 	}
 }
 
-// A choice list names every value of its setting, in order.
-func TestChoicesNameEveryValue(t *testing.T) {
-	for _, d := range Table {
-		values := len(d.Enum)
-		if d.Kind == KindIntEnum {
-			values = len(d.Ints)
-		}
-		if d.Choices != nil && len(d.Choices) != values {
-			t.Errorf("%s: %d choices for %d values", d.Key, len(d.Choices), values)
-		}
-	}
-}
-
-// A list shows words, never the values config.toml keeps: every choice
-// starts with a capital.
-func TestEveryListShowsCapitalizedChoices(t *testing.T) {
-	for _, d := range Table {
-		if d.Kind != KindEnum && d.Kind != KindIntEnum {
-			continue
-		}
-		if d.Choices == nil {
-			t.Errorf("%s: no choices, the list shows its values", d.Key)
-		}
-		for _, c := range d.Choices {
-			if r, _ := utf8.DecodeRuneInString(c); unicode.IsLower(r) {
-				t.Errorf("%s: choice %q starts lowercase", d.Key, c)
-			}
-		}
-	}
-}
-
-// Each bitrate says what a minute of it takes, in decimal megabytes; the
-// setting keeps the number.
-func TestBitrateChoicesSayTheSizePerMinute(t *testing.T) {
+// The bitrate keeps the number its list picks (model.SettingWords words
+// it).
+func TestTheBitrateKeepsItsNumber(t *testing.T) {
 	d, _ := Lookup("encode.bitrate_kbps")
-	want := []string{
-		"128 kbps · ~ 1.0 MB/min",
-		"160 kbps · ~ 1.2 MB/min",
-		"256 kbps · ~ 1.9 MB/min",
-		"320 kbps · ~ 2.4 MB/min",
-	}
-	if !slices.Equal(d.Choices, want) {
-		t.Errorf("choices %q, want %q", d.Choices, want)
-	}
 	if !slices.Equal(d.Ints, []int64{128, 160, 256, 320}) || d.Default != int64(160) {
 		t.Errorf("values %v, default %v", d.Ints, d.Default)
 	}

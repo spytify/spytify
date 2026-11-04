@@ -57,7 +57,7 @@ func TestOtherScreensRender(t *testing.T) {
 			t.Errorf("%q shows on the settings screen", unwanted)
 		}
 	}
-	if g := groups(); g[0] != "App" {
+	if g := groups(); g[0] != "app" {
 		t.Errorf("sections %v: App is not first", g)
 	}
 	s := a.screens[tabSettings].(*settingsScreen)

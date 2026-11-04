@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/spytify/spytify/internal/settings"
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -58,7 +59,7 @@ func settingsPage() string {
 		}
 	}
 	for _, g := range groups {
-		fmt.Fprintf(&b, "\n### %s\n", g)
+		fmt.Fprintf(&b, "\n### %s\n", lang.SettingGroups[g])
 		for _, advanced := range []bool{false, true} {
 			var rows []settings.Def
 			for _, d := range settings.Table {
@@ -67,7 +68,7 @@ func settingsPage() string {
 				}
 			}
 			// The app folds the player under App's advanced settings.
-			player := advanced && g == "App"
+			player := advanced && g == "app"
 			if len(rows) == 0 && !player {
 				continue
 			}
@@ -82,12 +83,12 @@ func settingsPage() string {
 			}
 			b.WriteString("\n| Setting | Key | Values | Default |\n| --- | --- | --- | --- |\n")
 			for _, d := range rows {
-				fmt.Fprintf(&b, "| %s | `%s` | %s | %s |\n", cell(d.Label), d.Key, cell(values(d)), cell(defaultOf(d)))
+				fmt.Fprintf(&b, "| %s | `%s` | %s | %s |\n", cell(lang.SettingTexts[d.Key].Label), d.Key, cell(values(d)), cell(defaultOf(d)))
 			}
 			if advanced {
 				b.WriteString("\n")
 				for _, d := range rows {
-					fmt.Fprintf(&b, "- **%s**: %s\n", d.Label, explain(d.Key))
+					fmt.Fprintf(&b, "- **%s**: %s\n", lang.SettingTexts[d.Key].Label, explain(d.Key))
 				}
 			}
 		}
@@ -178,7 +179,7 @@ func values(d settings.Def) string {
 	case settings.KindDuration:
 		return "a duration such as 90m or 2h"
 	case settings.KindTemplate:
-		return d.Note
+		return lang.SettingTexts[d.Key].Note
 	}
 	return "text"
 }
