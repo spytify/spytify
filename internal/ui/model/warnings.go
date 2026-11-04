@@ -16,11 +16,11 @@ type warning struct {
 }
 
 // warnings are the recorder's warnings the lexicon words, by their code.
-var warnings = map[string]warning{
-	"capture_stalled":     {lang.NoAudio, perSystem(lang.NoAudioMacOS, lang.NoAudioWindows, lang.NoAudioLinux)},
-	"capture_silent":      {lang.OnlySilence, perSystem(lang.OnlySilenceMacOS, lang.OnlySilenceWindows, lang.OnlySilenceLinux)},
-	"capture_low_quality": {lang.PhoneCall, perSystem(lang.PhoneCallMacOS, lang.PhoneCallWindows, lang.PhoneCallLinux)},
-	"disk_full":           {found: lang.DiskFull},
+var warnings = map[proto.ErrorCode]warning{
+	proto.ErrorCaptureStalled:    {lang.NoAudio, perSystem(lang.NoAudioMacOS, lang.NoAudioWindows, lang.NoAudioLinux)},
+	proto.ErrorCaptureSilent:     {lang.OnlySilence, perSystem(lang.OnlySilenceMacOS, lang.OnlySilenceWindows, lang.OnlySilenceLinux)},
+	proto.ErrorCaptureLowQuality: {lang.PhoneCall, perSystem(lang.PhoneCallMacOS, lang.PhoneCallWindows, lang.PhoneCallLinux)},
+	proto.ErrorDiskFull:          {found: lang.DiskFull},
 }
 
 func perSystem(macOS, windows, linux string) map[string]string {
@@ -39,7 +39,7 @@ func WarningText(e proto.ErrorEvent, goos string) string {
 	}
 	found := w.found
 	switch e.Code {
-	case "capture_low_quality":
+	case proto.ErrorCaptureLowQuality:
 		if e.Source == nil {
 			return e.Msg
 		}
@@ -48,7 +48,7 @@ func WarningText(e proto.ErrorEvent, goos string) string {
 			rate = lang.DeviceRateMono
 		}
 		found = fmt.Sprintf(found, fmt.Sprintf(rate, float64(e.Source.SampleRate)/1000))
-	case "disk_full":
+	case proto.ErrorDiskFull:
 		if e.FreeMB == nil {
 			return e.Msg
 		}
@@ -69,7 +69,7 @@ func WarningText(e proto.ErrorEvent, goos string) string {
 // warning's words.
 func CheckDetail(c proto.Check, goos string) string {
 	if c.Name == proto.CheckPlayerHeard && !c.OK {
-		return WarningText(proto.ErrorEvent{Code: "capture_silent"}, goos)
+		return WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureSilent}, goos)
 	}
 	return c.Detail
 }

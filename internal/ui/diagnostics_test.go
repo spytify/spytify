@@ -170,7 +170,7 @@ func TestTheOutputFolderIsCheckedAgain(t *testing.T) {
 	eventually(t, "the checks did not run again for another folder", func() bool { return !failing() })
 	// The folder lost during a recording.
 	core.setNoOutput(true)
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: "the output folder cannot be reached, so the recording stopped"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorOutputDir, Msg: "the output folder cannot be reached, so the recording stopped"}))
 	eventually(t, "the checks did not run again for a folder lost while recording", failing)
 }
 
@@ -182,9 +182,9 @@ func TestOnlySilenceLeadsToThePlayerHeardCheck(t *testing.T) {
 	a, m, core := connectedApp(t)
 	feedSession(t, m)
 	failing := func() bool { return checkFails(m.Snapshot().Info.Checks, proto.CheckPlayerHeard) }
-	why := model.WarningText(proto.ErrorEvent{Code: "capture_silent"}, runtime.GOOS)
+	why := model.WarningText(proto.ErrorEvent{Code: proto.ErrorCaptureSilent}, runtime.GOOS)
 	core.setSilent(true)
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: "only silence from the capture for 10s while the player plays"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent, Msg: "only silence from the capture for 10s while the player plays"}))
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -120, RMSDBFS: -120}))
 	eventually(t, "the checks did not run again for the silence", failing)
 	a.render()
@@ -215,7 +215,7 @@ func TestOnlySilenceLeadsToThePlayerHeardCheck(t *testing.T) {
 
 	core.setSilent(false)
 	before := core.count(proto.MethodCoreInfo)
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent}))
 	eventually(t, "the checks did not run again for the sound", func() bool { return core.count(proto.MethodCoreInfo) > before && !failing() })
 	a.render()
 	if r.alertRow.Visible() {

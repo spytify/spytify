@@ -40,14 +40,14 @@ func (s *Session) onTick() {
 		s.stalled = true
 		msg := fmt.Sprintf("no audio from the capture for %s while the player plays", captureStall)
 		s.deps.log.Errorf("%s", msg)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: msg})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: msg})
 	}
 	// An ad may be silent, muted by the session or not.
 	if s.deps.watchSilence && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
 		s.silent = true
 		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureSilent)
 		s.deps.log.Errorf("%s", msg)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: msg})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent, Msg: msg})
 		if s.deps.silence != nil {
 			s.deps.silence(true)
 		}
@@ -69,7 +69,7 @@ func (s *Session) hear() {
 	if s.silent {
 		s.silent = false
 		s.deps.log.Infof("sound from the capture again")
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_silent"})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent})
 	}
 	if s.deps.silence != nil {
 		s.deps.silence(false)
@@ -91,10 +91,10 @@ func (s *Session) checkQuality(f pcm.Format) {
 	case low:
 		msg := fmt.Sprintf("the capture is %s: tracks will sound like a phone call", f)
 		s.deps.log.Errorf("%s", msg)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: msg, Source: &proto.AudioSource{SampleRate: f.Rate, Channels: f.Channels}})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality, Msg: msg, Source: &proto.AudioSource{SampleRate: f.Rate, Channels: f.Channels}})
 	case s.lowFormat:
 		s.deps.log.Infof("the capture is %s, fit for music again", f)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality})
 	}
 	s.lowFormat = low
 }

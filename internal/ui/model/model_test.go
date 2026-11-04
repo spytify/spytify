@@ -281,8 +281,8 @@ func TestSettingsLogsAndErrors(t *testing.T) {
 	if n := len(m.Snapshot().Logs); n != maxLogs {
 		t.Fatalf("%d log lines kept", n)
 	}
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
-	if e := m.Snapshot().LastError; e == nil || e.Code != "disk_full" {
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorDiskFull, Msg: "only 10 MB free"}))
+	if e := m.Snapshot().LastError; e == nil || e.Code != proto.ErrorDiskFull {
 		t.Fatalf("last error %+v", e)
 	}
 	m.Apply(ev(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 42}))
@@ -413,14 +413,14 @@ func TestClearRowsSurvivesAReplay(t *testing.T) {
 
 func TestAudioBackClearsTheNoAudioWarning(t *testing.T) {
 	m := New()
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "no audio"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: "no audio"}))
 	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{}))
 	if e := m.Snapshot().LastError; e != nil {
 		t.Fatalf("warning kept after audio came back: %+v", e)
 	}
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorDiskFull, Msg: "only 10 MB free"}))
 	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{}))
-	if e := m.Snapshot().LastError; e == nil || e.Code != "disk_full" {
+	if e := m.Snapshot().LastError; e == nil || e.Code != proto.ErrorDiskFull {
 		t.Fatalf("other errors must stay: %+v", e)
 	}
 }
@@ -430,18 +430,18 @@ func TestAudioBackClearsTheNoAudioWarning(t *testing.T) {
 func TestAGoodCaptureAgainClearsTheLowQualityWarning(t *testing.T) {
 	m := New()
 	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality", Msg: "16 kHz mono"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality, Msg: "16 kHz mono"}))
 	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{}))
-	if e := m.Snapshot().LastError; e == nil || e.Code != "capture_low_quality" {
+	if e := m.Snapshot().LastError; e == nil || e.Code != proto.ErrorCaptureLowQuality {
 		t.Fatalf("warning %+v", e)
 	}
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality}))
 	if e := m.Snapshot().LastError; e != nil {
 		t.Fatalf("warning kept with the capture fit again: %+v", e)
 	}
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
-	if e := m.Snapshot().LastError; e == nil || e.Code != "disk_full" || e.Msg != "only 10 MB free" {
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorDiskFull, Msg: "only 10 MB free"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality}))
+	if e := m.Snapshot().LastError; e == nil || e.Code != proto.ErrorDiskFull || e.Msg != "only 10 MB free" {
 		t.Fatalf("other errors must stay: %+v", e)
 	}
 }
@@ -452,12 +452,12 @@ func TestAGoodCaptureAgainClearsTheLowQualityWarning(t *testing.T) {
 func TestSoundAgainClearsTheSilenceWarning(t *testing.T) {
 	m := New()
 	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: "only silence"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent, Msg: "only silence"}))
 	m.Apply(ev(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -120, RMSDBFS: -120}))
-	if e := m.Snapshot().LastError; e == nil || e.Code != "capture_silent" {
+	if e := m.Snapshot().LastError; e == nil || e.Code != proto.ErrorCaptureSilent {
 		t.Fatalf("warning %+v", e)
 	}
-	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent}))
 	if e := m.Snapshot().LastError; e != nil {
 		t.Fatalf("warning kept with sound again: %+v", e)
 	}

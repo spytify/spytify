@@ -53,7 +53,7 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	s.makeRoom(int64(len(data) / ch.Format.FrameBytes()))
 	if lost := s.ring.Append(data); lost > 0 {
 		s.deps.fin.addOverruns(lost)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "ring_overflow", Msg: fmt.Sprintf("%d frames lost", lost)})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorRingOverflow, Msg: fmt.Sprintf("%d frames lost", lost)})
 		if s.cur != nil && !s.cur.ghost {
 			s.cur.partial = true
 		}
@@ -159,7 +159,7 @@ func (s *Session) write(c *segment, from, to int64) {
 			s.dropWriter(c)
 			c.reason = proto.SkipIncomplete
 			if !s.outputLost(err) {
-				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "write", Msg: err.Error()})
+				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorWrite, Msg: err.Error()})
 			}
 		}
 	}
@@ -273,7 +273,7 @@ func (s *Session) classify(seg *segment) {
 	if seg.reason == "" && !seg.ghost && !seg.provisional {
 		if free, ok := diskFree(v.Path(settings.OutputDir)); ok && free < minFreeBytes {
 			mb := int64(free / 1e6)
-			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: fmt.Sprintf("only %d MB free in the output folder", mb), FreeMB: &mb})
+			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorDiskFull, Msg: fmt.Sprintf("only %d MB free in the output folder", mb), FreeMB: &mb})
 			seg.reason = proto.SkipIncomplete
 			if v.Bool(settings.RecorderPauseOnDiskFull) {
 				go func() { _ = s.deps.control(proto.CmdPause) }()
@@ -285,7 +285,7 @@ func (s *Session) classify(seg *segment) {
 		if err != nil {
 			seg.reason = proto.SkipIncomplete
 			if !s.outputLost(err) {
-				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "temp_file", Msg: err.Error()})
+				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorTempFile, Msg: err.Error()})
 			}
 			return
 		}
@@ -313,7 +313,7 @@ func (s *Session) outputLost(err error) bool {
 	if _, gone := os.Stat(s.tmpDir); gone == nil {
 		return false
 	}
-	s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: "the output folder cannot be reached, so the recording stopped: " + err.Error()})
+	s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorOutputDir, Msg: "the output folder cannot be reached, so the recording stopped: " + err.Error()})
 	s.Stop(true)
 	return true
 }
@@ -375,7 +375,7 @@ func (s *Session) closeSegment(c *segment, end int64) {
 	}
 	path := c.w.Path()
 	if err := c.w.Close(); err != nil {
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "write", Msg: err.Error()})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorWrite, Msg: err.Error()})
 	}
 	c.w = nil
 	info := c.info

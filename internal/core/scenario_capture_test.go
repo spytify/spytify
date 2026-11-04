@@ -34,7 +34,7 @@ func directSession(t *testing.T) (*Session, *recorder) {
 		rec.add(method, json.RawMessage(raw))
 	}
 	fin := newFinisher(store.Values, ff, emit, log)
-	s := newSession("test", sessionDeps{values: store.Values, emit: emit, log: log, fin: fin, control: func(string) error { return nil }}, SessionOptions{EndOnStop: true})
+	s := newSession("test", sessionDeps{values: store.Values, emit: emit, log: log, fin: fin, control: func(proto.PlayerCmd) error { return nil }}, SessionOptions{EndOnStop: true})
 	return s, rec
 }
 
@@ -62,7 +62,7 @@ func TestNoAudioWhileThePlayerPlaysIsReported(t *testing.T) {
 	for {
 		for _, ev := range rec.all() {
 			var e proto.ErrorEvent
-			if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == "capture_stalled" {
+			if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == proto.ErrorCaptureStalled {
 				if e.Msg == "" {
 					t.Fatal("the warning says nothing")
 				}
@@ -81,7 +81,7 @@ func lowQuality(events []proto.Event) []proto.ErrorEvent {
 	var out []proto.ErrorEvent
 	for _, ev := range events {
 		var e proto.ErrorEvent
-		if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == "capture_low_quality" {
+		if ev.Method == proto.EventError && ev.Decode(&e) == nil && e.Code == proto.ErrorCaptureLowQuality {
 			out = append(out, e)
 		}
 	}

@@ -460,7 +460,7 @@ func (r *recordScreen) render(s model.State) {
 	// Only silence is said in a line: why, and what to do, is the player
 	// heard check's in the diagnostics. A recorder gone no longer warns.
 	warns := !gone && s.LastError != nil && s.LastError.Msg != "" && s.Recording()
-	silent := warns && s.LastError.Code == "capture_silent"
+	silent := warns && s.LastError.Code == proto.ErrorCaptureSilent
 	switch {
 	case silent:
 		setCaption(r.alert, fmt.Sprintf(lang.OnlySilenceHeard, player))

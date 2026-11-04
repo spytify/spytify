@@ -107,8 +107,8 @@ func newLogsScreen(a *App) *logsScreen {
 				ts = t.Format("15:04:05")
 			}
 			prefix := box.Objects[1].(*widget.Label)
-			prefix.SetText(ts + " " + padLevel(line.Level))
-			if line.Level == "error" {
+			prefix.SetText(ts + " " + padLevel(string(line.Level)))
+			if line.Level == proto.LogError {
 				prefix.Importance = widget.DangerImportance
 			} else {
 				prefix.Importance = widget.MediumImportance
@@ -124,7 +124,7 @@ func newLogsScreen(a *App) *logsScreen {
 		a.noteAction("copy the log")
 		var b strings.Builder
 		for _, line := range l.lines {
-			b.WriteString(line.TS + " " + line.Level + " " + line.Msg + "\n")
+			b.WriteString(line.TS + " " + string(line.Level) + " " + line.Msg + "\n")
 		}
 		a.fa.Clipboard().SetContent(b.String())
 	})
@@ -259,7 +259,7 @@ func (l *logsScreen) renderChecks(s model.State) {
 			start := newRowLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, l.app.StartDaemon)
 			fix = start.lit
 		}
-		if c.Name == "player running" && !c.OK {
+		if c.Name == proto.CheckPlayerRunning && !c.OK {
 			open := newRowLitButton(fmt.Sprintf(lang.Open, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
 			fix = open.lit
 		}
@@ -335,9 +335,9 @@ func (l *logsScreen) renderChecks(s model.State) {
 }
 
 func (l *logsScreen) filter() {
-	shown := map[string]bool{}
+	shown := map[proto.LogLevel]bool{}
 	for _, lv := range l.level.Selected {
-		shown[lv] = true
+		shown[proto.LogLevel(lv)] = true
 	}
 	var lines []proto.LogEvent
 	for i := len(l.all) - 1; i >= 0; i-- {
