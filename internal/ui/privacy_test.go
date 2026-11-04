@@ -88,7 +88,7 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 		Cut: &proto.TrackCut{Kind: "boundary", By: "silence", OffsetMs: -480}}))
 	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-1", Path: "/x.flac", Timings: &proto.FinishTimings{Format: "flac", EncodeMs: 900, TotalMs: 1000}}))
 	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-2", Reason: proto.SkipIncomplete}))
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "No audio"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: "No audio"}))
 	a.showTab(tabLogs)
 	failCheck(a, m)
 	if a.win.Canvas().Overlays().Top() != nil {
@@ -170,8 +170,8 @@ func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	failCheck(a, m)
 	tapButton(t, diagnostics(t, a), lang.RunChecksAgain)
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "disk_full", Msg: "only 10 MB free"}))
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_stalled", Msg: "No audio from the player for 10 s"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorDiskFull, Msg: "only 10 MB free"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: "No audio from the player for 10 s"}))
 	ev := srv.Wait(t, "event", 1)[0].JSON()
 	if ev["message"] != "blocked: capture_stalled" {
 		t.Errorf("problem %v", ev["message"])

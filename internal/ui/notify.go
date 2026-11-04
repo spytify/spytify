@@ -39,14 +39,14 @@ const (
 // stopCodes are the recorder's errors after which it ends the session on
 // its own: the disk is full, the output folder is gone, or the counter is
 // past its last number.
-var stopCodes = map[string]bool{"disk_full": true, "output_dir": true, "counter_full": true}
+var stopCodes = map[proto.ErrorCode]bool{proto.ErrorDiskFull: true, proto.ErrorOutputDir: true, proto.ErrorCounterFull: true}
 
 // warnTitles title the problems that leave a session running with nothing
 // worth keeping: tracks that sound like a phone call, or no audio at all.
-var warnTitles = map[string]string{
-	"capture_low_quality": lang.RecordingLowQuality,
-	"capture_stalled":     lang.NothingRecorded,
-	"capture_silent":      lang.NothingRecorded,
+var warnTitles = map[proto.ErrorCode]string{
+	proto.ErrorCaptureLowQuality: lang.RecordingLowQuality,
+	proto.ErrorCaptureStalled:    lang.NothingRecorded,
+	proto.ErrorCaptureSilent:     lang.NothingRecorded,
 }
 
 // notify tells, while the window is hidden in the tray, what would
@@ -108,7 +108,7 @@ func (a *App) recorderError(e proto.ErrorEvent) {
 	if !ok {
 		return
 	}
-	if e.Code == "capture_silent" {
+	if e.Code == proto.ErrorCaptureSilent {
 		// Why, and what to do, wait in the diagnostics.
 		msg = fmt.Sprintf(lang.OnlySilenceHeard, playerName(s.Info))
 	}

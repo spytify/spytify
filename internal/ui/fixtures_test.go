@@ -260,7 +260,7 @@ type recordingCore struct {
 	sets  []map[string]any
 	stops []proto.SessionStopParams
 	// controls are the player.control commands, in order.
-	controls []string
+	controls []proto.PlayerCmd
 	// noOutput is an output folder that cannot be written to: its check
 	// fails and no session starts.
 	noOutput bool

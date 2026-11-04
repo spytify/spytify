@@ -68,7 +68,7 @@ type rig struct {
 	fed      float64 // ms of audio handed to the session so far
 	trace    []string
 	jobs     []string
-	controls []string
+	controls []proto.PlayerCmd
 	levels   []proto.LevelEvent
 	take     string
 }
@@ -223,7 +223,7 @@ func (r *rig) note(format string, args ...any) {
 	r.mu.Unlock()
 }
 
-func (r *rig) control(cmd string) error {
+func (r *rig) control(cmd proto.PlayerCmd) error {
 	r.mu.Lock()
 	r.controls = append(r.controls, cmd)
 	r.mu.Unlock()
@@ -231,10 +231,10 @@ func (r *rig) control(cmd string) error {
 }
 
 // sent is the player.control commands the session sent, in order.
-func (r *rig) sent() []string {
+func (r *rig) sent() []proto.PlayerCmd {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]string(nil), r.controls...)
+	return append([]proto.PlayerCmd(nil), r.controls...)
 }
 
 func (r *rig) mute(on bool) error {

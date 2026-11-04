@@ -14,6 +14,7 @@ import (
 
 	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 // pollScript runs inside osascript as JavaScript for Automation. It polls
@@ -381,13 +382,13 @@ func (j *JXA) run(args ...string) (string, error) {
 }
 
 // Control sends a transport command through the player's dictionary.
-func (j *JXA) Control(cmd string) error {
-	method := map[string]string{"play": "play", "pause": "pause", "next": "nextTrack", "previous": "previousTrack", "restart": "restart"}[cmd]
+func (j *JXA) Control(cmd proto.PlayerCmd) error {
+	method := map[proto.PlayerCmd]string{proto.CmdPlay: "play", proto.CmdPause: "pause", proto.CmdNext: "nextTrack", proto.CmdPrevious: "previousTrack", proto.CmdRestart: "restart"}[cmd]
 	if method == "" {
 		return ErrUnsupported
 	}
 	out, err := j.run(method)
-	if err != nil || cmd != "restart" {
+	if err != nil || cmd != proto.CmdRestart {
 		return err
 	}
 	return restarted(out)

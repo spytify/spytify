@@ -321,7 +321,7 @@ type fyneStopHook interface {
 // playerRunning is the latest word on the player: the target.state events,
 // or core.info's check until the first one.
 func playerRunning(s model.State) bool {
-	return (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, "player running"))
+	return (s.TargetKnown && s.Target.Running) || (!s.TargetKnown && checkOK(s.Info.Checks, proto.CheckPlayerRunning))
 }
 
 // launchPlayer asks the recorder to open the player.
@@ -608,7 +608,7 @@ func failingChecks(checks []proto.Check) int {
 // the player's, which the app bar already shows, nor advice, which only
 // lowers quality.
 func needsAttention(c proto.Check) bool {
-	return !c.OK && !c.Advice && c.Name != "player running"
+	return !c.OK && !c.Advice && c.Name != proto.CheckPlayerRunning
 }
 
 // checkFails says whether the check named name is there and fails: a
@@ -695,7 +695,7 @@ func (a *App) recheck(ev proto.Event) {
 	switch ev.Method {
 	case proto.EventError:
 		var e proto.ErrorEvent
-		if ev.Decode(&e) != nil || (e.Code != "output_dir" && e.Code != "capture_silent") {
+		if ev.Decode(&e) != nil || (e.Code != proto.ErrorOutputDir && e.Code != proto.ErrorCaptureSilent) {
 			return
 		}
 	case proto.EventSettingsChanged:

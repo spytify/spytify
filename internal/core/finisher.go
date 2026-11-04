@@ -280,7 +280,7 @@ func (f *finisher) complete(t *take) bool {
 		return false
 	}
 	if err != nil {
-		f.fail(t.finishJob, "read", err)
+		f.fail(t.finishJob, proto.ErrorRead, err)
 		return false
 	}
 	if !heard {
@@ -373,7 +373,7 @@ func (f *finisher) takeNumber(t *take) bool {
 	}
 	t.counter = t.v.Int(settings.OutputCounterNext)
 	if limit := naming.CounterLimit(t.o.CounterWidth); t.counter > limit {
-		f.fail(t.finishJob, "counter_full", fmt.Errorf("the counter is past %d, the last number of %d digits: raise Counter digits or set Next counter number back", limit, t.o.CounterWidth))
+		f.fail(t.finishJob, proto.ErrorCounterFull, fmt.Errorf("the counter is past %d, the last number of %d digits: raise Counter digits or set Next counter number back", limit, t.o.CounterWidth))
 		if f.full != nil {
 			f.full()
 		}
@@ -399,7 +399,7 @@ func (f *finisher) pickName(t *take) bool {
 	root := t.v.Path(settings.OutputDir)
 	dir := filepath.Join(root, plan.Dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		f.fail(t.finishJob, "output_dir", err)
+		f.fail(t.finishJob, proto.ErrorOutputDir, err)
 		return false
 	}
 	name := naming.FileName(plan, t.o, t.counter, t.tags.Track)
@@ -440,7 +440,7 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 	t.timings.EncodeMs = msSince(step)
 	if err != nil {
 		os.Remove(t.part)
-		f.fail(t.finishJob, "encode", err)
+		f.fail(t.finishJob, proto.ErrorEncode, err)
 		return false
 	}
 	if short != nil {
@@ -477,7 +477,7 @@ func (f *finisher) save(t *take) {
 	}
 	if err := os.Rename(t.part, t.final); err != nil {
 		os.Remove(t.part)
-		f.fail(t.finishJob, "rename", err)
+		f.fail(t.finishJob, proto.ErrorRename, err)
 		return
 	}
 	var size int64
@@ -516,14 +516,14 @@ func (f *finisher) save(t *take) {
 	})
 }
 
-func (f *finisher) fail(j finishJob, code string, err error) {
+func (f *finisher) fail(j finishJob, code proto.ErrorCode, err error) {
 	f.log.Errorf("%q: %s: %v", j.info.Title, code, err)
 	msg := fmt.Sprintf("%s: %v", j.info.Title, err)
 	// Only once a file failed is the output folder looked at: gone with
 	// its drive, nothing more can be saved, and the recording stops.
 	lost := false
 	if _, gone := os.Stat(f.values().Path(settings.OutputDir)); gone != nil {
-		code, msg, lost = "output_dir", "the output folder cannot be reached, so the recording stopped: "+msg, true
+		code, msg, lost = proto.ErrorOutputDir, "the output folder cannot be reached, so the recording stopped: "+msg, true
 	}
 	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg})
 	f.skip(j.id, proto.SkipIncomplete)

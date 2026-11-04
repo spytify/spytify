@@ -295,7 +295,7 @@ func TestRecordScreenOffersKeepAnyway(t *testing.T) {
 func TestASilentTakeSaysSo(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_silent", Msg: "only silence from the capture for 10s while the player plays"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent, Msg: "only silence from the capture for 10s while the player plays"}))
 	m.Apply(event(t, proto.EventTrackSkipped, proto.TrackSkippedEvent{ID: "s-004", Reason: proto.SkipSilent}))
 	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-005", Artist: "M83", Title: "Outro", Album: "Hurry Up, We're Dreaming", LengthMs: 247000, CoverURL: generatedCover(t, 5)}}))
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -120, RMSDBFS: -120,
@@ -426,7 +426,7 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	eventually(t, "player.control did not send play alone", func() bool {
 		core.mu.Lock()
 		defer core.mu.Unlock()
-		return slices.Equal(core.controls, []string{proto.CmdPlay})
+		return slices.Equal(core.controls, []proto.PlayerCmd{proto.CmdPlay})
 	})
 
 	// It plays the track it was on, which started before the session.
@@ -626,7 +626,7 @@ func TestRecordIsOffWithoutAnOutputFolder(t *testing.T) {
 func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
 	a, m := connectedTestApp(t, defaults())
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateWaiting}))
-	low := proto.ErrorEvent{Code: "capture_low_quality", Msg: "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call", Source: &proto.AudioSource{SampleRate: 16000, Channels: 1}}
+	low := proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality, Msg: "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call", Source: &proto.AudioSource{SampleRate: 16000, Channels: 1}}
 	msg := model.WarningText(low, runtime.GOOS)
 	m.Apply(event(t, proto.EventError, low))
 	a.render()
@@ -634,7 +634,7 @@ func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
 	if !r.alertRow.Visible() || r.alert.String() != msg {
 		t.Fatalf("alert shown %v, text %q", r.alertRow.Visible(), r.alert.String())
 	}
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality}))
 	a.render()
 	if r.alertRow.Visible() {
 		t.Fatalf("alert still shows %q with the device fit again", r.alert.String())
@@ -648,7 +648,7 @@ func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
 func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
 	feedSession(t, m)
-	low := proto.ErrorEvent{Code: "capture_low_quality", Msg: "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call", Source: &proto.AudioSource{SampleRate: 16000, Channels: 1}}
+	low := proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality, Msg: "the capture is s16le 16000 Hz 1ch: tracks will sound like a phone call", Source: &proto.AudioSource{SampleRate: 16000, Channels: 1}}
 	msg := model.WarningText(low, runtime.GOOS)
 	m.Apply(event(t, proto.EventError, low))
 	a.render()
@@ -681,7 +681,7 @@ func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 		t.Fatalf("alert still shows %q with spytifyd gone", r.alert.String())
 	}
 	m.SetConn(model.Connected, "")
-	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: "capture_low_quality"}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureLowQuality}))
 	a.render()
 	if r.alertRow.Visible() {
 		t.Fatalf("alert still shows %q with the device fit again", r.alert.String())

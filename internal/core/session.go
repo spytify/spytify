@@ -81,7 +81,7 @@ type sessionDeps struct {
 	emit    func(method string, payload any)
 	log     *Logger
 	fin     *finisher
-	control func(cmd string) error
+	control func(cmd proto.PlayerCmd) error
 	// mute silences the player (true) or gives it back its volume.
 	mute func(on bool) error
 	// watchSilence makes the session warn of a capture that delivers only
@@ -278,7 +278,7 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 	v := s.deps.values()
 	s.tmpDir = filepath.Join(v.Path(settings.OutputDir), ".spytify")
 	if err := os.MkdirAll(s.tmpDir, 0o755); err != nil {
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: "output_dir", Msg: err.Error(), Fatal: true})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorOutputDir, Msg: err.Error(), Fatal: true})
 		s.done = true
 	}
 	// Clients learn that a session runs from this first transition.

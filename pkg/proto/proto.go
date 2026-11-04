@@ -79,15 +79,17 @@ const (
 	SkipSilent SkipReason = "silent"
 )
 
-// Player transport commands accepted by player.control.
+// PlayerCmd is a player transport command, for player.control.
+type PlayerCmd string
+
 const (
-	CmdPlay     = "play"
-	CmdPause    = "pause"
-	CmdNext     = "next"
-	CmdPrevious = "previous"
+	CmdPlay     PlayerCmd = "play"
+	CmdPause    PlayerCmd = "pause"
+	CmdNext     PlayerCmd = "next"
+	CmdPrevious PlayerCmd = "previous"
 	// CmdRestart plays the current track again from its beginning, so a
 	// session started in the middle of it can record it whole.
-	CmdRestart = "restart"
+	CmdRestart PlayerCmd = "restart"
 )
 
 // TargetInfo is the resolved SPYTIFY_TARGET_* configuration.
@@ -119,6 +121,9 @@ const CheckOutputWritable = "output folder writable"
 // system's mixer, or, on macOS, a refused System Audio Recording
 // permission.
 const CheckPlayerHeard = "player heard"
+
+// CheckPlayerRunning is the check that the player runs.
+const CheckPlayerRunning = "player running"
 
 type CoreInfoResult struct {
 	Version  string     `json:"version"`
@@ -197,7 +202,7 @@ type SettingsResetParams struct {
 }
 
 type PlayerControlParams struct {
-	Cmd string `json:"cmd"`
+	Cmd PlayerCmd `json:"cmd"`
 }
 
 type LogTailParams struct {
@@ -328,17 +333,52 @@ type TargetStateEvent struct {
 	PID     int  `json:"pid,omitempty"`
 }
 
+// LogLevel is a log line's level.
+type LogLevel string
+
+const (
+	LogError LogLevel = "error"
+	LogInfo  LogLevel = "info"
+	LogDebug LogLevel = "debug"
+)
+
 type LogEvent struct {
-	Level string `json:"level"`
-	Msg   string `json:"msg"`
-	TS    string `json:"ts"`
+	Level LogLevel `json:"level"`
+	Msg   string   `json:"msg"`
+	TS    string   `json:"ts"`
 }
+
+// ErrorCode names a failure or a warning.
+type ErrorCode string
+
+const (
+	// ErrorOutputDir is an output folder that cannot be written to, or
+	// that went away during a session, which stops it.
+	ErrorOutputDir    ErrorCode = "output_dir"
+	ErrorDiskFull     ErrorCode = "disk_full"
+	ErrorTempFile     ErrorCode = "temp_file"
+	ErrorWrite        ErrorCode = "write"
+	ErrorRingOverflow ErrorCode = "ring_overflow"
+	// ErrorCaptureStalled is no audio from the capture while the player
+	// plays.
+	ErrorCaptureStalled ErrorCode = "capture_stalled"
+	// ErrorCaptureSilent is only silence from the capture while the
+	// player plays. Sent again with no Msg, it withdraws the warning, as
+	// ErrorCaptureLowQuality does.
+	ErrorCaptureSilent     ErrorCode = "capture_silent"
+	ErrorCaptureLowQuality ErrorCode = "capture_low_quality"
+	// A track's file failed on its way to the output folder.
+	ErrorRead        ErrorCode = "read"
+	ErrorEncode      ErrorCode = "encode"
+	ErrorRename      ErrorCode = "rename"
+	ErrorCounterFull ErrorCode = "counter_full"
+)
 
 // ErrorEvent is a failure or a warning, by its code. Msg is what the
 // recorder found, in English, for the log and the bug tracker; the window
 // words its known codes itself, from the code and the facts that follow.
 type ErrorEvent struct {
-	Code  string `json:"code"`
+	Code  ErrorCode `json:"code"`
 	Msg   string `json:"msg"`
 	Fatal bool   `json:"fatal"`
 	// Source is the capture's format, for capture_low_quality.
