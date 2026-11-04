@@ -5,6 +5,26 @@ import (
 	"github.com/spytify/spytify/internal/pcm"
 )
 
+const (
+	// A notification may come this late after the audio changed; windows
+	// and the drain hold-back cover it.
+	lateNotifyMs = 1000
+	// A notification this much earlier than the expected end is a skip or
+	// a seek, not jitter.
+	earlySlackMs   = 1000
+	earlyNotifyMs  = 300
+	startTimeoutMs = 2000
+	frameMs        = 20
+	stepMs         = 5
+	blockMs        = 5
+	// A window this many dB under the median of the search window is a
+	// boundary even when it is not silent.
+	dipDB = 15
+	// After a skip, the next track starts where the peak level of 1 ms
+	// windows drops this far under its median.
+	skipDipDB = 20
+)
+
 type changeKind int
 
 const (
