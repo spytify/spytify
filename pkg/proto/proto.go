@@ -379,8 +379,8 @@ const (
 // words its known codes itself, from the code and the facts that follow.
 type ErrorEvent struct {
 	Code  ErrorCode `json:"code"`
-	Msg   string `json:"msg"`
-	Fatal bool   `json:"fatal"`
+	Msg   string    `json:"msg"`
+	Fatal bool      `json:"fatal"`
 	// Source is the capture's format, for capture_low_quality.
 	Source *AudioSource `json:"source,omitempty"`
 	// FreeMB is the space left in the output folder, in millions of bytes,
