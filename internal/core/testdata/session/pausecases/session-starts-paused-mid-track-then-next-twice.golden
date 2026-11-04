@@ -1,0 +1,28 @@
+# pausecases/session-starts-paused-mid-track-then-next-twice
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=1000 (ring at -)
+       0ms  > player Paused pos=-1 (ring at 0)
+       0ms  log info: "A" is already playing; recording starts with the next track
+       0ms  state paused
+       0ms  take t-pre "A" start=0(0ms) length=88200(2000ms) ghost
+       0ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 0)
+       0ms  > player TrackChanged "C" id=/x/c length=3000ms pos=0 (ring at 0)
+       0ms  > player Playing pos=-1 (ring at 0)
+       0ms  state waiting
+       0ms  > audio music 3 at 0ms, 132300(3000ms)
+     320ms  log debug: cut for "C" at 0 ms (kind 2, noticed at 0 ms, window 0..300 ms)
+     320ms  started t-001 "C" artist="Artist" album="Album" length=3000ms cut=interrupt/edge offset=0ms source=44100/2
+     320ms  state recording
+     320ms  take t-001 "C" start=1(0.02ms) length=132300(3000ms)
+    3000ms  > audio silence, 66150(1500ms)
+    4500ms  > player Stopped pos=-1 (ring at 198450)
+    4500ms  state waiting
+    4500ms  state stopping
+    4500ms  state idle
+    4500ms  take none
+--- jobs
+job t-001 "C" played=132772(3010.7ms) length=132300(3000ms) wav=132772 crc=c30ad306
+--- end: idle, 0 skipped, 0 ads, 0 overruns

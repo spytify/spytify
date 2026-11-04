@@ -70,7 +70,7 @@ func TestPlanPlacesTheSearchWindow(t *testing.T) {
 		{"first, the ring holding less than 1 s", nil, 500, false, false, changeFirst, 0, 0, ms(500), 0, false},
 		{"natural end", takeFrom(f, 0, 2000), 1900, true, false, changeBoundary, ms(1700), ms(2300), ms(2000), ms(2300) + ms(frameMs)/2 + 1, false},
 		{"natural end, named early", takeFrom(f, 0, 2000), 1500, false, false, changeBoundary, ms(1700), ms(2300), ms(2000), ms(2300) + ms(frameMs)/2 + 1, false},
-		{"the same, paused", takeFrom(f, 0, 2000), 1500, false, true, changeInterrupt, ms(500), ms(1800), ms(1500), ms(1800) + ms(frameMs)/2 + 1, false},
+		{"the same, paused", takeFrom(f, 0, 2000), 1500, false, true, changeInterrupt, ms(1500), ms(1800), ms(1500), ms(1800) + ms(frameMs)/2 + 1, false},
 		{"natural end, paused", takeFrom(f, 0, 2000), 1900, false, true, changeBoundary, ms(1700), ms(2300), ms(2000), ms(2300) + ms(frameMs)/2 + 1, false},
 		{"skip", takeFrom(f, 0, 2800), 1000, false, false, changeInterrupt, 1, ms(1300), ms(1000), ms(1300) + ms(frameMs)/2 + 1, false},
 		{"skip, the same track again", takeFrom(f, 0, 2800), 1000, true, false, changeInterrupt, 1, ms(1300), ms(1000), ms(1300) + ms(frameMs)/2 + 1, true},

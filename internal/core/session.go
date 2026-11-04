@@ -766,6 +766,16 @@ func (s *Session) onTrack(info meta.TrackInfo, at int64, restart bool) {
 		s.pend.info = info
 		return
 	}
+	// A change still pending that no sound followed never played, as the
+	// first of two Next pressed while paused: it leaves no take, and this
+	// change is planned from the take before it. Back to that take's own
+	// item by way of another, the player starts it over.
+	if s.pend != nil && at <= s.pend.at {
+		s.pend = nil
+		if c := s.cur; c != nil && sameItem(c.info, info) {
+			restart = true
+		}
+	}
 	if !restart {
 		if c := s.cur; c != nil && s.pend == nil && sameItem(c.info, info) {
 			if c.provisional {
