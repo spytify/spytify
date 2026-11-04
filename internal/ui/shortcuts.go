@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"reflect"
 	"runtime"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
+	"github.com/spytify/spytify/internal/ui/lang"
 )
 
 // The shortcuts take the system's shortcut key, Cmd on macOS and Ctrl
@@ -39,7 +41,7 @@ func shortcutFor(key fyne.KeyName) *desktop.CustomShortcut {
 // (⌘R)" on macOS, "Record (Ctrl+R)" elsewhere. It writes the shortcut the
 // key is bound with, so the two cannot differ.
 func shortcutTip(name string, key fyne.KeyName) string {
-	return name + " (" + keyLabel(runtime.GOOS == "darwin", shortcutFor(key)) + ")"
+	return fmt.Sprintf(lang.ShortcutTip, name, keyLabel(runtime.GOOS == "darwin", shortcutFor(key)))
 }
 
 // keyLabel writes s as Fyne's menus do: on a Mac, the modifiers' symbols
@@ -50,10 +52,10 @@ func keyLabel(mac bool, s *desktop.CustomShortcut) string {
 		mod        fyne.KeyModifier
 		mac, other string
 	}{
-		{fyne.KeyModifierControl, "⌃", "Ctrl+"},
-		{fyne.KeyModifierAlt, "⌥", "Alt+"},
-		{fyne.KeyModifierShift, "⇧", "Shift+"},
-		{fyne.KeyModifierSuper, "⌘", "Super+"},
+		{fyne.KeyModifierControl, "⌃", lang.KeyCtrl + "+"},
+		{fyne.KeyModifierAlt, "⌥", lang.KeyAlt + "+"},
+		{fyne.KeyModifierShift, "⇧", lang.KeyShift + "+"},
+		{fyne.KeyModifierSuper, "⌘", lang.KeySuper + "+"},
 	} {
 		switch {
 		case s.Modifier&m.mod == 0:

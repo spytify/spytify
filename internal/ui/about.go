@@ -69,7 +69,7 @@ func (s *aboutScreen) checkNow() {
 		fyne.Do(func() {
 			switch {
 			case err != nil:
-				s.app.showError(fmt.Errorf("update check: %w", err))
+				s.app.showError(fmt.Errorf(lang.UpdateCheckFailed, err))
 			case tag != "" && newer(tag, proto.Version):
 				ask(s.app.win, lang.UpdateAvailable, fmt.Sprintf(lang.UpdateAvailableText, tag), func(ok bool) {
 					if ok {

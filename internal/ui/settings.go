@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -108,6 +109,10 @@ func matches(q string, d settings.Def) bool {
 		strings.Contains(strings.ToLower(strings.Join(d.Choices, " ")), q)
 }
 
+// playerWords are the player card's labels, which the search matches as
+// it matches a setting's.
+var playerWords = strings.ToLower(strings.Join([]string{lang.PlayerProcess, lang.BundleID, lang.MPRISName, lang.LaunchCommand}, " "))
+
 func (s *settingsScreen) layout() {
 	q := strings.ToLower(strings.TrimSpace(s.search.Text))
 	// Remember what the user opened, not what a search opened.
@@ -133,7 +138,7 @@ func (s *settingsScreen) layout() {
 			}
 			keys = append(keys, d.Key)
 		}
-		player := g == "App" && (q == "" || strings.Contains("player process bundle mpris launch", q))
+		player := g == "App" && (q == "" || strings.Contains(playerWords, q))
 		if len(keys) == 0 && !player {
 			continue
 		}
@@ -636,7 +641,7 @@ func (p *playerCard) save() {
 		"SPYTIFY_TARGET_LAUNCH":    p.launch.Text,
 	}
 	if strings.TrimSpace(values["SPYTIFY_TARGET_PROCESS"]) == "" {
-		p.app.showError(fmt.Errorf("the player process name is required"))
+		p.app.showError(errors.New(lang.PlayerRequired))
 		return
 	}
 	p.app.noteAction("save the player")

@@ -42,6 +42,19 @@ const (
 	Player             = "Player"
 )
 
+// The connection to the recorder, and why it failed. NoRecorder takes the
+// recorder's file name; RecorderStopped the last line it wrote.
+const (
+	NotConnectedToRecorder = "not connected to spytifyd"
+	InArchive              = "Spytify runs from inside the downloaded archive, without the recorder next to it. Extract the whole archive to a folder, then start Spytify from there."
+	NoRecorder             = "%s, the recorder, is not next to Spytify. Extract the whole download again and start Spytify from there; if it is still missing, an antivirus may have removed it."
+	RecorderDown           = "spytifyd is not running"
+	RecorderClosed         = "spytifyd closed the connection"
+	RecorderOtherProtocol  = "spytifyd speaks another protocol version; update the UI or the daemon"
+	RecorderStopped        = "spytifyd stopped: %s"
+	RecorderNoAnswer       = "spytifyd started but does not answer; see its log in Logs"
+)
+
 // The Record screen. ReadyText takes the player, then the output folder.
 const (
 	ReadyToRecord             = "Ready to record"
@@ -176,11 +189,18 @@ const (
 	RestartRecorder     = "Restart spytifyd"
 	RestartRecorderAsk  = "Restart spytifyd?"
 	RestartStopsSession = "A session is recording; restarting stops it now."
+	PlayerRequired      = "the player process name is required"
 )
 
-// Logs and the diagnostics. NotRunning and PID are the player running
-// check's detail, kept current between two runs of the checks.
+// Logs and the diagnostics. LevelError, LevelInfo and LevelDebug are the
+// log's filter; RecorderRunning is the window's own check, that the
+// recorder answers. NotRunning and PID are the player running check's
+// detail, kept current between two runs of the checks.
 const (
+	LevelError          = "error"
+	LevelInfo           = "info"
+	LevelDebug          = "debug"
+	RecorderRunning     = "spytifyd running"
 	Show                = "Show"
 	Copy                = "Copy"
 	OpenLogFile         = "Open log file"
@@ -245,6 +265,8 @@ const (
 	UpdateAvailableText  = "Spytify %s is out. Open the release page?"
 	UpToDate             = "Up to date"
 	UpToDateText         = "Spytify %s is the latest version."
+	UpdateCheckFailed    = "update check: %w"
+	GitHubAnswered       = "GitHub answered %s"
 	Disclaimer           = "For personal use of content you are entitled to listen to; you are responsible for the terms of the services you record."
 )
 
@@ -298,9 +320,34 @@ const (
 	OpenWindow          = "Open window"
 )
 
-// The message when no graphics driver offers OpenGL, then what to do on
-// Linux or Windows; on Linux, the one when no display answers.
+// A shortcut's tooltip: what the key does, then the key, with the names of
+// its modifiers outside macOS, which shows their symbols.
 const (
+	ShortcutTip = "%s (%s)"
+	KeyCtrl     = "Ctrl"
+	KeyAlt      = "Alt"
+	KeyShift    = "Shift"
+	KeySuper    = "Super"
+)
+
+// Sizes, rates and formats. Separator joins a title and its artist, or
+// album, and a stream's badges; FormatBitrate takes a format, then its
+// bitrate.
+const (
+	SizeGB        = "%.1f GB"
+	SizeMB        = "%.1f MB"
+	SizeKB        = "%.0f kB"
+	SizeB         = "%d B"
+	KHz           = "%s kHz"
+	FormatBitrate = "%s %v kbps"
+	Separator     = " · "
+)
+
+// The message when no graphics driver offers OpenGL, then what to do on
+// Linux or Windows; on Linux, the one when no display answers. WithError
+// adds the error that stopped it to a message.
+const (
+	WithError     = "%s\n\n(%s)"
 	NoDisplay     = "Spytify can't open its window: no display answers. Open it from your desktop session, not over SSH or from a text console."
 	NoWindow      = "Spytify can't open its window. It draws it with OpenGL, and no graphics driver on this computer offers it."
 	NoWindowLinux = "Install Mesa's OpenGL drivers, which draw with the graphics card or, without one, with the processor, then open Spytify again:\n" +
