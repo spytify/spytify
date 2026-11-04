@@ -348,9 +348,9 @@ func TestPinnedPauseCases(t *testing.T) {
 		},
 		// A's audio ends 500 ms before its declared end, B is named 300 ms
 		// later, and the player pauses while B's cut is still searched: the
-		// pause cuts back no earlier than where B's search starts. Today's
-		// behavior, which looks odd: the silence the search needed is cut
-		// with the pause, and B's first 300 ms go to A.
+		// pause cuts back no earlier than a frame into B's search, which
+		// finds the cut in that frame of silence: A ends with its own
+		// audio, and B starts at its first sound, whole.
 		"paused-while-the-next-cut-is-searched": func(r *rig) {
 			r.status(meta.Playing)
 			r.track(a, 0)

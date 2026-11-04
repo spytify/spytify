@@ -405,8 +405,14 @@ func (s *Session) pauseFloor() int64 {
 	if c := s.cur; c != nil {
 		floor = maxInt(floor, maxInt(c.drained, c.start))
 	}
-	if s.pend != nil {
-		floor = maxInt(floor, s.pend.lo)
+	if p := s.pend; p != nil {
+		floor = maxInt(floor, p.lo)
+		if p.kind != changeFirst {
+			// A frame of the silence a pause runs into is left at the
+			// start of the search: it was the gap between the two
+			// tracks, and the search finds the cut in it.
+			floor = maxInt(floor, p.lo+s.frame)
+		}
 	}
 	return maxInt(floor, r.Start())
 }
