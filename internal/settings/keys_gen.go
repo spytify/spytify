@@ -82,3 +82,97 @@ var (
 	// PrivacyBugTracker is privacy.bug_tracker, "Sentry bug tracker: send crashes, errors, traces and recording counts" in Settings.
 	PrivacyBugTracker = Key{"privacy.bug_tracker"}
 )
+
+// Theme is a value of app.theme.
+type Theme string
+
+// The values of app.theme, as Settings names them.
+const (
+	ThemeSystem Theme = "system" // System
+	ThemeLight  Theme = "light"  // Light
+	ThemeDark   Theme = "dark"   // Dark
+)
+
+// Theme is the value of app.theme.
+func (v Values) Theme() Theme { return Theme(v.String(AppTheme)) }
+
+// Notifications is a value of app.notifications.
+type Notifications string
+
+// The values of app.notifications, as Settings names them.
+const (
+	NotificationsProblems Notifications = "problems" // Problems only
+	NotificationsTracks   Notifications = "tracks"   // Every saved track
+	NotificationsOff      Notifications = "off"      // Off
+)
+
+// Notifications is the value of app.notifications.
+func (v Values) Notifications() Notifications { return Notifications(v.String(AppNotifications)) }
+
+// GroupBy is a value of output.group_by.
+type GroupBy string
+
+// The values of output.group_by, as Settings names them.
+const (
+	GroupByNone         GroupBy = "none"          // No folders
+	GroupByArtist       GroupBy = "artist"        // Main artist
+	GroupByArtistAlbum  GroupBy = "artist/album"  // Main artist / Album
+	GroupByArtists      GroupBy = "artists"       // All artists
+	GroupByArtistsAlbum GroupBy = "artists/album" // All artists / Album
+)
+
+// GroupBy is the value of output.group_by.
+func (v Values) GroupBy() GroupBy { return GroupBy(v.String(OutputGroupBy)) }
+
+// Prefix is a value of output.prefix.
+type Prefix string
+
+// The values of output.prefix, as Settings names them.
+const (
+	PrefixNone       Prefix = "none"        // None
+	PrefixCounter    Prefix = "counter"     // Counter (001)
+	PrefixAlbumTrack Prefix = "album_track" // Album track number (04)
+)
+
+// Prefix is the value of output.prefix.
+func (v Values) Prefix() Prefix { return Prefix(v.String(OutputPrefix)) }
+
+// Format is a value of encode.format.
+type Format string
+
+// The values of encode.format, as Settings names them.
+const (
+	FormatMp3  Format = "mp3"  // MP3
+	FormatAac  Format = "aac"  // AAC
+	FormatFlac Format = "flac" // FLAC
+	FormatWav  Format = "wav"  // WAV
+)
+
+// Format is the value of encode.format.
+func (v Values) Format() Format { return Format(v.String(EncodeFormat)) }
+
+// CoverSize is a value of tags.cover_size.
+type CoverSize string
+
+// The values of tags.cover_size, as Settings names them.
+const (
+	CoverSizeSmall  CoverSize = "small"  // Small (300 px)
+	CoverSizeMedium CoverSize = "medium" // Medium (640 px)
+	CoverSizeLarge  CoverSize = "large"  // Large (as it comes)
+)
+
+// CoverSize is the value of tags.cover_size.
+func (v Values) CoverSize() CoverSize { return CoverSize(v.String(TagsCoverSize)) }
+
+// Duplicates is a value of recorder.duplicates.
+type Duplicates string
+
+// The values of recorder.duplicates, as Settings names them.
+const (
+	DuplicatesSkip      Duplicates = "skip"      // Skip
+	DuplicatesSuffix    Duplicates = "suffix"    // Suffix
+	DuplicatesOverwrite Duplicates = "overwrite" // Overwrite
+)
+
+// Duplicates is the value of recorder.duplicates.
+func (v Values) Duplicates() Duplicates { return Duplicates(v.String(RecorderDuplicates)) }

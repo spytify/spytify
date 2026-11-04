@@ -8,6 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/spytify/spytify/internal/settings"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -60,8 +61,8 @@ func checkComponent(t *testing.T, what, c string, o Options) {
 // Every combination of the output settings gives names every OS accepts,
 // and the duplicate check finds a file saved under each of them.
 func TestEveryNamingCombinationGivesAValidName(t *testing.T) {
-	for _, group := range []string{"none", "artist", "artist/album"} {
-		for _, prefix := range []string{"none", "counter", "album_track"} {
+	for _, group := range []settings.GroupBy{settings.GroupByNone, settings.GroupByArtist, settings.GroupByArtistAlbum} {
+		for _, prefix := range []settings.Prefix{settings.PrefixNone, settings.PrefixCounter, settings.PrefixAlbumTrack} {
 			for _, underscores := range []bool{false, true} {
 				for _, ascii := range []bool{false, true} {
 					o := Options{GroupBy: group, Prefix: prefix, Underscores: underscores, ASCII: ascii, Template: "{artist} - {title}", CounterWidth: 3, Extension: "flac"}

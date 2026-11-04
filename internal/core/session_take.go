@@ -265,7 +265,7 @@ func (s *Session) classify(seg *segment) {
 	if seg.info.IsAdvert() || (short > 0 && seg.info.LengthMs > 0 && seg.info.LengthMs < short*1000 && seg.info.Album == "") {
 		seg.reason = proto.SkipAd
 	}
-	if seg.reason == "" && v.String(settings.RecorderDuplicates) == "skip" {
+	if seg.reason == "" && v.Duplicates() == settings.DuplicatesSkip {
 		if f, ok := s.deps.fin.find(seg.info, v); ok {
 			seg.reason, seg.recorded = proto.SkipDuplicate, f
 		}
