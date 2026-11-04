@@ -227,6 +227,24 @@ func TestPinnedPauseCases(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		},
+		// The session starts on a track paused mid-way; its track bar is
+		// dragged back to 0, along, and back to 0, all while paused, so no
+		// audio comes between the two starts over. Play then records A
+		// once, whole, with no empty take before it.
+		"restarted-twice-while-paused": func(r *rig) {
+			r.track(a, 1000)
+			r.status(meta.Paused)
+			r.send(meta.Event{Kind: meta.TrackChanged, Track: a, PositionMs: 0, Restart: true})
+			r.send(meta.Event{Kind: meta.Seeked, Track: a, PositionMs: 2000})
+			r.send(meta.Event{Kind: meta.TrackChanged, Track: a, PositionMs: 0, Restart: true})
+			r.status(meta.Playing)
+			r.sound(1, 3000)
+			r.quiet(500)
+			r.track(b, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
 		// Stop before A ever played: nothing is announced or skipped.
 		"session-starts-paused-at-zero-then-stop": func(r *rig) {
 			r.track(a, 0)

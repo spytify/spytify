@@ -759,11 +759,14 @@ func (s *Session) onTrack(info meta.TrackInfo, at int64, restart bool) {
 		s.endOfPlayback()
 		return
 	}
+	// A change still pending starts this item: started over again before
+	// it is cut, as a paused player's track bar dragged back to 0 twice,
+	// the item still starts there, and no empty take comes between.
+	if s.pend != nil && sameItem(s.pend.info, info) {
+		s.pend.info = info
+		return
+	}
 	if !restart {
-		if s.pend != nil && sameItem(s.pend.info, info) {
-			s.pend.info = info
-			return
-		}
 		if c := s.cur; c != nil && s.pend == nil && sameItem(c.info, info) {
 			if c.provisional {
 				s.adopt(c, info)
