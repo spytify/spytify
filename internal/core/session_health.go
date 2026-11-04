@@ -14,9 +14,9 @@ import (
 // before the session says so.
 var captureStall = 10 * time.Second
 
-// captureSilent is how long the player may play with only silence arriving
-// before the session says so.
-var captureSilent = 10 * time.Second
+// captureSilent is how long a track may play with only silence arriving
+// since it started before the session says so.
+var captureSilent = 30 * time.Second
 
 // diskFree reports the free space of a folder's disk; tests replace it.
 var diskFree = freeBytes
@@ -43,7 +43,7 @@ func (s *Session) onTick() {
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: msg})
 	}
 	// An ad may be silent, muted by the session or not.
-	if s.deps.watchSilence && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent {
+	if s.deps.watchSilence && !s.trackHeard && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent && time.Since(s.trackStarted) > captureSilent {
 		s.silent = true
 		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureSilent)
 		s.deps.log.Errorf("%s", msg)

@@ -135,6 +135,12 @@ type Session struct {
 	// silent is set once a capture that delivers only silence while the
 	// player plays was reported; heard once the capture brought sound.
 	silent, heard bool
+	// trackStarted is when the player's track started, or started over,
+	// and trackHeard is set once it brought sound. Only a track silent
+	// from its start is reported: the quiet end of a song had sound
+	// before it.
+	trackStarted time.Time
+	trackHeard   bool
 	// lowFormat is set while the capture's format is too poor for music.
 	lowFormat bool
 	// peak and sum are each channel's since the last level reported, over

@@ -237,7 +237,7 @@ const (
 	NoAudioMacOS       = "If macOS asks to let Spytify record system audio, allow it; it is in System Settings > Privacy & Security > Screen & System Audio Recording."
 	NoAudioWindows     = "Check that the Windows Audio service runs and that the player plays on an output device."
 	NoAudioLinux       = "Check that PipeWire runs: systemctl --user restart pipewire."
-	OnlySilence        = "Only silence from the player for 10 s while it plays."
+	OnlySilence        = "Only silence from the player for 30 s while it plays."
 	OnlySilenceMacOS   = "Check that the player is not muted in its own volume; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
 	OnlySilenceWindows = "Check that the player is not muted in its own volume, nor in the Volume mixer."
 	OnlySilenceLinux   = "Check that the player is not muted in its own volume, nor in the system's sound settings."
