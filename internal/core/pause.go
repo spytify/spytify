@@ -2,6 +2,17 @@ package core
 
 import "github.com/spytify/spytify/internal/pcm"
 
+const (
+	// Silence this long while paused is the pause, not a quiet note.
+	pauseRunMs = 20
+	// Where a pause was cut out, the 10 ms on each side of the cut are
+	// measured against the music this far away on that side; the dip that
+	// makes the player's fades is recorder.pause_fade_db. In a real take
+	// its five fades measured 31 to 36 dB at the cut; a cut with no fade
+	// measures under 5.
+	seamSideMs = 300
+)
+
 // pauseExcision cuts a pause out of the stream: while paused, every run of
 // at least pauseRunMs of silent frames is cut out at the sample, so a pause
 // leaves no hole. A player that fades out and in leaves its fades on each
