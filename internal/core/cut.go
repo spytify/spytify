@@ -42,6 +42,18 @@ type change struct {
 	ready    int64
 	// restart: the same item started over, so the take before is partial.
 	restart bool
+	// skipLo and skipHi frame the notice of a boundary named before its
+	// window, where a skip would have left its edge; both 0 otherwise.
+	skipLo, skipHi int64
+}
+
+// earliest is the first frame the change's cut may land on: the drain
+// writes no further until it is cut.
+func (ch *change) earliest() int64 {
+	if ch.skipHi > 0 && ch.skipLo < ch.lo {
+		return ch.skipLo
+	}
+	return ch.lo
 }
 
 // String names the kind as track.started's cut says it.
@@ -92,6 +104,11 @@ func (cf *cutFinder) plan(r *Ring, c *segment, info meta.TrackInfo, at int64, re
 		e := c.origin + c.length
 		late := cf.soundAt(r, c) + c.length
 		ch.kind, ch.lo, ch.hi, ch.expected = changeBoundary, e-cf.window, late+cf.window, e
+		if at < ch.lo {
+			// Named before its window: Next pressed in the take's last
+			// second, or a notice early for the take's natural end.
+			ch.skipLo, ch.skipHi = at-ms(lateNotifyMs), at+ms(earlyNotifyMs)
+		}
 	default:
 		ch.kind, ch.lo, ch.hi, ch.expected = changeInterrupt, at-ms(lateNotifyMs), at+ms(earlyNotifyMs), at
 		if paused {
@@ -111,6 +128,9 @@ func (cf *cutFinder) plan(r *Ring, c *segment, info meta.TrackInfo, at int64, re
 	}
 	if ch.lo < floor {
 		ch.lo = floor
+	}
+	if ch.skipHi > 0 && ch.skipLo < floor {
+		ch.skipLo = floor
 	}
 	if ch.hi < ch.lo {
 		ch.hi = ch.lo
@@ -197,6 +217,12 @@ func (cf *cutFinder) resolve(r *Ring, p *change, c *segment, force bool) (cut in
 		edgeOK := false
 		if p.kind == changeInterrupt {
 			at, peak, median := r.QuietestPeak(p.lo, hi, f1ms(r))
+			edge, edgeOK = at, peak <= median-skipDipDB
+		}
+		if p.skipHi > p.skipLo {
+			// With no silence or dip where the take was to end, a skip's
+			// edge near the notice is where it ended.
+			at, peak, median := r.QuietestPeak(p.skipLo, min(p.skipHi, r.End()), f1ms(r))
 			edge, edgeOK = at, peak <= median-skipDipDB
 		}
 		switch {

@@ -486,6 +486,34 @@ func TestPinnedCutCases(t *testing.T) {
 			r.quiet(1500)
 			r.status(meta.Stopped)
 		},
+		// Next pressed 1 s before A's declared end, which is a boundary:
+		// with no silence or dip where A was to end, the skip's edge, 100
+		// ms before the notice, is the cut, not A's length.
+		"skip-in-the-last-second": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.play("square at -12 dBFS", square(r.f, r.f.FramesFromMs(1900), 0.25))
+			r.play("square 20.5 dB lower", square(r.f, 50, 0.25*math.Pow(10, -20.5/20)))
+			r.play("square at -12 dBFS", square(r.f, r.f.FramesFromMs(100)-50, 0.25))
+			r.track(b, 0)
+			r.play("square at -12 dBFS", square(r.f, r.f.FramesFromMs(3000), 0.25))
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
+		// B is named 1 s before A's end, gapless: with no edge near the
+		// notice, A is cut at its length.
+		"named-a-second-early-gapless": func(r *rig) {
+			r.status(meta.Playing)
+			r.track(a, 0)
+			r.quiet(500)
+			r.play("square at -12 dBFS", square(r.f, r.f.FramesFromMs(2000), 0.25))
+			r.track(b, 0)
+			r.play("square at -12 dBFS", square(r.f, r.f.FramesFromMs(1000), 0.25))
+			r.play("square at -12 dBFS", square(r.f, r.f.FramesFromMs(3000), 0.25))
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		},
 		// The audio after B's notification comes one frame at a time, so
 		// the trace shows the very frame at which each cut is made.
 		"one-frame-chunks": func(r *rig) {
