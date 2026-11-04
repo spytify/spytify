@@ -112,6 +112,9 @@ func (s *Session) reformat(f pcm.Format) {
 	}
 	if p := s.pend; p != nil {
 		p.lo, p.hi, p.expected, p.ready = conv(p.lo), conv(p.hi), conv(p.expected), conv(p.ready)
+		if p.skipHi > 0 {
+			p.skipLo, p.skipHi = conv(p.skipLo), conv(p.skipHi)
+		}
 	}
 }
 

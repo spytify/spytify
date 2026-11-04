@@ -71,7 +71,7 @@ func (s *Session) makeRoom(n int64) {
 		return
 	}
 	need := s.ring.Start() + n - s.ring.Free()
-	if s.pend != nil && s.pend.lo < need {
+	if s.pend != nil && s.pend.earliest() < need {
 		s.tryResolve(true)
 	}
 	if c := s.cur; c != nil && c.drained < need {
@@ -125,8 +125,8 @@ func (s *Session) drain() {
 			limit = e
 		}
 	}
-	if s.pend != nil && limit > s.pend.lo {
-		limit = s.pend.lo
+	if s.pend != nil && limit > s.pend.earliest() {
+		limit = s.pend.earliest()
 	}
 	if limit > c.drained {
 		s.write(c, c.drained, limit)
