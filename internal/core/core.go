@@ -439,16 +439,21 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 	if err != nil {
 		return "", proto.Errorf(proto.CodeUnsupported, "%v", err)
 	}
+	// Raised before the watch begins, so the first volume it reports is
+	// the session's own, not the one just replaced.
+	restore := c.pinVolume(np)
 	ctx, cancel := context.WithCancel(context.Background())
 	events, err := np.Watch(ctx, c.env.Target)
 	if err != nil {
 		cancel()
 		capt.Close()
+		restore()
 		return "", proto.Errorf(proto.CodeTargetNotRunning, "player interface: %v", err)
 	}
 	if _, err := capt.Open(ctx, c.env.Target); err != nil {
 		cancel()
 		capt.Close()
+		restore()
 		return "", proto.Errorf(proto.CodeTargetNotRunning, "capture: %v", err)
 	}
 
@@ -480,7 +485,6 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 			return list.name()
 		},
 	}, opts)
-	restore := c.pinVolume(np)
 	if c.store.Values().Bool(settings.PlayerMuteOutput) && runtime.GOOS == "windows" {
 		c.log.Infof("player.mute_output is not applied on Windows in the alpha; the player stays audible")
 	}
@@ -603,12 +607,13 @@ func (c *Core) Status() proto.SessionStatusResult {
 	return s.Status()
 }
 
-// Control sends a transport command to the player.
+// Control sends a transport command to the player, or sets its own volume
+// to 100% for full_volume.
 func (c *Core) Control(cmd proto.PlayerCmd) error {
 	switch cmd {
-	case proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart:
+	case proto.CmdPlay, proto.CmdPause, proto.CmdNext, proto.CmdPrevious, proto.CmdRestart, proto.CmdFullVolume:
 	default:
-		return proto.Errorf(proto.CodeInvalidParams, "cmd must be play, pause, next, previous or restart")
+		return proto.Errorf(proto.CodeInvalidParams, "cmd must be play, pause, next, previous, restart or full_volume")
 	}
 	c.mu.Lock()
 	np := c.np
@@ -620,7 +625,11 @@ func (c *Core) Control(cmd proto.PlayerCmd) error {
 		}
 		np = fresh
 	}
-	if err := np.Control(cmd); err != nil {
+	send := np.Control
+	if cmd == proto.CmdFullVolume {
+		send = func(proto.PlayerCmd) error { return np.SetVolume(1) }
+	}
+	if err := send(cmd); err != nil {
 		if errors.Is(err, meta.ErrUnsupported) {
 			return proto.Errorf(proto.CodeUnsupported, "the player does not accept %q", cmd)
 		}

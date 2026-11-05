@@ -1,0 +1,65 @@
+# volume/lowered-during-a-track
+# option EndOnStop
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player Playing pos=-1 (ring at -)
+       0ms  > player Volume 1.00 (ring at 0)
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=0 (ring at 0)
+       0ms  > audio silence, 22050(500ms)
+     500ms  > audio music 1 at 0ms, 44100(1000ms)
+     510ms  log debug: cut for "A" at 500 ms (kind 0, noticed at 0 ms, window 0..0 ms)
+     510ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=first/first_sound offset=500ms source=44100/2
+     510ms  state recording
+     510ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms)
+    1500ms  > player Volume 0.40 (ring at 66150)
+    1500ms  log debug: "A": recorded while the player's volume is under 100%; the file is marked (low volume)
+    1500ms  log info: the player's volume is at 40%: tracks recorded now are quieter
+    1500ms  error player_volume_low "the player's volume is at 40%: tracks recorded now are quieter" volume=40
+    1500ms  take t-001 "A" start=22061(500.25ms) length=132300(3000ms) low-volume
+    1500ms  > audio music 1 at 1000ms, 22050(500ms)
+    2000ms  > player Volume 0.40 (ring at 88200)
+    2000ms  > player Volume 0.20 (ring at 88200)
+    2000ms  log info: the player's volume is at 20%: tracks recorded now are quieter
+    2000ms  error player_volume_low "the player's volume is at 20%: tracks recorded now are quieter" volume=20
+    2000ms  > audio music 1 at 1500ms, 22050(500ms)
+    2500ms  > player Volume 1.00 (ring at 110250)
+    2500ms  log info: the player's volume is back at 100%
+    2500ms  error player_volume_low ""
+    2500ms  > audio music 1 at 2000ms, 44100(1000ms)
+    3500ms  > audio silence, 22050(500ms)
+    4000ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 176400)
+    4000ms  log debug: cut for "B" at 3500 ms (kind 1, noticed at 4000 ms, window 3200..3801 ms)
+    4000ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    4000ms  take t-002 "B" start=154350(3500ms) length=132300(3000ms)
+    4000ms  > audio music 2 at 0ms, 132300(3000ms)
+    7000ms  > audio silence, 22050(500ms)
+    7500ms  > player TrackChanged "C" id=/x/c length=3000ms pos=0 (ring at 330750)
+    7500ms  log debug: cut for "C" at 7000 ms (kind 1, noticed at 7500 ms, window 6200..7302 ms)
+    7500ms  started t-003 "C" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    7500ms  take t-003 "C" start=308700(7000ms) length=132300(3000ms)
+    7500ms  > audio music 3 at 0ms, 44100(1000ms)
+    8500ms  > player Volume 0.50 (ring at 374850)
+    8500ms  log debug: "C": recorded while the player's volume is under 100%; the file is marked (low volume)
+    8500ms  log info: the player's volume is at 50%: tracks recorded now are quieter
+    8500ms  error player_volume_low "the player's volume is at 50%: tracks recorded now are quieter" volume=50
+    8500ms  take t-003 "C" start=308700(7000ms) length=132300(3000ms) low-volume
+    8500ms  > audio music 3 at 1000ms, 88200(2000ms)
+   10500ms  > audio silence, 22050(500ms)
+   11000ms  > player TrackChanged "D" id=/x/d length=3000ms pos=0 (ring at 485100)
+   11000ms  log debug: cut for "D" at 10500 ms (kind 1, noticed at 11000 ms, window 9700..10801 ms)
+   11000ms  started t-004 "D" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+   11000ms  take t-004 "D" start=463050(10500ms) length=132300(3000ms) low-volume
+   11000ms  > audio music 4 at 0ms, 132300(3000ms)
+   14000ms  > audio silence, 66150(1500ms)
+   15500ms  > player Stopped pos=-1 (ring at 683550)
+   15500ms  state waiting
+   15500ms  state stopping
+   15500ms  state idle
+   15500ms  take none
+--- jobs
+job t-001 "A" played=132289(2999.75ms) length=132300(3000ms) wav=132289 crc=d270d060 low-volume
+job t-002 "B" played=154350(3500ms) length=132300(3000ms) wav=154350 crc=a0330101
+job t-003 "C" played=154350(3500ms) length=132300(3000ms) wav=154350 crc=e3c4dc47 low-volume
+job t-004 "D" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=42becfa6 low-volume
+--- end: idle, 0 skipped, 0 ads, 0 overruns

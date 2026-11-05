@@ -145,3 +145,17 @@ func TestControlChecksTheCommand(t *testing.T) {
 		t.Fatalf("pause: %v", err)
 	}
 }
+
+// full_volume sets the player's own volume to 100%, as the low volume
+// warning's button asks.
+func TestFullVolumeRaisesThePlayer(t *testing.T) {
+	c, _ := newTestCore(t, true)
+	player := c.backends.(fakeBackends).b.Player()
+	_ = player.SetVolume(0.4)
+	if err := c.Control(proto.CmdFullVolume); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := player.Volume(); v != 1 {
+		t.Fatalf("volume %.2f, want 1", v)
+	}
+}

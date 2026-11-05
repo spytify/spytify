@@ -82,11 +82,11 @@ const (
 	takeComplete   = lang.Complete
 	takePartial    = lang.Partial
 	takeLowQuality = lang.LowQuality
-	takePauseFade  = lang.PauseFade
+	takeIssues     = lang.WithIssues
 	noAlbum        = lang.NoAlbum
 )
 
-var takeKinds = []string{takeComplete, takePartial, takeLowQuality, takePauseFade}
+var takeKinds = []string{takeComplete, takePartial, takeLowQuality, takeIssues}
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
@@ -104,7 +104,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.search = newSearch(a, lang.SearchLibrary, func(string) { l.filter() })
 	l.sortBy = newSelectField([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
 	// Keep anyway saves a take cut short or in low quality, and a take with
-	// a pause fade is marked: the filter hides those files, or shows them
+	// a pause fade or a low volume is marked: the filter hides those files, or shows them
 	// alone to clean them up, a box per kind of file in its dropdown. They start ticked without their callback, which
 	// needs the list: the sort's, below, draws the list first.
 	l.takes = map[string]*widget.Check{}
@@ -119,7 +119,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.kinds.Selected = l.takesLabel()
 	// A select is as wide as its placeholder, which a choice made never
 	// shows: the longest label fits.
-	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality + ", " + takePauseFade
+	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality + ", " + takeIssues
 	rescan := newIconButton(lang.Rescan, theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
@@ -172,7 +172,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 			show(badgeBox, kind != takeComplete)
 			if kind != takeComplete {
 				title = takeMarker.ReplaceAllString(title, "")
-				badgeBox.Objects[0].(*badge).set(kind, colorSkippedBadge, colorOnSkippedBadge)
+				badgeBox.Objects[0].(*badge).set(takeChip(f.rel, kind), colorSkippedBadge, colorOnSkippedBadge)
 			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
@@ -355,8 +355,9 @@ func (l *libraryScreen) kept(f libraryFile) bool {
 }
 
 // takeKind tells whether the file at path is a take that Keep anyway
-// saved, partial or in low quality, or a complete one: the recorder adds
-// " (partial)" or " (low quality)" to such a take's title, and the name
+// saved, partial or in low quality, one saved with an issue, or a complete
+// one: the recorder adds " (partial)", " (low quality)", " (pause fade)"
+// or " (low volume)" to such a take's title, and the name
 // template puts the title in the file's name, its spaces made underscores
 // when the setting says so, with a number after it when the name was
 // taken. Its tags say so too, but are not read yet for most files, and the
@@ -368,15 +369,37 @@ func takeKind(path string) string {
 		return takePartial
 	case strings.Contains(name, "(low quality)"), strings.Contains(name, "(low_quality)"):
 		return takeLowQuality
-	case strings.Contains(name, "(pause fade)"), strings.Contains(name, "(pause_fade)"):
-		return takePauseFade
+	case takeIssue.MatchString(name):
+		return takeIssues
 	}
 	return takeComplete
 }
 
-// takeMarker is the marker Keep anyway, or a pause fade, adds to a take's
-// title, and the space before it: the row shows the kind in its chip instead.
-var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality|pause[ _]fade)\)`)
+// takeIssue is the mark of a take saved with an issue: a pause fade or a
+// low volume, written with spaces or underscores.
+var takeIssue = regexp.MustCompile(`(?i)\((pause[ _]fade|low[ _]volume)\)`)
+
+// takeChip is a take's chip: its kind, or for a take with issues, which
+// ones it has.
+func takeChip(path, kind string) string {
+	if kind != takeIssues {
+		return kind
+	}
+	var issues []string
+	for _, m := range takeIssue.FindAllStringSubmatch(filepath.Base(path), -1) {
+		if strings.HasPrefix(strings.ToLower(m[1]), "pause") {
+			issues = append(issues, lang.PauseFade)
+		} else {
+			issues = append(issues, lang.LowVolume)
+		}
+	}
+	return strings.Join(slices.Compact(issues), " · ")
+}
+
+// takeMarker is the marker Keep anyway, a pause fade or a low volume adds
+// to a take's title, and the space before it: the row shows the kind in
+// its chip instead.
+var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality|pause[ _]fade|low[ _]volume)\)`)
 
 // takesLabel says which kinds of file the filter shows.
 func (l *libraryScreen) takesLabel() string {

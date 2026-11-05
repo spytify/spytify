@@ -175,10 +175,24 @@ func (m *MPRIS) snapshot(conn *dbus.Conn, at time.Time) []Event {
 	m.last = info
 	m.clock = posClock{ms: pos, at: at, playing: status == Playing}
 	m.mu.Unlock()
-	return []Event{
+	out := []Event{
 		{Kind: TrackChanged, Track: info, PositionMs: pos},
 		{Kind: StatusChanged, Status: status, PositionMs: pos},
 	}
+	if v, ok := props["Volume"]; ok && !info.Empty() {
+		out = append(out, volumeEvent(v)...)
+	}
+	return out
+}
+
+// volumeEvent is the VolumeChanged of an MPRIS Volume property, none for a
+// value that is not a number.
+func volumeEvent(v dbus.Variant) []Event {
+	f, ok := v.Value().(float64)
+	if !ok {
+		return nil
+	}
+	return []Event{{Kind: VolumeChanged, Volume: f, PositionMs: -1}}
 }
 
 func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal, at time.Time) []Event {
@@ -268,6 +282,14 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal, at time.Time) []Event 
 			m.clock.playing = status == Playing
 			m.mu.Unlock()
 			out = append(out, Event{Kind: StatusChanged, Status: status, PositionMs: -1})
+		}
+		if v, ok := changed["Volume"]; ok {
+			m.mu.Lock()
+			loaded := !m.last.Empty()
+			m.mu.Unlock()
+			if loaded {
+				out = append(out, volumeEvent(v)...)
+			}
 		}
 		return out
 	}

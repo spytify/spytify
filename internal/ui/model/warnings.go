@@ -21,6 +21,7 @@ var warnings = map[proto.ErrorCode]warning{
 	proto.ErrorCaptureSilent:     {lang.OnlySilence, perSystem(lang.OnlySilenceMacOS, lang.OnlySilenceWindows, lang.OnlySilenceLinux)},
 	proto.ErrorCaptureLowQuality: {lang.PhoneCall, perSystem(lang.PhoneCallMacOS, lang.PhoneCallWindows, lang.PhoneCallLinux)},
 	proto.ErrorDiskFull:          {found: lang.DiskFull},
+	proto.ErrorPlayerVolumeLow:   {found: lang.VolumeLow},
 }
 
 func perSystem(macOS, windows, linux string) map[string]string {
@@ -53,6 +54,15 @@ func WarningText(e proto.ErrorEvent, goos string) string {
 			return e.Msg
 		}
 		found = fmt.Sprintf(found, *e.FreeMB)
+	case proto.ErrorPlayerVolumeLow:
+		switch {
+		case e.Volume == nil:
+			return e.Msg
+		case *e.Volume == 0:
+			found = lang.VolumeZero
+		default:
+			found = fmt.Sprintf(found, *e.Volume)
+		}
 	}
 	if w.advice == nil {
 		return found

@@ -349,6 +349,7 @@ func TestJobsThatClaimNothing(t *testing.T) {
 		"session skipped": {rejected: proto.SkipAd},
 		"kept":            {keep: true, partial: true},
 		"pause fade":      {pauseFade: true},
+		"low volume":      {lowVolume: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := newBench(t, nil)
@@ -597,33 +598,45 @@ func quoted(s string) string {
 	return string(b)
 }
 
-// A take with the player's fades around a pause in it is saved marked, in
-// its name and its title tag, and leaves its track unrecorded, so it can
-// still be recorded clean.
-func TestAPauseFadeIsMarkedAndLeavesItsTrackUnrecorded(t *testing.T) {
+// A take with the player's fades around a pause in it, or recorded while
+// the player's own volume was under 100%, is saved marked, in its name and
+// its title tag, and leaves its track unrecorded, so it can still be
+// recorded clean. Both marks follow each other, in that order.
+func TestAFlawedTakeIsMarkedAndLeavesItsTrackUnrecorded(t *testing.T) {
 	ff := testkit.Need(t, "ffmpeg", encode.Find)
-	b := newBench(t, nil)
-	fin := b.open(ff)
-	j := b.wholeTake("s-1", ferry)
-	j.pauseFade = true
-	fin.enqueue(j)
-	fin.wait()
-	want := "Neon Harbor - Midnight Ferry (pause fade).wav"
-	if saved, why := b.outcome("s-1"); saved != want {
-		t.Fatalf("saved %q, skipped %q, want %q", saved, why, want)
-	}
-	for _, ev := range b.rec.all() {
-		var f proto.TrackFinishedEvent
-		if ev.Method == proto.EventTrackFinished && ev.Decode(&f) == nil && !f.PauseFade {
-			t.Errorf("track.finished %+v: not a pause fade", f)
-		}
-	}
-	var side struct{ Title string }
-	if err := json.Unmarshal([]byte(b.read(want+".json")), &side); err != nil || side.Title != "Midnight Ferry (pause fade)" {
-		t.Errorf("sidecar title %q: %v", side.Title, err)
-	}
-	if b.recorded(fin, ferry) {
-		t.Error("recorded")
+	for _, c := range []struct {
+		pauseFade, lowVolume bool
+		suffix               string
+	}{
+		{true, false, " (pause fade)"},
+		{false, true, " (low volume)"},
+		{true, true, " (pause fade) (low volume)"},
+	} {
+		t.Run(strings.TrimSpace(c.suffix), func(t *testing.T) {
+			b := newBench(t, nil)
+			fin := b.open(ff)
+			j := b.wholeTake("s-1", ferry)
+			j.pauseFade, j.lowVolume = c.pauseFade, c.lowVolume
+			fin.enqueue(j)
+			fin.wait()
+			want := "Neon Harbor - Midnight Ferry" + c.suffix + ".wav"
+			if saved, why := b.outcome("s-1"); saved != want {
+				t.Fatalf("saved %q, skipped %q, want %q", saved, why, want)
+			}
+			for _, ev := range b.rec.all() {
+				var f proto.TrackFinishedEvent
+				if ev.Method == proto.EventTrackFinished && ev.Decode(&f) == nil && (f.PauseFade != c.pauseFade || f.LowVolume != c.lowVolume) {
+					t.Errorf("track.finished %+v: pause_fade %v, low_volume %v wanted", f, c.pauseFade, c.lowVolume)
+				}
+			}
+			var side struct{ Title string }
+			if err := json.Unmarshal([]byte(b.read(want+".json")), &side); err != nil || side.Title != "Midnight Ferry"+c.suffix {
+				t.Errorf("sidecar title %q: %v", side.Title, err)
+			}
+			if b.recorded(fin, ferry) {
+				t.Error("recorded")
+			}
+		})
 	}
 }
 

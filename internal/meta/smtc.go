@@ -212,6 +212,9 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 		return nil, fmt.Errorf("powershell: %w", err)
 	}
 	out := make(chan Event, 64)
+	if m.Mixer != nil {
+		go watchMixer(ctx, m.Mixer, mixerInterval, out)
+	}
 	// SMTC lengths are whole milliseconds.
 	tracker := &pollTracker{unit: "ms"}
 	go func() {
@@ -241,6 +244,33 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 		}
 	}()
 	return out, nil
+}
+
+// mixerInterval is how often the player's Volume Mixer slider is read: each
+// read runs the capture helper once.
+var mixerInterval = 2 * time.Second
+
+// watchMixer reports the player's Volume Mixer slider, as the media session
+// API has no volume: when first read and each time it changes.
+func watchMixer(ctx context.Context, mixer interface{ Volume() (float64, error) }, every time.Duration, out chan<- Event) {
+	known, last := false, 0.0
+	tick := time.NewTicker(every)
+	defer tick.Stop()
+	for {
+		if v, err := mixer.Volume(); err == nil && (!known || v != last) {
+			known, last = true, v
+			select {
+			case out <- Event{Kind: VolumeChanged, Volume: v, PositionMs: -1}:
+			case <-ctx.Done():
+				return
+			}
+		}
+		select {
+		case <-tick.C:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (m *SMTC) Control(cmd proto.PlayerCmd) error {

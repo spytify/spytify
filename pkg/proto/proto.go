@@ -90,6 +90,9 @@ const (
 	// CmdRestart plays the current track again from its beginning, so a
 	// session started in the middle of it can record it whole.
 	CmdRestart PlayerCmd = "restart"
+	// CmdFullVolume sets the player's own volume to 100%, where a session
+	// records it.
+	CmdFullVolume PlayerCmd = "full_volume"
 )
 
 // TargetInfo is the resolved SPYTIFY_TARGET_* configuration.
@@ -321,6 +324,9 @@ type TrackFinishedEvent struct {
 	// meet where it was, a dip that is heard. Its name ends in
 	// " (pause fade)".
 	PauseFade bool `json:"pause_fade,omitempty"`
+	// LowVolume is a take recorded while the player's own volume was under
+	// 100%: it is quieter than the track. Its name ends in " (low volume)".
+	LowVolume bool `json:"low_volume,omitempty"`
 }
 
 // FinishTimings are the steps between the end of a track and its file.
@@ -410,6 +416,9 @@ const (
 	// ErrorCaptureLowQuality does.
 	ErrorCaptureSilent     ErrorCode = "capture_silent"
 	ErrorCaptureLowQuality ErrorCode = "capture_low_quality"
+	// ErrorPlayerVolumeLow is the player's own volume under 100% during a
+	// session, in Volume. Sent again with no Msg, it withdraws the warning.
+	ErrorPlayerVolumeLow ErrorCode = "player_volume_low"
 	// A track's file failed on its way to the output folder.
 	ErrorRead        ErrorCode = "read"
 	ErrorEncode      ErrorCode = "encode"
@@ -429,6 +438,8 @@ type ErrorEvent struct {
 	// FreeMB is the space left in the output folder, in millions of bytes,
 	// for disk_full.
 	FreeMB *int64 `json:"free_mb,omitempty"`
+	// Volume is the player's own volume in percent, for player_volume_low.
+	Volume *int `json:"volume,omitempty"`
 }
 
 // Event is a decoded notification: its method name and raw payload.
