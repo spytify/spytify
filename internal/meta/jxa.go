@@ -94,7 +94,13 @@ function run(argv) {
   const app = Application(argv[0]);
   if (!app.running()) { throw new Error("player not running"); }
   switch (argv[1]) {
-    case "volume": return String(app.soundVolume());
+    case "volume": {
+      // A player with no item loaded says 0, whatever its volume: none is
+      // known then.
+      let loaded = false;
+      try { loaded = app.currentTrack.id() !== null; } catch (e) {}
+      return loaded ? String(app.soundVolume()) : "none";
+    }
     case "restart": {
       // A player may echo the new position, then carry on where it was:
       // read it back twice, and try again. The result is where it is.
@@ -424,6 +430,8 @@ func restarted(out string) error {
 	return fmt.Errorf("the player did not go back to the start of the track: it plays at %d:%02d", s/60, s%60)
 }
 
+// Volume is the player's sound volume, from 0 to 1. A player with no item
+// loaded has none to tell: it is ErrUnsupported then.
 func (j *JXA) Volume() (float64, error) {
 	s, err := j.run("volume")
 	if err != nil {

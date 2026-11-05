@@ -4,6 +4,7 @@ package meta
 
 import (
 	"context"
+	"errors"
 	"math"
 	"os"
 	"os/exec"
@@ -54,7 +55,7 @@ func TestJXAWithTheFakePlayer(t *testing.T) {
 	// open starts FakePlayer as an app of its own, not as a child of this
 	// test, which would make the test's terminal the sender of the events.
 	cmd := exec.CommandContext(ctx, "open", "-W", "-n", "--stdout", logs, "--stderr", logs, "--env", "SPYTIFY_FAKE_INNER=1",
-		app, "--args", "--timeline", timeline, "--silent", "--status", status,
+		app, "--args", "--timeline", timeline, "--start-delay", "10000", "--silent", "--status", status,
 		"--exec", os.Args[0], "-test.run", "^TestJXAWithTheFakePlayer$", "-test.v")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("open: %v %s", err, out)
@@ -85,6 +86,13 @@ func scriptTheFakePlayer(t *testing.T) {
 	events, err := j.Watch(ctx, target.Target{BundleID: "org.spytify.fakeplayer", DurationUnit: "ms"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Before its first item, 10 s in so a slow first Apple event still
+	// comes before it, FakePlayer has none loaded and reads 0, as a player
+	// just opened does: that 0 is not its volume, and a session
+	// that took it would turn the player down to 0 when it ends.
+	if v, err := j.Volume(); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("volume with no item loaded: %v %v, want ErrUnsupported", v, err)
 	}
 	next := func(what string, ok func(Event) bool) Event {
 		t.Helper()

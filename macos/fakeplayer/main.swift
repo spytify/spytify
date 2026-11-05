@@ -141,9 +141,11 @@ final class Player {
         }
     }
 
+    // With no item loaded, the volume reads 0 and a new one is ignored, as
+    // a real player's does.
     var soundVolume: Int {
-        get { lock.withLock { volume } }
-        set { lock.withLock { volume = max(0, min(newValue, 100)) } }
+        get { lock.withLock { playing ? volume : 0 } }
+        set { lock.withLock { if playing { volume = max(0, min(newValue, 100)) } } }
     }
 
     func command(_ name: String) {
