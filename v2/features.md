@@ -39,6 +39,13 @@ In the session's list, the ads played one after another take one slim blue row b
 
 When the application's output device runs below 44.1 kHz or in mono, as a Bluetooth headset does while an app uses its microphone, the tracks would sound like a phone call. Spytify says so and what to change, and skips the tracks recorded that way; **Keep anyway** still saves the last one.
 
+### [Takes with issues](#issues)
+
+Some takes are saved with a mark at the end of their name and title, and do not count as recorded: the track is recorded again, clean, the next time it plays.
+
+- **Pause fade**: the application fades out when paused and in when resumed. Spytify leaves the pause out of the file, and where the two fades meet a short dip can be heard; such a take ends in "(pause fade)". **Pause fade threshold** in Settings > Recording sets how deep a dip must be.
+- **Low volume**: Record sets the application's own volume to 100% and Stop puts yours back. Turned down during the session, it makes the tracks quieter: a red alert says so, with **Set to 100%**, and the tracks recorded meanwhile end in "(low volume)". At 0% nothing is heard, so nothing is saved. On Windows this is the application's slider in the Volume mixer.
+
 ### [The Record screen](#record-screen)
 
 The track being recorded sits on its cover's colours, with a badge that says whether it is recorded, the stream's rate and channels, and its progress along the bottom. Beside **Skip**, a meter shows each channel's level, L and R, while it records. Under it, the session's list says which tracks were saved, and why the others were skipped; the [ads](#ads) of each break are one row. When nothing is recorded, one line says why, with the one button that fixes it: open the player, **Play**, **Start the recorder** or **Open diagnostics**.
@@ -47,7 +54,7 @@ Light or dark, as the system is; **Theme** in Settings > App picks one.
 
 ### [Library](#library)
 
-Every recorded file with its cover, sorted by newest, by name, or by album under a heading per album. The search finds an artist, a title or an album, and a filter shows the complete files, the partial takes **Keep anyway** saved, or the low-quality ones, together or alone, to clean them up. Each row's buttons show the file in its folder, play it, or move it to the system's trash (the Recycle Bin on Windows), where it can be put back: Spytify never deletes a file.
+Every recorded file with its cover, sorted by newest, by name, or by album under a heading per album. The search finds an artist, a title or an album, and a filter shows the complete files, the partial takes **Keep anyway** saved, the low-quality ones, or the [takes with issues](#issues), together or alone, to clean them up. A take shows a badge per mark, such as **Partial** and **Low volume**. Each row's buttons show the file in its folder, play it, or move it to the system's trash (the Recycle Bin on Windows), where it can be put back: Spytify never deletes a file.
 
 ### [Keyboard](#keyboard)
 

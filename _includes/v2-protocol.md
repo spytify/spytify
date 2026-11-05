@@ -19,7 +19,7 @@ Clients speak newline-delimited JSON-RPC 2.0, protocol version 1, on the recorde
 | `settings.get` | [SettingsGetParams](#settingsgetparams) | [SettingsValues](#settingsvalues) | every setting when keys is empty |
 | `settings.set` | [SettingsSetParams](#settingssetparams) | [SettingsSetResult](#settingssetresult) | validated, persisted, then settings.changed fires |
 | `settings.reset` | [SettingsResetParams](#settingsresetparams) | [Empty](#empty) | back to defaults, all keys or those under a prefix |
-| `player.control` | [PlayerControlParams](#playercontrolparams) | [Empty](#empty) | play, pause, next, previous, restart (from 0:00) through the player's local interface |
+| `player.control` | [PlayerControlParams](#playercontrolparams) | [Empty](#empty) | play, pause, next, previous, restart (from 0:00) or full_volume (the player's own volume to 100%) through the player's local interface |
 | `player.launch` | none | [Empty](#empty) | opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way |
 | `log.tail` | [LogTailParams](#logtailparams) | [LogTailResult](#logtailresult) | last N log lines |
 | `events.recent` | none | [EventsRecentResult](#eventsrecentresult) | the last 200 events, for a client that connects mid-session |
@@ -39,7 +39,7 @@ Clients speak newline-delimited JSON-RPC 2.0, protocol version 1, on the recorde
 | `settings.changed` | [SettingsValues](#settingsvalues) | after any successful settings.set or settings.reset |
 | `target.state` | [TargetStateEvent](#targetstateevent) | player process appears or exits |
 | `log` | [LogEvent](#logevent) | each log line, every level |
-| `error` | [ErrorEvent](#errorevent) | capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code. msg says what the recorder found, in English; capture_low_quality carries the capture's format in source, disk_full the megabytes left in free_mb |
+| `error` | [ErrorEvent](#errorevent) | capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code. msg says what the recorder found, in English; capture_low_quality carries the capture's format in source, disk_full the megabytes left in free_mb, player_volume_low the player's volume in percent in volume |
 
 ### Types
 
@@ -67,6 +67,7 @@ An empty object.
 | `fatal` | boolean |
 | `source` | [AudioSource](#audiosource), optional |
 | `free_mb` | integer, optional |
+| `volume` | integer, optional |
 
 #### EventsRecentResult
 
@@ -202,6 +203,7 @@ An empty object.
 | `timings` | [FinishTimings](#finishtimings), optional |
 | `partial` | boolean, optional |
 | `pause_fade` | boolean, optional |
+| `low_volume` | boolean, optional |
 
 #### TrackKeepParams
 
