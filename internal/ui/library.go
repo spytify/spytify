@@ -144,11 +144,17 @@ func newLibraryScreen(a *App) *libraryScreen {
 		func() int { return len(l.rows) },
 		func() fyne.CanvasObject {
 			// The title and the artists, as the player lists a track; or in
-			// the Album view, an album's heading. A take Keep anyway saved
-			// says which in a badge, as the Record screen's rows say theirs.
+			// the Album view, an album's heading. A take Keep anyway saved,
+			// or one with an issue, says which in a badge per kind, as the
+			// Record screen's rows say theirs: three at most, as Keep anyway
+			// marks a take partial or in low quality, not both.
 			reveal, play, bin := newRowButton("", theme.SearchIcon()), newRowButton("", theme.MediaPlayIcon()), newRowButton("", theme.DeleteIcon())
 			play.main = true
-			return container.NewStack(trackRow(2, container.NewHBox(container.NewCenter(newBadge("", colorSkippedBadge, "", colorOnSkippedBadge)),
+			badges := container.NewHBox()
+			for range 3 {
+				badges.Add(container.NewCenter(newBadge("", colorSkippedBadge, "", colorOnSkippedBadge)))
+			}
+			return container.NewStack(trackRow(2, container.NewHBox(badges,
 				container.NewCenter(reveal), container.NewCenter(play), container.NewCenter(bin))), albumHeading())
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
@@ -168,11 +174,16 @@ func newLibraryScreen(a *App) *libraryScreen {
 			// Border layout: center first, then the leading and trailing parts.
 			after := box.Objects[2].(*fyne.Container)
 			title, artist := l.tags(f)
-			kind, badgeBox := takeKind(f.rel), after.Objects[0].(*fyne.Container)
-			show(badgeBox, kind != takeComplete)
-			if kind != takeComplete {
+			marks, badges := takeBadges(f.rel), after.Objects[0].(*fyne.Container)
+			show(badges, len(marks) > 0)
+			if len(marks) > 0 {
 				title = takeMarker.ReplaceAllString(title, "")
-				badgeBox.Objects[0].(*badge).set(takeChip(f.rel, kind), colorSkippedBadge, colorOnSkippedBadge)
+			}
+			for i, o := range badges.Objects {
+				show(o, i < len(marks))
+				if i < len(marks) {
+					o.(*fyne.Container).Objects[0].(*badge).set(marks[i], colorSkippedBadge, colorOnSkippedBadge)
+				}
 			}
 			setTrackRow(box, l.cover(f).row, title, artist)
 			path := f.path
@@ -349,56 +360,62 @@ func (l *libraryScreen) filter() {
 	show(l.list, !l.empty.Visible())
 }
 
-// kept tells whether the filter keeps f: its kind is ticked.
+// kept tells whether the filter keeps f: one of its kinds is ticked.
 func (l *libraryScreen) kept(f libraryFile) bool {
-	return l.takes[takeKind(f.rel)].Checked
+	return slices.ContainsFunc(kindsOf(f.rel), func(k string) bool { return l.takes[k].Checked })
 }
 
-// takeKind tells whether the file at path is a take that Keep anyway
-// saved, partial or in low quality, one saved with an issue, or a complete
-// one: the recorder adds " (partial)", " (low quality)", " (pause fade)"
-// or " (low volume)" to such a take's title, and the name
-// template puts the title in the file's name, its spaces made underscores
-// when the setting says so, with a number after it when the name was
-// taken. Its tags say so too, but are not read yet for most files, and the
-// index of recorded tracks leaves these files out.
-func takeKind(path string) string {
-	name := strings.ToLower(filepath.Base(path))
-	switch {
-	case strings.Contains(name, "(partial)"):
-		return takePartial
-	case strings.Contains(name, "(low quality)"), strings.Contains(name, "(low_quality)"):
-		return takeLowQuality
-	case takeIssue.MatchString(name):
-		return takeIssues
-	}
-	return takeComplete
-}
+// takeMark is each mark the recorder adds to a take's title, in the order
+// it adds them: Keep anyway's " (partial)" or " (low quality)", then
+// " (pause fade)", then " (low volume)". The name template puts the title
+// in the file's name, its spaces made underscores when the setting says
+// so, with a number after it when the name was taken. The tags say so
+// too, but are not read yet for most files, and the index of recorded
+// tracks leaves these files out.
+var takeMark = regexp.MustCompile(`(?i)\((partial|low[ _]quality|pause[ _]fade|low[ _]volume)\)`)
 
-// takeIssue is the mark of a take saved with an issue: a pause fade or a
-// low volume, written with spaces or underscores.
-var takeIssue = regexp.MustCompile(`(?i)\((pause[ _]fade|low[ _]volume)\)`)
-
-// takeChip is a take's chip: its kind, or for a take with issues, which
-// ones it has.
-func takeChip(path, kind string) string {
-	if kind != takeIssues {
-		return kind
-	}
-	var issues []string
-	for _, m := range takeIssue.FindAllStringSubmatch(filepath.Base(path), -1) {
-		if strings.HasPrefix(strings.ToLower(m[1]), "pause") {
-			issues = append(issues, lang.PauseFade)
-		} else {
-			issues = append(issues, lang.LowVolume)
+// takeBadges are the badges of the file at path, one per mark in its name,
+// in the recorder's order; none for a complete take.
+func takeBadges(path string) []string {
+	var out []string
+	for _, m := range takeMark.FindAllStringSubmatch(filepath.Base(path), -1) {
+		switch strings.ReplaceAll(strings.ToLower(m[1]), "_", " ") {
+		case "partial":
+			out = append(out, lang.Partial)
+		case "low quality":
+			out = append(out, lang.LowQuality)
+		case "pause fade":
+			out = append(out, lang.PauseFade)
+		case "low volume":
+			out = append(out, lang.LowVolume)
 		}
 	}
-	return strings.Join(slices.Compact(issues), " · ")
+	return slices.Compact(out)
 }
 
-// takeMarker is the marker Keep anyway, a pause fade or a low volume adds
-// to a take's title, and the space before it: the row shows the kind in
-// its chip instead.
+// kindsOf are the kinds of file the filter ticks for the file at path:
+// Partial or Low quality for a take Keep anyway saved, With issues for one
+// with a pause fade or a low volume, both for a take that is both, and
+// Complete for one with no mark.
+func kindsOf(path string) []string {
+	var out []string
+	for _, b := range takeBadges(path) {
+		kind := b
+		if b == lang.PauseFade || b == lang.LowVolume {
+			kind = takeIssues
+		}
+		if !slices.Contains(out, kind) {
+			out = append(out, kind)
+		}
+	}
+	if len(out) == 0 {
+		return []string{takeComplete}
+	}
+	return out
+}
+
+// takeMarker is a mark the recorder adds to a take's title, and the space
+// before it: the row shows it in a badge instead.
 var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality|pause[ _]fade|low[ _]volume)\)`)
 
 // takesLabel says which kinds of file the filter shows.
