@@ -19,13 +19,19 @@ const playlistDir = "Playlists"
 // core's events: a track takes its place as it starts, and goes in once
 // its file is known, the one saved, the one a track already recorded has,
 // or the one track.keep saves after all. The file is written again after
-// each, so a quit or a crash keeps what is done.
+// each, so a quit or a crash keeps what is done. Every session has one,
+// written only while on says so: turned on mid-session, it has the tracks
+// saved before too.
 type playlist struct {
-	root  string
+	out   func() string
 	start time.Time
+	on    func() bool
 	log   *Logger
 
-	mu     sync.Mutex
+	mu sync.Mutex
+	// root is the output folder as the file is named; tracks saved in
+	// another after a change are listed by their full path.
+	root   string
 	path   string
 	tracks []*listed
 	byID   map[string]*listed
@@ -43,8 +49,8 @@ type listed struct {
 	out  bool
 }
 
-func newPlaylist(root string, start time.Time, log *Logger) *playlist {
-	return &playlist{root: root, start: start, log: log, byID: map[string]*listed{}}
+func newPlaylist(out func() string, start time.Time, on func() bool, log *Logger) *playlist {
+	return &playlist{out: out, start: start, on: on, log: log, byID: map[string]*listed{}}
 }
 
 // observe takes in an event the core sends.
@@ -101,25 +107,36 @@ func (p *playlist) observe(payload any) {
 
 // name is the playlist's file as the session ends: the one written, or the
 // one its tracks still being saved go to; "" when none of its tracks goes
-// in.
+// in, or when it is off. It is written once more: turned on after the last
+// track was saved, it has not been yet.
 func (p *playlist) name() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if !p.on() {
+		return ""
+	}
+	pending := false
 	for _, l := range p.tracks {
-		if l.path != "" || !l.out {
-			return p.file()
+		if l.path != "" {
+			p.write()
+			return p.path
 		}
+		pending = pending || !l.out
+	}
+	if pending {
+		return p.file()
 	}
 	return ""
 }
 
-// file is where the playlist is written: named after the session's start,
-// with " (2)" and up when another session of that minute wrote one. The
-// name is picked once.
+// file is where the playlist is written: the output folder's Playlists,
+// named after the session's start, with " (2)" and up when another session
+// of that minute wrote one. The folder and name are picked once.
 func (p *playlist) file() string {
 	if p.path != "" {
 		return p.path
 	}
+	p.root = p.out()
 	base := p.start.Format("2006-01-02 15.04")
 	p.path = filepath.Join(p.root, playlistDir, base+".m3u8")
 	for n := 2; exists(p.path); n++ {
@@ -129,8 +146,11 @@ func (p *playlist) file() string {
 }
 
 // write writes the tracks whose files are known, in the order they played,
-// to a new file then put in place of the one before.
+// to a new file then put in place of the one before; nothing while off.
 func (p *playlist) write() {
+	if !p.on() {
+		return
+	}
 	path := p.file()
 	var b strings.Builder
 	b.WriteString("#EXTM3U\n#PLAYLIST:" + strings.TrimSuffix(filepath.Base(path), ".m3u8") + "\n")
