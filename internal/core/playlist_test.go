@@ -15,18 +15,21 @@ import (
 var sessionStart = time.Date(2026, 11, 3, 14, 20, 5, 0, time.Local)
 
 // listening feeds a playlist the events of a session, as the core sends
-// them.
+// them. root is output.dir and on is output.playlist, on unless a test
+// turns it off.
 type listening struct {
 	t    *testing.T
 	root string
+	on   bool
 	p    *playlist
 }
 
 func newListening(t *testing.T) *listening {
 	t.Helper()
-	root := filepath.Join(t.TempDir(), "out")
 	log, _ := NewLogger("", testWriter{t})
-	return &listening{t: t, root: root, p: newPlaylist(root, sessionStart, log)}
+	l := &listening{t: t, root: filepath.Join(t.TempDir(), "out"), on: true}
+	l.p = newPlaylist(func() string { return l.root }, sessionStart, func() bool { return l.on }, log)
+	return l
 }
 
 func (l *listening) started(id, artist, title string, lengthMs int64) {
@@ -166,6 +169,79 @@ func TestASessionThatSavesNothingWritesNoPlaylist(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(l.root, "Playlists")); !os.IsNotExist(err) {
 		t.Errorf("Playlists made: %v", err)
 	}
+}
+
+// output.playlist turned on mid-session writes the session's playlist with
+// the tracks saved before it too, at the next track saved or, when none
+// is, as the session ends. Turned off, it is no longer written or named.
+func TestThePlaylistTurnedOnMidSession(t *testing.T) {
+	want := "#EXTM3U\n#PLAYLIST:2026-11-03 14.20\n" +
+		"#EXTINF:134,M83 - Intro\n" + fromList("M83/Hurry Up/M83 - Intro.flac") + "\n" +
+		"#EXTINF:236,M83 - Reunion\n" + fromList("M83/Hurry Up/M83 - Reunion.flac") + "\n"
+	t.Run("then a track saved", func(t *testing.T) {
+		l := newListening(t)
+		l.on = false
+		l.started("s-001", "M83", "Intro", 134000)
+		l.saved("s-001", "M83/Hurry Up/M83 - Intro.flac", 133700)
+		if got := l.file("2026-11-03 14.20.m3u8"); got != "" {
+			t.Fatalf("written while off:\n%s", got)
+		}
+		l.on = true
+		l.started("s-002", "M83", "Reunion", 236000)
+		l.saved("s-002", "M83/Hurry Up/M83 - Reunion.flac", 236000)
+		if got := l.file("2026-11-03 14.20.m3u8"); got != want {
+			t.Errorf("playlist\n%s\nwant\n%s", got, want)
+		}
+	})
+	t.Run("then the session ends", func(t *testing.T) {
+		l := newListening(t)
+		l.on = false
+		l.started("s-001", "M83", "Intro", 134000)
+		l.saved("s-001", "M83/Hurry Up/M83 - Intro.flac", 133700)
+		l.started("s-002", "M83", "Reunion", 236000)
+		l.saved("s-002", "M83/Hurry Up/M83 - Reunion.flac", 236000)
+		if got := l.p.name(); got != "" {
+			t.Errorf("named %q while off", got)
+		}
+		l.on = true
+		if got, want := l.p.name(), l.at("Playlists/2026-11-03 14.20.m3u8"); got != want {
+			t.Errorf("name %q, want %q", got, want)
+		}
+		if got := l.file("2026-11-03 14.20.m3u8"); got != want {
+			t.Errorf("playlist\n%s\nwant\n%s", got, want)
+		}
+	})
+	t.Run("after the output folder changed", func(t *testing.T) {
+		l := newListening(t)
+		l.on = false
+		l.started("s-001", "M83", "Intro", 134000)
+		l.saved("s-001", "M83/Hurry Up/M83 - Intro.flac", 133700)
+		before := l.at("M83/Hurry Up/M83 - Intro.flac")
+		l.root = filepath.Join(t.TempDir(), "elsewhere")
+		l.on = true
+		l.started("s-002", "M83", "Reunion", 236000)
+		l.saved("s-002", "M83/Hurry Up/M83 - Reunion.flac", 236000)
+		want := "#EXTM3U\n#PLAYLIST:2026-11-03 14.20\n" +
+			"#EXTINF:134,M83 - Intro\n" + before + "\n" +
+			"#EXTINF:236,M83 - Reunion\n" + fromList("M83/Hurry Up/M83 - Reunion.flac") + "\n"
+		if got := l.file("2026-11-03 14.20.m3u8"); got != want {
+			t.Errorf("playlist\n%s\nwant\n%s", got, want)
+		}
+	})
+	t.Run("turned off", func(t *testing.T) {
+		l := newListening(t)
+		l.started("s-001", "M83", "Intro", 134000)
+		l.saved("s-001", "M83/Hurry Up/M83 - Intro.flac", 133700)
+		l.on = false
+		l.started("s-002", "M83", "Reunion", 236000)
+		l.saved("s-002", "M83/Hurry Up/M83 - Reunion.flac", 236000)
+		if got := l.file("2026-11-03 14.20.m3u8"); strings.Contains(got, "Reunion") {
+			t.Errorf("written while off:\n%s", got)
+		}
+		if got := l.p.name(); got != "" {
+			t.Errorf("named %q while off", got)
+		}
+	})
 }
 
 // Another session of the same minute wrote its playlist: this one takes
