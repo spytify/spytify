@@ -35,6 +35,12 @@
         "advice": {
           "type": "boolean"
         },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "detail": {
           "type": "string"
         },
@@ -43,6 +49,9 @@
             "type": "string"
           },
           "type": "object"
+        },
+        "id": {
+          "type": "string"
         },
         "name": {
           "type": "string"

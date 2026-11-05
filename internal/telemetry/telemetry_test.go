@@ -393,7 +393,7 @@ func TestCheckFactsLeaveAsTags(t *testing.T) {
 	srv := fakesentry.New(t)
 	c := newClient(t, srv, Options{})
 	c.SetEnabled(true)
-	r := Checks{Failing: []proto.Check{{Name: proto.CheckOutputWritable, Detail: "mkdir <output>: denied",
+	r := Checks{Failing: []proto.Check{{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: "mkdir <output>: denied",
 		Facts: map[string]string{"output.cloud": "OneDrive", "output.errno": "2"}}}}
 	if p := c.ChecksPreview(r); !strings.Contains(p, "output.cloud: OneDrive\n") || !strings.Contains(p, "output.errno: 2\n") {
 		t.Errorf("preview %q lacks the facts", p)

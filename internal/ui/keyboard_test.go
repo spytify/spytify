@@ -202,8 +202,8 @@ func TestTheKeyboardWorksTheRecordScreen(t *testing.T) {
 	// With the player closed, Record is off and the screen offers to open it.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
 	a.render()
-	wantOrder(t, a, lang.Donate, "Tabs", fmt.Sprintf(lang.Open, "Player"))
-	tabTo(t, a, fmt.Sprintf(lang.Open, "Player"), 1)
+	wantOrder(t, a, lang.Donate, "Tabs", fmt.Sprintf(lang.OpenPlayer, "Player"))
+	tabTo(t, a, fmt.Sprintf(lang.OpenPlayer, "Player"), 1)
 	pressSpace(c)
 	waitCall(t, core, proto.MethodPlayerLaunch)
 
@@ -416,7 +416,7 @@ func settingsOrder(s *settingsScreen) []string {
 	want := []string{lang.Donate, lang.Record, "Tabs", lang.SearchSettings}
 	for _, g := range groups() {
 		var main []string
-		advanced := g == "App"
+		advanced := g == "app"
 		for _, d := range settings.Table {
 			off, _ := s.fields[d.Key].input.(fyne.Disableable)
 			switch {
@@ -487,7 +487,7 @@ func TestTheKeyboardWorksSettings(t *testing.T) {
 	// The App card's Advanced fold holds the player: open, Tab goes in.
 	tabTo(t, a, lang.Advanced, 1)
 	pressSpace(c)
-	if !s.advanced["App"].open {
+	if !s.advanced["app"].open {
 		t.Fatal("Space did not open Advanced")
 	}
 	// The window lays the screen out again before it next draws.
@@ -528,8 +528,8 @@ func TestSpaceLeavesTheFocusOnTheButtonItPresses(t *testing.T) {
 
 	adv := tabTo(t, a, lang.Advanced, 1)
 	pressSpace(c)
-	if !s.advanced["App"].open || c.Focused() != adv {
-		t.Fatalf("Space on Advanced: open %v, the focus on %v", s.advanced["App"].open, c.Focused())
+	if !s.advanced["app"].open || c.Focused() != adv {
+		t.Fatalf("Space on Advanced: open %v, the focus on %v", s.advanced["app"].open, c.Focused())
 	}
 	pressTab(c)
 	if got := focusName(a, c.Focused()); got != lang.PlayerProcessHint {
@@ -537,8 +537,8 @@ func TestSpaceLeavesTheFocusOnTheButtonItPresses(t *testing.T) {
 	}
 	pressShiftTab(c)
 	pressSpace(c)
-	if s.advanced["App"].open || c.Focused() != adv {
-		t.Fatalf("Space on the open Advanced: open %v, the focus on %v", s.advanced["App"].open, c.Focused())
+	if s.advanced["app"].open || c.Focused() != adv {
+		t.Fatalf("Space on the open Advanced: open %v, the focus on %v", s.advanced["app"].open, c.Focused())
 	}
 	pressTab(c)
 	if got := focusName(a, c.Focused()); got != after {
@@ -672,7 +672,7 @@ func TestTheKeyboardWorksAbout(t *testing.T) {
 // screen scrolls to them in a short window.
 func TestTheKeyboardWorksTheOfflineScreen(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	m.SetConn(model.Disconnected, "spytifyd is not running")
+	m.SetConn(model.Disconnected, "")
 	a.render()
 	order := tabOrder(t, a)
 	if len(order) < 4 || !slices.Equal(order[:3], []string{lang.Donate, lang.StartRecorder, lang.PlayerProcessHint}) ||

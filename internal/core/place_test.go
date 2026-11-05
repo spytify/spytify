@@ -16,7 +16,7 @@ func TestTheOutputCheckSaysWhereTheFolderIs(t *testing.T) {
 	s := newScenario(t, tl, nil)
 	facts := func() map[string]string {
 		for _, c := range s.core.Info().Checks {
-			if c.Name == proto.CheckOutputWritable {
+			if c.ID == proto.CheckOutputWritable {
 				return c.Facts
 			}
 		}

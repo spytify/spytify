@@ -43,5 +43,5 @@ func (f Fake) New(target.Target) (capture.Capture, meta.NowPlaying, error) {
 }
 
 func (f Fake) Probe() []proto.Check {
-	return []proto.Check{{Name: "fake player", OK: true, Detail: f.Timeline.Name}}
+	return []proto.Check{{ID: proto.CheckFakePlayer, Name: "fake player", OK: true, Detail: f.Timeline.Name}}
 }

@@ -6,6 +6,7 @@ package model
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -471,12 +472,12 @@ func (m *Model) apply(s *State, ev proto.Event) {
 			s.TargetKnown = true
 			// core.info checked once, on connect; keep its answer current.
 			for i := range s.Info.Checks {
-				if s.Info.Checks[i].Name == proto.CheckPlayerRunning {
-					s.Info.Checks[i].OK = s.Target.Running
-					s.Info.Checks[i].Detail = lang.NotRunning
+				if c := &s.Info.Checks[i]; c.ID == proto.CheckPlayerRunning {
+					c.OK, c.Args = s.Target.Running, nil
 					if s.Target.Running {
-						s.Info.Checks[i].Detail = fmt.Sprintf(lang.PID, s.Target.PID)
+						c.Args = []string{strconv.Itoa(s.Target.PID)}
 					}
+					c.Detail = CheckDetail(*c, "")
 				}
 			}
 		}

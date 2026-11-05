@@ -2,7 +2,11 @@
 
 package platform
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/spytify/spytify/pkg/proto"
+)
 
 func TestAllowedRatesPattern(t *testing.T) {
 	out := "Found \"settings\" metadata 31\nupdate: id:0 key:'clock.rate' value:'48000' type:''\nupdate: id:0 key:'clock.allowed-rates' value:'[ 48000 ]' type:''\n"
@@ -28,5 +32,15 @@ func TestRatesCheckIsAdvice(t *testing.T) {
 		if got := ratesCheck([]byte(c.settings)); got.OK != c.ok || !got.Advice {
 			t.Errorf("%s: %+v", c.name, got)
 		}
+	}
+}
+
+// ratesChecks are the sample rates check's three outcomes: rates unknown,
+// 44.1 kHz allowed, and only 48 kHz.
+func ratesChecks() []proto.Check {
+	return []proto.Check{
+		ratesCheck(nil),
+		ratesCheck([]byte("key:'clock.allowed-rates' value:'[ 44100, 48000 ]'")),
+		ratesCheck([]byte("key:'clock.allowed-rates' value:'[ 48000 ]'")),
 	}
 }

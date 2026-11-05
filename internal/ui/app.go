@@ -358,7 +358,7 @@ func (a *App) quit() {
 		a.quitApp()
 		return
 	}
-	ask(a.win, lang.Quit, lang.QuitText, func(ok bool) {
+	ask(a.win, lang.QuitAsk, lang.QuitText, func(ok bool) {
 		if ok {
 			a.quitApp()
 		}
@@ -382,7 +382,7 @@ func (a *App) showOutputSetting() {
 	a.showTab(tabSettings)
 	if set, ok := a.screens[tabSettings].(*settingsScreen); ok {
 		d, _ := settings.Lookup(settings.OutputDir.String())
-		set.search.SetText(d.Label)
+		set.search.SetText(model.SettingWords(*d).Label)
 	}
 }
 
@@ -585,9 +585,9 @@ func (a *App) openURL(raw string) {
 	}
 }
 
-func checkOK(checks []proto.Check, name string) bool {
+func checkOK(checks []proto.Check, id proto.CheckID) bool {
 	for _, c := range checks {
-		if c.Name == name {
+		if c.ID == id {
 			return c.OK
 		}
 	}
@@ -609,14 +609,14 @@ func failingChecks(checks []proto.Check) int {
 // the player's, which the app bar already shows, nor advice, which only
 // lowers quality.
 func needsAttention(c proto.Check) bool {
-	return !c.OK && !c.Advice && c.Name != proto.CheckPlayerRunning
+	return !c.OK && !c.Advice && c.ID != proto.CheckPlayerRunning
 }
 
-// checkFails says whether the check named name is there and fails: a
-// recorder of an earlier build may not have it.
-func checkFails(checks []proto.Check, name string) bool {
+// checkFails says whether the check id is there and fails: a recorder of
+// an earlier build may not have it.
+func checkFails(checks []proto.Check, id proto.CheckID) bool {
 	for _, c := range checks {
-		if c.Name == name {
+		if c.ID == id {
 			return !c.OK
 		}
 	}

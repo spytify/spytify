@@ -138,7 +138,7 @@ func newLogsScreen(a *App) *logsScreen {
 		_ = openPath(l.path)
 	})
 	open.Importance = widget.LowImportance
-	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel(lang.Show), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
+	tools := container.NewBorder(nil, nil, container.NewHBox(widget.NewLabel(lang.ShowLevels), l.level), container.NewHBox(copyAll, open, l.diagnose.lit))
 	l.root = plain(inReadingOrder(inset(tools), nil, nil, nil, l.list))
 	return l
 }
@@ -205,22 +205,22 @@ func (l *logsScreen) render(s model.State) {
 	l.filter()
 }
 
-// checkDaemon is the app's own check, that spytifyd answers: it runs the
-// others.
-const checkDaemon = lang.RecorderRunning
+// checkDaemon is the name of the app's own check, model.CheckRecorder, for
+// the bug tracker.
+const checkDaemon = "spytifyd running"
 
-// diagChecks are the checks the diagnostics show: checkDaemon, then
+// diagChecks are the checks the diagnostics show: the app's own, then
 // spytifyd's. While it is gone its checks are left out, its last answers
 // being no longer true.
 func (a *App) diagChecks(s model.State) []proto.Check {
 	if s.Conn == model.Connected {
-		return append([]proto.Check{{Name: checkDaemon, OK: true, Detail: s.Info.Version}}, s.Info.Checks...)
+		return append([]proto.Check{{ID: model.CheckRecorder, Name: checkDaemon, OK: true, Detail: s.Info.Version}}, s.Info.Checks...)
 	}
 	detail := cmp.Or(a.startErr, s.ConnError)
 	if a.starting {
 		detail = lang.StartingRecorder
 	}
-	return []proto.Check{{Name: checkDaemon, Detail: detail}}
+	return []proto.Check{{ID: model.CheckRecorder, Name: checkDaemon, Detail: detail}}
 }
 
 func (l *logsScreen) renderChecks(s model.State) {
@@ -250,8 +250,8 @@ func (l *logsScreen) renderChecks(s model.State) {
 	for _, c := range checks {
 		if !c.OK && c.Advice {
 			// The name and its icon stay on the first line of the detail.
-			name := container.NewVBox(container.NewHBox(widget.NewIcon(theme.InfoIcon()), widget.NewLabel(c.Name)))
-			advice = append(advice, container.NewBorder(nil, nil, name, nil, wrapped(c.Detail)))
+			name := container.NewVBox(container.NewHBox(widget.NewIcon(theme.InfoIcon()), widget.NewLabel(model.CheckName(c))))
+			advice = append(advice, container.NewBorder(nil, nil, name, nil, wrapped(model.CheckDetail(c, runtime.GOOS))))
 			continue
 		}
 		icon := theme.ConfirmIcon()
@@ -259,22 +259,22 @@ func (l *logsScreen) renderChecks(s model.State) {
 			icon = theme.WarningIcon()
 		}
 		var fix fyne.CanvasObject
-		if c.Name == checkDaemon && !c.OK && !l.app.starting {
+		if c.ID == model.CheckRecorder && !c.OK && !l.app.starting {
 			start := newRowLitButton(lang.StartRecorder, theme.MediaPlayIcon(), widget.HighImportance, l.app.StartDaemon)
 			fix = start.lit
 		}
-		if c.Name == proto.CheckPlayerRunning && !c.OK {
-			open := newRowLitButton(fmt.Sprintf(lang.Open, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
+		if c.ID == proto.CheckPlayerRunning && !c.OK {
+			open := newRowLitButton(fmt.Sprintf(lang.OpenPlayer, s.Info.Target.Process), theme.MediaPlayIcon(), widget.HighImportance, l.app.launchPlayer)
 			fix = open.lit
 		}
-		if c.Name == proto.CheckOutputWritable && !c.OK {
+		if c.ID == proto.CheckOutputWritable && !c.OK {
 			choose := newRowLitButton(lang.ChooseAnotherFolder, theme.FolderOpenIcon(), widget.HighImportance, func() {
 				l.hideDiagnostics()
 				l.app.showOutputSetting()
 			})
 			fix = choose.lit
 		}
-		name := container.NewHBox(widget.NewIcon(icon), widget.NewLabel(checkLabel(c)))
+		name := container.NewHBox(widget.NewIcon(icon), widget.NewLabel(model.CheckName(c)))
 		detail := model.CheckDetail(c, runtime.GOOS)
 		var row fyne.CanvasObject = container.NewBorder(nil, nil, name, fix, clipped(detail))
 		if !c.OK && detail != "" {
@@ -351,18 +351,4 @@ func (l *logsScreen) filter() {
 	}
 	l.lines = lines
 	l.list.Refresh()
-}
-
-// checkLabel names a check as it stands: a failed "ffmpeg found" reads
-// "ffmpeg not found". Code keeps finding checks by their names.
-func checkLabel(c proto.Check) string {
-	if c.OK {
-		return c.Name
-	}
-	for _, word := range []string{"found", "running", "configured", "writable", "heard"} {
-		if strings.HasSuffix(c.Name, " "+word) {
-			return strings.TrimSuffix(c.Name, word) + "not " + word
-		}
-	}
-	return c.Name
 }

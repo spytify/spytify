@@ -43,10 +43,10 @@ func folded(s *settingsScreen, group string, o fyne.CanvasObject) bool {
 // in its section, the rarely changed ones folded under Advanced.
 func TestSettingsAreLaidOutBySection(t *testing.T) {
 	_, _, s := settingsApp(t)
-	if g := groups(); g[0] != "App" {
+	if g := groups(); g[0] != "app" {
 		t.Errorf("first section %q, want App", g[0])
 	}
-	if !folded(s, "App", s.player.box) {
+	if !folded(s, "app", s.player.box) {
 		t.Error("the player is not in App's Advanced part")
 	}
 	for _, d := range settings.Table {
@@ -154,11 +154,12 @@ func TestEveryNoteShowsUnderItsLabel(t *testing.T) {
 	relayout(s.scroll)
 	drv := fyne.CurrentApp().Driver()
 	for _, d := range settings.Table {
-		if d.Note == "" {
+		w := model.SettingWords(d)
+		if w.Note == "" {
 			continue
 		}
 		row := s.fields[d.Key].row
-		label, note := richText(row, d.Label), richText(row, d.Note)
+		label, note := richText(row, w.Label), richText(row, w.Note)
 		if label == nil || note == nil {
 			t.Errorf("%s: no note under its label", d.Key)
 			continue
@@ -167,7 +168,7 @@ func TestEveryNoteShowsUnderItsLabel(t *testing.T) {
 		if under.X != at.X || under.Y < at.Y+label.Size().Height {
 			t.Errorf("%s: note at %v, not under its label at %v", d.Key, under, at)
 		}
-		if got := shown(note); got != d.Note {
+		if got := shown(note); got != w.Note {
 			t.Errorf("%s: the note shows %q, cut at the default width", d.Key, got)
 		}
 	}
@@ -238,7 +239,7 @@ func TestPickingABitrateSendsItsNumber(t *testing.T) {
 // puts back what the user had opened.
 func TestSettingsSearch(t *testing.T) {
 	a, _, s := settingsApp(t)
-	s.advanced["Output"].setOpen(true)
+	s.advanced["output"].setOpen(true)
 	s.search.SetText("bitrate")
 	a.render()
 	all := texts(s.sections)
@@ -247,10 +248,10 @@ func TestSettingsSearch(t *testing.T) {
 	}
 	s.search.SetText("")
 	a.render()
-	if !s.advanced["Output"].open {
+	if !s.advanced["output"].open {
 		t.Error("the Advanced part the user opened closed after a search")
 	}
-	if s.advanced["Encoding"] != nil && s.advanced["Encoding"].open {
+	if s.advanced["encoding"] != nil && s.advanced["encoding"].open {
 		t.Error("an Advanced part a search opened stayed open")
 	}
 }
@@ -322,7 +323,7 @@ func TestThePlayerSavesWithoutAButton(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	a, _, s := settingsApp(t)
-	s.advanced["App"].setOpen(true)
+	s.advanced["app"].setOpen(true)
 	s.layout()
 	if _, err := os.Stat(target.UserEnvPath()); err == nil {
 		t.Fatal("showing the player wrote the .env file")

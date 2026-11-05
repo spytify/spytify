@@ -2,11 +2,13 @@
 // written once under the name the code uses. A text with %s or %d takes its
 // values through fmt.Sprintf, in the order its comment gives.
 //
-// Not here: the settings' labels and notes, which settings.Table keeps by
-// their key; the checks' names and details, and the errors, which come from
-// the recorder or are written where they are made, but for the recorder's
-// warnings, which model.WarningText words from their code; and log lines,
-// telemetry names and preference keys, which the window never shows.
+// The settings' labels, notes and choices are in settings.go, by their key.
+//
+// Not here: the facts the recorder sends, as a path, a version or an
+// error, which the window shows as they come, inside these texts when they
+// word them: the checks by their ID (model.CheckName, model.CheckDetail),
+// the recorder's warnings by their code (model.WarningText); and log
+// lines, telemetry names and preference keys, which the window never shows.
 package lang
 
 // The app and its tabs.
@@ -37,7 +39,7 @@ const (
 // The window while the recorder is not running.
 const (
 	RecorderNotRunning = "The recorder is not running"
-	RecorderExplained  = "Spytify records through spytifyd, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set."
+	RecorderExplained  = "Spytify records through its recorder, which runs on its own so recording goes on with this window closed. It starts with the app; choose the player it records if none is set."
 	StartRecorder      = "Start the recorder"
 	Player             = "Player"
 )
@@ -45,14 +47,13 @@ const (
 // The connection to the recorder, and why it failed. NoRecorder takes the
 // recorder's file name; RecorderStopped the last line it wrote.
 const (
-	NotConnectedToRecorder = "not connected to spytifyd"
+	NotConnectedToRecorder = "not connected to the recorder"
 	InArchive              = "Spytify runs from inside the downloaded archive, without the recorder next to it. Extract the whole archive to a folder, then start Spytify from there."
 	NoRecorder             = "%s, the recorder, is not next to Spytify. Extract the whole download again and start Spytify from there; if it is still missing, an antivirus may have removed it."
-	RecorderDown           = "spytifyd is not running"
-	RecorderClosed         = "spytifyd closed the connection"
-	RecorderOtherProtocol  = "spytifyd speaks another protocol version; update the UI or the daemon"
-	RecorderStopped        = "spytifyd stopped: %s"
-	RecorderNoAnswer       = "spytifyd started but does not answer; see its log in Logs"
+	RecorderClosed         = "the recorder closed the connection"
+	RecorderOtherProtocol  = "the recorder speaks another protocol version; update Spytify"
+	RecorderStopped        = "the recorder stopped: %s"
+	RecorderNoAnswer       = "the recorder started but does not answer; see its log in Logs"
 )
 
 // The Record screen. ReadyText takes the player, then the output folder.
@@ -61,10 +62,10 @@ const (
 	ReadyText                 = "Press Record, then play music in %s. Each track becomes its own file in %s."
 	RecordIsOff               = "Record is off"
 	RecordIsOffText           = "Spytify cannot write to the output folder, %s. The diagnostics say why."
-	RecordNeedsRecorder       = "Spytify records through spytifyd, which is not running. Start it to record."
+	RecordNeedsRecorder       = "The recorder is not running. Start it to record."
 	AlreadyPlaying            = "A track that is already playing when you press Record is skipped: recording starts with the next one, or replay it from the start."
 	YourPlayer                = "your player"
-	Open                      = "Open %s"
+	OpenPlayer                = "Open %s"
 	OpenThePlayer             = "Open the player"
 	OpenDiagnostics           = "Open diagnostics"
 	Play                      = "Play"
@@ -185,42 +186,87 @@ const (
 	MPRISNameHint       = "org.mpris.MediaPlayer2.<name> (default)"
 	LaunchCommand       = "Launch command"
 	LaunchCommandHint   = "command that starts the player (optional)"
-	PlayerSaved         = "Saved. spytifyd records this player once it restarts."
-	RestartRecorder     = "Restart spytifyd"
-	RestartRecorderAsk  = "Restart spytifyd?"
+	PlayerSaved         = "Saved. The recorder records this player once it restarts."
+	RestartRecorder     = "Restart the recorder"
+	RestartRecorderAsk  = "Restart the recorder?"
 	RestartStopsSession = "A session is recording; restarting stops it now."
 	PlayerRequired      = "the player process name is required"
 )
 
 // Logs and the diagnostics. LevelError, LevelInfo and LevelDebug are the
 // log's filter; RecorderRunning is the window's own check, that the
-// recorder answers. NotRunning and PID are the player running check's
-// detail, kept current between two runs of the checks.
+// recorder answers. DetailNotRunning and DetailPID are the player running
+// check's detail, kept current between two runs of the checks.
 const (
 	LevelError          = "error"
 	LevelInfo           = "info"
 	LevelDebug          = "debug"
-	RecorderRunning     = "spytifyd running"
-	Show                = "Show"
+	RecorderRunning     = "recorder running"
+	ShowLevels          = "Show"
 	Copy                = "Copy"
 	OpenLogFile         = "Open log file"
 	Diagnostics         = "Diagnostics"
 	RunChecksAgain      = "Run the checks again"
 	ChecksPass          = "All %d checks pass."
 	ChecksNeedAttention = "%d of %d checks need attention."
-	NothingElseChecked  = "spytifyd is not running, so nothing else can be checked."
+	NothingElseChecked  = "The recorder is not running, so nothing else can be checked."
 	ChooseAnotherFolder = "Choose another folder"
-	NotRunning          = "not running"
-	PID                 = "pid %d"
+	DetailNotRunning    = "not running"
+	DetailPID           = "pid %s"
 	SendToDevelopers    = "Send to the developers"
 	SendChecksText      = "Send the checks that fail and the end of the recorder's log to the developers? The log can name tracks you recorded."
 	SendChecksPicture   = "Send the checks that fail, the end of the recorder's log and a picture of the window to the developers? They can name tracks you recorded; the picture covers your folders."
 	SendPicture         = "Send the picture of the window"
 	WhatWillBeSent      = "What will be sent"
-	Comment             = "Comment (optional)"
+	CommentHint         = "Comment (optional)"
 	Send                = "Send"
 	Sent                = "Sent"
 	NotSent             = "Not sent, try again"
+)
+
+// The checks, by their ID (model.CheckName, model.CheckDetail): a name,
+// one when the check fails if it says so, then the details that word what
+// the recorder found. CheckEncoder takes the encoder; TargetProcess the
+// process names; ForFormat the format; MacOSVersion the version;
+// WindowsBuild the build; HelperMacOS and PowerShellReads a path;
+// NoCaptureBackend the system; Rates and RatesOnly the allowed rates.
+const (
+	CheckTarget             = "target configured"
+	CheckNoTarget           = "target not configured"
+	CheckPlayerRunning      = "player running"
+	CheckPlayerNotRunning   = "player not running"
+	CheckFFmpeg             = "ffmpeg found"
+	CheckNoFFmpeg           = "ffmpeg not found"
+	CheckEncoder            = "encoder %s"
+	CheckPlayerHeard        = "player heard"
+	CheckPlayerNotHeard     = "player not heard"
+	CheckOutputWritable     = "output folder writable"
+	CheckOutputNotWritable  = "output folder not writable"
+	CheckMacOS              = "macOS 14.2 or later"
+	CheckWindows            = "Windows 10 2004 or later"
+	CheckHelper             = "capture helper"
+	CheckAppleScript        = "AppleScript"
+	CheckPowerShell         = "Windows PowerShell"
+	CheckCapture            = "capture"
+	CheckSessionBus         = "D-Bus session bus"
+	CheckSampleRates        = "PipeWire sample rates"
+	CheckFakePlayer         = "fake player"
+	CheckRecorderNotRunning = "recorder not running"
+	TargetProcess           = "SPYTIFY_TARGET_PROCESS=%s"
+	ForFormat               = "for encode.format=%s"
+	NoSilenceHeard          = "no silence heard"
+	MacOSVersion            = "macOS %s"
+	WindowsBuild            = "build %s"
+	HelperMacOS             = "%s; macOS asks once for System Audio Recording permission"
+	AppleScriptAsks         = "macOS asks once to let spytify control the player"
+	PowerShellReads         = "%s; reads what plays through the media session API"
+	CapturePipeWire         = "PipeWire (pw-record)"
+	CapturePulseAudio       = "PulseAudio (parec)"
+	InstallCapture          = "install pipewire-bin (pw-record, pw-dump) or pulseaudio-utils"
+	NoCaptureBackend        = "no %s capture backend in the alpha (Linux only)"
+	RatesUnknown            = "allowed rates unknown"
+	Rates                   = "%s Hz"
+	RatesOnly               = "only %s Hz: 44.1 kHz tracks are resampled once. To record them unchanged, put context.properties = { default.clock.allowed-rates = [ 44100 48000 ] } in a .conf file under ~/.config/pipewire/pipewire.conf.d/, then log out and back in"
 )
 
 // The recorder's warnings, by their code (model.WarningText), in the Record
@@ -237,7 +283,7 @@ const (
 	NoAudioMacOS       = "If macOS asks to let Spytify record system audio, allow it; it is in System Settings > Privacy & Security > Screen & System Audio Recording."
 	NoAudioWindows     = "Check that the Windows Audio service runs and that the player plays on an output device."
 	NoAudioLinux       = "Check that PipeWire runs: systemctl --user restart pipewire."
-	OnlySilence        = "Only silence from the player for 10 s while it plays."
+	OnlySilence        = "Only silence from the player for 30 s while it plays."
 	OnlySilenceMacOS   = "Check that the player is not muted in its own volume; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
 	OnlySilenceWindows = "Check that the player is not muted in its own volume, nor in the Volume mixer."
 	OnlySilenceLinux   = "Check that the player is not muted in its own volume, nor in the system's sound settings."
@@ -304,7 +350,7 @@ const (
 	Cancel   = "Cancel"
 	Close    = "Close"
 	Error    = "Error"
-	Quit     = "Quit Spytify?"
+	QuitAsk  = "Quit Spytify?"
 	QuitText = "Recording stops, and the track being recorded is not kept."
 )
 
@@ -332,7 +378,8 @@ const (
 
 // Sizes, rates and formats. Separator joins a title and its artist, or
 // album, and a stream's badges; FormatBitrate takes a format, then its
-// bitrate.
+// bitrate; BitrateChoice a bitrate, then the megabytes a minute of it
+// takes, so an hour's cost shows before picking one.
 const (
 	SizeGB        = "%.1f GB"
 	SizeMB        = "%.1f MB"
@@ -340,6 +387,7 @@ const (
 	SizeB         = "%d B"
 	KHz           = "%s kHz"
 	FormatBitrate = "%s %v kbps"
+	BitrateChoice = "%d kbps · ~ %.1f MB/min"
 	Separator     = " · "
 )
 

@@ -58,7 +58,7 @@ func connect(t *testing.T, a *App, m *model.Model, on bool) {
 // failCheck makes ffmpeg's check fail.
 func failCheck(a *App, m *model.Model) {
 	in := info()
-	in.Checks = append(in.Checks, proto.Check{Name: "ffmpeg found", Detail: "not on PATH"})
+	in.Checks = append(in.Checks, proto.Check{ID: proto.CheckFFmpeg, Name: "ffmpeg found", Detail: "not on PATH"})
 	m.SetInfo(in)
 	a.render()
 }
@@ -81,7 +81,7 @@ func TestNothingLeavesWhenTheBugTrackerIsOff(t *testing.T) {
 	connect(t, a, m, false)
 	a.checkCrashes()
 	tapButton(t, overlay(t, a), lang.Close)
-	a.launchFailed(errors.New("spytifyd started but does not answer; see its log in Logs"))
+	a.launchFailed(errors.New(lang.RecorderNoAnswer))
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
 	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -12}))
 	m.Apply(event(t, proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "s-1", Artist: "Neon Harbor", Title: "Midnight Ferry", LengthMs: 200000},

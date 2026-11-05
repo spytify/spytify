@@ -8,6 +8,7 @@ import (
 	"go/types"
 	"io/fs"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -81,5 +82,51 @@ func TestEachTextIsUsed(t *testing.T) {
 		if !used[name] {
 			t.Errorf("%s is in the lexicon but nothing shows it", name)
 		}
+	}
+}
+
+// The settings' texts are written once too, among them and against the
+// other texts, which they name instead, as recorder.duplicates' Skip.
+func TestEachSettingTextIsWrittenOnce(t *testing.T) {
+	_, text := texts(t)
+	named := map[string]string{}
+	for name, s := range text {
+		named[s] = name
+	}
+	f, err := parser.ParseFile(token.NewFileSet(), "settings.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	ast.Inspect(f, func(n ast.Node) bool {
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+		// A setting's Label, Note or Choices, or a group's title.
+		if _, field := kv.Key.(*ast.Ident); !field {
+			if _, title := kv.Value.(*ast.BasicLit); !title {
+				return true
+			}
+		}
+		ast.Inspect(kv.Value, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			s, _ := strconv.Unquote(lit.Value)
+			if name, ok := named[s]; ok {
+				t.Errorf("settings.go writes %q, which is %s: name it", s, name)
+			}
+			if seen[s] {
+				t.Errorf("settings.go writes %q twice", s)
+			}
+			seen[s] = true
+			return true
+		})
+		return false
+	})
+	if len(seen) < 70 {
+		t.Errorf("only %d texts read in settings.go", len(seen))
 	}
 }

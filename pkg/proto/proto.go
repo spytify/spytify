@@ -102,28 +102,71 @@ type TargetInfo struct {
 
 // Check is one line of the capability probe shown before Record is enabled.
 // An Advice check that fails only lowers quality: recording still works.
+//
+// The window words a check from its ID and Args, the facts its words take;
+// a Detail that holds only a fact, as a path or an error, it shows as it
+// comes. Name and Detail say it all in English, for the bug tracker and for
+// a window older than the IDs.
 type Check struct {
-	Name   string `json:"name"`
-	OK     bool   `json:"ok"`
-	Detail string `json:"detail,omitempty"`
-	Advice bool   `json:"advice,omitempty"`
+	ID     CheckID  `json:"id,omitempty"`
+	Name   string   `json:"name"`
+	OK     bool     `json:"ok"`
+	Detail string   `json:"detail,omitempty"`
+	Args   []string `json:"args,omitempty"`
+	Advice bool     `json:"advice,omitempty"`
 	// Facts say what the check found, without a name or a path, for the
 	// bug tracker: where the output folder is, say.
 	Facts map[string]string `json:"facts,omitempty"`
 }
 
-// CheckOutputWritable is the check that the output folder can be written
-// to: without it, no recording starts (CodeOutputDir).
-const CheckOutputWritable = "output folder writable"
+// CheckID names a check. The comment of each says what its Args hold, or
+// what its Detail is when it has none.
+type CheckID string
 
-// CheckPlayerHeard is the check that the capture did not hear only silence
-// while the player played: the player muted in its own volume or in the
-// system's mixer, or, on macOS, a refused System Audio Recording
-// permission.
-const CheckPlayerHeard = "player heard"
-
-// CheckPlayerRunning is the check that the player runs.
-const CheckPlayerRunning = "player running"
+const (
+	// CheckTarget is the player configured: its process names.
+	CheckTarget CheckID = "target"
+	// CheckPlayerRunning is the player running: its pid when it runs.
+	CheckPlayerRunning CheckID = "player_running"
+	// CheckFFmpeg is ffmpeg found; Detail: its version, or why not.
+	CheckFFmpeg CheckID = "ffmpeg"
+	// CheckEncoder is ffmpeg having encode.format's encoder: the encoder,
+	// then the format.
+	CheckEncoder CheckID = "encoder"
+	// CheckPlayerHeard is the capture not hearing only silence while the
+	// player played: the player muted in its own volume or in the system's
+	// mixer, or, on macOS, a refused System Audio Recording permission.
+	CheckPlayerHeard CheckID = "player_heard"
+	// CheckOutputWritable is the output folder written to; Detail: the
+	// folder, or why not. Without it, no recording starts (CodeOutputDir).
+	CheckOutputWritable CheckID = "output_writable"
+	// CheckMacOS is macOS 14.2 or later: the version.
+	CheckMacOS CheckID = "macos"
+	// CheckWindows is Windows 10 2004 or later: the build.
+	CheckWindows CheckID = "windows"
+	// CheckHelper is Windows' capture helper found: its path; Detail: why
+	// not.
+	CheckHelper CheckID = "capture_helper"
+	// CheckTapHelper is macOS' capture helper found: its path; Detail: why
+	// not.
+	CheckTapHelper CheckID = "tap_helper"
+	// CheckAppleScript is osascript found; Detail: why not.
+	CheckAppleScript CheckID = "applescript"
+	// CheckPowerShell is Windows PowerShell found: its path; Detail: why
+	// not.
+	CheckPowerShell CheckID = "powershell"
+	// CheckCapture is a Linux capture found: pipewire or pulseaudio.
+	CheckCapture CheckID = "capture"
+	// CheckNoCapture is a system with no capture: the system.
+	CheckNoCapture CheckID = "no_capture"
+	// CheckSessionBus is the D-Bus session bus reached; Detail: why not.
+	CheckSessionBus CheckID = "session_bus"
+	// CheckSampleRates is PipeWire allowing 44.1 kHz, an advice: the
+	// allowed rates, none when they are not known.
+	CheckSampleRates CheckID = "sample_rates"
+	// CheckFakePlayer is spytifyd --fake's player; Detail: its timeline.
+	CheckFakePlayer CheckID = "fake_player"
+)
 
 type CoreInfoResult struct {
 	Version  string     `json:"version"`

@@ -403,7 +403,7 @@ func TestWaitingSaysToStartThePlayer(t *testing.T) {
 	// row offers to open the player.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: false}))
 	offers(fmt.Sprintf(lang.NothingRecordedNotRunning, "Player"), r.launch)
-	if r.launch.Text != fmt.Sprintf(lang.Open, "Player") || !a.action.Disabled() || len(r.rows) != 1 {
+	if r.launch.Text != fmt.Sprintf(lang.OpenPlayer, "Player") || !a.action.Disabled() || len(r.rows) != 1 {
 		t.Errorf("the button reads %q, Record disabled %v, %d rows", r.launch.Text, a.action.Disabled(), len(r.rows))
 	}
 	snapshot(t, a, "waiting-player-closed")
@@ -457,13 +457,13 @@ func TestIdleRecordScreenIsJustAMessage(t *testing.T) {
 	down.Checks[1].OK = false
 	m.SetInfo(down)
 	a.render()
-	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.Open, "Player")) || contains(all, lang.OpenDiagnostics) {
+	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.OpenPlayer, "Player")) || contains(all, lang.OpenDiagnostics) {
 		t.Errorf("player not running: %v", all)
 	}
 	// It starts: the check follows the target's state, and the offer goes.
 	m.Apply(event(t, proto.EventTargetState, proto.TargetStateEvent{Running: true, PID: 99}))
 	a.render()
-	if all := texts(a.win.Content()); contains(all, fmt.Sprintf(lang.Open, "Player")) || !checkOK(m.Snapshot().Info.Checks, "player running") {
+	if all := texts(a.win.Content()); contains(all, fmt.Sprintf(lang.OpenPlayer, "Player")) || !checkOK(m.Snapshot().Info.Checks, proto.CheckPlayerRunning) {
 		t.Errorf("player started: %v", all)
 	}
 	// Any other failing check sends the user to the diagnostics.
@@ -675,7 +675,7 @@ func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 	}
 	a.showTab(tabRecord)
 	// What spytifyd last said no longer holds once it is gone.
-	m.SetConn(model.Disconnected, "spytifyd closed the connection")
+	m.SetConn(model.Disconnected, lang.RecorderClosed)
 	a.render()
 	if r.alertRow.Visible() {
 		t.Fatalf("alert still shows %q with spytifyd gone", r.alert.String())
@@ -693,7 +693,7 @@ func TestARecorderWarningShowsInAnAlertOnTheRecordTab(t *testing.T) {
 func TestRecordSaysSpytifydIsGone(t *testing.T) {
 	a, m := connectedTestApp(t, defaults())
 
-	m.SetConn(model.Disconnected, "spytifyd closed the connection")
+	m.SetConn(model.Disconnected, lang.RecorderClosed)
 	a.render()
 	all := texts(a.win.Content())
 	for _, want := range []string{lang.RecordIsOff, lang.RecordNeedsRecorder, lang.StartRecorder} {
@@ -712,7 +712,7 @@ func TestRecordSaysSpytifydIsGone(t *testing.T) {
 	snapshot(t, a, "record-spytifyd-gone")
 
 	// A start that failed says why.
-	a.startErr = "spytifyd stopped: listen: address already in use"
+	a.startErr = fmt.Sprintf(lang.RecorderStopped, "listen: address already in use")
 	a.render()
 	if all := texts(a.win.Content()); !contains(all, a.startErr) || !contains(all, lang.StartRecorder) {
 		t.Errorf("failed start: %v", all)
@@ -745,7 +745,7 @@ func TestRecordSaysSpytifydIsGoneDuringASession(t *testing.T) {
 		t.Fatal("recording: no card for the track")
 	}
 
-	m.SetConn(model.Disconnected, "spytifyd closed the connection")
+	m.SetConn(model.Disconnected, lang.RecorderClosed)
 	a.render()
 	if r.card.Visible() {
 		t.Error("spytifyd is gone: the track still shows as being recorded")

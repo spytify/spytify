@@ -41,6 +41,7 @@ func (s *Session) onChunk(ch capture.Chunk) {
 	peaks, rms := ch.Format.ChannelLevels(ch.Data)
 	if slices.Max(peaks) > s.silenceDB {
 		s.lastSound = time.Now()
+		s.trackHeard = true
 		s.hear()
 	}
 	data := ch.Data

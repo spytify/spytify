@@ -18,14 +18,14 @@ func TestTheDiagnosticsFollowSpytifyd(t *testing.T) {
 	a.showTab(tabRecord)
 	a.render()
 	d := diagnostics(t, a)
-	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 5)) || !contains(all, "spytifyd running") || !contains(all, "v2.0.0-alpha") {
+	if all := texts(d); !contains(all, fmt.Sprintf(lang.ChecksPass, 5)) || !contains(all, lang.RecorderRunning) || !contains(all, "v2.0.0-alpha") {
 		t.Errorf("spytifyd answers: %v", all)
 	}
 
-	m.SetConn(model.Disconnected, "spytifyd closed the connection")
+	m.SetConn(model.Disconnected, lang.RecorderClosed)
 	a.render()
 	all := texts(d)
-	for _, want := range []string{lang.NothingElseChecked, "spytifyd not running", "spytifyd closed the connection", lang.StartRecorder} {
+	for _, want := range []string{lang.NothingElseChecked, lang.CheckRecorderNotRunning, lang.RecorderClosed, lang.StartRecorder} {
 		if !contains(all, want) {
 			t.Errorf("%q not in the diagnostics once spytifyd is gone: %v", want, all)
 		}

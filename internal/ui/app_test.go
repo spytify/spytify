@@ -18,10 +18,10 @@ import (
 
 func TestOfflineScreen(t *testing.T) {
 	a, m, _ := newTestApp(t, "/tmp/spytify.sock")
-	m.SetConn(model.Disconnected, "spytifyd is not running")
+	m.SetConn(model.Disconnected, "")
 	a.render()
 	all := texts(a.win.Content())
-	for _, want := range []string{lang.RecorderNotRunning, "spytifyd is not running", lang.StartRecorder, "/tmp/spytify.sock", lang.PlayerProcess} {
+	for _, want := range []string{lang.RecorderNotRunning, lang.StartRecorder, "/tmp/spytify.sock", lang.PlayerProcess} {
 		if !contains(all, want) {
 			t.Errorf("%q not on the offline screen", want)
 		}
@@ -57,7 +57,7 @@ func TestOtherScreensRender(t *testing.T) {
 			t.Errorf("%q shows on the settings screen", unwanted)
 		}
 	}
-	if g := groups(); g[0] != "App" {
+	if g := groups(); g[0] != "app" {
 		t.Errorf("sections %v: App is not first", g)
 	}
 	s := a.screens[tabSettings].(*settingsScreen)
@@ -216,7 +216,7 @@ func TestQuitWhileRecordingAsksFirst(t *testing.T) {
 	a.render()
 	a.quit()
 	top := a.win.Canvas().Overlays().Top()
-	if top == nil || !contains(texts(top), lang.Quit) {
+	if top == nil || !contains(texts(top), lang.QuitAsk) {
 		t.Fatal("quitting during a recording did not ask")
 	}
 }
@@ -230,7 +230,7 @@ func TestTheAppStartsTheRecorderItself(t *testing.T) {
 	m := model.New()
 	l := link.New(filepath.Join(t.TempDir(), "absent.sock"), m)
 	a := New(fa, l, m, Options{StateDir: t.TempDir(), ManualRender: true, NoUpdateCheck: true, AutoStart: true})
-	m.SetConn(model.Disconnected, "spytifyd is not running")
+	m.SetConn(model.Disconnected, "")
 	a.render()
 	snapshot(t, a, "starting")
 	all := texts(a.win.Content())

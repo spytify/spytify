@@ -107,7 +107,7 @@ func TestNoRecordingStartsWithoutAnOutputFolder(t *testing.T) {
 		t.Fatalf("start: %v, want the output folder's error", err)
 	}
 	for _, c := range s.core.Info().Checks {
-		if c.Name == proto.CheckOutputWritable && (c.OK || c.Detail == s.out) {
+		if c.ID == proto.CheckOutputWritable && (c.OK || c.Detail == s.out) {
 			t.Errorf("check %+v, want it failing with the reason", c)
 		}
 	}
