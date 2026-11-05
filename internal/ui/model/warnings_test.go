@@ -23,6 +23,9 @@ func TestPinnedWarnings(t *testing.T) {
 	}
 	free := int64(80)
 	fmt.Fprintf(&b, "disk full: %s\n", WarningText(proto.ErrorEvent{Code: proto.ErrorDiskFull, FreeMB: &free}, "linux"))
+	for _, pct := range []int{40, 0} {
+		fmt.Fprintf(&b, "volume %d%%: %s\n", pct, WarningText(proto.ErrorEvent{Code: proto.ErrorPlayerVolumeLow, Volume: &pct}, "darwin"))
+	}
 	golden, err := os.ReadFile("testdata/warnings.golden")
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +52,7 @@ func TestWarningsTheLexiconCannotWordKeepTheRecordersMessage(t *testing.T) {
 		{Code: proto.ErrorRingOverflow, Msg: "12 frames lost"},
 		{Code: proto.ErrorCaptureLowQuality, Msg: "The player's output device runs at 16 kHz mono, not fit for recording"},
 		{Code: proto.ErrorDiskFull, Msg: "only 10 MB free in the output folder"},
+		{Code: proto.ErrorPlayerVolumeLow, Msg: "the player's volume is at 40%: tracks recorded now are quieter"},
 	} {
 		if got := WarningText(e, "darwin"); got != e.Msg {
 			t.Errorf("%s: %q, want the recorder's %q", e.Code, got, e.Msg)

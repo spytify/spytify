@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
@@ -17,6 +18,10 @@ var captureStall = 10 * time.Second
 // captureSilent is how long a track may play with only silence arriving
 // since it started before the session says so.
 var captureSilent = 30 * time.Second
+
+// unmuteGrace is how long after an ad's mute is undone a volume of 0 may
+// still be the mute's: the player is polled.
+const unmuteGrace = time.Second
 
 // diskFree reports the free space of a folder's disk; tests replace it.
 var diskFree = freeBytes
@@ -42,8 +47,9 @@ func (s *Session) onTick() {
 		s.deps.log.Errorf("%s", msg)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: msg})
 	}
-	// An ad may be silent, muted by the session or not.
-	if s.deps.watchSilence && !s.trackHeard && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent && time.Since(s.trackStarted) > captureSilent {
+	// An ad may be silent, muted by the session or not. A player at 0% is
+	// silent too, and its volume warning says so.
+	if s.deps.watchSilence && !(s.volumeLow && s.volumePct == 0) && !s.trackHeard && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent && time.Since(s.trackStarted) > captureSilent {
 		s.silent = true
 		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureSilent)
 		s.deps.log.Errorf("%s", msg)
@@ -57,6 +63,43 @@ func (s *Session) onTick() {
 		s.endOfPlayback()
 		s.finish()
 	}
+}
+
+// onVolume follows the player's own volume. Under 100%, the take is
+// quieter than the track: the session says so, again for each new value,
+// and marks the take; back at 100%, the warning is withdrawn. The volume
+// the session sets itself, muting an ad, is not the user's.
+func (s *Session) onVolume(v float64) {
+	if s.adMuted || (v == 0 && time.Since(s.unmutedAt) < unmuteGrace) {
+		return
+	}
+	pct := int(math.Round(v * 100))
+	if pct >= 100 {
+		if s.volumeLow {
+			s.volumeLow, s.volumePct = false, 0
+			s.deps.log.Infof("the player's volume is back at 100%%")
+			s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorPlayerVolumeLow})
+		}
+		return
+	}
+	s.markLowVolume(s.cur)
+	if s.volumeLow && pct == s.volumePct {
+		return
+	}
+	s.volumeLow, s.volumePct = true, pct
+	msg := fmt.Sprintf("the player's volume is at %d%%: tracks recorded now are quieter", pct)
+	s.deps.log.Infof("%s", msg)
+	s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorPlayerVolumeLow, Msg: msg, Volume: &pct})
+}
+
+// markLowVolume marks a take recorded while the player's volume is under
+// 100%; an ad, or audio the session does not record, has no file to mark.
+func (s *Session) markLowVolume(c *segment) {
+	if c == nil || c.ghost || c.provisional || c.reason == proto.SkipAd || c.lowVolume {
+		return
+	}
+	c.lowVolume = true
+	s.deps.log.Debugf("%q: recorded while the player's volume is under 100%%; the file is marked (low volume)", c.info.Title)
 }
 
 // hear notes sound from the capture, the session's first or the first

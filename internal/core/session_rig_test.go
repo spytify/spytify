@@ -190,6 +190,9 @@ func (r *rig) emit(method string, payload any) {
 		if p.FreeMB != nil {
 			line += fmt.Sprintf(" free_mb=%d", *p.FreeMB)
 		}
+		if p.Volume != nil {
+			line += fmt.Sprintf(" volume=%d", *p.Volume)
+		}
 		if p.Fatal {
 			line += " fatal"
 		}
@@ -335,6 +338,7 @@ func takeLine(c *segment) string {
 		{c.awaitStart, "awaiting-sound"},
 		{c.partial, "partial"},
 		{c.pauseFade, "pause-fade"},
+		{c.lowVolume, "low-volume"},
 		{c.w == nil && !c.ghost && !c.provisional, "no-file"},
 	} {
 		if fl.on {
@@ -365,6 +369,9 @@ func (r *rig) addJob(j finishJob) {
 	}
 	if j.pauseFade {
 		line += " pause-fade"
+	}
+	if j.lowVolume {
+		line += " low-volume"
 	}
 	if j.format != f44 {
 		line += fmt.Sprintf(" format=%d/%d", j.format.Rate, j.format.Channels)
@@ -422,6 +429,8 @@ func eventText(ev meta.Event) string {
 		return "appeared"
 	case meta.Seeked:
 		return fmt.Sprintf("Seeked %q pos=%d", ev.Track.Title, ev.PositionMs)
+	case meta.VolumeChanged:
+		return fmt.Sprintf("Volume %.2f", ev.Volume)
 	}
 	return fmt.Sprintf("kind %d", ev.Kind)
 }
@@ -473,6 +482,10 @@ func (r *rig) quiet(ms int64) {
 
 func (r *rig) track(info meta.TrackInfo, posMs int64) {
 	r.send(meta.Event{Kind: meta.TrackChanged, Track: info, PositionMs: posMs})
+}
+
+func (r *rig) volume(v float64) {
+	r.send(meta.Event{Kind: meta.VolumeChanged, Volume: v, PositionMs: -1})
 }
 
 func (r *rig) status(st meta.Status) {

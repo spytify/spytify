@@ -162,3 +162,37 @@ func TestARestartThePlayerIgnoredIsAnError(t *testing.T) {
 		t.Errorf("message %v", err)
 	}
 }
+
+// The poll's volume is reported when first known and each time it changes,
+// from 0 to 1; a poll with no item loaded reports none, as a player with
+// none says 0, and a player that went away is known again from scratch.
+func TestJXATrackerReportsTheVolume(t *testing.T) {
+	const song = `"track":{"id":"vendor:track:1","name":"Song","artist":"Artist","album":"Album","duration":200000}`
+	k := &pollTracker{}
+	volumes := func(evs []Event) []float64 {
+		var out []float64
+		for _, e := range evs {
+			if e.Kind == VolumeChanged {
+				out = append(out, e.Volume)
+			}
+		}
+		return out
+	}
+	for _, st := range []struct {
+		what, poll string
+		want       []float64
+	}{
+		{"first poll", `{"running":true,"state":"playing","position":1,` + song + `,"volume":100}`, []float64{1}},
+		{"the same", `{"running":true,"state":"playing","position":1.25,` + song + `,"volume":100}`, nil},
+		{"lowered", `{"running":true,"state":"playing","position":1.5,` + song + `,"volume":40}`, []float64{0.4}},
+		{"no item", `{"running":true,"state":"stopped","position":0,"track":null,"volume":0}`, nil},
+		{"an item again", `{"running":true,"state":"playing","position":0,` + song + `,"volume":40}`, nil},
+		{"gone", `{"running":false}`, nil},
+		{"back", `{"running":true,"state":"playing","position":0,` + song + `,"volume":40}`, []float64{0.4}},
+		{"not read", `{"running":true,"state":"playing","position":0.25,` + song + `}`, nil},
+	} {
+		if got := volumes(k.next(poll(t, st.poll))); !reflect.DeepEqual(got, st.want) {
+			t.Errorf("%s: volumes %v, want %v", st.what, got, st.want)
+		}
+	}
+}

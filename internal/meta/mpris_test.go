@@ -111,3 +111,26 @@ func TestSeekedOnlyWhenThePositionJumps(t *testing.T) {
 		}
 	}
 }
+
+// MPRIS's Volume is reported from PropertiesChanged, with an item loaded.
+func TestMPRISReportsTheVolume(t *testing.T) {
+	const owner = ":1.42"
+	m := NewMPRIS()
+	m.setOwner("org.mpris.MediaPlayer2.player", owner)
+	changed := func(props map[string]dbus.Variant) *dbus.Signal {
+		return &dbus.Signal{Sender: owner, Name: propsInterface + ".PropertiesChanged", Body: []any{mprisPlayer, props, []string{}}}
+	}
+	volume := func(v float64) map[string]dbus.Variant { return map[string]dbus.Variant{"Volume": dbus.MakeVariant(v)} }
+	at := time.Unix(1_700_000_000, 0)
+	if got := m.handle(nil, changed(volume(0.5)), at); got != nil {
+		t.Errorf("with no item: %+v", got)
+	}
+	song := dbus.MakeVariant(map[string]dbus.Variant{"mpris:trackid": dbus.MakeVariant(dbus.ObjectPath("/track/1")), "xesam:title": dbus.MakeVariant("Song")})
+	m.handle(nil, changed(map[string]dbus.Variant{"Metadata": song}), at)
+	if got, want := m.handle(nil, changed(volume(0.5)), at), []Event{{Kind: VolumeChanged, Volume: 0.5, PositionMs: -1}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("lowered: %+v, want %+v", got, want)
+	}
+	if got := m.handle(nil, changed(map[string]dbus.Variant{"Volume": dbus.MakeVariant("loud")}), at); got != nil {
+		t.Errorf("not a number: %+v", got)
+	}
+}

@@ -228,6 +228,25 @@ func TestAPauseFadeSaysSo(t *testing.T) {
 	}
 }
 
+// A take saved while the player's own volume was under 100% reads "Saved:
+// low volume", and one with a pause fade too names both.
+func TestALowVolumeSaysSo(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(started(t, "a", "First"))
+	m.Apply(started(t, "b", "Second"))
+	m.Apply(started(t, "c", "Third"))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (low volume).flac", LowVolume: true}))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "b", Path: "/m/Second (pause fade) (low volume).flac", PauseFade: true, LowVolume: true}))
+	rows := m.Snapshot().Rows
+	if r := rows[1]; r.Status != Saved || r.StatusText() != lang.SavedLowVolume {
+		t.Errorf("saved %+v, %q", r, r.StatusText())
+	}
+	if r := rows[0]; r.Status != Saved || r.StatusText() != lang.SavedBothIssues {
+		t.Errorf("saved %+v, %q", r, r.StatusText())
+	}
+}
+
 // A track skipped as already recorded has the file the recorder names, or,
 // played again while this session's take of it was being saved, that
 // take's file once it is there.
