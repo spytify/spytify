@@ -40,6 +40,7 @@ The player Spytify records. The app saves it in the `.env` file of your configur
 | --- | --- | --- | --- |
 | Output folder | `output.dir` | a folder: absolute, or starting with ~/ | `~/Spytify` |
 | Group by folders | `output.group_by` | none, artist, artist/album, artists, artists/album | `artist/album` |
+| Write a playlist for each session | `output.playlist` | on, off | off |
 
 Advanced:
 
@@ -97,14 +98,16 @@ Advanced:
 | Trim leading/trailing silence | `recorder.trim_silence` | on, off | on |
 | Silence threshold (dBFS) | `recorder.silence_db` | -90 to -20 | -50 |
 | Boundary search window (ms) | `recorder.boundary_window_ms` | 20 to 2000 | 300 |
+| Pause fade threshold (dB, 0 = off) | `recorder.pause_fade_db` | 0 to 60 | 20 |
 | Stop the session after (0s = never) | `recorder.session_timer` | a duration such as 90m or 2h | `0s` |
 | Target loudness (LUFS) | `recorder.target_lufs` | -30 to -5 | -14 |
 | Pause player when disk is full | `recorder.pause_on_disk_full` | on, off | on |
 | Mute the player on this computer while recording (macOS, Linux) | `player.mute_output` | on, off | off |
 
-- **Trim leading/trailing silence**: Cuts the silence at the start and end of each file. The file starts at the first sound above Silence threshold and ends after the last one, and keeps the fade around them down to 12 dB under the threshold, so a soft attack or a fading last note is not clipped. A take with no sound above the threshold is not saved. Off keeps each file as it was cut between tracks.
-- **Silence threshold (dBFS)**: The level under which sound counts as silence, in dBFS: 0 is the loudest a file can hold, and lower is quieter. Spytify uses it to find where one track ends and the next begins, where a track's first sound is, what Trim leading/trailing silence removes, and the silence of a pause, which is left out of the file. Raise it (towards -40) if hiss between tracks stays in the files; lower it (towards -60) if quiet intros or fade-outs get cut off.
+- **Trim leading/trailing silence**: Cuts the silence at the start and end of each file. The file starts at the first sound above Silence threshold and ends after the last one, and keeps the fade around them down to 12 dB under the threshold, so a soft attack or a fading last note is not clipped. Off keeps each file as it was cut between tracks.
+- **Silence threshold (dBFS)**: The level under which sound counts as silence, in dBFS: 0 is the loudest a file can hold, and lower is quieter. Spytify uses it to find where one track ends and the next begins, where a track's first sound is, what Trim leading/trailing silence removes, and the silence of a pause, which is left out of the file. A take with no sound above it is not saved: it is skipped as silent. Raise it (towards -40) if hiss between tracks stays in the files; lower it (towards -60) if quiet intros or fade-outs get cut off.
 - **Boundary search window (ms)**: When a track plays to its end, the player announces the next one a little early or late. Spytify looks for the cut this many milliseconds on each side of the end the track's length gives: at the quietest point if it is under Silence threshold, at a clear dip in level if two tracks fade into each other, and otherwise at that length. A change announced earlier counts as a skip, and is cut where it happens. A wider window allows for a player that announces further from the end, but can cut at a quiet moment near it.
+- **Pause fade threshold (dB, 0 = off)**: Some players fade out when paused and fade back in when resumed. Spytify leaves the pause's silence out of the file, and the two fades then meet there as a short dip in the music. It measures the sound on each side of the cut against the music 300 milliseconds away: when both sides are this many dB under it, the take is saved with ` (pause fade)` at the end of its file name and title, and the track does not count as recorded, so a later take of it is saved too. A real player's fades measured 31 to 36 dB at the cut, and a cut with no fade under 5. Lower it if takes with a heard dip are not marked; raise it if takes whose pause can't be heard are. 0 never marks a take.
 - **Stop the session after (0s = never)**: Ends the session this long after it starts, written like `90m` or `1h30m`; `0s` never ends it. The track playing at that moment is recorded to its end first.
 - **Target loudness (LUFS)**: The loudness Normalize volume brings tracks to, in LUFS; -14 is the level many streaming services play at. Each track gets one gain for its whole length, never compressed: a louder track is turned down to the target, and a quieter one is turned up only as far as its peaks stay under -1.5 dBTP, so it can end a little under the target. Not used while Normalize volume is off.
 - **Pause player when disk is full**: Before each track, Spytify checks that the output folder has 256 MB free. When it has less, the track is not recorded and the session stops with an error. This setting pauses the player too, so the music does not go on unrecorded.

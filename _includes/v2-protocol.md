@@ -33,13 +33,13 @@ Clients speak newline-delimited JSON-RPC 2.0, protocol version 1, on the recorde
 | `session.state` | [SessionStateEvent](#sessionstateevent) | every transition |
 | `track.started` | [TrackStartedEvent](#trackstartedevent) | boundary committed |
 | `track.finished` | [TrackFinishedEvent](#trackfinishedevent) | file closed and tagged |
-| `track.skipped` | [TrackSkippedEvent](#trackskippedevent) | decision made: duplicate, too_short, ad, incomplete, seeked, low_quality |
+| `track.skipped` | [TrackSkippedEvent](#trackskippedevent) | decision made: duplicate, too_short, ad, incomplete, seeked, low_quality, silent |
 | `track.keepable` | [TrackKeepableEvent](#trackkeepableevent) | a take cut short, stopped, moved along its track bar or recorded in low quality can be saved with track.keep, or no longer |
 | `level` | [LevelEvent](#levelevent) | 10 Hz while recording |
 | `settings.changed` | [SettingsValues](#settingsvalues) | after any successful settings.set or settings.reset |
 | `target.state` | [TargetStateEvent](#targetstateevent) | player process appears or exits |
 | `log` | [LogEvent](#logevent) | each log line, every level |
-| `error` | [ErrorEvent](#errorevent) | capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code |
+| `error` | [ErrorEvent](#errorevent) | capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code. msg says what the recorder found, in English; capture_low_quality carries the capture's format in source, disk_full the megabytes left in free_mb |
 
 ### Types
 
@@ -65,6 +65,8 @@ An empty object.
 | `code` | string |
 | `msg` | string |
 | `fatal` | boolean |
+| `source` | [AudioSource](#audiosource), optional |
+| `free_mb` | integer, optional |
 
 #### EventsRecentResult
 
@@ -78,6 +80,7 @@ An empty object.
 | --- | --- |
 | `peak_dbfs` | number |
 | `rms_dbfs` | number |
+| `channels` | array of [ChannelLevel](#channellevel), optional |
 
 #### LogEvent
 
@@ -122,6 +125,7 @@ An empty object.
 | Field | Type |
 | --- | --- |
 | `state` | string |
+| `playlist` | string, optional |
 
 #### SessionStatusResult
 
@@ -197,6 +201,7 @@ An empty object.
 | `tagged_by` | string, optional |
 | `timings` | [FinishTimings](#finishtimings), optional |
 | `partial` | boolean, optional |
+| `pause_fade` | boolean, optional |
 
 #### TrackKeepParams
 
@@ -217,6 +222,8 @@ An empty object.
 | --- | --- |
 | `id` | string |
 | `reason` | string |
+| `path` | string, optional |
+| `of` | string, optional |
 
 #### TrackStartedEvent
 
@@ -238,13 +245,22 @@ An empty object.
 | `sample_rate` | integer |
 | `channels` | integer |
 
+#### ChannelLevel
+
+| Field | Type |
+| --- | --- |
+| `peak_dbfs` | number |
+| `rms_dbfs` | number |
+
 #### Check
 
 | Field | Type |
 | --- | --- |
+| `id` | string, optional |
 | `name` | string |
 | `ok` | boolean |
 | `detail` | string, optional |
+| `args` | array of string, optional |
 | `advice` | boolean, optional |
 | `facts` | object of string, optional |
 
