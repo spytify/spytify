@@ -2,10 +2,15 @@ package ui
 
 import (
 	"errors"
+	"io"
 	"io/fs"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -56,13 +61,102 @@ func (a *App) launchReady(s model.State) {
 	a.tel.Measure("launch", a.launch.start, now, nil, spans)
 }
 
-// launchFailed reports a recorder that did not start.
+// launchFailed reports a recorder that did not start, with what its start
+// found and saw.
 func (a *App) launchFailed(err error) {
 	kind := startErrorKind(err)
 	a.tel.Log("launch", map[string]any{"ready": false, "start_error": kind, "software_opengl": a.opts.SoftwareOpenGL})
+	start := a.link.EndStart()
+	waited := time.Since(start.At)
 	// Not on the toolkit's goroutine, which this is: the report waits for
 	// the window's picture, taken there.
-	a.reports.Go(func() { a.tel.Problem("recorder_start", kind) })
+	a.reports.Go(func() { a.tel.ProblemWith("recorder_start", kind, a.startFacts(start, waited)) })
+}
+
+// startFacts are what a recorder that did not start leaves beside its
+// kind: where spytifyd was, whether it ran, how it stopped and what it
+// said, with no path. They are nil when no start was made.
+func (a *App) startFacts(s link.Start, waited time.Duration) map[string]string {
+	if s.At.IsZero() {
+		return nil
+	}
+	facts := map[string]string{
+		"start.found":         s.Found,
+		"start.in_temp":       strconv.FormatBool(s.InTemp),
+		"start.started":       strconv.FormatBool(s.Started),
+		"start.exited":        strconv.FormatBool(s.Exited),
+		"start.waited_ms":     strconv.FormatInt(waited.Milliseconds(), 10),
+		"start.socket_exists": strconv.FormatBool(s.SocketExists),
+	}
+	if s.Found != "none" {
+		facts["start.exe_bytes"] = strconv.FormatInt(s.ExeBytes, 10)
+	}
+	if s.Err != "" {
+		facts["start.error"] = s.Err
+	}
+	if s.Errno != 0 {
+		facts["start.errno"] = strconv.FormatUint(uint64(s.Errno), 10)
+	}
+	if s.Exited {
+		facts["start.exit_code"] = strconv.Itoa(s.ExitCode)
+	}
+	if s.Started {
+		facts["start.stderr"] = lastLines(s.Stderr, 5, 1000)
+	}
+	if s.DialErr != "" {
+		facts["start.dial_error"] = s.DialErr
+	}
+	if tail, ok := logSince(filepath.Join(a.opts.StateDir, "spytifyd.log"), s.At); ok {
+		facts["start.log_tail"] = lastLines(tail, 20, 2000)
+	}
+	return facts
+}
+
+// logSince is what spytifyd's log holds from the line written at since on,
+// read from its last 64 KiB: the lines of an earlier run, which can name
+// tracks, stay out. ok is false with no log.
+func logSince(path string, since time.Time) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	const most = 64 << 10
+	var from int64
+	if fi, err := f.Stat(); err == nil && fi.Size() > most {
+		from = fi.Size() - most
+	}
+	b, err := io.ReadAll(io.NewSectionReader(f, from, most))
+	if err != nil {
+		return "", false
+	}
+	lines := strings.Split(string(b), "\n")
+	if from > 0 {
+		// The first line read is cut.
+		lines = lines[1:]
+	}
+	for i, l := range lines {
+		ts, _, _ := strings.Cut(l, " ")
+		if at, err := time.Parse(time.RFC3339Nano, ts); err == nil && !at.Before(since) {
+			return strings.Join(lines[i:], "\n"), true
+		}
+	}
+	return "", true
+}
+
+// lastLines are the last n lines of s, their end kept to max bytes.
+func lastLines(s string, n, max int) string {
+	lines := strings.Split(strings.TrimSpace(strings.ReplaceAll(s, "\r\n", "\n")), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	s = strings.Join(lines, "\n")
+	for cut := len(s) - max; cut > 0 && cut < len(s); cut++ {
+		if utf8.RuneStart(s[cut]) {
+			return s[cut:]
+		}
+	}
+	return s
 }
 
 func startErrorKind(err error) string {

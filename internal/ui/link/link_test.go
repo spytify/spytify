@@ -3,6 +3,7 @@ package link
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,22 +158,158 @@ func TestFindDaemonTellsAnArchiveFromAMissingRecorder(t *testing.T) {
 		}
 	}
 	ui := "Spytify" + exeSuffix
-	if _, err := findDaemon(filepath.Join(unpacked, ui)); err != ErrInArchive {
-		t.Errorf("unpacked alone: %v, want ErrInArchive", err)
+	if _, found, err := findDaemon(filepath.Join(unpacked, ui)); err != ErrInArchive || found != "none" {
+		t.Errorf("unpacked alone: %v found %q, want ErrInArchive", err, found)
 	}
-	if _, err := findDaemon(filepath.Join(app, ui)); err != ErrNoDaemon {
-		t.Errorf("recorder missing: %v, want ErrNoDaemon", err)
+	if _, found, err := findDaemon(filepath.Join(app, ui)); err != ErrNoDaemon || found != "none" {
+		t.Errorf("recorder missing: %v found %q, want ErrNoDaemon", err, found)
 	}
 	daemon := filepath.Join(app, "spytifyd"+exeSuffix)
 	if err := os.WriteFile(daemon, nil, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if p, err := findDaemon(filepath.Join(app, ui)); err != nil || p != daemon {
-		t.Errorf("next to the app: %q, %v", p, err)
+	if p, found, err := findDaemon(filepath.Join(app, ui)); err != nil || p != daemon || found != "next to the app" {
+		t.Errorf("next to the app: %q found %q, %v", p, found, err)
 	}
 }
 
-// Once the recorder is up, what it writes to stderr is not kept in the
+// TestMain plays spytifyd when a test starts this binary as one: see
+// fakeDaemon.
+func TestMain(m *testing.M) {
+	switch os.Getenv("SPYTIFY_FAKE_DAEMON") {
+	case "exit":
+		fmt.Fprintln(os.Stderr, "spytifyd: reading settings")
+		fmt.Fprintln(os.Stderr, "spytifyd: listen: address already in use")
+		os.Exit(3)
+	case "slow":
+		fmt.Fprintln(os.Stderr, "spytifyd: starting")
+		time.Sleep(1800 * time.Millisecond)
+		fmt.Fprintln(os.Stderr, "spytifyd: still starting")
+		time.Sleep(2 * time.Second)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// fakeDaemon puts this test binary on PATH as spytifyd, which plays the
+// given part, and nothing else.
+func fakeDaemon(t *testing.T, part string) {
+	t.Helper()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "spytifyd"+exeSuffix), b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("SPYTIFY_FAKE_DAEMON", part)
+}
+
+// A recorder found nowhere is said so, and was never started.
+func TestAStartSaysTheRecorderWasNotFound(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	l := New(filepath.Join(t.TempDir(), "absent.sock"), model.New())
+	if err := l.StartDaemon(); err != ErrNoDaemon && err != ErrInArchive {
+		t.Fatalf("StartDaemon: %v", err)
+	}
+	s := l.EndStart()
+	if s.Found != "none" || s.Started || s.ExeBytes != 0 || s.At.IsZero() {
+		t.Errorf("start %+v", s)
+	}
+}
+
+// A recorder that stops at once says how, and what it wrote last.
+func TestAStartSaysHowTheRecorderStopped(t *testing.T) {
+	fakeDaemon(t, "exit")
+	l := New(filepath.Join(t.TempDir(), "absent.sock"), model.New())
+	err := l.StartDaemon()
+	if err == nil || !strings.Contains(err.Error(), "address already in use") {
+		t.Fatalf("StartDaemon: %v", err)
+	}
+	s := l.EndStart()
+	if s.Found != "PATH" || s.ExeBytes == 0 || !s.Started || !s.Exited || s.ExitCode != 3 || s.Err != "exit status 3" {
+		t.Errorf("start %+v", s)
+	}
+	if !strings.Contains(s.Stderr, "reading settings") || !strings.HasSuffix(strings.TrimSpace(s.Stderr), "address already in use") {
+		t.Errorf("stderr %q", s.Stderr)
+	}
+}
+
+// A recorder still running at 1.5 s that does not answer keeps what it
+// wrote since, until its start is reported; then it is dropped.
+func TestAStartThatGetsNoAnswerKeepsTheRecorderOutput(t *testing.T) {
+	fakeDaemon(t, "slow")
+	sock := filepath.Join(t.TempDir(), "absent.sock")
+	l := New(sock, model.New())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go l.Run(ctx)
+	if err := l.StartDaemon(); err != nil {
+		t.Fatalf("StartDaemon: %v", err)
+	}
+	l.mu.Lock()
+	st := l.start
+	l.mu.Unlock()
+	for deadline := time.Now().Add(5 * time.Second); !strings.Contains(st.stderr.String(), "still starting"); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("stderr %q, without what came after 1.5 s", st.stderr.String())
+		}
+	}
+	s := l.EndStart()
+	if !s.Started || s.Exited || s.SocketExists {
+		t.Errorf("start %+v", s)
+	}
+	if !strings.Contains(s.Stderr, "spytifyd: starting") || !strings.Contains(s.Stderr, "still starting") {
+		t.Errorf("stderr %q", s.Stderr)
+	}
+	if s.DialErr == "" || strings.Contains(s.DialErr, sock) {
+		t.Errorf("dial error %q, want one without the socket's path", s.DialErr)
+	}
+	if st.stderr.String() != "" {
+		t.Error("the recorder's output is still kept once its start was reported")
+	}
+}
+
+// A recorder that answers is no longer heard on stderr.
+func TestAStartThatGetsAnAnswerDropsTheRecorderOutput(t *testing.T) {
+	_, sock, _ := fakeCore(t, proto.Protocol)
+	fakeDaemon(t, "slow")
+	m := model.New()
+	l := New(sock, m)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go l.Run(ctx)
+	if err := l.StartDaemon(); err != nil {
+		t.Fatalf("StartDaemon: %v", err)
+	}
+	waitFor(t, m, "connected", func(s model.State) bool { return s.Conn == model.Connected })
+	l.mu.Lock()
+	st := l.start
+	l.mu.Unlock()
+	time.Sleep(500 * time.Millisecond)
+	if s := st.stderr.String(); s != "" {
+		t.Errorf("kept %q once it answered", s)
+	}
+}
+
+// Its stderr keeps its end: the last lines say why it stopped.
+func TestTheDaemonOutputKeepsItsEnd(t *testing.T) {
+	var b lockedBuffer
+	for i := 0; i < 10000; i++ {
+		fmt.Fprintf(&b, "line %d\n", i)
+	}
+	if s := b.String(); len(s) > 64<<10 || lastLine(s) != "line 9999" {
+		t.Fatalf("kept %d bytes ending %q", len(s), lastLine(s))
+	}
+}
+
+// Once the recorder answers, what it writes to stderr is not kept in the
 // app: its log file has it.
 func TestTheDaemonOutputIsNotKeptAfterStart(t *testing.T) {
 	var b lockedBuffer
