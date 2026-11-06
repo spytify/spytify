@@ -473,7 +473,7 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 func (f *finisher) writeTags(ctx context.Context, t *take) {
 	t.tagged = true
 	step := time.Now()
-	err := (tag.Writer{FFmpeg: f.ffmpeg.Path}).Write(ctx, t.part, t.timings.Format, t.tags, t.topts)
+	err := (tag.Writer{FFmpeg: f.ffmpeg.Path, Logf: f.log.Infof}).Write(ctx, t.part, t.timings.Format, t.tags, t.topts)
 	t.timings.TagMs = msSince(step)
 	if err != nil {
 		f.log.Errorf("%q: tags not written: %v", t.info.Title, err)
@@ -485,12 +485,11 @@ func (f *finisher) writeTags(ctx context.Context, t *take) {
 // counts the file and reports it saved.
 func (f *finisher) save(t *take) {
 	if t.timings.Format == "wav" {
-		if err := os.Rename(t.part+".json", t.final+".json"); err != nil && !os.IsNotExist(err) {
+		if err := openfiles.Rename(t.part+".json", t.final+".json", f.log.Infof); err != nil && !os.IsNotExist(err) {
 			f.log.Errorf("%q: sidecar: %v", t.info.Title, err)
 		}
 	}
-	if err := os.Rename(t.part, t.final); err != nil {
-		err = openfiles.Explain(err, t.part, t.final)
+	if err := openfiles.Rename(t.part, t.final, f.log.Infof); err != nil {
 		os.Remove(t.part)
 		f.fail(t.finishJob, proto.ErrorRename, err)
 		return
