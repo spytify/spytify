@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spytify/spytify/internal/openfiles"
 	"github.com/spytify/spytify/internal/proc"
 )
 
@@ -76,7 +77,10 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 	if err != nil {
 		return fmt.Errorf("tag: ffmpeg: %v: %s", err, strings.TrimSpace(string(out)))
 	}
-	return os.Rename(tmp.Name(), path)
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return openfiles.Explain(err, tmp.Name(), path)
+	}
+	return nil
 }
 
 func metadataPairs(t Track, format, sep string) []string {
