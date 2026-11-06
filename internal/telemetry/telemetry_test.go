@@ -226,6 +226,25 @@ func TestProblemsAreCountedAndSampled(t *testing.T) {
 	}
 }
 
+// A problem's facts go in its context beside the detail, scrubbed.
+func TestAProblemCarriesItsFacts(t *testing.T) {
+	srv := fakesentry.New(t)
+	c := newClient(t, srv, Options{ProblemSampleRate: 1})
+	c.SetEnabled(true)
+	home, _ := os.UserHomeDir()
+	c.ProblemWith("rename", "the file is in use", map[string]string{"rename.errno": "32", "rename.where": filepath.Join(home, "Music")})
+	c.Flush(5 * time.Second)
+
+	ev := srv.Wait(t, "event", 1)[0].JSON()
+	problem, _ := ev["contexts"].(map[string]any)["problem"].(map[string]any)
+	if problem["detail"] != "the file is in use" || problem["rename.errno"] != "32" {
+		t.Fatalf("problem context %v", problem)
+	}
+	if where, _ := problem["rename.where"].(string); home != "" && strings.Contains(where, home) {
+		t.Errorf("rename.where = %q left with the home folder", where)
+	}
+}
+
 // A timing leaves as a transaction with its steps.
 func TestMeasureSendsATransaction(t *testing.T) {
 	srv := fakesentry.New(t)
@@ -363,7 +382,7 @@ func TestCrashReport(t *testing.T) {
 // message.
 func TestSendChecks(t *testing.T) {
 	srv := fakesentry.New(t)
-	c := newClient(t, srv, Options{})
+	c := newClient(t, srv, Options{ProblemSampleRate: 1})
 	c.SetEnabled(true)
 	home, _ := os.UserHomeDir()
 	r := Checks{
