@@ -130,6 +130,13 @@ func (c *Client) once(key string) bool {
 // breadcrumbs that led to it and the window's picture, go as a Sentry
 // issue once per install and version, from a share of the installs.
 func (c *Client) Problem(reason, detail string) {
+	c.ProblemWith(reason, detail, nil)
+}
+
+// ProblemWith is Problem with facts: what was known when it happened, as
+// strings without a name or a path. They go in the problem's context,
+// beside its detail, through the scrubber like every string.
+func (c *Client) ProblemWith(reason, detail string, facts map[string]string) {
 	defer quietly()
 	hub := c.hub()
 	if hub == nil {
@@ -148,8 +155,15 @@ func (c *Client) Problem(reason, detail string) {
 	ev.Message = "blocked: " + reason
 	ev.Fingerprint = []string{"blocked", reason}
 	ev.Tags["reason"] = reason
+	problem := sentry.Context{}
+	for k, v := range facts {
+		problem[k] = v
+	}
 	if detail != "" {
-		ev.Contexts["problem"] = sentry.Context{"detail": detail}
+		problem["detail"] = detail
+	}
+	if len(problem) > 0 {
+		ev.Contexts["problem"] = problem
 	}
 	if att := screenshot(c.takeScreenshot()); att != nil {
 		ev.Attachments = append(ev.Attachments, att)

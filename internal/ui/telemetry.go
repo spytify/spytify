@@ -179,7 +179,7 @@ func (a *App) feedTracker(ev proto.Event) {
 		}
 		a.tel.Breadcrumb("error", string(e.Code), nil)
 		if problemCodes[e.Code] {
-			a.tel.Problem(string(e.Code), e.Msg)
+			a.tel.ProblemWith(string(e.Code), e.Msg, e.Facts)
 		}
 	case proto.EventSettingsChanged:
 		var e proto.SettingsValues
