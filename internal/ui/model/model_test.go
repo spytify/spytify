@@ -282,6 +282,24 @@ func TestASkippedTrackHasItsFile(t *testing.T) {
 	}
 }
 
+// Sizes counts what Snapshot would copy, and the rows cleared.
+func TestSizes(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	for _, id := range []string{"a", "b", "c"} {
+		m.Apply(started(t, id, "Track "+id))
+	}
+	m.Apply(ev(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: "line"}))
+	s := m.Snapshot()
+	if rows, logs, cleared := m.Sizes(); rows != len(s.Rows) || rows == 0 || logs != 1 || cleared != 0 {
+		t.Fatalf("sizes %d %d %d, snapshot has %d rows", rows, logs, cleared, len(s.Rows))
+	}
+	m.ClearRows()
+	if rows, _, cleared := m.Sizes(); rows != 0 || cleared != len(s.Rows) {
+		t.Fatalf("after ClearRows: %d rows, %d cleared", rows, cleared)
+	}
+}
+
 func TestSettingsLogsAndErrors(t *testing.T) {
 	m := New()
 	m.SetSettings(map[string]any{"encode.format": "mp3", "output.dir": "/m"})

@@ -272,6 +272,15 @@ func (m *Model) Snapshot() State {
 	return s
 }
 
+// Sizes counts the finished rows, which only ClearRows empties, the log
+// lines, and the rows cleared, which a replay must not bring back, without
+// copying them as Snapshot does.
+func (m *Model) Sizes() (rows, logs, cleared int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.s.Rows), len(m.s.Logs), len(m.cleared)
+}
+
 // SetConn records the connection state; leaving Connected keeps what the
 // screens show but marks it stale.
 func (m *Model) SetConn(c Conn, err string) {

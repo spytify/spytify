@@ -21,21 +21,28 @@ const MaxAge = 30 * 24 * time.Hour
 // Keep copies a fatal panic's trace to path as well as stderr, so a
 // crash leaves a trace whoever started the program: the app drops
 // spytifyd's stderr once it is up. It returns the summary of the trace the
-// previous run left, which moves to path.1.
+// previous run left, which moves to path.1 with its stderr and vitals.
 func Keep(path string) (previous string) {
 	// Let go of a file set before, which Windows would not rename.
 	_ = debug.SetCrashOutput(nil, debug.CrashOptions{})
 	if st, err := os.Stat(path + ".1"); err == nil && time.Since(st.ModTime()) > MaxAge {
 		_ = os.Remove(path + ".1")
 		_ = os.Remove(StderrOf(path + ".1"))
+		_ = os.Remove(VitalsOf(path + ".1"))
 	}
 	if b, err := os.ReadFile(path); err == nil && len(bytes.TrimSpace(b)) > 0 {
 		previous = Summary(WithLost(path, string(b)))
 		_ = os.Rename(path, path+".1")
-		// An older crash's stderr must not stay beside this trace.
-		_ = os.Remove(StderrOf(path + ".1"))
-		_ = os.Rename(StderrOf(path), StderrOf(path+".1"))
+		// An older crash's stderr and vitals must not stay beside this
+		// trace.
+		for _, of := range []func(string) string{StderrOf, VitalsOf} {
+			_ = os.Remove(of(path + ".1"))
+			_ = os.Rename(of(path), of(path+".1"))
+		}
 	}
+	// A clean run's vitals would pass for this run's, should it crash
+	// before Vitals writes.
+	_ = os.Remove(VitalsOf(path))
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return previous
 	}
@@ -120,11 +127,19 @@ func Header(trace string) []string {
 // which Keep moves along with it: "spytify-ui.crash.log" has
 // "spytify-ui.crash.stderr", and "spytify-ui.crash.log.1"
 // "spytify-ui.crash.stderr.1".
-func StderrOf(path string) string {
+func StderrOf(path string) string { return beside(path, ".stderr") }
+
+// VitalsOf is the file Vitals writes beside the crash log at path, named
+// as StderrOf names its own: "spytify-ui.crash.vitals" and
+// "spytify-ui.crash.vitals.1".
+func VitalsOf(path string) string { return beside(path, ".vitals") }
+
+// beside is path with ext in place of its ".log".
+func beside(path, ext string) string {
 	if i := strings.LastIndex(path, ".log"); i >= 0 {
-		return path[:i] + ".stderr" + path[i+len(".log"):]
+		return path[:i] + ext + path[i+len(".log"):]
 	}
-	return path + ".stderr"
+	return path + ext
 }
 
 // maxStderr is how much of the end of a stderr file WithLost reads.
