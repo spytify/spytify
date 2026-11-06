@@ -95,6 +95,9 @@ type sessionDeps struct {
 	silence func(on bool)
 	// playlist is the session's playlist file as it ends, "" for none.
 	playlist func() string
+	// health is what the capture says of itself when it stalls; nil when
+	// it says nothing.
+	health func() map[string]string
 }
 
 // Session turns a stream of frames and now-playing events into track files.

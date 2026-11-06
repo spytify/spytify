@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	exeSuffix = ".exe"
-	buildHint = "build it with scripts/build-windows.sh"
+	// helperBackend names the capture in its health.
+	helperBackend = "wasapi"
+	exeSuffix     = ".exe"
+	buildHint     = "build it with scripts/build-windows.sh"
 )
 
 // WindowsBuild returns the running Windows build number, such as 22631.

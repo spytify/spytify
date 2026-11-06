@@ -32,7 +32,10 @@ type streamNode struct {
 	rate     int
 	channels int
 	running  bool
-	order    int64
+	// state is the stream's state as the sound server says it, for the
+	// capture's health.
+	state string
+	order int64
 }
 
 // PipeWire records the target's output stream with pw-record, found by
@@ -57,6 +60,17 @@ type PipeWire struct {
 	cancel   context.CancelFunc
 	done     chan struct{}
 	once     sync.Once
+
+	// What the capture saw, for Health: the stream last looked for, the
+	// last error looking for it, the recorder's runs, its last exit status
+	// and its last stderr lines.
+	mu         sync.Mutex
+	found      bool
+	node       streamNode
+	findErr    string
+	runs       int
+	recordExit string
+	stderr     lineRing
 }
 
 type procBackend interface {
@@ -113,6 +127,59 @@ func (p *PipeWire) Open(ctx context.Context, t target.Target) (pcm.Format, error
 func (p *PipeWire) Frames() <-chan Chunk { return p.frames }
 func (p *PipeWire) Overruns() int64      { return p.overruns.Load() }
 
+// Health says what the capture saw; see Healther.
+func (p *PipeWire) Health() map[string]string {
+	p.mu.Lock()
+	h := map[string]string{
+		"capture.backend":    p.backend.name(),
+		"capture.node_found": yesNo(p.found),
+		"capture.restarts":   strconv.Itoa(max(p.runs-1, 0)),
+	}
+	if p.found {
+		h["capture.node_state"] = p.node.state
+		h["capture.node_rate"] = strconv.Itoa(p.node.rate)
+		h["capture.node_channels"] = strconv.Itoa(p.node.channels)
+	}
+	if p.findErr != "" {
+		h["capture.dump_error"] = p.findErr
+	}
+	if p.recordExit != "" {
+		h["capture.record_exit"] = p.recordExit
+	}
+	p.mu.Unlock()
+	if e := p.stderr.String(); e != "" {
+		h["capture.stderr"] = e
+	}
+	return h
+}
+
+// looked notes what looking for the stream gave; an error keeps the stream
+// found before.
+func (p *PipeWire) looked(n streamNode, ok bool, err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err != nil {
+		p.findErr = err.Error()
+		return
+	}
+	p.found, p.node = ok, n
+}
+
+// recorded notes how the recorder ended: its exit status, -1 when it was
+// stopped.
+func (p *PipeWire) recorded(err error) {
+	code := "0"
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		code = strconv.Itoa(ee.ExitCode())
+	} else if err != nil {
+		code = "unknown"
+	}
+	p.mu.Lock()
+	p.recordExit = code
+	p.mu.Unlock()
+}
+
 func (p *PipeWire) Close() error {
 	p.once.Do(func() {
 		if p.cancel != nil {
@@ -150,6 +217,7 @@ func (p *PipeWire) run(ctx context.Context, t target.Target) {
 	waiting := false
 	for ctx.Err() == nil {
 		node, ok, err := p.backend.find(t)
+		p.looked(node, ok, err)
 		if err != nil {
 			p.logf("capture: %s: %v", p.backend.name(), err)
 		}
@@ -199,7 +267,12 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 	var watchers sync.WaitGroup
 	defer watchers.Wait()
 	defer cancel()
+	p.mu.Lock()
+	p.runs++
+	p.mu.Unlock()
 	cmd := p.backend.record(sctx, node, f)
+	// Its stderr is kept for the capture's health only.
+	cmd.Stderr = &p.stderr
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		p.logf("capture: %v", err)
@@ -207,6 +280,9 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 	}
 	if err := cmd.Start(); err != nil {
 		p.logf("capture: start %s: %v", cmd.Path, err)
+		p.mu.Lock()
+		p.recordExit = "not started"
+		p.mu.Unlock()
 		return
 	}
 	// driver is the running stream's driver, 0 while the stream is not running.
@@ -225,6 +301,7 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 				return
 			case <-tick.C:
 				now, ok, err := p.backend.find(t)
+				p.looked(now, ok, err)
 				if err != nil {
 					continue
 				}
@@ -269,14 +346,14 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 		case p.frames <- c:
 		case <-ctx.Done():
 			cancel()
-			_ = cmd.Wait()
+			p.recorded(cmd.Wait())
 			return
 		default:
 			p.overruns.Add(1)
 		}
 	}
 	cancel()
-	_ = cmd.Wait()
+	p.recorded(cmd.Wait())
 }
 
 type pipewireTools struct{}
@@ -341,7 +418,7 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 		if !match {
 			continue
 		}
-		n := streamNode{key: strconv.Itoa(num(props["object.serial"])), id: o.ID, driver: num(props["node.driver-id"]), running: o.Info.State == "running", order: int64(num(props["object.serial"]))}
+		n := streamNode{key: strconv.Itoa(num(props["object.serial"])), id: o.ID, driver: num(props["node.driver-id"]), running: o.Info.State == "running", state: o.Info.State, order: int64(num(props["object.serial"]))}
 		if formats := o.Info.Params["Format"]; len(formats) > 0 {
 			n.rate = num(formats[0]["rate"])
 			n.channels = num(formats[0]["channels"])
