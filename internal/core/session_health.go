@@ -2,10 +2,13 @@ package core
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"slices"
+	"strconv"
 	"time"
 
+	"github.com/spytify/spytify/internal/capture"
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/pkg/proto"
@@ -45,7 +48,7 @@ func (s *Session) onTick() {
 		s.stalled = true
 		msg := fmt.Sprintf("no audio from the capture for %s while the player plays", captureStall)
 		s.deps.log.Errorf("%s", msg)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: msg})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: msg, Facts: s.stallFacts(last)})
 	}
 	// An ad may be silent, muted by the session or not. A player at 0% is
 	// silent too, and its volume warning says so.
@@ -63,6 +66,30 @@ func (s *Session) onTick() {
 		s.endOfPlayback()
 		s.finish()
 	}
+}
+
+// stallFacts is what is known of a stalled capture, for the bug tracker:
+// the session's side, since last, and the capture's own.
+func (s *Session) stallFacts(last time.Time) map[string]string {
+	facts := map[string]string{
+		"stall.player_status":  string(s.status),
+		"stall.since_chunk_ms": strconv.FormatInt(time.Since(last).Milliseconds(), 10),
+		"stall.any_chunk":      yesNo(!s.lastChunk.IsZero()),
+		"stall.session_age_s":  strconv.FormatInt(int64(time.Since(s.started).Seconds()), 10),
+	}
+	if s.deps.health != nil {
+		maps.Copy(facts, s.deps.health())
+	}
+	return facts
+}
+
+// captureHealth is what a capture says of itself (capture.Healther), nil
+// for one that says nothing.
+func captureHealth(c capture.Capture) func() map[string]string {
+	if h, ok := c.(capture.Healther); ok {
+		return h.Health
+	}
+	return nil
 }
 
 // onVolume follows the player's own volume. Under 100%, the take is

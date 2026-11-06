@@ -481,6 +481,7 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		watchSilence: true,
 		silence:      c.silent.Store,
 		playlist:     list.name,
+		health:       captureHealth(capt),
 	}, opts)
 	if c.store.Values().Bool(settings.PlayerMuteOutput) && runtime.GOOS == "windows" {
 		c.log.Infof("player.mute_output is not applied on Windows in the alpha; the player stays audible")
