@@ -4,7 +4,6 @@ package platform
 
 import (
 	"fmt"
-	"os/exec"
 
 	"github.com/spytify/spytify/internal/capture"
 	"github.com/spytify/spytify/internal/meta"
@@ -71,7 +70,7 @@ func (b Backends) Probe() []proto.Check {
 	} else {
 		checks = append(checks, proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: true, Detail: p, Args: []string{p}})
 	}
-	if p, err := exec.LookPath("powershell.exe"); err != nil {
+	if p, err := meta.PowerShell(); err != nil {
 		checks = append(checks, proto.Check{ID: proto.CheckPowerShell, Name: "Windows PowerShell", OK: false, Detail: err.Error()})
 	} else {
 		checks = append(checks, proto.Check{ID: proto.CheckPowerShell, Name: "Windows PowerShell", OK: true, Detail: p + "; reads what plays through the media session API", Args: []string{p}})
