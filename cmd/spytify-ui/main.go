@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -60,6 +61,12 @@ func main() {
 	fa := app.NewWithID("org.spytify.ui")
 	fa.SetIcon(ui.Logo)
 	m := model.New()
+	// It says too how big the app and the computer's memory were a minute
+	// before at most, and how long the app's lists had grown.
+	crash.Vitals(crashLog, func() map[string]string {
+		rows, logs, cleared := m.Sizes()
+		return map[string]string{"ui.rows": strconv.Itoa(rows), "ui.logs": strconv.Itoa(logs), "ui.cleared": strconv.Itoa(cleared)}
+	})
 	l := link.New(env.SocketPath, m)
 	tel := telemetry.New(telemetry.Options{Prefs: fa.Preferences()})
 	// At quit, what is queued leaves within 2 s or is dropped.
