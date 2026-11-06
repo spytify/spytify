@@ -19,6 +19,7 @@
 // spytify-tap.exe --pid <pid> --get-volume | --set-volume <0..1> reads or
 // sets the volume of the process tree's audio sessions, the player's slider
 // in the Volume Mixer, and exits 4 when the tree has no session yet.
+// --get-mute | --set-mute <0|1> do the same with the sessions' mute.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -204,8 +205,9 @@ static HRESULT eachSession(IMMDeviceEnumerator *devices, const std::set<DWORD> &
 }
 
 // sessionVolume reads (set false) or sets the master volume of every audio
-// session of the tree, on every active output device.
-static int sessionVolume(DWORD pid, bool set, float value) {
+// session of the tree, on every active output device, or its mute when mute
+// is true.
+static int sessionVolume(DWORD pid, bool set, bool mute, float value) {
   HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   if (FAILED(hr)) return fail("CoInitializeEx", hr);
   IMMDeviceEnumerator *devices = nullptr;
@@ -216,8 +218,14 @@ static int sessionVolume(DWORD pid, bool set, float value) {
   hr = eachSession(devices, processTree(pid), [&](IMMDevice *, IAudioSessionControl *control) {
     ISimpleAudioVolume *volume = nullptr;
     if (FAILED(control->QueryInterface(kISimpleAudioVolume, reinterpret_cast<void **>(&volume)))) return;
-    if (set) {
+    if (set && mute) {
+      volume->SetMute(value != 0, nullptr);
+    } else if (set) {
       volume->SetMasterVolume(value, nullptr);
+    } else if (found == 0 && mute) {
+      BOOL muted = FALSE;
+      volume->GetMute(&muted);
+      first = muted ? 1 : 0;
     } else if (found == 0) {
       volume->GetMasterVolume(&first);
     }
@@ -230,7 +238,7 @@ static int sessionVolume(DWORD pid, bool set, float value) {
     fprintf(stderr, "spytify-tap: process %lu has no audio session yet\n", (unsigned long)pid);
     return 4;
   }
-  if (!set) printf("%.3f\n", first);
+  if (!set) printf(mute ? "%.0f\n" : "%.3f\n", first);
   return 0;
 }
 
@@ -397,11 +405,16 @@ static DWORD WINAPI followSource(void *arg) {
 int wmain(int argc, wchar_t **argv) {
   DWORD pid = 0;
   DWORD given = 0;
-  bool badRate = false, getVolume = false, setVolume = false;
+  bool badRate = false, getVolume = false, setVolume = false, mute = false;
   float volume = 0;
   for (int i = 1; i < argc; i++) {
     if (wcscmp(argv[i], L"--get-volume") == 0) {
       getVolume = true;
+    } else if (wcscmp(argv[i], L"--get-mute") == 0) {
+      getVolume = mute = true;
+    } else if (i + 1 < argc && wcscmp(argv[i], L"--set-mute") == 0) {
+      setVolume = mute = true;
+      volume = wcstof(argv[++i], nullptr);
     } else if (i + 1 < argc && wcscmp(argv[i], L"--pid") == 0) {
       pid = wcstoul(argv[++i], nullptr, 10);
     } else if (i + 1 < argc && wcscmp(argv[i], L"--rate") == 0) {
@@ -413,10 +426,10 @@ int wmain(int argc, wchar_t **argv) {
     }
   }
   if (pid == 0 || badRate || (setVolume && (volume < 0 || volume > 1))) {
-    fprintf(stderr, "usage: spytify-tap.exe --pid <pid> [--rate <Hz>] | --get-volume | --set-volume <0..1>\n");
+    fprintf(stderr, "usage: spytify-tap.exe --pid <pid> [--rate <Hz>] | --get-volume | --set-volume <0..1> | --get-mute | --set-mute <0|1>\n");
     return 2;
   }
-  if (getVolume || setVolume) return sessionVolume(pid, setVolume, volume);
+  if (getVolume || setVolume) return sessionVolume(pid, setVolume, mute, volume);
   _setmode(_fileno(stdout), _O_BINARY);
 
   HANDLE target = OpenProcess(SYNCHRONIZE, FALSE, pid);
