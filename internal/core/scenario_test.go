@@ -341,6 +341,23 @@ func TestTheCoverGoesIntoTheFile(t *testing.T) {
 	}
 }
 
+// A track the player shows no cover for is saved without one, and the log
+// says the player gave none (#765: a Windows player sometimes gives no
+// thumbnail for a whole track).
+func TestATrackWithNoCoverFromThePlayerIsLogged(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	tl.Items[1].Art = ""
+	s := newScenario(t, tl, map[string]any{"encode.format": "flac", "tags.cover": true})
+	s.run(t, tl)
+	logs := s.logs.String()
+	for i, it := range tl.Items {
+		line := fmt.Sprintf("%q: no cover from the player", it.Title)
+		if got := strings.Contains(logs, line); got != (i == 1) {
+			t.Errorf("%q logged %v, want %v; log:\n%s", line, got, i == 1, logs)
+		}
+	}
+}
+
 // track.started says how the recorder found each start: the first track at
 // its first sound, the next ones in the silence between them, near where
 // the player said they changed.
