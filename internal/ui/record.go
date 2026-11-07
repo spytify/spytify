@@ -266,7 +266,7 @@ func newRecordScreen(a *App) *recordScreen {
 			}
 			row := item.row
 			right := box.Objects[2].(*fyne.Container)
-			setTrackRow(box, a.covers.get(row.CoverURL).row, row.Title, row.Artist, rowDetails(row))
+			setTrackRow(box, a.rowCover(row).row, row.Title, row.Artist, rowDetails(row))
 			fill, ink := badgeColors(row)
 			right.Objects[0].(*fyne.Container).Objects[0].(*badge).set(row.StatusText(), fill, ink)
 			keep := right.Objects[1].(*fyne.Container)
@@ -570,7 +570,7 @@ func (r *recordScreen) renderCard(c *model.Row, session proto.SessionState) {
 			b.set(parts[i], "", theme.ColorNameForeground)
 		}
 	}
-	cover := r.app.covers.get(c.CoverURL)
+	cover := r.app.rowCover(*c)
 	setCover(r.cover, cover.live)
 	g := cover.glow
 	if g == nil {

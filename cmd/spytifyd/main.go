@@ -97,6 +97,7 @@ func run() int {
 
 	crashLog := filepath.Join(env.StateDir, "spytifyd.crash.log")
 	crashed := crash.Keep(crashLog)
+	crash.Vitals(crashLog, nil)
 	log, err := core.NewLogger(*logPath, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spytifyd: log file:", err)

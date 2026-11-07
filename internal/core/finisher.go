@@ -351,7 +351,11 @@ func (f *finisher) goodQuality(t *take) bool {
 // cover that cannot be had is left out.
 func (f *finisher) fetchCover(ctx context.Context, t *take) {
 	t.tags = tag.FromLocal(t.info, t.topts)
-	if !t.topts.Cover || t.tags.CoverURL == "" {
+	if !t.topts.Cover {
+		return
+	}
+	if t.tags.CoverURL == "" {
+		f.log.Infof("%q: no cover from the player", t.info.Title)
 		return
 	}
 	step := time.Now()

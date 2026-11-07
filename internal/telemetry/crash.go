@@ -24,7 +24,10 @@ type Crash struct {
 	Program string
 	Trace   string
 	Time    time.Time
-	key     string
+	// Vitals are the program's and the computer's counts its run last
+	// wrote (crash.Vitals), nil without any.
+	Vitals map[string]string
+	key    string
 }
 
 // CrashLogs are the files crash.Keep writes for each program, the
@@ -71,7 +74,7 @@ func FindCrashes(stateDir string, prefs Prefs, now time.Time) (found []Crash) {
 			if contains(handled, key) || containsKey(out, key) {
 				continue
 			}
-			out = append(out, Crash{Program: p, Trace: crash.WithLost(path, trace), Time: st.ModTime(), key: key})
+			out = append(out, Crash{Program: p, Trace: crash.WithLost(path, trace), Time: st.ModTime(), Vitals: crash.ReadVitals(path), key: key})
 		}
 	}
 	return out
@@ -176,6 +179,18 @@ func crashEvent(cr Crash) *sentry.Event {
 		ev.Threads = append(ev.Threads, sentry.Thread{ID: s.id, Name: s.name, Stacktrace: &sentry.Stacktrace{Frames: s.frames}, Crashed: i == 0, Current: i == 0})
 	}
 	ev.Exception = []sentry.Exception{ex}
+	if len(cr.Vitals) > 0 {
+		vitals := sentry.Context{}
+		for k, v := range cr.Vitals {
+			vitals[k] = v
+		}
+		// How long before the crash they were written, a minute at most
+		// unless the run stopped writing them.
+		if at, err := strconv.ParseInt(cr.Vitals["written_at"], 10, 64); err == nil && !cr.Time.IsZero() {
+			vitals["age_s"] = strconv.FormatInt(int64(cr.Time.Sub(time.Unix(at, 0))/time.Second), 10)
+		}
+		ev.Contexts["vitals"] = vitals
+	}
 	return ev
 }
 
