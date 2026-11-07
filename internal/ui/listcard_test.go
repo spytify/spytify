@@ -123,7 +123,7 @@ func TestAListCardIsDrawnInTheCardsColours(t *testing.T) {
 	if got := theme.ColorForWidget(theme.ColorNameInputBackground, label); got != cardColors[colorCardInput][0] {
 		t.Errorf("an input on the card is %v", got)
 	}
-	if _, ok := first.box.(*container.ThemeOverride); !ok {
+	if _, ok := first.box.(*themed); !ok {
 		t.Errorf("the row is a %T", first.box)
 	}
 }

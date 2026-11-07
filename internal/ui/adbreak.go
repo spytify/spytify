@@ -88,7 +88,7 @@ func newAdLine() *fyne.Container {
 	// The icon takes the break's text colour from a theme: a coloured
 	// resource kept the first theme's colour once its row was reused.
 	icon := container.NewGridWrap(fyne.NewSize(rowCover, theme.IconInlineSize()),
-		container.NewThemeOverride(widget.NewIcon(adIcon), adTheme{cardTheme: cardTheme{input: colorCardInput, surface: colorCard}, ink: colorAdText}))
+		newThemed(widget.NewIcon(adIcon), adTheme{cardTheme: cardTheme{input: colorCardInput, surface: colorCard}, ink: colorAdText}))
 	name := widget.NewRichText(&widget.TextSegment{Style: adText})
 	name.Truncation = fyne.TextTruncateEllipsis
 	length := widget.NewRichText(&widget.TextSegment{Style: adText})
@@ -114,16 +114,16 @@ func newAdBreak() *fyne.Container {
 	arrow := widget.NewIcon(theme.MenuDropDownIcon())
 	card := cardTheme{input: colorCardInput, surface: colorCard}
 	rule := func() fyne.CanvasObject {
-		return container.NewThemeOverride(widget.NewSeparator(), adTheme{cardTheme: card, ink: colorAdText, rule: colorAdRule})
+		return newThemed(widget.NewSeparator(), adTheme{cardTheme: card, ink: colorAdText, rule: colorAdRule})
 	}
 	return container.New(adBreakLayout{}, rule(), rule(),
-		container.NewThemeOverride(container.New(pillLayout{}, pill, arrow), adTheme{cardTheme: card, ink: colorOnAdPill, fill: colorAdPill}))
+		newThemed(container.New(pillLayout{}, pill, arrow), adTheme{cardTheme: card, ink: colorOnAdPill, fill: colorAdPill}))
 }
 
 // setAdBreak shows a break's pill: its text, its arrow, down while closed,
 // and what a press does.
 func setAdBreak(row *fyne.Container, text string, open bool, toggle func()) {
-	pill := row.Objects[2].(*container.ThemeOverride).Content.(*fyne.Container)
+	pill := row.Objects[2].(*themed).o.Content.(*fyne.Container)
 	b, arrow := pill.Objects[0].(*rowButton), pill.Objects[1].(*widget.Icon)
 	b.OnTapped = toggle
 	if b.Text != text {

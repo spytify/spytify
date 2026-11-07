@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -152,7 +151,7 @@ func TestAnAdBreakIsOnePillThatOpens(t *testing.T) {
 	if row.back.Hidden || !row.line.Hidden || !rowAt(r.list, at+1).line.Hidden {
 		t.Error("the closed break is not a block of its own without lines at its ends")
 	}
-	rule := row.content.(*fyne.Container).Objects[1].(*fyne.Container).Objects[0].(*container.ThemeOverride).Content.(fyne.Widget)
+	rule := row.content.(*fyne.Container).Objects[1].(*fyne.Container).Objects[0].(*themed).o.Content.(fyne.Widget)
 	if got, want := theme.ColorForWidget(theme.ColorNameSeparator, rule), cardColors[colorAdRule]; got != want[0] && got != want[1] {
 		t.Errorf("the line beside the pill is %v", got)
 	}

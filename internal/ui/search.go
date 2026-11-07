@@ -30,7 +30,7 @@ func newSearch(a *App, placeholder string, changed func(string)) *keyEntry {
 	clear.Hide()
 	// Before SetIcon: its refresh draws the field, with the action item it
 	// has by then.
-	e.ActionItem = container.NewThemeOverride(container.New(clearInset(3), clear), clearTheme{cardTheme{input: colorCard}})
+	e.ActionItem = newThemed(container.New(clearInset(3), clear), clearTheme{cardTheme{input: colorCard}})
 	e.SetIcon(theme.SearchIcon())
 	e.SetPlaceHolder(placeholder)
 	e.OnChanged = func(s string) {
@@ -42,7 +42,7 @@ func newSearch(a *App, placeholder string, changed func(string)) *keyEntry {
 
 // clearOf is the clear button of a field newSearch made.
 func clearOf(e *keyEntry) *clearButton {
-	return e.ActionItem.(*container.ThemeOverride).Content.(*fyne.Container).Objects[0].(*clearButton)
+	return e.ActionItem.(*themed).o.Content.(*fyne.Container).Objects[0].(*clearButton)
 }
 
 // clearInset keeps the clear button, its focus too, that many pixels off
@@ -111,5 +111,5 @@ func (t clearTheme) Size(n fyne.ThemeSizeName) float32 {
 // squareFields draws the fields in o white on the page, square, as the
 // cards draw theirs.
 func squareFields(o fyne.CanvasObject) fyne.CanvasObject {
-	return container.NewThemeOverride(o, cardTheme{input: colorCard})
+	return newThemed(o, cardTheme{input: colorCard})
 }

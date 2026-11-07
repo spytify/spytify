@@ -177,7 +177,7 @@ func newRecordScreen(a *App) *recordScreen {
 	// the window to the other, its progress along the bottom edge.
 	media := container.NewStack(r.glow, container.NewBorder(nil, r.progress, nil, nil,
 		container.New(layout.NewCustomPaddedLayout(pad*3, pad*3, pad*3, pad*4), body)))
-	r.card = container.NewStack(container.NewThemeOverride(media, mediaTheme{}))
+	r.card = container.NewStack(newThemed(media, mediaTheme{}))
 
 	r.waiting = widget.NewRichText(&widget.TextSegment{Style: widget.RichTextStyle{ColorName: colorInfoText, Inline: true}})
 	r.launch = newLitButton(lang.OpenThePlayer, theme.MediaPlayIcon(), widget.HighImportance, a.launchPlayer)

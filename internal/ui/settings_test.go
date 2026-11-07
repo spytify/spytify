@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -499,7 +498,7 @@ func TestTheSettingsCardsAreSquare(t *testing.T) {
 	test.NewTempApp(t).Settings().SetTheme(spytifyTheme{mode: "light"})
 	for name, o := range map[string]fyne.CanvasObject{"card": newCard(widget.NewLabel("card")), "advanced block": newBlock(widget.NewLabel("block"))} {
 		test.NewTempWindow(t, o)
-		p := o.(*container.ThemeOverride).Content.(*panel)
+		p := o.(*themed).o.Content.(*panel)
 		if r := test.TempWidgetRenderer(t, p).(*panelRenderer).box.CornerRadius; r != 0 {
 			t.Errorf("the %s is rounded %v", name, r)
 		}

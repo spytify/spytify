@@ -201,7 +201,7 @@ func relayout(s *container.Scroll) {
 // plain sets a part of the window on the plain colour instead of the page.
 func plain(content fyne.CanvasObject) fyne.CanvasObject {
 	box := newPanel(colorPlain, "", 0, fyne.Size{}, content)
-	return container.NewThemeOverride(box, cardTheme{surface: colorPlain})
+	return newThemed(box, cardTheme{surface: colorPlain})
 }
 
 // playerName is the player the recorder records, or "your player" before
@@ -226,7 +226,7 @@ func inset(o fyne.CanvasObject) *fyne.Container {
 func footerBar(left, actions fyne.CanvasObject) fyne.CanvasObject {
 	pad := theme.Padding()
 	row := container.New(layout.NewCustomPaddedLayout(pad/2, pad/2, pad*2, pad),
-		container.NewBorder(nil, nil, nil, container.NewThemeOverride(actions, cardTheme{hover: colorFooterHover}),
+		container.NewBorder(nil, nil, nil, newThemed(actions, cardTheme{hover: colorFooterHover}),
 			container.NewVBox(layout.NewSpacer(), left, layout.NewSpacer())))
 	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, newPanel(colorFooter, "", 0, fyne.Size{}, row))
 }

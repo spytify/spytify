@@ -136,7 +136,7 @@ func (l *cardList) CreateRenderer() fyne.WidgetRenderer {
 	l.scroll = container.NewVScroll(l.page)
 	l.scroll.OnScrolled = func(fyne.Position) { l.place(false) }
 	// Lighter shadows at the scrolled edges, as in Settings.
-	r := &cardListRenderer{l: l, objs: []fyne.CanvasObject{container.NewThemeOverride(l.scroll, cardTheme{})}}
+	r := &cardListRenderer{l: l, objs: []fyne.CanvasObject{newThemed(l.scroll, cardTheme{})}}
 	r.measure()
 	return r
 }
@@ -225,8 +225,8 @@ func rowButtons(o fyne.CanvasObject) []*rowButton {
 			buttons = append(buttons, rowButtons(child)...)
 		}
 		return buttons
-	case *container.ThemeOverride:
-		return rowButtons(o.Content)
+	case *themed:
+		return rowButtons(o.o.Content)
 	}
 	return nil
 }
@@ -253,7 +253,7 @@ func (l *cardList) spareRow() *cardRow {
 	}
 	row := &cardRow{content: l.create(), line: widget.NewSeparator(), back: canvas.NewRectangle(color.Transparent), hover: canvas.NewRectangle(color.Transparent)}
 	row.ExtendBaseWidget(row)
-	row.box = container.NewThemeOverride(row, cardTheme{input: colorCardInput, surface: colorCard})
+	row.box = newThemed(row, cardTheme{input: colorCardInput, surface: colorCard})
 	return row
 }
 
@@ -370,11 +370,11 @@ func (r *cardListRenderer) MinSize() fyne.Size {
 // in range and updates every row in view.
 func (r *cardListRenderer) Refresh() {
 	l := r.l
-	r.measure()
 	// The rows put aside missed the refresh a new theme gives the rows in
 	// view: drawn again, they kept the former theme's icons and badges.
 	if look := [2]color.Color{theme.ColorForWidget(theme.ColorNameForeground, l), theme.ColorForWidget(theme.ColorNameBackground, l)}; look != l.look {
 		l.look, l.spare = look, nil
+		r.measure()
 	}
 	l.card.FillColor = theme.ColorForWidget(colorCard, l)
 	l.card.Refresh()

@@ -4,7 +4,6 @@ import (
 	"image/color"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/spytify/spytify/internal/settings"
@@ -22,14 +21,14 @@ type litButton struct {
 	focused bool
 	// lit is the button in the theme that lights it up: the layouts hold
 	// it, and it shows and hides with the button.
-	lit *container.ThemeOverride
+	lit *themed
 }
 
 func newLitButton(text string, icon fyne.Resource, imp widget.Importance, tapped func()) *litButton {
 	b := &litButton{}
 	b.Text, b.Icon, b.Importance, b.OnTapped = text, icon, imp, tapped
 	b.ExtendBaseWidget(b)
-	b.lit = container.NewThemeOverride(b, litTheme{b})
+	b.lit = newThemed(b, litTheme{b})
 	return b
 }
 
