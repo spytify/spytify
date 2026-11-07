@@ -61,6 +61,9 @@ type recordScreen struct {
 	// too poor for music, or one that brings no audio or only silence.
 	alertRow *fyne.Container
 	alert    *widget.RichText
+	// alertVolume puts the player's own volume back at 100% when the
+	// warning says it is lower.
+	alertVolume *litButton
 	// alertDiagnose leads to the diagnostics, which say why and what to do
 	// when the warning has a check of its own.
 	alertDiagnose *litButton
@@ -214,8 +217,12 @@ func newRecordScreen(a *App) *recordScreen {
 	a.maskPaths(r.alert)
 	r.alertDiagnose = newLitButton(lang.OpenDiagnostics, theme.WarningIcon(), widget.WarningImportance, a.showDiagnostics)
 	errorIcon := container.NewCenter(widget.NewIcon(theme.NewColoredResource(theme.ErrorIcon(), theme.ColorNameError)))
+	r.alertVolume = newLitButton(lang.SetFullVolume, theme.VolumeUpIcon(), widget.WarningImportance, func() {
+		a.noteAction("set the player's volume to 100%")
+		a.do(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.CmdFullVolume}, nil)
+	})
 	r.alertRow = inset(newPanel("", theme.ColorNameError, 0, fyne.NewSize(pad*2, pad*1.5),
-		container.NewBorder(nil, nil, errorIcon, container.NewCenter(r.alertDiagnose.lit), container.NewVBox(layout.NewSpacer(), r.alert, layout.NewSpacer()))))
+		container.NewBorder(nil, nil, errorIcon, container.NewCenter(container.NewHBox(r.alertVolume.lit, r.alertDiagnose.lit)), container.NewVBox(layout.NewSpacer(), r.alert, layout.NewSpacer()))))
 
 	r.list = newCardList(
 		func() int { return len(r.items) },
@@ -259,7 +266,7 @@ func newRecordScreen(a *App) *recordScreen {
 			}
 			row := item.row
 			right := box.Objects[2].(*fyne.Container)
-			setTrackRow(box, a.covers.get(row.CoverURL).row, row.Title, row.Artist, rowDetails(row))
+			setTrackRow(box, a.rowCover(row).row, row.Title, row.Artist, rowDetails(row))
 			fill, ink := badgeColors(row)
 			right.Objects[0].(*fyne.Container).Objects[0].(*badge).set(row.StatusText(), fill, ink)
 			keep := right.Objects[1].(*fyne.Container)
@@ -469,6 +476,7 @@ func (r *recordScreen) render(s model.State) {
 	}
 	show(r.alertRow, warns)
 	show(r.alertDiagnose, silent)
+	show(r.alertVolume, warns && s.LastError.Code == proto.ErrorPlayerVolumeLow)
 
 	c := s.Current
 	if gone {
@@ -562,7 +570,7 @@ func (r *recordScreen) renderCard(c *model.Row, session proto.SessionState) {
 			b.set(parts[i], "", theme.ColorNameForeground)
 		}
 	}
-	cover := r.app.covers.get(c.CoverURL)
+	cover := r.app.rowCover(*c)
 	setCover(r.cover, cover.live)
 	g := cover.glow
 	if g == nil {
@@ -602,7 +610,7 @@ func (r *recordScreen) renderLive(c *model.Row, session proto.SessionState, leve
 func (r *recordScreen) relayout() {
 	shape := fmt.Sprint(r.idle.Visible(), r.hint.Visible(), r.attention.Visible(), r.openPlayer.Visible(), r.diagnose.Visible(), r.startDaemon.Visible(), r.card.Visible(),
 		r.state.text, r.state.lead.Visible(), r.rate.text, r.channels.text, r.fileRate.Visible(), r.fileRate.text,
-		r.alertRow.Visible(), r.alert.String(), r.alertDiagnose.Visible(), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.startAgain.Visible(), r.noRows.Visible())
+		r.alertRow.Visible(), r.alert.String(), r.alertDiagnose.Visible(), r.alertVolume.Visible(), r.waitRow.Visible(), r.launch.Visible(), r.play.Visible(), r.restart.Visible(), r.blocked.Visible(), r.startAgain.Visible(), r.noRows.Visible())
 	if shape != r.shape {
 		r.shape = shape
 		r.root.Refresh()

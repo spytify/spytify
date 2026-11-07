@@ -86,9 +86,11 @@ func shrink(img image.Image, px int) image.Image {
 	return dst
 }
 
-// maxCovers is how many covers the cache keeps, the ones used last: about
-// 35 MB of thumbnails.
-const maxCovers = 200
+// maxCovers is how many covers the cache keeps, the ones used last: the rows
+// of a screen and a few on each side, about 10 MB of thumbnails. A row
+// scrolled back to loads its cover again, from the file or the copy the
+// Record list keeps.
+const maxCovers = 60
 
 // covers loads album art once per URL, off the toolkit's goroutine, and
 // keeps the thumbnails of the covers used last.
@@ -102,10 +104,15 @@ type covers struct {
 	loaded  func()
 	// slots bounds the loads running at once.
 	slots chan struct{}
+	// max is how many covers the cache keeps: maxCovers, fewer in tests.
+	max int
+	// copies are the Record list's covers, kept in the output folder.
+	copies *coverCopies
 }
 
 func newCovers(loaded func()) *covers {
-	return &covers{cache: map[string]thumbs{}, used: map[string]uint64{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
+	return &covers{cache: map[string]thumbs{}, used: map[string]uint64{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2), max: maxCovers,
+		copies: newCoverCopies(loaded)}
 }
 
 // loads is how many covers finished loading, failed ones included: a
@@ -166,7 +173,7 @@ func (c *covers) load(key string, fetch func(context.Context) ([]byte, error)) t
 // put caches t under key, in place of the cover used longest ago when the
 // cache is full. c.mu is held.
 func (c *covers) put(key string, t thumbs) {
-	if _, ok := c.cache[key]; !ok && len(c.cache) >= maxCovers {
+	if _, ok := c.cache[key]; !ok && len(c.cache) >= c.max {
 		oldest := ""
 		for k, u := range c.used {
 			if oldest == "" || u < c.used[oldest] {

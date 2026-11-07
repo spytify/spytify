@@ -52,6 +52,8 @@ func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 	case meta.Seeked:
 		s.deps.log.Debugf("%q: the player jumped to %d ms", ev.Track.Title, ev.PositionMs)
 		s.onSeek(ev.PositionMs, at)
+	case meta.VolumeChanged:
+		s.onVolume(ev.Volume)
 	}
 	s.progress()
 }

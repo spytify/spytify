@@ -87,15 +87,17 @@ type App struct {
 	offline *container.Scroll
 	player  *playerCard
 
-	dot     *widget.Label
-	status  *widget.Label
-	output  *widget.RichText
-	update  *button
-	donate  *tipButton
-	action  *litButton
-	bar     *fyne.Container
-	covers  *covers
-	checked bool
+	dot    *widget.Label
+	status *widget.Label
+	output *widget.RichText
+	update *button
+	donate *tipButton
+	action *litButton
+	bar    *fyne.Container
+	covers *covers
+	// coverIDs is the tracks the Record list held at the last render.
+	coverIDs map[string]bool
+	checked  bool
 	// themeMode is the app.theme applied.
 	themeMode settings.Theme
 	// outputDir is the output.dir the reports leave out.
@@ -474,6 +476,7 @@ func (a *App) render() {
 		}
 	}
 	a.renderPrivacy(s)
+	a.keepCovers(s)
 	// Texts changed width: lay the bar out again, only then.
 	if key := fmt.Sprint(a.dot.Importance, a.status.Text, a.output.String(), a.action.Text, a.update.Visible()); key != a.barKey {
 		a.barKey = key

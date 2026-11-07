@@ -83,6 +83,10 @@ const (
 	// for another reason than playing on (the user dragged the track bar).
 	// A jump back to the start is a TrackChanged with Restart instead.
 	Seeked
+	// VolumeChanged carries the player's own volume, from 0 to 1, when it
+	// is first known and each time it changes. A player with no item
+	// loaded reports none.
+	VolumeChanged
 )
 
 // Event is one change reported by a backend. The core stamps it with the
@@ -96,6 +100,8 @@ type Event struct {
 	// Restart marks a TrackChanged for the same item started again from
 	// its beginning: repeat one, or a seek back to the start.
 	Restart bool
+	// Volume is the player's own volume, for VolumeChanged.
+	Volume float64
 }
 
 // NowPlaying is one OS metadata backend.

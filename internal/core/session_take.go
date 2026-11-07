@@ -253,6 +253,8 @@ func (s *Session) newSegment(info meta.TrackInfo, start int64) *segment {
 		drained: start,
 		length:  f.FramesFromMs(info.LengthMs),
 		soundAt: -1,
+		// Recorded from a volume still under 100%, the take is quieter.
+		lowVolume: s.volumeLow,
 	}
 	s.classify(seg)
 	return seg
@@ -393,6 +395,7 @@ func (s *Session) closeSegment(c *segment, end int64) {
 		partial:   c.partial,
 		rejected:  c.reason,
 		pauseFade: c.pauseFade,
+		lowVolume: c.lowVolume,
 	})
 	if s.opts.SingleTrack {
 		s.stop = stopGraceful

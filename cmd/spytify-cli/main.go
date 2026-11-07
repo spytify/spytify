@@ -374,10 +374,10 @@ func (a *app) eventsCmd() *cobra.Command {
 
 func (a *app) controlCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:       "control play|pause|next|previous|restart",
-		Short:     "Send a transport command to the player",
+		Use:       "control play|pause|next|previous|restart|full_volume",
+		Short:     "Send a transport command to the player, or set its own volume to 100%",
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{string(proto.CmdPlay), string(proto.CmdPause), string(proto.CmdNext), string(proto.CmdPrevious), string(proto.CmdRestart)},
+		ValidArgs: []string{string(proto.CmdPlay), string(proto.CmdPause), string(proto.CmdNext), string(proto.CmdPrevious), string(proto.CmdRestart), string(proto.CmdFullVolume)},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.call(proto.MethodPlayerControl, proto.PlayerControlParams{Cmd: proto.PlayerCmd(args[0])}, nil)
 		},

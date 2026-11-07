@@ -19,7 +19,8 @@ import (
 
 // pollScript runs inside osascript as JavaScript for Automation. It polls
 // the player's scripting interface (current track, player state, player
-// position) and prints one JSON line per poll. Asking whether the player
+// position, sound volume) and prints one JSON line per poll. The volume is
+// read only with an item loaded: a player with none reports 0. Asking whether the player
 // runs never launches it; nothing else is asked unless it runs.
 const pollScript = `
 ObjC.import('Foundation');
@@ -80,7 +81,8 @@ function run(argv) {
       }
       current = last;
     }
-    out({running: true, state: state || "", position: get(() => app.playerPosition()), track: current, error: error});
+    const volume = current ? get(() => app.soundVolume()) : null;
+    out({running: true, state: state || "", position: get(() => app.playerPosition()), track: current, volume: volume, error: error});
     delay(interval);
   }
 }
@@ -92,7 +94,13 @@ function run(argv) {
   const app = Application(argv[0]);
   if (!app.running()) { throw new Error("player not running"); }
   switch (argv[1]) {
-    case "volume": return String(app.soundVolume());
+    case "volume": {
+      // A player with no item loaded says 0, whatever its volume: none is
+      // known then.
+      let loaded = false;
+      try { loaded = app.currentTrack.id() !== null; } catch (e) {}
+      return loaded ? String(app.soundVolume()) : "none";
+    }
     case "restart": {
       // A player may echo the new position, then carry on where it was:
       // read it back twice, and try again. The result is where it is.
@@ -162,7 +170,9 @@ type playerPoll struct {
 	State    string       `json:"state"`
 	Position *float64     `json:"position"`
 	Track    *polledTrack `json:"track"`
-	Error    string       `json:"error"`
+	// Volume is the player's sound volume, from 0 to 100, or nil.
+	Volume *float64 `json:"volume"`
+	Error  string   `json:"error"`
 	// at is when the poll was read; zero leaves seeks undetected.
 	at time.Time
 }
@@ -242,6 +252,22 @@ type pollTracker struct {
 	status  Status
 	lastPos int64
 	lastAt  time.Time
+	// volume is the last volume reported, from 0 to 1, once known.
+	volume      float64
+	volumeKnown bool
+}
+
+// volumeChange is a VolumeChanged for a volume first known or changed.
+func (k *pollTracker) volumeChange(p playerPoll) []Event {
+	if p.Volume == nil || p.Track == nil {
+		return nil
+	}
+	v := *p.Volume / 100
+	if k.volumeKnown && v == k.volume {
+		return nil
+	}
+	k.volume, k.volumeKnown = v, true
+	return []Event{{Kind: VolumeChanged, Volume: v, PositionMs: -1}}
 }
 
 // A position that jumps back near zero on the same item is a restart.
@@ -268,11 +294,11 @@ func (k *pollTracker) next(p playerPoll) []Event {
 			return []Event{{Kind: TrackChanged, PositionMs: -1}, {Kind: StatusChanged, Status: Stopped, PositionMs: -1}}
 		}
 		k.last, k.status, k.lastPos = p.info(k.unit), p.status(), pos
-		return []Event{{Kind: TrackChanged, Track: k.last, PositionMs: pos}, {Kind: StatusChanged, Status: k.status, PositionMs: pos}}
+		return append([]Event{{Kind: TrackChanged, Track: k.last, PositionMs: pos}, {Kind: StatusChanged, Status: k.status, PositionMs: pos}}, k.volumeChange(p)...)
 	}
 	if !p.Running {
 		if k.running {
-			k.running, k.last, k.status = false, TrackInfo{}, Stopped
+			k.running, k.last, k.status, k.volumeKnown = false, TrackInfo{}, Stopped, false
 			return []Event{{Kind: PlayerGone, PositionMs: -1}}
 		}
 		return nil
@@ -306,7 +332,7 @@ func (k *pollTracker) next(p playerPoll) []Event {
 		k.status = st
 		out = append(out, Event{Kind: StatusChanged, Status: st, PositionMs: pos})
 	}
-	return out
+	return append(out, k.volumeChange(p)...)
 }
 
 // Watch starts the poller and reports changes.
@@ -404,6 +430,8 @@ func restarted(out string) error {
 	return fmt.Errorf("the player did not go back to the start of the track: it plays at %d:%02d", s/60, s%60)
 }
 
+// Volume is the player's sound volume, from 0 to 1. A player with no item
+// loaded has none to tell: it is ErrUnsupported then.
 func (j *JXA) Volume() (float64, error) {
 	s, err := j.run("volume")
 	if err != nil {

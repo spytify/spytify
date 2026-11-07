@@ -62,6 +62,9 @@ type Row struct {
 	// PauseFade is a take saved with the player's fades around a pause in
 	// it, its name marked " (pause fade)".
 	PauseFade bool
+	// LowVolume is a take saved while the player's own volume was under
+	// 100%, its name marked " (low volume)".
+	LowVolume bool
 	// PausedFor is how long the track was paused before the pause going on,
 	// which began at PausedAt.
 	PausedFor time.Duration
@@ -79,8 +82,15 @@ func (r Row) StatusText() string {
 		}
 		return lang.SavedPartial
 	}
-	if r.PauseFade && r.Status == Saved {
-		return lang.SavedPauseFade
+	if r.Status == Saved {
+		switch {
+		case r.PauseFade && r.LowVolume:
+			return lang.SavedBothIssues
+		case r.PauseFade:
+			return lang.SavedPauseFade
+		case r.LowVolume:
+			return lang.SavedLowVolume
+		}
 	}
 	return string(r.Status)
 }
@@ -262,6 +272,15 @@ func (m *Model) Snapshot() State {
 	return s
 }
 
+// Sizes counts the finished rows, which only ClearRows empties, the log
+// lines, and the rows cleared, which a replay must not bring back, without
+// copying them as Snapshot does.
+func (m *Model) Sizes() (rows, logs, cleared int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.s.Rows), len(m.s.Logs), len(m.cleared)
+}
+
 // SetConn records the connection state; leaving Connected keeps what the
 // screens show but marks it stale.
 func (m *Model) SetConn(c Conn, err string) {
@@ -435,7 +454,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		m.edit(s, e.ID, func(r *Row) {
 			r.Status, r.Path, r.DurationMs, r.Bytes, r.TaggedBy = Saved, e.Path, e.DurationMs, e.Bytes, e.TaggedBy
-			r.Partial, r.PauseFade, r.Keepable = e.Partial, e.PauseFade, false
+			r.Partial, r.PauseFade, r.LowVolume, r.Keepable = e.Partial, e.PauseFade, e.LowVolume, false
 		})
 		// The tracks played again while this take was being saved have its
 		// file now.

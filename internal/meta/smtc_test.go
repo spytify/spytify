@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf16"
@@ -133,5 +134,56 @@ func TestSMTCControlReadsTheExitCode(t *testing.T) {
 	}
 	if err := NewSMTC().Control("next"); !errors.Is(err, ErrNoPlayer) {
 		t.Errorf("no player: %v", err)
+	}
+}
+
+// mixerSteps answers each read with the next volume, then the last one.
+type mixerSteps struct {
+	mu    sync.Mutex
+	steps []float64
+	err   error
+}
+
+func (m *mixerSteps) Volume() (float64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return 0, m.err
+	}
+	v := m.steps[0]
+	if len(m.steps) > 1 {
+		m.steps = m.steps[1:]
+	}
+	return v, nil
+}
+
+// The Volume Mixer slider is reported when first read and each time it
+// changes; a read that fails reports nothing.
+func TestTheMixerWatchReportsChanges(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	out := make(chan Event, 16)
+	go watchMixer(ctx, &mixerSteps{steps: []float64{1, 1, 0.4, 0.4, 1}}, time.Millisecond, out)
+	var got []float64
+	for len(got) < 3 {
+		select {
+		case e := <-out:
+			if e.Kind != VolumeChanged {
+				t.Fatalf("event %+v", e)
+			}
+			got = append(got, e.Volume)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("volumes %v, want three", got)
+		}
+	}
+	if want := []float64{1, 0.4, 1}; !slices.Equal(got, want) {
+		t.Fatalf("volumes %v, want %v", got, want)
+	}
+	failing := make(chan Event, 1)
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel2()
+	watchMixer(ctx2, &mixerSteps{err: errors.New("no session")}, time.Millisecond, failing)
+	if len(failing) != 0 {
+		t.Fatalf("a failed read reported %+v", <-failing)
 	}
 }

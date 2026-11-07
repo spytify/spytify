@@ -641,6 +641,53 @@ func TestTheLowQualityWarningShowsWhileWaiting(t *testing.T) {
 	}
 }
 
+// The player's volume under 100% shows in the alert, with Set to 100%,
+// which asks the recorder for full_volume; Open diagnostics is not
+// offered. At 0% it says nothing is recorded, and the alert goes once the
+// recorder withdraws the warning.
+func TestALowVolumeOffersToSetItTo100(t *testing.T) {
+	a, m, core := connectedApp(t)
+	feedSession(t, m)
+	r := a.screens[tabRecord].(*recordScreen)
+	for _, pct := range []int{40, 0} {
+		e := proto.ErrorEvent{Code: proto.ErrorPlayerVolumeLow, Msg: "the player's volume is low", Volume: &pct}
+		m.Apply(event(t, proto.EventError, e))
+		a.render()
+		if want := model.WarningText(e, runtime.GOOS); !r.alertRow.Visible() || r.alert.String() != want || !r.alertVolume.Visible() || r.alertDiagnose.Visible() {
+			t.Fatalf("at %d%%: alert shown %v, text %q, Set to 100%% %v, Open diagnostics %v", pct, r.alertRow.Visible(), r.alert.String(), r.alertVolume.Visible(), r.alertDiagnose.Visible())
+		}
+		if pct == 40 {
+			snapshot(t, a, "record-volume-low")
+		}
+	}
+	snapshot(t, a, "record-volume-zero")
+	test.Tap(r.alertVolume)
+	eventually(t, "player.control did not send full_volume", func() bool {
+		core.mu.Lock()
+		defer core.mu.Unlock()
+		return slices.Equal(core.controls, []proto.PlayerCmd{proto.CmdFullVolume})
+	})
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorPlayerVolumeLow}))
+	a.render()
+	if r.alertRow.Visible() || r.alertVolume.Visible() {
+		t.Fatalf("the alert stays at 100%%: %q", r.alert.String())
+	}
+}
+
+// A take saved while the player's volume was under 100% says so in its row.
+func TestRecordScreenSaysATakeHasALowVolume(t *testing.T) {
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	// s-004 is the track playing.
+	m.Apply(event(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "s-004", Path: "/Users/listener/Music/Spytify/M83/Midnight City (low volume).flac", DurationMs: 243000, Bytes: 31_400_000, Tagged: true, LowVolume: true}))
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
+	a.render()
+	a.screens[tabRecord].(*recordScreen).list.ScrollToBottom()
+	if all := texts(a.win.Content()); !contains(all, lang.SavedLowVolume) {
+		t.Errorf("the take does not say it has a low volume: %v", all)
+	}
+}
+
 // The recorder's warning shows once, on the Record tab, in an outlined
 // alert in the error red over the track being recorded, as the info alert
 // the session waits in: not as a line of red text over the tabs. It goes

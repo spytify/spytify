@@ -228,6 +228,25 @@ func TestAPauseFadeSaysSo(t *testing.T) {
 	}
 }
 
+// A take saved while the player's own volume was under 100% reads "Saved:
+// low volume", and one with a pause fade too names both.
+func TestALowVolumeSaysSo(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(started(t, "a", "First"))
+	m.Apply(started(t, "b", "Second"))
+	m.Apply(started(t, "c", "Third"))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (low volume).flac", LowVolume: true}))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "b", Path: "/m/Second (pause fade) (low volume).flac", PauseFade: true, LowVolume: true}))
+	rows := m.Snapshot().Rows
+	if r := rows[1]; r.Status != Saved || r.StatusText() != lang.SavedLowVolume {
+		t.Errorf("saved %+v, %q", r, r.StatusText())
+	}
+	if r := rows[0]; r.Status != Saved || r.StatusText() != lang.SavedBothIssues {
+		t.Errorf("saved %+v, %q", r, r.StatusText())
+	}
+}
+
 // A track skipped as already recorded has the file the recorder names, or,
 // played again while this session's take of it was being saved, that
 // take's file once it is there.
@@ -260,6 +279,24 @@ func TestASkippedTrackHasItsFile(t *testing.T) {
 	want := map[string]string{"a": "/m/First.flac", "b": "/m/Second.flac", "c": "/m/Second.flac", "d": "/m/Third.flac", "e": "/m/Third.flac"}
 	if got := paths(); !maps.Equal(got, want) {
 		t.Errorf("paths %v, want %v", got, want)
+	}
+}
+
+// Sizes counts what Snapshot would copy, and the rows cleared.
+func TestSizes(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	for _, id := range []string{"a", "b", "c"} {
+		m.Apply(started(t, id, "Track "+id))
+	}
+	m.Apply(ev(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: "line"}))
+	s := m.Snapshot()
+	if rows, logs, cleared := m.Sizes(); rows != len(s.Rows) || rows == 0 || logs != 1 || cleared != 0 {
+		t.Fatalf("sizes %d %d %d, snapshot has %d rows", rows, logs, cleared, len(s.Rows))
+	}
+	m.ClearRows()
+	if rows, _, cleared := m.Sizes(); rows != 0 || cleared != len(s.Rows) {
+		t.Fatalf("after ClearRows: %d rows, %d cleared", rows, cleared)
 	}
 }
 

@@ -71,6 +71,9 @@ type segment struct {
 	// pauseFade is a take a pause was cut out of, where the player's
 	// fades meet: its file is marked " (pause fade)".
 	pauseFade bool
+	// lowVolume is a take recorded while the player's own volume was
+	// under 100%: its file is marked " (low volume)".
+	lowVolume bool
 	// cut is how the take's start was found, for track.started.
 	cut *proto.TrackCut
 }
@@ -151,6 +154,13 @@ type Session struct {
 	diskFull  bool
 	warnedLen bool
 	adMuted   bool
+	// unmutedAt is when the session last gave the player its volume back
+	// after an ad.
+	unmutedAt time.Time
+	// volumeLow is set while the player's own volume is reported under
+	// 100%, at volumePct.
+	volumeLow bool
+	volumePct int
 
 	stopCh chan stopMode
 	mu     sync.Mutex
@@ -221,6 +231,9 @@ func (s *Session) muteAds(st proto.SessionState) {
 		return
 	}
 	s.adMuted = want
+	if !want {
+		s.unmutedAt = time.Now()
+	}
 	if err := s.deps.mute(want); err != nil {
 		s.deps.log.Infof("mute ads: %v", err)
 	}

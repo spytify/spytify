@@ -24,7 +24,7 @@ var Methods = []MethodSpec{
 	{MethodSettingsGet, SettingsGetParams{}, SettingsValues{}, "every setting when keys is empty"},
 	{MethodSettingsSet, SettingsSetParams{}, SettingsSetResult{}, "validated, persisted, then settings.changed fires"},
 	{MethodSettingsReset, SettingsResetParams{}, Empty{}, "back to defaults, all keys or those under a prefix"},
-	{MethodPlayerControl, PlayerControlParams{}, Empty{}, "play, pause, next, previous, restart (from 0:00) through the player's local interface"},
+	{MethodPlayerControl, PlayerControlParams{}, Empty{}, "play, pause, next, previous, restart (from 0:00) or full_volume (the player's own volume to 100%) through the player's local interface"},
 	{MethodPlayerLaunch, nil, Empty{}, "opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way"},
 	{MethodLogTail, LogTailParams{}, LogTailResult{}, "last N log lines"},
 	{MethodEventsRecent, nil, EventsRecentResult{}, "the last 200 events, for a client that connects mid-session"},
@@ -43,5 +43,5 @@ var Events = []EventSpec{
 	{EventSettingsChanged, SettingsValues{}, "after any successful settings.set or settings.reset"},
 	{EventTargetState, TargetStateEvent{}, "player process appears or exits"},
 	{EventLog, LogEvent{}, "each log line, every level"},
-	{EventError, ErrorEvent{}, "capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code. msg says what the recorder found, in English; capture_low_quality carries the capture's format in source, disk_full the megabytes left in free_mb"},
+	{EventError, ErrorEvent{}, "capture, encoder or disk failure, or a warning such as capture_low_quality; one without msg withdraws the warning of its code. msg says what the recorder found, in English; capture_low_quality carries the capture's format in source, disk_full the megabytes left in free_mb, player_volume_low the player's volume in percent in volume"},
 }

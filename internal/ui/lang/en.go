@@ -68,6 +68,7 @@ const (
 	OpenPlayer                = "Open %s"
 	OpenThePlayer             = "Open the player"
 	OpenDiagnostics           = "Open diagnostics"
+	SetFullVolume             = "Set to 100%"
 	Play                      = "Play"
 	Skip                      = "Skip"
 	MeterLeft                 = "L"
@@ -118,6 +119,8 @@ const (
 	SavedLowQuality  = "Saved: low quality"
 	SavedPartial     = "Saved: partial"
 	SavedPauseFade   = "Saved: pause fade"
+	SavedLowVolume   = "Saved: low volume"
+	SavedBothIssues  = "Saved: pause fade, low volume"
 	ReasonDuplicate  = "already recorded"
 	ReasonTooShort   = "too short"
 	ReasonAd         = "advert"
@@ -149,14 +152,16 @@ const (
 	Partial         = "Partial"
 	LowQuality      = "Low quality"
 	PauseFade       = "Pause fade"
+	LowVolume       = "Low volume"
+	WithIssues      = "With issues"
 	NoFiles         = "No files"
 	Rescan          = "Rescan"
 	AllFiles        = "All files"
 	NoRecordingsYet = "No recordings yet"
 	LibraryEmpty    = "Recorded tracks land in %s."
 	TickAKind       = "Tick a kind of file to show."
-	NoTakesYet      = "None yet: Keep anyway saves takes cut short or in low quality; takes with a pause fade are marked."
-	OnlyTakes       = "Every file here is a take cut short, in low quality or with a pause fade."
+	NoTakesYet      = "None yet: Keep anyway saves takes cut short or in low quality; takes with a pause fade or a low volume are marked."
+	OnlyTakes       = "Every file here is a take cut short, in low quality, or with a pause fade or a low volume."
 	NothingMatches  = `Nothing matches "%s".`
 	OneFile         = "1 file"
 	Files           = "%d files"
@@ -277,7 +282,8 @@ const (
 // in the sound settings on Linux, but not the output device's; on macOS a
 // tap refused System Audio Recording records silence too, not nothing.
 // PhoneCall takes the device's format, DeviceRate or DeviceRateMono, which
-// take its rate in kHz; DiskFull takes the megabytes left.
+// take its rate in kHz; DiskFull takes the megabytes left. VolumeLow takes
+// the player's own volume in percent; VolumeZero is its 0%.
 const (
 	NoAudio            = "No audio from the player for 10 s."
 	NoAudioMacOS       = "If macOS asks to let Spytify record system audio, allow it; it is in System Settings > Privacy & Security > Screen & System Audio Recording."
@@ -294,6 +300,8 @@ const (
 	DeviceRate         = "%g kHz"
 	DeviceRateMono     = "%g kHz mono"
 	DiskFull           = "Only %d MB free in the output folder."
+	VolumeLow          = "The player's volume is at %d%%. Tracks recorded now are quieter and marked low volume."
+	VolumeZero         = "The player's volume is at 0%. Nothing is recorded until it's raised."
 )
 
 // About. Versions takes the app's version, the recorder's, then the
