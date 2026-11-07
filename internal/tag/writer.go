@@ -12,10 +12,11 @@ import (
 	"github.com/spytify/spytify/internal/proc"
 )
 
-// Writer writes tags into an encoded file. MP3 gets ID3v2.4, FLAC gets
-// Vorbis comments, AAC gets MP4 atoms, all through an ffmpeg stream copy so
-// the audio is untouched; WAV has no standard tag block and gets a sidecar
-// JSON file instead.
+// Writer writes tags into an encoded file. MP3 gets ID3v2.3, whose cover
+// Windows' Explorer and Media Player show (they show none from ID3v2.4);
+// FLAC gets Vorbis comments, AAC gets MP4 atoms, all through an ffmpeg
+// stream copy so the audio is untouched; WAV has no standard tag block and
+// gets a sidecar JSON file instead.
 type Writer struct {
 	FFmpeg string
 }
@@ -65,7 +66,7 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 	}
 	args = append(args, "-map_metadata", "-1")
 	if format == "mp3" {
-		args = append(args, "-id3v2_version", "4", "-write_id3v1", "0")
+		args = append(args, "-id3v2_version", "3", "-write_id3v1", "0")
 	}
 	for _, kv := range metadataPairs(t, format, o.ArtistSeparator) {
 		args = append(args, "-metadata", kv)
