@@ -152,7 +152,7 @@ func (a *App) keepCovers(s model.State) {
 	held := make(map[string]bool, len(s.Rows)+1)
 	if c := s.Current; c != nil {
 		held[c.ID] = true
-		a.copies.keep(dir, c.ID, c.CoverURL)
+		a.covers.copies.keep(dir, c.ID, c.CoverURL)
 	}
 	for _, r := range s.Rows {
 		held[r.ID] = true
@@ -166,14 +166,14 @@ func (a *App) keepCovers(s model.State) {
 	}
 	a.coverIDs = held
 	if letGo {
-		a.copies.prune(dir, held)
+		a.covers.copies.prune(dir, held)
 	}
 }
 
 // rowCover is the cover the player showed for row: its copy once made, the
 // player's own until then.
 func (a *App) rowCover(row model.Row) thumbs {
-	if p := a.copies.path(coverDir(a.last), row.ID); p != "" {
+	if p := a.covers.copies.path(coverDir(a.last), row.ID); p != "" {
 		return a.covers.load(p, func(context.Context) ([]byte, error) { return os.ReadFile(p) })
 	}
 	return a.covers.get(row.CoverURL)

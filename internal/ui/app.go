@@ -95,7 +95,6 @@ type App struct {
 	action *litButton
 	bar    *fyne.Container
 	covers *covers
-	copies *coverCopies
 	// coverIDs is the tracks the Record list held at the last render.
 	coverIDs map[string]bool
 	checked  bool
@@ -170,7 +169,6 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a.tel.SetScreenshot(a.screenshot)
 	a.applyTheme(settings.ThemeSystem)
 	a.covers = newCovers(a.scheduleRender)
-	a.copies = newCoverCopies(a.scheduleRender)
 	a.win = fa.NewWindow(lang.Spytify)
 	a.win.SetIcon(Logo)
 	a.win.Resize(fyne.NewSize(920, 640))
