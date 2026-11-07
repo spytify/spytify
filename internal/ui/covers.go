@@ -106,10 +106,13 @@ type covers struct {
 	slots chan struct{}
 	// max is how many covers the cache keeps: maxCovers, fewer in tests.
 	max int
+	// copies are the Record list's covers, kept in the output folder.
+	copies *coverCopies
 }
 
 func newCovers(loaded func()) *covers {
-	return &covers{cache: map[string]thumbs{}, used: map[string]uint64{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2), max: maxCovers}
+	return &covers{cache: map[string]thumbs{}, used: map[string]uint64{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2), max: maxCovers,
+		copies: newCoverCopies(loaded)}
 }
 
 // loads is how many covers finished loading, failed ones included: a

@@ -67,9 +67,9 @@ func (r *coverRig) settle() {
 		r.a.covers.mu.Lock()
 		loading := len(r.a.covers.pending)
 		r.a.covers.mu.Unlock()
-		r.a.copies.mu.Lock()
-		copying := len(r.a.copies.pending)
-		r.a.copies.mu.Unlock()
+		r.a.covers.copies.mu.Lock()
+		copying := len(r.a.covers.copies.pending)
+		r.a.covers.copies.mu.Unlock()
 		return loading == 0 && copying == 0
 	})
 }
