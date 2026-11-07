@@ -747,6 +747,46 @@ func TestLibraryShowsEmbeddedCovers(t *testing.T) {
 	}
 }
 
+// The Library shows what the files hold. A WAV has no tag block to hold a
+// cover, so it shows none, even with a cover_url in its .json: that is the
+// player's, a web address or, on Windows, a temporary file gone since.
+func TestLibraryShowsNoCoverForAWav(t *testing.T) {
+	dir := t.TempDir()
+	cover := filepath.Join(t.TempDir(), "cover.png")
+	var picture bytes.Buffer
+	if err := png.Encode(&picture, image.NewNRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cover, picture.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Artist - Song.wav"), []byte("RIFF"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	side := fmt.Sprintf(`{"title": "Song", "performers": ["Artist"], "cover_url": %q}`, "file://"+filepath.ToSlash(cover))
+	if err := os.WriteFile(filepath.Join(dir, "Artist - Song.wav.json"), []byte(side), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	values := defaults()
+	values["output.dir"] = dir
+	a, _ := connectedTestApp(t, values)
+	a.showTab(tabLibrary)
+	a.render()
+	lib := a.screens[tabLibrary].(*libraryScreen)
+	if len(lib.shown) != 1 {
+		t.Fatalf("%d files listed", len(lib.shown))
+	}
+	lib.cover(lib.shown[0])
+	eventually(t, "the covers never settled", func() bool {
+		a.covers.mu.Lock()
+		defer a.covers.mu.Unlock()
+		return len(a.covers.pending) == 0
+	})
+	if lib.cover(lib.shown[0]).row != nil {
+		t.Error("the WAV shows the cover of its .json")
+	}
+}
+
 // The library builds rows only for the files in view, however many there
 // are: a row, and its cover, cost nothing until it scrolls in.
 func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
