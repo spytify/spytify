@@ -211,6 +211,33 @@ func fakeDaemon(t *testing.T, part string) {
 	t.Setenv("SPYTIFY_FAKE_DAEMON", part)
 }
 
+// waitExited waits, as the test ends, for the recorder l started to exit:
+// Windows does not delete a program still running, and the test's folder
+// goes with its copy of the fake in it. Its cleanup comes after
+// fakeDaemon's, so it runs first.
+func waitExited(t *testing.T, l *Link) {
+	t.Cleanup(func() {
+		l.mu.Lock()
+		st := l.start
+		l.mu.Unlock()
+		if st == nil {
+			return
+		}
+		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+			st.mu.Lock()
+			done := st.facts.Exited || !st.facts.Started
+			st.mu.Unlock()
+			if done {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Error("the fake recorder never exited")
+				return
+			}
+		}
+	})
+}
+
 // A recorder found nowhere is said so, and was never started.
 func TestAStartSaysTheRecorderWasNotFound(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
@@ -228,6 +255,7 @@ func TestAStartSaysTheRecorderWasNotFound(t *testing.T) {
 func TestAStartSaysHowTheRecorderStopped(t *testing.T) {
 	fakeDaemon(t, "exit")
 	l := New(filepath.Join(t.TempDir(), "absent.sock"), model.New())
+	waitExited(t, l)
 	err := l.StartDaemon()
 	if err == nil || !strings.Contains(err.Error(), "address already in use") {
 		t.Fatalf("StartDaemon: %v", err)
@@ -247,6 +275,7 @@ func TestAStartThatGetsNoAnswerKeepsTheRecorderOutput(t *testing.T) {
 	fakeDaemon(t, "slow")
 	sock := filepath.Join(t.TempDir(), "absent.sock")
 	l := New(sock, model.New())
+	waitExited(t, l)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go l.Run(ctx)
@@ -282,6 +311,7 @@ func TestAStartThatGetsAnAnswerDropsTheRecorderOutput(t *testing.T) {
 	fakeDaemon(t, "slow")
 	m := model.New()
 	l := New(sock, m)
+	waitExited(t, l)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go l.Run(ctx)
