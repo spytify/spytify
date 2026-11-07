@@ -183,7 +183,12 @@ func encodeCommand(script string) string {
 
 // powershell runs script in Windows PowerShell. Tests replace it.
 var powershell = func(ctx context.Context, script string) *exec.Cmd {
-	return proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodeCommand(script))
+	path, err := PowerShell()
+	if err != nil {
+		// Start fails with PATH's own error.
+		path = "powershell.exe"
+	}
+	return proc.CommandContext(ctx, path, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodeCommand(script))
 }
 
 func (m *SMTC) current() []string {
