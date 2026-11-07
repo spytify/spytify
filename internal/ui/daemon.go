@@ -72,9 +72,11 @@ const startAnswerTimeout = 15 * time.Second
 // launch's telemetry counts it by the error, not by its words.
 var errNoAnswer = errors.New(lang.RecorderNoAnswer)
 
-// startFailed shows the offline screen with why the recorder did not start.
+// startFailed shows the offline screen with why the recorder did not start,
+// then reports it: the report's picture of the window is that screen, and
+// it is taken off the toolkit's goroutine once the drawing is done.
 func (a *App) startFailed(err error) {
 	a.starting, a.startErr = false, err.Error()
-	a.launchFailed(err)
 	a.render()
+	a.launchFailed(err)
 }
