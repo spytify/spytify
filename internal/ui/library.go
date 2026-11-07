@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -204,16 +203,11 @@ func newLibraryScreen(a *App) *libraryScreen {
 	return l
 }
 
-// cover is a file's art: the picture embedded in it, or for WAV, which has
-// no tags, the cover URL in the .json beside it. None while it loads.
+// cover is a file's art: the picture embedded in it, none while it loads.
+// The Library shows what the files hold, and a WAV has no tag block to hold
+// a cover: the cover_url of its .json is the player's, not the file's.
 func (l *libraryScreen) cover(f libraryFile) thumbs {
 	if strings.EqualFold(filepath.Ext(f.path), ".wav") {
-		var side struct {
-			CoverURL string `json:"cover_url"`
-		}
-		if b, err := os.ReadFile(f.path + ".json"); err == nil && json.Unmarshal(b, &side) == nil {
-			return l.covers.get(side.CoverURL)
-		}
 		return thumbs{}
 	}
 	ff := l.ffmpeg()
