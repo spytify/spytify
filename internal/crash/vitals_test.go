@@ -106,3 +106,20 @@ func TestKeepMovesTheVitalsWithTheTrace(t *testing.T) {
 		t.Error("a 40-day-old crash's vitals are still there")
 	}
 }
+
+// System says the computer's memory as numbers, and nothing of the
+// program's own.
+func TestSystemSaysTheComputersMemoryOnly(t *testing.T) {
+	facts := System()
+	if _, ok := facts["system.physical_bytes"]; !ok {
+		t.Errorf("no system.physical_bytes in %v", facts)
+	}
+	for k, v := range facts {
+		if !strings.HasPrefix(k, "system.") {
+			t.Errorf("%s=%s is not the system's", k, v)
+		}
+		if _, err := strconv.ParseUint(v, 10, 64); err != nil {
+			t.Errorf("%s=%q is not a number", k, v)
+		}
+	}
+}
