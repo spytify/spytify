@@ -45,7 +45,7 @@ func newRowLitButton(text string, icon fyne.Resource, imp widget.Importance, tap
 	b := &rowLitButton{}
 	b.Text, b.Icon, b.Importance, b.OnTapped = text, icon, imp, tapped
 	b.ExtendBaseWidget(b)
-	b.lit = container.NewThemeOverride(b, litTheme{&b.litButton})
+	b.lit = newThemed(b, litTheme{&b.litButton})
 	return b
 }
 
@@ -59,8 +59,8 @@ func checkFixes(o fyne.CanvasObject) []*rowLitButton {
 		if !o.Disabled() {
 			return []*rowLitButton{o}
 		}
-	case *container.ThemeOverride:
-		return checkFixes(o.Content)
+	case *themed:
+		return checkFixes(o.o.Content)
 	case *fyne.Container:
 		var fixes []*rowLitButton
 		for _, child := range o.Objects {
