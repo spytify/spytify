@@ -138,6 +138,12 @@
         "code": {
           "type": "string"
         },
+        "facts": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
         "fatal": {
           "type": "boolean"
         },
