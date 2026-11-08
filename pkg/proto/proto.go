@@ -272,6 +272,9 @@ type SessionStateEvent struct {
 	// Playlist is, as the session ends, the .m3u8 written for it
 	// (output.playlist), or the one its tracks still being saved go to.
 	Playlist string `json:"playlist,omitempty"`
+	// AtRecorded is, as the session ends, that it ended at a track already
+	// recorded (recorder.stop_at_recorded).
+	AtRecorded bool `json:"at_recorded,omitempty"`
 }
 
 type TrackStartedEvent struct {

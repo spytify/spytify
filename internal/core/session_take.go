@@ -337,9 +337,25 @@ func (s *Session) announce(seg *segment) {
 	case proto.SkipDuplicate:
 		s.deps.fin.skipped(proto.TrackSkippedEvent{ID: seg.id, Reason: seg.reason, Path: seg.recorded.path, Of: seg.recorded.of})
 	}
-	// A duplicate is skipped once announced: one paused at its start waits
-	// for Play, as next would make a paused player play the next track.
-	if seg.reason == proto.SkipDuplicate && s.deps.values().Bool(settings.RecorderSkipDuplicatesForward) {
+	if seg.reason != proto.SkipDuplicate {
+		return
+	}
+	switch v := s.deps.values(); {
+	case v.Bool(settings.RecorderStopAtRecorded):
+		// The playlist's tracks after it are recorded too: the session ends
+		// as Stop ends it on a skipped track, at once, and the player waits.
+		s.deps.log.Infof("%q is already recorded: the session stops there", seg.info.Title)
+		s.atRecorded = true
+		go func() {
+			if err := s.deps.control(proto.CmdPause); err != nil {
+				s.deps.log.Infof("pause at a track already recorded: %v", err)
+			}
+		}()
+		s.Stop(false)
+	case v.Bool(settings.RecorderSkipDuplicatesForward):
+		// A duplicate is skipped once announced: one paused at its start
+		// waits for Play, as next would make a paused player play the next
+		// track.
 		go func() {
 			if err := s.deps.control(proto.CmdNext); err != nil {
 				s.deps.log.Infof("skip to next: %v", err)

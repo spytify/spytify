@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 )
@@ -99,5 +100,33 @@ func TestTheToggleHaloFollowsThePointer(t *testing.T) {
 	test.MoveMouse(w.Canvas(), fyne.NewPos(-10, -10))
 	if r.halo.FillColor != color.Transparent {
 		t.Errorf("after the pointer left, the halo is %v", r.halo.FillColor)
+	}
+}
+
+// Disabled, the switch keeps showing its value, dimmed, and neither a tap
+// nor the space bar flips it; the keyboard's focus passes over it.
+func TestADisabledToggleDoesNotFlip(t *testing.T) {
+	flips := 0
+	sw, r, w := toggleWindow(t, func(bool) { flips++ })
+	sw.SetOn(true)
+	sw.Disable()
+	if !sw.Disabled() || r.knob.FillColor != theme.Color(theme.ColorNameDisabled) {
+		t.Fatalf("disabled %v, knob %v", sw.Disabled(), r.knob.FillColor)
+	}
+	test.Tap(sw)
+	sw.TypedRune(' ')
+	if !sw.on || flips != 0 || w.Canvas().Focused() == sw {
+		t.Fatalf("a disabled switch: on %v, flipped %d times, focused %v", sw.on, flips, w.Canvas().Focused() == sw)
+	}
+	other := newToggle(nil)
+	w.SetContent(container.NewVBox(sw, other))
+	w.Canvas().FocusNext()
+	if w.Canvas().Focused() != other {
+		t.Errorf("Tab went to %v, want the next switch past the disabled one", w.Canvas().Focused())
+	}
+	sw.Enable()
+	test.Tap(sw)
+	if sw.on || flips != 1 {
+		t.Errorf("enabled again, a tap: on %v, flipped %d times", sw.on, flips)
 	}
 }

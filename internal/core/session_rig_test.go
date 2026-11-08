@@ -155,6 +155,9 @@ func (r *rig) emit(method string, payload any) {
 		return
 	case proto.SessionStateEvent:
 		line = "state " + string(p.State)
+		if p.AtRecorded {
+			line += " at_recorded"
+		}
 	case proto.TrackStartedEvent:
 		line = fmt.Sprintf("started %s %q artist=%q album=%q length=%dms", p.ID, p.Title, p.Artist, p.Album, p.LengthMs)
 		if p.Cut != nil {

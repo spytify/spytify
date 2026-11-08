@@ -497,6 +497,9 @@ func (r *recordScreen) render(s model.State) {
 	// The session ended with a playlist: the alert names it.
 	ended := !gone && s.Session == proto.StateIdle && s.Playlist != ""
 	text := waitingText(s.Session)
+	if s.Session == proto.StateIdle && s.EndedAtRecorded {
+		text = lang.SessionEndedRecorded
+	}
 	switch {
 	case gone:
 		text = fmt.Sprintf(lang.NothingRecordedNotRunning, "spytifyd")
@@ -507,7 +510,11 @@ func (r *recordScreen) render(s model.State) {
 	case paused:
 		text = fmt.Sprintf(lang.NothingRecordedPaused, player)
 	case ended:
-		text = fmt.Sprintf(lang.SessionEndedPlaylist, filepath.Join(filepath.Base(filepath.Dir(s.Playlist)), filepath.Base(s.Playlist)))
+		list := lang.SessionEndedPlaylist
+		if s.EndedAtRecorded {
+			list = lang.SessionEndedRecordedList
+		}
+		text = fmt.Sprintf(list, filepath.Join(filepath.Base(filepath.Dir(s.Playlist)), filepath.Base(s.Playlist)))
 	}
 	setCaption(r.waiting, text)
 	r.launch.SetText(fmt.Sprintf(lang.OpenPlayer, player))

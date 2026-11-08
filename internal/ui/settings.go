@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -293,8 +294,10 @@ func (s *settingsScreen) apply(key string, v any) {
 	s.app.calls.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
+		values := map[string]any{key: v}
+		maps.Copy(values, offWith(key, v))
 		var res proto.SettingsSetResult
-		err := s.app.link.Do(ctx, proto.MethodSettingsSet, proto.SettingsSetParams{Values: map[string]any{key: v}}, &res)
+		err := s.app.link.Do(ctx, proto.MethodSettingsSet, proto.SettingsSetParams{Values: values}, &res)
 		if err == nil && res.Rejected[key] != "" {
 			err = fmt.Errorf("%s: %s", model.SettingWords(*s.fields[key].def).Label, res.Rejected[key])
 		}
@@ -305,6 +308,16 @@ func (s *settingsScreen) apply(key string, v any) {
 			})
 		}
 	})
+}
+
+// offWith is what a value turns off with it: the switches about tracks
+// already recorded mean something only while such tracks are skipped, so
+// Suffix or Overwrite turns them off, and they stay off once Skip is back.
+func offWith(key string, v any) map[string]any {
+	if key != settings.RecorderDuplicates.String() || v == string(settings.DuplicatesSkip) {
+		return nil
+	}
+	return map[string]any{settings.RecorderSkipDuplicatesForward.String(): false, settings.RecorderStopAtRecorded.String(): false}
 }
 
 func (s *settingsScreen) newField(d *settings.Def) *field {
@@ -502,6 +515,19 @@ func (s *settingsScreen) render(st model.State) {
 	prefix, _ := st.Settings[settings.OutputPrefix.String()].(string)
 	s.enable(settings.OutputCounterNext, settings.Prefix(prefix) == settings.PrefixCounter)
 	s.enable(settings.OutputCounterWidth, settings.Prefix(prefix) == settings.PrefixCounter)
+	// Only a skipped track is already recorded, to skip past or to stop at:
+	// with Suffix or Overwrite, both switches are off and cannot be turned
+	// on.
+	duplicates, _ := st.Settings[settings.RecorderDuplicates.String()].(string)
+	skip := settings.Duplicates(duplicates) == settings.DuplicatesSkip
+	for _, k := range []settings.Key{settings.RecorderSkipDuplicatesForward, settings.RecorderStopAtRecorded} {
+		s.enable(k, skip)
+		if f, ok := s.fields[k.String()]; ok && !skip {
+			if tg, ok := f.input.(*toggle); ok {
+				tg.SetOn(false)
+			}
+		}
+	}
 	note := s.app.trayNote()
 	if note == "" {
 		note = model.SettingWords(*s.tray).Note

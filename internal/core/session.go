@@ -165,6 +165,10 @@ type Session struct {
 	volumeLow bool
 	volumePct int
 
+	// atRecorded is the session ending at a track already recorded
+	// (recorder.stop_at_recorded).
+	atRecorded bool
+
 	stopCh chan stopMode
 	mu     sync.Mutex
 	snap   proto.SessionStatusResult
@@ -215,8 +219,11 @@ func (s *Session) setState(st proto.SessionState) {
 			s.lastSound = time.Now()
 		}
 		ev := proto.SessionStateEvent{State: st}
-		if st == proto.StateIdle && s.deps.playlist != nil {
-			ev.Playlist = s.deps.playlist()
+		if st == proto.StateIdle {
+			ev.AtRecorded = s.atRecorded
+			if s.deps.playlist != nil {
+				ev.Playlist = s.deps.playlist()
+			}
 		}
 		s.deps.emit(proto.EventSessionState, ev)
 		s.muteAds(st)

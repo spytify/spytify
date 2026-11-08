@@ -74,6 +74,7 @@ var Table = []Def{
 
 	{Key: "recorder.duplicates", Tab: "Recorder", Group: "recording", Kind: KindEnum, Enum: []string{"skip", "suffix", "overwrite"}, Default: "skip"},
 	{Key: "recorder.skip_duplicates_forward", Tab: "Recorder", Group: "recording", Kind: KindBool, Default: false},
+	{Key: "recorder.stop_at_recorded", Tab: "Recorder", Group: "recording", Kind: KindBool, Default: false},
 	{Key: "recorder.single_track", Tab: "Recorder", Group: "recording", Kind: KindBool, Default: false},
 	{Key: "recorder.stop_with_player", Tab: "Recorder", Group: "recording", Kind: KindBool, Default: false},
 	{Key: "recorder.normalize", Tab: "Advanced", Group: "recording", Kind: KindBool, Default: false},
