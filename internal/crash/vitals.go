@@ -117,3 +117,15 @@ func ReadVitals(path string) map[string]string {
 	}
 	return out
 }
+
+// System is the computer's memory and handles now, under the vitals' keys:
+// how much it had left when a program could not get its own.
+func System() map[string]string {
+	facts := map[string]string{}
+	for _, v := range osVitals() {
+		if strings.HasPrefix(v.key, "system.") {
+			facts[v.key] = strconv.FormatUint(v.value, 10)
+		}
+	}
+	return facts
+}
