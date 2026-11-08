@@ -55,15 +55,15 @@ jobs:
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install the desktop app's build dependencies
         run: scripts/ci/apt-install.sh gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
       - name: Tarball, .deb and .rpm
         run: SPYTIFY_VERSION="${{ needs.version.outputs.version }}" scripts/build-linux.sh dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.runner }}
           path: |
@@ -84,15 +84,15 @@ jobs:
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install nasm
         run: brew install nasm
       # ffmpeg takes minutes to build: it is built again when its script
       # changes.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/spytify/ffmpeg-*
           key: ffmpeg-macos-${{ hashFiles('scripts/build-ffmpeg.sh') }}
@@ -132,7 +132,7 @@ jobs:
           SPYTIFY_NOTARY_KEY="$RUNNER_TEMP/notary.p8" scripts/notarize-macos.sh dist/*.dmg dist/*.zip
           rm "$RUNNER_TEMP/notary.p8"
           echo "done=true" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-macos
           path: |
@@ -149,15 +149,15 @@ jobs:
     env:
       WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install MinGW-w64, nasm and 7-Zip
         run: scripts/ci/apt-install.sh mingw-w64 nasm 7zip
       # ffmpeg takes minutes to build: it is built again when its script
       # changes.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/spytify/ffmpeg-*
           key: ffmpeg-windows-${{ hashFiles('scripts/build-ffmpeg.sh') }}
@@ -181,7 +181,7 @@ jobs:
         run: |
           v="${{ needs.version.outputs.version }}"
           (cd dist && zip -q -r "spytify-$v-windows-amd64.zip" "spytify-$v-windows-amd64")
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: dist/*.zip
@@ -192,12 +192,12 @@ jobs:
   site:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           ref: gh-pages
           path: site
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: The site matches the code
@@ -215,12 +215,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-*
           merge-multiple: true
           path: files
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: src
           sparse-checkout: scripts/release-notes.sh

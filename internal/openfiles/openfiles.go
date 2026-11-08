@@ -3,7 +3,8 @@
 // Package openfiles tells which files and folders under a folder a process
 // holds open, for tests that check spytify lets go of the output folder
 // when it is not recording: an external drive with a file still open
-// cannot be ejected safely.
+// cannot be ejected safely. HeldBy names, on Windows, the programs holding
+// a file that could not be renamed.
 package openfiles
 
 import (

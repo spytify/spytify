@@ -440,6 +440,9 @@ type ErrorEvent struct {
 	FreeMB *int64 `json:"free_mb,omitempty"`
 	// Volume is the player's own volume in percent, for player_volume_low.
 	Volume *int `json:"volume,omitempty"`
+	// Facts say what the recorder knew when it happened, without a name or
+	// a path, for the bug tracker.
+	Facts map[string]string `json:"facts,omitempty"`
 }
 
 // Event is a decoded notification: its method name and raw payload.

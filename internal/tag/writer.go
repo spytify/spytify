@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spytify/spytify/internal/openfiles"
 	"github.com/spytify/spytify/internal/proc"
 )
 
@@ -19,6 +20,8 @@ import (
 // gets a sidecar JSON file instead.
 type Writer struct {
 	FFmpeg string
+	// Logf logs a rename Windows refused while a program held the file.
+	Logf func(format string, args ...any)
 }
 
 // Write tags path (an encoded file of format) in place.
@@ -76,7 +79,7 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 	if err != nil {
 		return fmt.Errorf("tag: ffmpeg: %v: %s", err, strings.TrimSpace(string(out)))
 	}
-	return os.Rename(tmp.Name(), path)
+	return openfiles.Rename(tmp.Name(), path, w.Logf)
 }
 
 func metadataPairs(t Track, format, sep string) []string {

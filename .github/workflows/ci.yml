@@ -27,8 +27,8 @@ jobs:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install ffmpeg (and the UI's OpenGL and X11 headers on Linux)
@@ -61,7 +61,7 @@ jobs:
         run: log show --last 10m --style compact --predicate 'subsystem == "com.apple.TCC" OR process == "appleeventsd" OR process == "tccd"' | grep -i -E "fakeplayer|osascript|AppleEvents" | tail -60 || true
       - name: Keep the results for the test badge
         if: always() && matrix.os == 'ubuntu-24.04'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test.jsonl
@@ -77,7 +77,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: test-results
       - name: Publish the test count
@@ -102,8 +102,8 @@ jobs:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       # The desktop UI needs cgo; the unit and macOS jobs build it natively.
@@ -119,14 +119,14 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install ffmpeg
         shell: pwsh
         run: choco install ffmpeg -y --no-progress
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: spytify-windows
           path: shipped
@@ -145,8 +145,8 @@ jobs:
   windows-staticcheck:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install MinGW-w64
@@ -160,18 +160,18 @@ jobs:
   windows-build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The build's version counts the commits since the latest tag.
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install MinGW-w64, nasm and 7-Zip
         run: scripts/ci/apt-install.sh mingw-w64 nasm 7zip
       # ffmpeg takes minutes to build: it is built again when its script
       # changes.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/spytify/ffmpeg-*
           key: ffmpeg-windows-${{ hashFiles('scripts/build-ffmpeg.sh') }}
@@ -179,7 +179,7 @@ jobs:
         run: scripts/build-windows.sh dist/windows
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: spytify-windows
           path: dist/windows/
@@ -192,7 +192,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: spytify-windows
       - name: The command-line tools start
@@ -277,7 +277,7 @@ jobs:
           echo "spytify-tap exit $code"
           cat tap-none.err
           grep -F "recording $pid at 48000 Hz: no output device gives its mix rate" tap-none.err
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: src
           sparse-checkout: scripts/ci
@@ -314,18 +314,18 @@ jobs:
   macos-build:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The build's version counts the commits since the latest tag.
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install nasm, and Homebrew's ffmpeg for ffprobe
         run: brew install nasm ffmpeg
       # ffmpeg takes minutes to build: it is built again when its script
       # changes.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/spytify/ffmpeg-*
           key: ffmpeg-macos-${{ hashFiles('scripts/build-ffmpeg.sh') }}
@@ -353,7 +353,7 @@ jobs:
         run: |
           scripts/dmg-macos.sh dist/Spytify.app dist/Spytify-macos.dmg
           (cd dist && zip -q -y -r spytify-macos-cli.zip spytifyd spytify-cli spytify-tap)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: spytify-macos
           path: |
@@ -365,11 +365,11 @@ jobs:
   linux-build:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The build's version counts the commits since the latest tag.
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Install the desktop app's build dependencies
@@ -378,7 +378,7 @@ jobs:
         run: scripts/build-linux.sh dist
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: spytify-linux
           path: |
@@ -402,7 +402,7 @@ jobs:
       matrix:
         image: ["ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04", "debian:12", "debian:13"]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: spytify-linux
       - name: The .deb installs, and the command-line tools start
@@ -447,7 +447,7 @@ jobs:
           - name: app
             tests: "-skip TestRecordFakePlayer"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install PipeWire, WirePlumber, D-Bus and ffmpeg
         run: |
           apt-get update -qq
@@ -477,7 +477,7 @@ jobs:
       matrix:
         rates: [default, 44100]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install PipeWire, WirePlumber, D-Bus and the PulseAudio tools
         run: |
           apt-get update -qq

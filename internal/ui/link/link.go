@@ -7,11 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/spytify/spytify/internal/bus"
@@ -45,6 +48,80 @@ type Link struct {
 	mu   sync.Mutex
 	c    *bus.Client
 	wake chan struct{}
+	// start is the last start of spytifyd; dialErr, why the last dial
+	// failed.
+	start   *starting
+	dialErr string
+}
+
+// Start is what a start of spytifyd found and saw, for the bug tracker:
+// nothing in it names the user or a folder of theirs.
+type Start struct {
+	// At is when the start began.
+	At time.Time
+	// Found is where spytifyd was: "next to the app", "PATH" or "none";
+	// ExeBytes is its size.
+	Found    string
+	ExeBytes int64
+	// InTemp is the app run from inside the temporary folder.
+	InTemp bool
+	// Started is spytifyd launched; Exited, that it stopped since, with
+	// ExitCode.
+	Started, Exited bool
+	ExitCode        int
+	// Err is why it did not start or how it stopped, without the path it
+	// may hold, and Errno the system's error number in it, 0 for none.
+	Err   string
+	Errno uintptr
+	// Stderr is what spytifyd wrote to its stderr, its end kept.
+	Stderr string
+	// SocketExists is the socket's file there as the start ends; DialErr,
+	// why the last dial failed, without the path.
+	SocketExists bool
+	DialErr      string
+}
+
+// starting is a start of spytifyd: what StartDaemon found, then what the
+// process does once it returned. settled is StartDaemon returned with it
+// running: until then its stderr is its message if it stops.
+type starting struct {
+	mu      sync.Mutex
+	facts   Start
+	settled bool
+	stderr  lockedBuffer
+}
+
+func (s *starting) note(f func(*Start)) {
+	s.mu.Lock()
+	f(&s.facts)
+	s.mu.Unlock()
+}
+
+// failed notes err, without the path it may hold.
+func (f *Start) failed(err error) {
+	f.Err = pathless(err)
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		f.Errno = uintptr(errno)
+	}
+}
+
+// pathless is err's message without the path it may hold: the bug tracker
+// gets what went wrong, not where.
+func pathless(err error) string {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Op + ": " + pe.Err.Error()
+	}
+	var ee *exec.Error
+	if errors.As(err, &ee) {
+		return ee.Err.Error()
+	}
+	var oe *net.OpError
+	if errors.As(err, &oe) {
+		return oe.Op + ": " + oe.Err.Error()
+	}
+	return err.Error()
 }
 
 // New prepares a link to addr (a socket path or tcp://host:port).
@@ -78,6 +155,9 @@ func (l *Link) Run(ctx context.Context) {
 		if err != nil {
 			// Nothing answers: the window says the recorder is not
 			// running, with no reason to add.
+			l.mu.Lock()
+			l.dialErr = pathless(err)
+			l.mu.Unlock()
 			lastErr = ""
 			l.Model.SetConn(model.Disconnected, lastErr)
 			if !pause() {
@@ -98,6 +178,7 @@ func (l *Link) Run(ctx context.Context) {
 		}
 		wait, lastErr = first, ""
 		l.Model.SetConn(model.Connected, "")
+		l.answered()
 		for loop := true; loop; {
 			select {
 			case <-ctx.Done():
@@ -120,6 +201,49 @@ func (l *Link) set(c *bus.Client) {
 	l.mu.Lock()
 	l.c = c
 	l.mu.Unlock()
+}
+
+// answered ends the start under way: the recorder answers, so what it
+// writes to stderr is no longer kept, its log file has it. A start not
+// settled yet stops keeping it as it settles. It comes after the model
+// says connected, which StartDaemon reads as it settles.
+func (l *Link) answered() {
+	l.mu.Lock()
+	l.dialErr = ""
+	st := l.start
+	l.mu.Unlock()
+	if st == nil {
+		return
+	}
+	st.mu.Lock()
+	settled := st.settled
+	st.mu.Unlock()
+	if settled {
+		st.stderr.stop()
+	}
+}
+
+// EndStart returns what the last start of spytifyd found and saw, and
+// stops keeping its output: the start failed and is being reported. It is
+// the zero Start when no start was made.
+func (l *Link) EndStart() Start {
+	l.mu.Lock()
+	st, dialErr := l.start, l.dialErr
+	l.mu.Unlock()
+	if st == nil {
+		return Start{}
+	}
+	st.mu.Lock()
+	s := st.facts
+	st.mu.Unlock()
+	s.Stderr = st.stderr.String()
+	st.stderr.stop()
+	s.DialErr = dialErr
+	if !strings.HasPrefix(l.Addr, "tcp://") {
+		_, err := os.Lstat(l.Addr)
+		s.SocketExists = err == nil
+	}
+	return s
 }
 
 // sync fills the model in the order that leaves it right: what the core is,
@@ -193,23 +317,26 @@ func FindDaemon() (string, error) {
 	if err != nil {
 		exe = ""
 	}
-	return findDaemon(exe)
+	p, _, err := findDaemon(exe)
+	return p, err
 }
 
-func findDaemon(exe string) (string, error) {
+// findDaemon also says where spytifyd was found: "next to the app",
+// "PATH" or "none".
+func findDaemon(exe string) (string, string, error) {
 	if exe != "" {
 		p := filepath.Join(filepath.Dir(exe), "spytifyd"+exeSuffix)
 		if _, err := os.Stat(p); err == nil {
-			return p, nil
+			return p, "next to the app", nil
 		}
 	}
 	if p, err := exec.LookPath("spytifyd"); err == nil {
-		return p, nil
+		return p, "PATH", nil
 	}
 	if exe != "" && inTempDir(filepath.Dir(exe)) {
-		return "", ErrInArchive
+		return "", "none", ErrInArchive
 	}
-	return "", ErrNoDaemon
+	return "", "none", ErrNoDaemon
 }
 
 // inTempDir says whether dir is in the temporary folder, where Windows'
@@ -231,21 +358,48 @@ func inTempDir(dir string) bool {
 
 // StartDaemon launches spytifyd detached from the UI, so closing the window
 // does not stop a recording, then asks Run to connect. A daemon that exits
-// at once (no player configured, socket taken) returns its message.
+// at once (no player configured, socket taken) returns its message. What
+// it found and saw waits for EndStart.
 func (l *Link) StartDaemon() error {
-	path, err := FindDaemon()
+	st := &starting{facts: Start{At: time.Now(), Found: "none"}}
+	l.mu.Lock()
+	if l.start != nil {
+		l.start.stderr.stop()
+	}
+	l.start = st
+	l.mu.Unlock()
+	exe, err := os.Executable()
+	if err != nil {
+		exe = ""
+	}
+	inTemp := exe != "" && inTempDir(filepath.Dir(exe))
+	path, found, err := findDaemon(exe)
+	st.note(func(f *Start) { f.Found, f.InTemp = found, inTemp })
 	if err != nil {
 		return err
 	}
+	if fi, err := os.Stat(path); err == nil {
+		st.note(func(f *Start) { f.ExeBytes = fi.Size() })
+	}
 	cmd := exec.Command(path)
 	detach(cmd)
-	var stderr lockedBuffer
-	cmd.Stderr = &stderr
+	cmd.Stderr = &st.stderr
 	if err := cmd.Start(); err != nil {
+		st.note(func(f *Start) { f.failed(err) })
 		return err
 	}
+	st.note(func(f *Start) { f.Started = true })
 	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	go func() {
+		err := cmd.Wait()
+		st.note(func(f *Start) {
+			f.Exited, f.ExitCode = true, cmd.ProcessState.ExitCode()
+			if err != nil {
+				f.failed(err)
+			}
+		})
+		exited <- err
+	}()
 	go func() {
 		for i := 0; i < 20; i++ {
 			time.Sleep(250 * time.Millisecond)
@@ -254,19 +408,27 @@ func (l *Link) StartDaemon() error {
 	}()
 	select {
 	case err := <-exited:
-		msg := lastLine(stderr.String())
+		msg := lastLine(st.stderr.String())
 		if msg == "" && err != nil {
 			msg = err.Error()
 		}
 		return fmt.Errorf(lang.RecorderStopped, msg)
 	case <-time.After(1500 * time.Millisecond):
 		// Still running: its log file has the rest. The pipe stays open
-		// until the app quits, so what comes through is dropped.
-		stderr.stop()
+		// until the app quits; what comes through is kept until it answers
+		// or EndStart reports it did not, then dropped.
+		st.mu.Lock()
+		st.settled = true
+		st.mu.Unlock()
+		if l.Model.Snapshot().Conn == model.Connected {
+			st.stderr.stop()
+		}
 		return nil
 	}
 }
 
+// lockedBuffer keeps the last 64 KiB written to it: the end of what
+// spytifyd said says why it stopped.
 type lockedBuffer struct {
 	mu      sync.Mutex
 	b       []byte
@@ -276,8 +438,11 @@ type lockedBuffer struct {
 func (w *lockedBuffer) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if !w.stopped && len(w.b) < 64<<10 {
+	if !w.stopped {
 		w.b = append(w.b, p...)
+		if over := len(w.b) - 64<<10; over > 0 {
+			w.b = append(w.b[:0], w.b[over:]...)
+		}
 	}
 	return len(p), nil
 }

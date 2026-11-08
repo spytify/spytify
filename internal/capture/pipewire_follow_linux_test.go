@@ -4,6 +4,8 @@ package capture
 
 import (
 	"context"
+	"errors"
+	"maps"
 	"os/exec"
 	"slices"
 	"sync"
@@ -19,6 +21,7 @@ import (
 type fakeTools struct {
 	mu       sync.Mutex
 	node     *streamNode
+	stderr   string // what the recorder writes to stderr as it starts
 	recorded []string
 	silenced []string
 	restored []string
@@ -45,7 +48,11 @@ func (f *fakeTools) find(target.Target) (streamNode, bool, error) {
 func (f *fakeTools) record(ctx context.Context, n streamNode, _ pcm.Format) *exec.Cmd {
 	f.mu.Lock()
 	f.recorded = append(f.recorded, n.key)
+	stderr := f.stderr
 	f.mu.Unlock()
+	if stderr != "" {
+		return exec.CommandContext(ctx, "sh", "-c", `printf '%s' "$1" >&2; exec cat /dev/zero`, "sh", stderr)
+	}
 	return exec.CommandContext(ctx, "cat", "/dev/zero")
 }
 
@@ -245,5 +252,50 @@ func TestAMutedPlayerGetsItsOutputBack(t *testing.T) {
 	defer tools.mu.Unlock()
 	if !slices.Equal(tools.silenced, []string{"55"}) || !slices.Equal(tools.restored, []string{"55"}) || !tools.dropped {
 		t.Fatalf("silenced %v, restored %v, sink dropped %v", tools.silenced, tools.restored, tools.dropped)
+	}
+}
+
+// The capture's health says which stream it records and what the recorder
+// wrote to stderr; once the stream is gone, that none is found and how the
+// recorder ended: stopped.
+func TestTheCaptureSaysWhatItSaw(t *testing.T) {
+	tools := &fakeTools{stderr: "one\ntwo\n"}
+	tools.set(&streamNode{key: "55", rate: 44100, channels: 2, running: true, state: "running"})
+	p := openFake(t, tools, false)
+	waitFormat(t, p, pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.F32LE})
+	want := map[string]string{"capture.backend": "fake", "capture.node_found": "yes", "capture.node_state": "running",
+		"capture.node_rate": "44100", "capture.node_channels": "2", "capture.restarts": "0", "capture.stderr": "one\ntwo"}
+	deadline := time.Now().Add(5 * time.Second)
+	for !maps.Equal(p.Health(), want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("health %v, want %v", p.Health(), want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	tools.set(nil)
+	for h := p.Health(); h["capture.node_found"] != "no" || h["capture.record_exit"] != "-1"; h = p.Health() {
+		if time.Now().After(deadline) {
+			t.Fatalf("health %v once the stream is gone", h)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// An error looking for the stream is said, and keeps the stream found
+// before; a recorder that ended by itself says its status.
+func TestTheCaptureKeepsItsLastErrors(t *testing.T) {
+	p := &PipeWire{backend: &fakeTools{}}
+	p.looked(streamNode{key: "55", rate: 48000, channels: 2, state: "suspended"}, true, nil)
+	p.looked(streamNode{}, false, errors.New("pw-dump: exit status 1"))
+	p.recorded(nil)
+	h := p.Health()
+	if h["capture.node_found"] != "yes" || h["capture.node_state"] != "suspended" || h["capture.dump_error"] != "pw-dump: exit status 1" || h["capture.record_exit"] != "0" {
+		t.Fatalf("health %v", h)
+	}
+	if err := exec.Command("sh", "-c", "exit 2").Run(); err != nil {
+		p.recorded(err)
+	}
+	if got := p.Health()["capture.record_exit"]; got != "2" {
+		t.Fatalf("record_exit %q, want 2", got)
 	}
 }

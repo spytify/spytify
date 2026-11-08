@@ -6,13 +6,17 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 
 	"github.com/spytify/spytify/internal/core/naming"
+	"github.com/spytify/spytify/internal/crash"
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/meta"
+	"github.com/spytify/spytify/internal/openfiles"
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/tag"
@@ -453,7 +457,7 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 	t.timings.EncodeMs = msSince(step)
 	if err != nil {
 		os.Remove(t.part)
-		f.fail(t.finishJob, proto.ErrorEncode, err)
+		f.failWith(t.finishJob, proto.ErrorEncode, err, encodeFacts(t.v.Path(settings.OutputDir), t.part))
 		return false
 	}
 	if short != nil {
@@ -467,12 +471,27 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 	return true
 }
 
+// encodeFacts say, with no path, what may have kept ffmpeg from writing
+// part: how long its path is, in the UTF-16 units Windows counts (a
+// program not made for longer paths stops at 260), whether its folder is
+// still there, where the output folder is and whether Windows guards it
+// from programs it does not know, and how much memory the computer had
+// left (Windows cannot start a program without it: 0xc0000142).
+func encodeFacts(root, part string) map[string]string {
+	facts := crash.System()
+	facts["encode.part_len"] = strconv.Itoa(len(utf16.Encode([]rune(part))))
+	fi, err := os.Stat(filepath.Dir(part))
+	facts["encode.dir_exists"] = yesNo(err == nil && fi.IsDir())
+	placeFacts(root, facts)
+	return facts
+}
+
 // writeTags tags the .part file. A file whose tags could not be written is
 // saved all the same.
 func (f *finisher) writeTags(ctx context.Context, t *take) {
 	t.tagged = true
 	step := time.Now()
-	err := (tag.Writer{FFmpeg: f.ffmpeg.Path}).Write(ctx, t.part, t.timings.Format, t.tags, t.topts)
+	err := (tag.Writer{FFmpeg: f.ffmpeg.Path, Logf: f.log.Infof}).Write(ctx, t.part, t.timings.Format, t.tags, t.topts)
 	t.timings.TagMs = msSince(step)
 	if err != nil {
 		f.log.Errorf("%q: tags not written: %v", t.info.Title, err)
@@ -484,11 +503,11 @@ func (f *finisher) writeTags(ctx context.Context, t *take) {
 // counts the file and reports it saved.
 func (f *finisher) save(t *take) {
 	if t.timings.Format == "wav" {
-		if err := os.Rename(t.part+".json", t.final+".json"); err != nil && !os.IsNotExist(err) {
+		if err := openfiles.Rename(t.part+".json", t.final+".json", f.log.Infof); err != nil && !os.IsNotExist(err) {
 			f.log.Errorf("%q: sidecar: %v", t.info.Title, err)
 		}
 	}
-	if err := os.Rename(t.part, t.final); err != nil {
+	if err := openfiles.Rename(t.part, t.final, f.log.Infof); err != nil {
 		os.Remove(t.part)
 		f.fail(t.finishJob, proto.ErrorRename, err)
 		return
@@ -531,6 +550,11 @@ func (f *finisher) save(t *take) {
 }
 
 func (f *finisher) fail(j finishJob, code proto.ErrorCode, err error) {
+	f.failWith(j, code, err, nil)
+}
+
+// failWith is fail with facts for the bug tracker.
+func (f *finisher) failWith(j finishJob, code proto.ErrorCode, err error, facts map[string]string) {
 	f.log.Errorf("%q: %s: %v", j.info.Title, code, err)
 	msg := fmt.Sprintf("%s: %v", j.info.Title, err)
 	// Only once a file failed is the output folder looked at: gone with
@@ -539,7 +563,7 @@ func (f *finisher) fail(j finishJob, code proto.ErrorCode, err error) {
 	if _, gone := os.Stat(f.values().Path(settings.OutputDir)); gone != nil {
 		code, msg, lost = proto.ErrorOutputDir, "the output folder cannot be reached, so the recording stopped: "+msg, true
 	}
-	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg})
+	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg, Facts: facts})
 	f.skip(j.id, proto.SkipIncomplete)
 	if lost && f.lost != nil {
 		f.lost()
