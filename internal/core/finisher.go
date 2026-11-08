@@ -13,6 +13,7 @@ import (
 	"github.com/spytify/spytify/internal/core/naming"
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/meta"
+	"github.com/spytify/spytify/internal/openfiles"
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/tag"
@@ -489,6 +490,7 @@ func (f *finisher) save(t *take) {
 		}
 	}
 	if err := os.Rename(t.part, t.final); err != nil {
+		err = openfiles.Explain(err, t.part, t.final)
 		os.Remove(t.part)
 		f.fail(t.finishJob, proto.ErrorRename, err)
 		return
