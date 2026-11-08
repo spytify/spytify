@@ -1,6 +1,7 @@
 package openfiles
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"unsafe"
@@ -73,6 +74,12 @@ func HeldBy(paths ...string) []string {
 		}
 		return names
 	}
+}
+
+// isHeld tells a rename refused because a program holds the file: a
+// sharing violation, or access denied while a scanner has it pending.
+func isHeld(err error) bool {
+	return errors.Is(err, windows.ERROR_SHARING_VIOLATION) || errors.Is(err, windows.ERROR_ACCESS_DENIED)
 }
 
 func processName(info rmProcessInfo) string {
