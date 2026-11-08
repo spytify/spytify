@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	exeSuffix = ""
-	buildHint = "build it with scripts/build-macos.sh"
+	// helperBackend names the capture in its health.
+	helperBackend = "coreaudio"
+	exeSuffix     = ""
+	buildHint     = "build it with scripts/build-macos.sh"
 )
 
 // MacOSVersion returns the running macOS version, such as "14.2.1".

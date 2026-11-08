@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -183,6 +184,63 @@ func TestAFullDiskStopsTheRecording(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		if got := slices.Contains(s.player.Commands(), string(proto.CmdPause)); got != pause {
 			t.Errorf("pause %v: the player was sent %v", pause, s.player.Commands())
+		}
+	}
+}
+
+// A track ffmpeg could not encode says, with no path, what may have kept
+// it from writing: how long the file's path is, whether its folder was
+// still there, where the output folder is and how much memory the
+// computer had left (SPYTIFY-G).
+func TestATrackThatCouldNotBeEncodedSaysWhatMayHaveKeptIt(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out")
+	store := testStore(t, dir, map[string]any{"output.dir": out}, baseSettings)
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	log, _ := NewLogger("", testWriter{t})
+	rec := &recorder{}
+	emit := func(method string, payload any) {
+		raw, _ := json.Marshal(payload)
+		rec.add(method, json.RawMessage(raw))
+	}
+	// An ffmpeg that cannot be started, as Windows answers 0xc0000142.
+	fin := newFinisher(store.Values, &encode.FFmpeg{Path: filepath.Join(dir, "no-ffmpeg")}, emit, log)
+
+	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
+	frames := f.FramesFromMs(3000)
+	take := testkit.WriteWAV(t, filepath.Join(dir, "take.wav"), f, pcm.Synth{Seed: 1}.Render(f, frames))
+	fin.enqueue(finishJob{id: "s-1", info: meta.TrackInfo{Title: "Midnight Ferry", Artists: []string{"Neon Harbor"}, Album: "Harbor Lights", LengthMs: 3000},
+		tmp: take, format: f, played: frames, length: frames})
+	fin.close()
+
+	var errs []proto.ErrorEvent
+	for _, ev := range rec.all() {
+		var e proto.ErrorEvent
+		if ev.Method == proto.EventError && ev.Decode(&e) == nil {
+			errs = append(errs, e)
+		}
+	}
+	if len(errs) != 1 || errs[0].Code != proto.ErrorEncode {
+		t.Fatalf("errors %+v, want one encode error", errs)
+	}
+	facts := errs[0].Facts
+	// The path is the output folder's, then the track's folders and name.
+	if n, err := strconv.Atoi(facts["encode.part_len"]); err != nil || n <= len(out) || n > len(out)+200 {
+		t.Errorf("encode.part_len %q, want the .part path's length, over the output folder's %d", facts["encode.part_len"], len(out))
+	}
+	if facts["encode.dir_exists"] != "yes" {
+		t.Errorf("encode.dir_exists %q, want yes", facts["encode.dir_exists"])
+	}
+	for _, k := range []string{"output.cloud", "output.known", "system.physical_bytes"} {
+		if _, ok := facts[k]; !ok {
+			t.Errorf("no %s in %v", k, facts)
+		}
+	}
+	for k, v := range facts {
+		if strings.Contains(v, dir) {
+			t.Errorf("%s %q holds a path", k, v)
 		}
 	}
 }

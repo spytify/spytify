@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -61,6 +63,62 @@ func TestPinnedStallAndRecovery(t *testing.T) {
 	}
 	if got := r.lines(); !slices.Equal(got, want) {
 		t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// sayingCapture is a capture that says what it knows of itself.
+type sayingCapture struct{ capture.Capture }
+
+func (sayingCapture) Health() map[string]string {
+	return map[string]string{"capture.backend": "fake", "capture.restarts": "4"}
+}
+
+// A stalled capture's report carries what the session knew, before any
+// chunk and after some, and what the capture says of itself; its code,
+// message and flag stay. A capture that says nothing adds nothing.
+func TestAStallSaysWhatWasKnown(t *testing.T) {
+	if captureHealth(struct{ capture.Capture }{}) != nil {
+		t.Fatal("a capture with no health has some")
+	}
+	r := bareRig(t, nil, endOnStop)
+	s := r.s
+	s.deps.health = captureHealth(sayingCapture{})
+	var stalls []proto.ErrorEvent
+	emit := s.deps.emit
+	s.deps.emit = func(method string, payload any) {
+		if e, ok := payload.(proto.ErrorEvent); ok && e.Code == proto.ErrorCaptureStalled {
+			stalls = append(stalls, e)
+		}
+		emit(method, payload)
+	}
+	ctx := context.Background()
+	s.onMeta(ctx, statusEvent(meta.Playing))
+	s.started = time.Now().Add(-time.Minute)
+	s.onTick()
+	s.onChunk(capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44})
+	s.lastChunk = time.Now().Add(-20 * time.Second)
+	s.onTick()
+	if len(stalls) != 2 {
+		t.Fatalf("%d stalls reported, want 2", len(stalls))
+	}
+	for i, want := range []struct {
+		anyChunk string
+		since    int64
+	}{{"no", 60000}, {"yes", 20000}} {
+		e := stalls[i]
+		if e.Msg != "no audio from the capture for 10s while the player plays" || e.Fatal {
+			t.Errorf("stall %d: %q fatal=%v", i, e.Msg, e.Fatal)
+		}
+		since, err := strconv.ParseInt(e.Facts["stall.since_chunk_ms"], 10, 64)
+		if err != nil || since < want.since || since > want.since+5000 {
+			t.Errorf("stall %d: since_chunk_ms %q, want about %d", i, e.Facts["stall.since_chunk_ms"], want.since)
+		}
+		delete(e.Facts, "stall.since_chunk_ms")
+		wantFacts := map[string]string{"stall.player_status": "Playing", "stall.any_chunk": want.anyChunk, "stall.session_age_s": "60",
+			"capture.backend": "fake", "capture.restarts": "4"}
+		if !maps.Equal(e.Facts, wantFacts) {
+			t.Errorf("stall %d: facts %v, want %v", i, e.Facts, wantFacts)
+		}
 	}
 }
 

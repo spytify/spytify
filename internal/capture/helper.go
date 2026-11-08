@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -56,6 +58,16 @@ type Helper struct {
 	cancel   context.CancelFunc
 	done     chan struct{}
 	once     sync.Once
+
+	// What the helper did, for Health: how many times it ran, its last
+	// exit statuses, whether this run gave its header, whether it waits
+	// for the player, and its last stderr lines without a device's name.
+	mu      sync.Mutex
+	runs    int
+	exits   []int
+	header  bool
+	waiting bool
+	stderr  lineRing
 }
 
 func newHelper(helper string, args func(target.Target) ([]string, bool), logf func(format string, args ...any)) *Helper {
@@ -98,6 +110,43 @@ func (c *Helper) Open(ctx context.Context, t target.Target) (pcm.Format, error) 
 func (c *Helper) Frames() <-chan Chunk { return c.frames }
 func (c *Helper) Overruns() int64      { return c.overruns.Load() }
 
+// Health says what the helper did; see Healther.
+func (c *Helper) Health() map[string]string {
+	c.mu.Lock()
+	exits := make([]string, len(c.exits))
+	for i, e := range c.exits {
+		exits[i] = strconv.Itoa(e)
+	}
+	h := map[string]string{
+		"capture.backend":            helperBackend,
+		"capture.restarts":           strconv.Itoa(max(c.runs-1, 0)),
+		"capture.last_exits":         strings.Join(exits, ","),
+		"capture.header":             yesNo(c.header),
+		"capture.waiting_for_player": yesNo(c.waiting),
+	}
+	c.mu.Unlock()
+	if e := c.stderr.String(); e != "" {
+		h["capture.stderr"] = e
+	}
+	return h
+}
+
+func (c *Helper) setWaiting(w bool) {
+	c.mu.Lock()
+	c.waiting = w
+	c.mu.Unlock()
+}
+
+// exited notes a run's exit status, the last three kept.
+func (c *Helper) exited(code int) {
+	c.mu.Lock()
+	c.exits = append(c.exits, code)
+	if len(c.exits) > 3 {
+		c.exits = c.exits[len(c.exits)-3:]
+	}
+	c.mu.Unlock()
+}
+
 func (c *Helper) Close() error {
 	c.once.Do(func() {
 		if c.cancel != nil {
@@ -118,15 +167,18 @@ func (c *Helper) run(ctx context.Context, t target.Target) {
 			if !waiting {
 				c.logf("capture: waiting for the player to start")
 				waiting = true
+				c.setWaiting(true)
 			}
 			sleep(ctx, time.Second)
 			continue
 		}
 		waiting = false
+		c.setWaiting(false)
 		code := c.stream(ctx, args, t)
 		if ctx.Err() != nil {
 			return
 		}
+		c.exited(code)
 		if code != helperExitChanged {
 			sleep(ctx, time.Second)
 		}
@@ -135,6 +187,10 @@ func (c *Helper) run(ctx context.Context, t target.Target) {
 
 // stream runs the helper once and returns its exit status.
 func (c *Helper) stream(ctx context.Context, args []string, t target.Target) int {
+	c.mu.Lock()
+	c.runs++
+	c.header = false
+	c.mu.Unlock()
 	cmd := proc.CommandContext(ctx, c.helper, args...)
 	cmd.Cancel = func() error { return stopHelper(cmd.Process) }
 	cmd.WaitDelay = 2 * time.Second
@@ -155,7 +211,9 @@ func (c *Helper) stream(ctx context.Context, args []string, t target.Target) int
 	go func() {
 		sc := bufio.NewScanner(stderr)
 		for sc.Scan() {
-			c.logf("capture: %s", strings.TrimPrefix(sc.Text(), "spytify-tap: "))
+			line := strings.TrimPrefix(sc.Text(), "spytify-tap: ")
+			c.logf("capture: %s", line)
+			c.stderr.add(deviceless(line))
 		}
 	}()
 	r := bufio.NewReaderSize(out, 1<<16)
@@ -179,6 +237,9 @@ wait:
 					c.logf("capture: %v", h.err)
 				}
 			} else {
+				c.mu.Lock()
+				c.header = true
+				c.mu.Unlock()
 				c.readFrames(ctx, r, h.f, cmd.Process)
 			}
 			break wait
@@ -221,4 +282,26 @@ func (c *Helper) readFrames(ctx context.Context, r io.Reader, f pcm.Format, p *o
 			c.overruns.Add(1)
 		}
 	}
+}
+
+// The helper names the output device in these lines: Windows' mix rate
+// lines, macOS's tap line.
+var (
+	mixRateLine = regexp.MustCompile(`^(recording \d+ at \d+ Hz, the mix rate of ).*?(, the default output)?$`)
+	mixesLine   = regexp.MustCompile(`^.* (now mixes at \d+ Hz)$`)
+	tapLine     = regexp.MustCompile(`^(tapping .*?\]) on .* (at \d+ Hz \(tap reports \d+ Hz\))$`)
+)
+
+// deviceless is a helper's stderr line with the output device's name, which
+// the user chose, replaced by "a device".
+func deviceless(line string) string {
+	switch {
+	case mixRateLine.MatchString(line):
+		return mixRateLine.ReplaceAllString(line, "${1}a device$2")
+	case mixesLine.MatchString(line):
+		return mixesLine.ReplaceAllString(line, "a device $1")
+	case tapLine.MatchString(line):
+		return tapLine.ReplaceAllString(line, "$1 on a device $2")
+	}
+	return line
 }

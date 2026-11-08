@@ -6,11 +6,14 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 
 	"github.com/spytify/spytify/internal/core/naming"
+	"github.com/spytify/spytify/internal/crash"
 	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/meta"
 	"github.com/spytify/spytify/internal/openfiles"
@@ -454,7 +457,7 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 	t.timings.EncodeMs = msSince(step)
 	if err != nil {
 		os.Remove(t.part)
-		f.fail(t.finishJob, proto.ErrorEncode, err)
+		f.failWith(t.finishJob, proto.ErrorEncode, err, encodeFacts(t.v.Path(settings.OutputDir), t.part))
 		return false
 	}
 	if short != nil {
@@ -466,6 +469,21 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 		}
 	}
 	return true
+}
+
+// encodeFacts say, with no path, what may have kept ffmpeg from writing
+// part: how long its path is, in the UTF-16 units Windows counts (a
+// program not made for longer paths stops at 260), whether its folder is
+// still there, where the output folder is and whether Windows guards it
+// from programs it does not know, and how much memory the computer had
+// left (Windows cannot start a program without it: 0xc0000142).
+func encodeFacts(root, part string) map[string]string {
+	facts := crash.System()
+	facts["encode.part_len"] = strconv.Itoa(len(utf16.Encode([]rune(part))))
+	fi, err := os.Stat(filepath.Dir(part))
+	facts["encode.dir_exists"] = yesNo(err == nil && fi.IsDir())
+	placeFacts(root, facts)
+	return facts
 }
 
 // writeTags tags the .part file. A file whose tags could not be written is
@@ -532,6 +550,11 @@ func (f *finisher) save(t *take) {
 }
 
 func (f *finisher) fail(j finishJob, code proto.ErrorCode, err error) {
+	f.failWith(j, code, err, nil)
+}
+
+// failWith is fail with facts for the bug tracker.
+func (f *finisher) failWith(j finishJob, code proto.ErrorCode, err error, facts map[string]string) {
 	f.log.Errorf("%q: %s: %v", j.info.Title, code, err)
 	msg := fmt.Sprintf("%s: %v", j.info.Title, err)
 	// Only once a file failed is the output folder looked at: gone with
@@ -540,7 +563,7 @@ func (f *finisher) fail(j finishJob, code proto.ErrorCode, err error) {
 	if _, gone := os.Stat(f.values().Path(settings.OutputDir)); gone != nil {
 		code, msg, lost = proto.ErrorOutputDir, "the output folder cannot be reached, so the recording stopped: "+msg, true
 	}
-	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg})
+	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg, Facts: facts})
 	f.skip(j.id, proto.SkipIncomplete)
 	if lost && f.lost != nil {
 		f.lost()
