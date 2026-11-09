@@ -94,6 +94,10 @@ func (l *checkList) setRows(rows []fyne.CanvasObject) {
 	l.page.Refresh()
 }
 
+func (l *checkList) parts() []fyne.CanvasObject {
+	return append([]fyne.CanvasObject{l.scroll}, l.rows...)
+}
+
 func (l *checkList) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(l.scroll)
 }

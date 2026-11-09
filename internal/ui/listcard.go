@@ -35,6 +35,7 @@ type cardList struct {
 	band func(id widget.ListItemID) fyne.ThemeColorName
 
 	scroll  *container.Scroll
+	frame   *themed
 	page    *fyne.Container
 	card    *canvas.Rectangle
 	itemMin fyne.Size
@@ -130,13 +131,27 @@ func (l *cardList) bandOf(id widget.ListItemID) fyne.ThemeColorName {
 	return l.band(id)
 }
 
+// parts is the list's frame and the rows it keeps for later: a spare row
+// that lost its theme would come back in the app's.
+func (l *cardList) parts() []fyne.CanvasObject {
+	if l.frame == nil {
+		return nil
+	}
+	parts := []fyne.CanvasObject{l.frame}
+	for _, row := range l.spare {
+		parts = append(parts, row.box)
+	}
+	return parts
+}
+
 func (l *cardList) CreateRenderer() fyne.WidgetRenderer {
 	l.card = canvas.NewRectangle(color.Transparent)
 	l.page = container.New(cardPage{l}, l.card)
 	l.scroll = container.NewVScroll(l.page)
 	l.scroll.OnScrolled = func(fyne.Position) { l.place(false) }
 	// Lighter shadows at the scrolled edges, as in Settings.
-	r := &cardListRenderer{l: l, objs: []fyne.CanvasObject{newThemed(l.scroll, cardTheme{})}}
+	l.frame = newThemed(l.scroll, cardTheme{})
+	r := &cardListRenderer{l: l, objs: []fyne.CanvasObject{l.frame}}
 	r.measure()
 	return r
 }
@@ -419,6 +434,8 @@ type cardRow struct {
 }
 
 var _ desktop.Hoverable = (*cardRow)(nil)
+
+func (r *cardRow) parts() []fyne.CanvasObject { return []fyne.CanvasObject{r.line, r.content} }
 
 func (r *cardRow) setLook(noLine, focus bool, fill fyne.ThemeColorName, joined bool) {
 	if r.noLine != noLine || r.focus != focus || r.fill != fill || r.joined != joined {

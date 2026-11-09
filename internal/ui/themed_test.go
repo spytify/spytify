@@ -2,9 +2,17 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/driver/software"
+	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -53,4 +61,85 @@ func TestTracksDoNotGrowTheWindowsMemory(t *testing.T) {
 			t.Fatalf("%d tracks grew the heap by %d MB", n+10-20, grown>>20)
 		}
 	}
+}
+
+// Fyne drops the drawing of a widget it has not drawn for a minute, and the
+// widget's theme with it: the Record card, back from another tab, had the
+// app's dark text on its darkened cover in light. The window keeps every
+// widget drawn, the tabs not shown included.
+func TestAHiddenTabKeepsItsTheme(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for Fyne's clean, 10 s apart")
+	}
+	// Fyne reads how long it keeps a drawing when it starts: the test runs
+	// again in a process that keeps them a second.
+	if os.Getenv("FYNE_CACHE") == "" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestAHiddenTabKeepsItsTheme$")
+		cmd.Env = append(os.Environ(), "FYNE_CACHE=1s")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+		return
+	}
+	// A window's draw tells Fyne the time, and cleans what it has not drawn
+	// lately: the first draw at once, then 10 s apart at the soonest.
+	draw := software.NewCanvas().Capture
+	draw()
+	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	feedSession(t, m)
+	a.render()
+	// Nothing keeps this one drawn: Fyne dropping its theme shows that the
+	// drawings were cleaned.
+	control := widget.NewLabel("")
+	test.WidgetRenderer(newThemed(control, mediaTheme{}))
+
+	a.showTab(tabSettings)
+	for end := time.Now().Add(11 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		for _, o := range a.keptParts() {
+			keepDrawn(o)
+		}
+		draw()
+	}
+	a.showTab(tabRecord)
+	a.render()
+
+	if control.Refresh(); !inAppTheme(control) {
+		t.Fatal("Fyne kept the drawing nothing drew: the test cleaned nothing")
+	}
+	var lost []string
+	var walk func(o fyne.CanvasObject, under bool)
+	walk = func(o fyne.CanvasObject, under bool) {
+		switch o := o.(type) {
+		case *themed:
+			walk(o.o.Content, true)
+		case *fyne.Container:
+			for _, c := range o.Objects {
+				walk(c, under)
+			}
+		case fyne.Widget:
+			if o.Refresh(); under && inAppTheme(o) {
+				lost = append(lost, fmt.Sprintf("%T", o))
+			}
+			for _, c := range test.WidgetRenderer(o).Objects() {
+				walk(c, under)
+			}
+		}
+	}
+	// The tabs are in the window's AppTabs.
+	walk(a.win.Content(), false)
+	walk(a.screens[tabLogs].(*logsScreen).diag, false)
+	if len(lost) > 0 {
+		t.Errorf("%d widgets lost their theme: %v", len(lost), lost)
+	}
+}
+
+// inAppTheme says whether a widget draws in the app's theme rather than the
+// one of the themed around it.
+func inAppTheme(w fyne.Widget) bool {
+	th, ok := w.(interface{ Theme() fyne.Theme })
+	if !ok {
+		return false
+	}
+	_, app := th.Theme().(spytifyTheme)
+	return app
 }

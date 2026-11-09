@@ -29,6 +29,8 @@ func newFold(title string, detail fyne.CanvasObject) *fold {
 	return f
 }
 
+func (f *fold) parts() []fyne.CanvasObject { return []fyne.CanvasObject{f.header, f.detail} }
+
 func (f *fold) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(container.New(foldLayout{f}, f.header, f.detail))
 }

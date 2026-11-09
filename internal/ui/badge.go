@@ -36,6 +36,13 @@ func (b *badge) set(text string, fill, ink fyne.ThemeColorName) {
 	b.Refresh()
 }
 
+func (b *badge) parts() []fyne.CanvasObject {
+	if b.lead == nil {
+		return nil
+	}
+	return []fyne.CanvasObject{b.lead}
+}
+
 func (b *badge) CreateRenderer() fyne.WidgetRenderer {
 	r := &badgeRenderer{b: b, box: canvas.NewRectangle(nil), label: canvas.NewText("", nil)}
 	r.label.TextStyle.Bold = true

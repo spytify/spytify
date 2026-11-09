@@ -287,6 +287,7 @@ func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	m.OnEvent(a.notify)
 	if !opts.ManualRender {
 		go a.clockAds()
+		go a.keepWindowDrawn()
 	}
 	a.render()
 	return a

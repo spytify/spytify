@@ -25,6 +25,8 @@ func newPanel(fill, line fyne.ThemeColorName, radius float32, pad fyne.Size, con
 	return p
 }
 
+func (p *panel) parts() []fyne.CanvasObject { return []fyne.CanvasObject{p.content} }
+
 func (p *panel) CreateRenderer() fyne.WidgetRenderer {
 	r := &panelRenderer{p: p, box: canvas.NewRectangle(nil)}
 	r.Refresh()
