@@ -238,10 +238,17 @@ jobs:
           draft="--draft"
           [ "$PUBLISH" = true ] && draft=""
           (cd files && sha256sum * > SHA256SUMS)
+          # GitHub's list of changes starts at the newest published release,
+          # neither draft nor pre-release. Left to itself, it skips a tag such
+          # as 2.0.0-alpha.7 for a stable version and starts much earlier.
+          since="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 2 --json tagName -q "[.[].tagName | select(. != \"$TAG\")][0] // empty")"
+          start=""
+          [ -n "$since" ] && start="--notes-start-tag $since"
           # --target makes the tag on this commit when a manual run asks for a
           # version that has none yet.
           gh release create "$TAG" files/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" $draft $pre \
-            --title "Spytify $TAG" --generate-notes
+            --title "Spytify $TAG" --generate-notes $start
           # The notes link the files by the names GitHub gave them.
           src/scripts/release-notes.sh "$TAG" > notes.md
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
