@@ -257,6 +257,15 @@ func (p *Player) Control(cmd string) error {
 	return nil
 }
 
+// PlayURL notes the link among the commands; the timeline plays from its
+// first item whatever it is asked.
+func (p *Player) PlayURL(url string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.sent = append(p.sent, "play_url "+url)
+	return nil
+}
+
 // Commands lists the transport commands the player was sent, in order,
 // whether or not it played on long enough to act on them.
 func (p *Player) Commands() []string {
@@ -547,6 +556,7 @@ func (b *Backend) maybeStart() {
 func (b *Backend) Frames() <-chan capture.Chunk      { return b.frames }
 func (b *Backend) Overruns() int64                   { return 0 }
 func (b *Backend) Control(cmd proto.PlayerCmd) error { return b.p.Control(string(cmd)) }
+func (b *Backend) PlayURL(url string) error          { return b.p.PlayURL(url) }
 func (b *Backend) Volume() (float64, error)          { return b.p.Volume() }
 func (b *Backend) SetVolume(v float64) error         { return b.p.SetVolume(v) }
 

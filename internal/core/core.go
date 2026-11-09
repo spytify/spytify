@@ -236,6 +236,7 @@ func (c *Core) Handle(ctx context.Context, method string, params json.RawMessage
 		if p.SingleTrack != nil {
 			opts.SingleTrack = *p.SingleTrack
 		}
+		opts.PlayURL = strings.TrimSpace(p.PlayURL)
 		id, err := c.StartSession(opts)
 		if err != nil {
 			return nil, err
@@ -432,12 +433,17 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 	if err := outputWritable(c.store.Values().Path(settings.OutputDir)); err != nil {
 		return "", proto.Errorf(proto.CodeOutputDir, "the output folder cannot be written to: %v", err)
 	}
-	if err := c.ensureTarget(); err != nil {
+	if err := c.ensureTarget(opts.PlayURL != ""); err != nil {
 		return "", err
 	}
 	capt, np, err := c.backends.New(c.env.Target)
 	if err != nil {
 		return "", proto.Errorf(proto.CodeUnsupported, "%v", err)
+	}
+	urls, canPlayURL := np.(meta.URLPlayer)
+	if opts.PlayURL != "" && !canPlayURL {
+		capt.Close()
+		return "", proto.Errorf(proto.CodeUnsupported, "the player cannot be asked to play a link on %s", runtime.GOOS)
 	}
 	// Raised before the watch begins, so the first volume it reports is
 	// the session's own, not the one just replaced.
@@ -520,7 +526,75 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		c.log.Infof("session %s ended: %d recorded, %d skipped", id, cnt.Recorded, cnt.Skipped)
 		close(done)
 	}()
+	if opts.PlayURL != "" {
+		if err := c.playURL(s, urls, opts.PlayURL, done); err != nil {
+			s.Stop(true)
+			<-done
+			return "", err
+		}
+	}
 	return id, nil
+}
+
+// A player just opened takes a request to play a link and does nothing
+// with it, with no error: the request is sent again every playURLEvery
+// until the player plays, for up to playURLWithin.
+const (
+	playURLEvery  = 3 * time.Second
+	playURLWithin = 20 * time.Second
+)
+
+// playURL asks the player to play url until it plays a track it moved to.
+func (c *Core) playURL(s *Session, p meta.URLPlayer, url string, done <-chan struct{}) error {
+	c.log.Infof("asking the player to play %s", url)
+	if err := askToPlay(func() error { return p.PlayURL(url) }, s.watching.Load, s.plays.Load, done, playURLEvery, playURLWithin); err != nil {
+		return proto.Errorf(proto.CodePlayURL, "the player did not play %s: %v", url, err)
+	}
+	c.log.Infof("the player plays %s", url)
+	return nil
+}
+
+var errSessionEnded = errors.New("the session ended first")
+
+// askToPlay calls send once ready, then again each every while plays has
+// not moved, until within has passed. Before ready, the player's first
+// state may already be the link playing, and it would not count as a move.
+// A failed send is tried again too: a player just opened may not answer
+// yet. The last failure is the error then.
+func askToPlay(send func() error, ready func() bool, plays func() uint64, done <-chan struct{}, every, within time.Duration) error {
+	deadline := time.Now().Add(within)
+	for !ready() {
+		if !time.Now().Before(deadline) {
+			return errors.New("the player's state never came")
+		}
+		select {
+		case <-done:
+			return errSessionEnded
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	var last error
+	for {
+		before := plays()
+		last = send()
+		next := time.Now().Add(every)
+		for time.Now().Before(next) {
+			select {
+			case <-done:
+				return errSessionEnded
+			case <-time.After(50 * time.Millisecond):
+			}
+			if plays() != before {
+				return nil
+			}
+		}
+		if !time.Now().Before(deadline) {
+			if last != nil {
+				return last
+			}
+			return fmt.Errorf("asked for %s, it went on as it was", within)
+		}
+	}
 }
 
 // StopSession stops the running session.
@@ -650,8 +724,6 @@ func (c *Core) Shutdown() {
 	}
 }
 
-// ensureTarget launches the player with SPYTIFY_TARGET_LAUNCH when it is
-// not running, retrying 5 times 3 seconds apart as v1 did.
 // launch starts the player: SPYTIFY_TARGET_LAUNCH when it is set, else the
 // OS's own way to open an app by its bundle id or name.
 func (c *Core) launch() error {
@@ -681,11 +753,15 @@ func (c *Core) launch() error {
 	return nil
 }
 
-func (c *Core) ensureTarget() error {
+// ensureTarget launches the player when it is not running, then waits for
+// it 5 times 3 seconds apart as v1 did. Only with SPYTIFY_TARGET_LAUNCH set,
+// or open, for a session that plays a link: otherwise the session waits for
+// the player the listener opens.
+func (c *Core) ensureTarget(open bool) error {
 	if _, ok := c.find(c.env.Target); ok {
 		return nil
 	}
-	if c.env.Target.Launch == "" {
+	if c.env.Target.Launch == "" && !open {
 		return proto.Errorf(proto.CodeTargetNotRunning, "%s is not running", joinNames(c.env.Target.ProcessNames))
 	}
 	if err := c.launch(); err != nil {

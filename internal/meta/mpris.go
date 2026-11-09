@@ -410,6 +410,18 @@ func (m *MPRIS) restart() error {
 	return obj.CallWithContext(ctx, mprisPlayer+".Seek", 0, int64(-1<<40)).Err
 }
 
+// PlayURL plays a playlist or album link from its first track, with
+// OpenUri.
+func (m *MPRIS) PlayURL(url string) error {
+	obj, err := m.player()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return obj.CallWithContext(ctx, mprisPlayer+".OpenUri", 0, url).Err
+}
+
 func (m *MPRIS) Volume() (float64, error) {
 	obj, err := m.player()
 	if err != nil {

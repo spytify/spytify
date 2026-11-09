@@ -303,6 +303,9 @@
     },
     "SessionStartParams": {
       "properties": {
+        "play_url": {
+          "type": "string"
+        },
         "single_track": {
           "type": "boolean"
         }
