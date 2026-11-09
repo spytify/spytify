@@ -1,10 +1,15 @@
 package ui
 
 import (
+	"bytes"
 	"path/filepath"
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/driver/software"
+	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 
 	"github.com/spytify/spytify/internal/ui/model"
 )
@@ -37,6 +42,49 @@ func TestClosingTheWindowQuitsUnlessMinimizedToTray(t *testing.T) {
 				t.Fatalf("quit %d times, want quitting %v", quits, c.quits)
 			}
 		})
+	}
+}
+
+// QA found the macOS menu bar showing the logo in colour among icons in
+// one colour. There the tray icon is a template, which macOS tints only if
+// Fyne gets a themed resource whose SVG it can colour; Windows and Linux
+// keep the logo in colour.
+func TestTheMenuBarIconIsATemplateOnMacOS(t *testing.T) {
+	test.NewTempApp(t)
+	for _, goos := range []string{"windows", "linux"} {
+		if trayIcon(goos) != Logo {
+			t.Fatalf("%s tray icon is %s, want the logo in colour", goos, trayIcon(goos).Name())
+		}
+	}
+	themed, ok := trayIcon("darwin").(*theme.ThemedResource)
+	if !ok {
+		t.Fatalf("macOS tray icon is a %T, want a *theme.ThemedResource", trayIcon("darwin"))
+	}
+	if bytes.Equal(themed.Content(), traySVG) {
+		t.Fatal("Fyne could not colour tray.svg and fell back to its bytes")
+	}
+
+	// The coloured SVG keeps the logo's holes: the brow and the eye are
+	// cut out of the disc, and the iris sits in the eye.
+	img := canvas.NewImageFromResource(themed)
+	c := software.NewTransparentCanvas()
+	c.SetPadded(false)
+	c.SetContent(img)
+	c.Resize(fyne.NewSquareSize(256))
+	shot := c.Capture()
+	for _, p := range []struct {
+		name   string
+		x, y   int
+		opaque bool
+	}{
+		{"disc", 128, 20, true},
+		{"brow", 128, 79, false},
+		{"eye", 60, 150, false},
+		{"iris", 126, 154, true},
+	} {
+		if _, _, _, a := shot.At(p.x, p.y).RGBA(); p.opaque && a < 0xf000 || !p.opaque && a > 0x0fff {
+			t.Errorf("%s at (%d,%d) has alpha %#x, want opaque %v", p.name, p.x, p.y, a, p.opaque)
+		}
 	}
 }
 
