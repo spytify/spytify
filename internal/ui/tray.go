@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"runtime"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
 
@@ -48,7 +50,7 @@ func (a *App) setupTray() {
 	if !ok {
 		return
 	}
-	desk.SetSystemTrayIcon(Logo)
+	desk.SetSystemTrayIcon(trayIcon(runtime.GOOS))
 	// The tray's action is the app bar's, which render copies there:
 	// Record, Stop, or Stop now while the last track is being saved.
 	a.trayAction = fyne.NewMenuItem(lang.Record, a.toggleRecording)
