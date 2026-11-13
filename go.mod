@@ -52,6 +52,6 @@ require (
 
 // Fyne 2.8.2 keys its font cache by theme scope, so every theme override
 // parses the fonts again and keeps them. This is 2.8.2 with
-// fyne-io/fyne#6642, branch v2.8.2-font-cache of spytify/fyne. Remove it
-// once a Fyne release carries #6642.
-replace fyne.io/fyne/v2 => github.com/spytify/fyne/v2 v2.8.3-0.20261113014613-e57df82d8bdc
+// fyne-io/fyne#6642, branch v2.8.2-font-cache of spytify/fyne-fix-6642.
+// Remove it once a Fyne release carries #6642.
+replace fyne.io/fyne/v2 => github.com/spytify/fyne-fix-6642/v2 v2.8.3-0.20261113014613-e57df82d8bdc
