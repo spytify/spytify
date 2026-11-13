@@ -59,6 +59,7 @@ func run() int {
 	waitTarget := flag.Duration("wait-target", 15*time.Second, "with --once, wait this long for the player to start")
 	single := flag.Bool("single-track", false, "with --once, stop after one track")
 	serve := flag.Bool("serve", false, "with --once, also answer clients on the socket while recording")
+	playURL := flag.String("play-url", "", "with --once, open the player if needed and play this playlist or album link from its first track")
 	version := flag.Bool("version", false, "print the version and exit")
 	flag.Var(overrides, "set", "override a setting for this run, key=value (repeatable, not saved)")
 	flag.Parse()
@@ -66,6 +67,10 @@ func run() int {
 	if *version {
 		fmt.Printf("spytifyd %s (protocol %d)\n", proto.Version, proto.Protocol)
 		return 0
+	}
+	if *playURL != "" && !*once {
+		fmt.Fprintln(os.Stderr, "spytifyd: --play-url needs --once; a running spytifyd plays a link with spytify-cli start --play-url")
+		return 2
 	}
 
 	var backends core.Backends
@@ -141,7 +146,7 @@ func run() int {
 
 	if *once && !*serve {
 		c.SetBroadcaster(events)
-		return runOnce(c, log, sigs, core.SessionOptions{EndOnStop: true, IdleExit: *idleExit, SingleTrack: *single}, *waitTarget)
+		return runOnce(c, log, sigs, core.SessionOptions{EndOnStop: true, IdleExit: *idleExit, SingleTrack: *single, PlayURL: strings.TrimSpace(*playURL)}, *waitTarget)
 	}
 
 	srv := bus.NewServer(c.Handle, log.Infof)
@@ -165,7 +170,7 @@ func run() int {
 		log.Infof("listening on %s %s", a.Network(), a.String())
 	}
 	if *once {
-		return runOnce(c, log, sigs, core.SessionOptions{EndOnStop: true, IdleExit: *idleExit, SingleTrack: *single}, *waitTarget)
+		return runOnce(c, log, sigs, core.SessionOptions{EndOnStop: true, IdleExit: *idleExit, SingleTrack: *single, PlayURL: strings.TrimSpace(*playURL)}, *waitTarget)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

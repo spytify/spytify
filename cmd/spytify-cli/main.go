@@ -131,15 +131,27 @@ func (a *app) infoCmd() *cobra.Command {
 }
 
 func (a *app) startCmd() *cobra.Command {
-	var single bool
+	var single, noWait bool
+	var playURL string
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start a recording session",
-		Args:  cobra.NoArgs,
+		Long: `Start a recording session.
+
+With --play-url, the player is opened if it is closed and plays the link from
+its first track; the command then follows the session to its end. When no
+spytifyd answers, it runs spytifyd --once for that session.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			p := proto.SessionStartParams{}
+			p := proto.SessionStartParams{PlayURL: strings.TrimSpace(playURL)}
 			if cmd.Flags().Changed("single-track") {
 				p.SingleTrack = &single
+			}
+			if p.PlayURL != "" {
+				return a.play(p, !noWait)
+			}
+			if noWait {
+				return errors.New("--no-wait goes with --play-url")
 			}
 			var res proto.SessionStartResult
 			if err := a.call(proto.MethodSessionStart, p, &res); err != nil || a.asJSON {
@@ -150,6 +162,8 @@ func (a *app) startCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&single, "single-track", false, "stop after one track")
+	cmd.Flags().StringVar(&playURL, "play-url", "", "open the player if needed and play this playlist or album link from its first track")
+	cmd.Flags().BoolVar(&noWait, "no-wait", false, "with --play-url, return once the player plays instead of at the session's end")
 	return cmd
 }
 

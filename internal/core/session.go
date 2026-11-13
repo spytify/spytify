@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spytify/spytify/internal/capture"
@@ -25,7 +26,7 @@ const (
 	stopNow
 )
 
-// SessionOptions changes how a session ends.
+// SessionOptions changes how a session starts and ends.
 type SessionOptions struct {
 	SingleTrack bool
 	// EndOnStop ends the session when the player stops or quits after
@@ -35,6 +36,10 @@ type SessionOptions struct {
 	// IdleExit ends the session after this long without audio while the
 	// player is paused or stopped; 0 disables it.
 	IdleExit time.Duration
+	// PlayURL is a playlist or album link the player is asked to play from
+	// its first track once the session watches it; the player is opened
+	// for it when closed.
+	PlayURL string
 }
 
 type segment struct {
@@ -167,6 +172,13 @@ type Session struct {
 	// 100%, at volumePct.
 	volumeLow bool
 	volumePct int
+
+	// watching is set once the watch described the player as it was;
+	// plays then counts the events after which the player plays a track it
+	// moved to, jumped in or started. A play request is sent once watching,
+	// and waits for plays to move.
+	watching atomic.Bool
+	plays    atomic.Uint64
 
 	stopCh chan stopMode
 	mu     sync.Mutex

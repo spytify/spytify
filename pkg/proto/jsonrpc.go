@@ -38,6 +38,9 @@ const (
 	CodeUnsupported      = -32005
 	CodeNotAvailable     = -32006
 	CodeOutputDir        = -32007
+	// CodePlayURL is a link the player did not play: the session it
+	// started for it has ended.
+	CodePlayURL = -32008
 )
 
 // Error is a JSON-RPC error object.

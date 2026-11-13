@@ -114,6 +114,12 @@ type NowPlaying interface {
 	SetVolume(v float64) error
 }
 
+// URLPlayer is a player that can be asked to play a playlist or album link
+// from its first track.
+type URLPlayer interface {
+	PlayURL(url string) error
+}
+
 var (
 	ErrUnsupported = errors.New("not supported by this backend")
 	ErrNoPlayer    = errors.New("player interface not found")
