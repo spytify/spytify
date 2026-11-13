@@ -54,4 +54,4 @@ require (
 // parses the fonts again and keeps them. This is 2.8.2 with
 // fyne-io/fyne#6642, branch v2.8.2-font-cache of spytify/fyne. Remove it
 // once a Fyne release carries #6642.
-replace fyne.io/fyne/v2 => github.com/spytify/fyne/v2 v2.8.3-0.20261113014613-e57df82d8bdc
+replace fyne.io/fyne/v2 => github.com/spytify/fyne-fix-6652/v2 v2.8.3-0.20261113014613-e57df82d8bdc
