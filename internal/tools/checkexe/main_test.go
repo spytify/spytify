@@ -1,6 +1,7 @@
 package main
 
 import (
+	"debug/pe"
 	"encoding/binary"
 	"maps"
 	"slices"
@@ -15,6 +16,22 @@ func TestImportsFrom(t *testing.T) {
 	}
 	if got := importsFrom(syms[:1], "opengl32.dll"); len(got) != 0 {
 		t.Errorf("from opengl32.dll, with none: %v", got)
+	}
+}
+
+func TestOverlay(t *testing.T) {
+	section := func(offset, size uint32) *pe.Section {
+		return &pe.Section{SectionHeader: pe.SectionHeader{Offset: offset, Size: size}}
+	}
+	// spytify-tap.exe in 2.0.1, as MinGW's g++ linked it without -s: its
+	// last section ends at 495104, then 333998 bytes of COFF symbol table.
+	// .bss has no raw data, at offset 0.
+	tap := []*pe.Section{section(1536, 178176), section(0, 0), section(493056, 2048)}
+	if got := overlay(829102, tap); got != 333998 {
+		t.Errorf("the 2.0.1 tap: %d bytes past the last section, want 333998", got)
+	}
+	if got := overlay(495104, tap); got != 0 {
+		t.Errorf("a stripped tap: %d bytes past the last section, want 0", got)
 	}
 }
 
