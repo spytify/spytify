@@ -29,11 +29,12 @@ const unmuteGrace = time.Second
 var diskFree = freeBytes
 
 // playerHeardCheck is the check that the capture did not hear only silence
-// while the player played, until it heard sound again. The window words
-// its failure as the only silence warning (model.CheckDetail).
-func playerHeardCheck(silent bool) proto.Check {
-	if silent {
-		return proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", Detail: "only silence from the capture while the player played"}
+// while the player played, until it heard sound again; silent is what was
+// known then, nil while it hears sound. The window words its failure as
+// the only silence warning (model.CheckDetail).
+func playerHeardCheck(silent map[string]string) proto.Check {
+	if silent != nil {
+		return proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", Detail: "only silence from the capture while the player played", Facts: silent}
 	}
 	return proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", OK: true, Detail: "no silence heard"}
 }
@@ -55,9 +56,10 @@ func (s *Session) onTick() {
 		s.silent = true
 		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureQuiet)
 		s.deps.log.Errorf("%s", msg)
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent, Msg: msg})
+		facts := s.silenceFacts()
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent, Msg: msg, Facts: facts})
 		if s.deps.silence != nil {
-			s.deps.silence(true)
+			s.deps.silence(facts)
 		}
 	}
 	if s.opts.IdleExit > 0 && s.seen && (s.status != meta.Playing) && time.Since(s.lastSound) > s.opts.IdleExit {
@@ -75,6 +77,31 @@ func (s *Session) stallFacts(last time.Time) map[string]string {
 		"stall.since_chunk_ms": strconv.FormatInt(time.Since(last).Milliseconds(), 10),
 		"stall.any_chunk":      yesNo(!s.lastChunk.IsZero()),
 		"stall.session_age_s":  strconv.FormatInt(int64(time.Since(s.started).Seconds()), 10),
+	}
+	if s.deps.health != nil {
+		maps.Copy(facts, s.deps.health())
+	}
+	return facts
+}
+
+// silenceFacts is what is known of a capture that hears only silence, for
+// the bug tracker: the session's side, how long ago the computer woke, as
+// outputs may not be back then, and the capture's own.
+func (s *Session) silenceFacts() map[string]string {
+	facts := map[string]string{
+		"silent.player_status": string(s.status),
+		"silent.any_sound":     yesNo(s.heard),
+		"silent.track_age_s":   strconv.FormatInt(int64(time.Since(s.trackStarted).Seconds()), 10),
+		"silent.session_age_s": strconv.FormatInt(int64(time.Since(s.started).Seconds()), 10),
+		"silent.since_wake_s":  "none",
+	}
+	if s.volumeLow {
+		facts["silent.player_volume_pct"] = strconv.Itoa(s.volumePct)
+	}
+	if s.deps.sinceWake != nil {
+		if d, ok := s.deps.sinceWake(); ok {
+			facts["silent.since_wake_s"] = strconv.FormatInt(int64(d.Seconds()), 10)
+		}
 	}
 	if s.deps.health != nil {
 		maps.Copy(facts, s.deps.health())
@@ -141,7 +168,7 @@ func (s *Session) hear() {
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent})
 	}
 	if s.deps.silence != nil {
-		s.deps.silence(false)
+		s.deps.silence(nil)
 	}
 }
 

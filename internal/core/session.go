@@ -91,8 +91,11 @@ type sessionDeps struct {
 	// silence while the player plays; tests leave it off.
 	watchSilence bool
 	// silence tells that the capture hears only silence while the player
-	// plays (true), or sound (false).
-	silence func(on bool)
+	// plays, with what was known then, or sound (nil).
+	silence func(facts map[string]string)
+	// sinceWake is how long ago the computer woke from sleep, false when
+	// it has not slept; nil when nobody watches.
+	sinceWake func() (time.Duration, bool)
 	// playlist is the session's playlist file as it ends, "" for none.
 	playlist func() string
 	// health is what the capture says of itself when it stalls; nil when

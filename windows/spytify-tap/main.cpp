@@ -7,7 +7,10 @@
 // The stream follows the clock: when the player renders nothing, Windows
 // delivers no packets, so silence is written in their place, and each packet
 // lands at the frame its timestamp gives. spytifyd then sees one continuous
-// stream, as from PipeWire or Core Audio.
+// stream, as from PipeWire or Core Audio. So that a silent recording says
+// why, stderr tells what the packets bring when it changes (none, marked
+// silent, zeros, sound), whether the player's audio session is active, and
+// the kind and state of the output, never its name.
 //
 // Usage: spytify-tap.exe --pid <pid> [--rate <Hz>]
 // --rate asks for another rate than the device's.
@@ -73,6 +76,7 @@ static const GUID kIAudioSessionManager2 = {0x77AA99A0, 0x1BD6, 0x484F, {0x8B, 0
 static const GUID kIAudioSessionControl2 = {0xbfb7ff88, 0x7239, 0x4fc9, {0x8f, 0xa2, 0x07, 0xc9, 0x50, 0xbe, 0x9c, 0x6d}};
 static const GUID kISimpleAudioVolume = {0x87CE5498, 0x68D6, 0x44E5, {0x92, 0x15, 0x6D, 0xA4, 0x7E, 0xF8, 0x83, 0xD8}};
 static const PROPERTYKEY kFriendlyName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};
+static const PROPERTYKEY kFormFactor = {{0x1da5d803, 0xd492, 0x4edd, {0x8c, 0x23, 0xe0, 0xc0, 0xff, 0xee, 0x7f, 0x0e}}, 0};
 
 typedef HRESULT(WINAPI *ActivateFn)(LPCWSTR, REFIID, PROPVARIANT *, IActivateAudioInterfaceCompletionHandler *,
                                     IActivateAudioInterfaceAsyncOperation **);
@@ -242,13 +246,38 @@ static std::string utf8(const wchar_t *s) {
   return out;
 }
 
-// Output is an output device: its endpoint id, its name and its mix rate, 0
-// when it gives none.
+// Output is an output device: its endpoint id, its name, its mix rate, 0
+// when it gives none, its kind (EndpointFormFactor) and its state.
 struct Output {
   std::wstring id;
   std::string name;
   DWORD rate = 0;
+  UINT kind = 10;  // UnknownFormFactor
+  DWORD state = 0;
 };
+
+// kindText and stateText say what an output is and whether it works,
+// without its name, which the user chose.
+static const char *kindText(UINT kind) {
+  static const char *const kinds[] = {"a network device", "speakers",  "a line output",     "headphones",
+                                      "a microphone",     "a headset", "a handset",         "a digital output",
+                                      "an S/PDIF output", "a display (HDMI or DisplayPort)"};
+  return kind < sizeof kinds / sizeof *kinds ? kinds[kind] : "a device of unknown kind";
+}
+
+static const char *stateText(DWORD state) {
+  switch (state) {
+    case DEVICE_STATE_ACTIVE:
+      return "active";
+    case DEVICE_STATE_DISABLED:
+      return "disabled";
+    case DEVICE_STATE_NOTPRESENT:
+      return "not present";
+    case DEVICE_STATE_UNPLUGGED:
+      return "unplugged";
+  }
+  return "in no known state";
+}
 
 // describe fills o from device and returns the result of reading its mix
 // rate.
@@ -264,8 +293,13 @@ static HRESULT describe(IMMDevice *device, Output &o) {
     PropVariantInit(&name);
     if (SUCCEEDED(props->GetValue(kFriendlyName, &name)) && name.vt == VT_LPWSTR) o.name = utf8(name.pwszVal);
     PropVariantClear(&name);
+    PROPVARIANT kind;
+    PropVariantInit(&kind);
+    if (SUCCEEDED(props->GetValue(kFormFactor, &kind)) && kind.vt == VT_UI4) o.kind = kind.ulVal;
+    PropVariantClear(&kind);
     props->Release();
   }
+  device->GetState(&o.state);
   IAudioClient *client = nullptr;
   WAVEFORMATEX *mix = nullptr;
   HRESULT hr = device->Activate(kIAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&client));
@@ -354,23 +388,30 @@ static DWORD pickRate(Source &s, DWORD given) {
               (unsigned long)hr);
       break;
   }
+  if (!s.device.id.empty()) fprintf(stderr, "spytify-tap: the output is %s, %s\n", kindText(s.device.kind), stateText(s.device.state));
   return rate.hz;
 }
 
 // sourceChanged says whether the recording must start again at another
-// rate: the player left the device the rate comes from, or that device
-// mixes at another rate now.
-static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s) {
+// rate: the player left the device the rate comes from, or that device is
+// gone or mixes at another rate now. active says whether the player has an
+// active audio session.
+static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &active) {
   std::wstring playing;
   std::vector<std::wstring> sessions;
   Output byDefault, now;
   treeDevices(devices, s.pid, playing, sessions);
+  active = !playing.empty();
   defaultOutput(devices, byDefault);
   if (moved(playing, s.device.id, byDefault.id, s.defaultAtStart)) {
     fprintf(stderr, "spytify-tap: the output device of process %lu changed\n", (unsigned long)s.pid);
     return true;
   }
   if (!s.device.id.empty()) deviceOutput(devices, s.device.id, now);
+  if (now.state != s.device.state) {
+    fprintf(stderr, "spytify-tap: the output is %s now\n", stateText(now.state));
+    return true;
+  }
   if (now.rate != s.device.rate) {
     fprintf(stderr, "spytify-tap: %s now mixes at %lu Hz\n", s.device.name.c_str(), (unsigned long)now.rate);
     return true;
@@ -380,6 +421,7 @@ static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s) {
 
 // followSource checks the source about once a second, on a thread of its
 // own: reading the devices can take longer than the capture's 20 ms buffer.
+// It says when the player's audio session turns active or inactive.
 static DWORD WINAPI followSource(void *arg) {
   Source *s = static_cast<Source *>(arg);
   IMMDeviceEnumerator *devices = nullptr;
@@ -387,9 +429,16 @@ static DWORD WINAPI followSource(void *arg) {
       FAILED(CoCreateInstance(kMMDeviceEnumerator, nullptr, CLSCTX_ALL, kIMMDeviceEnumerator, reinterpret_cast<void **>(&devices)))) {
     return 0;
   }
+  int wasActive = -1;
   while (!s->changed) {
     Sleep(1000);
-    s->changed = sourceChanged(devices, *s);
+    bool active = false;
+    s->changed = sourceChanged(devices, *s, active);
+    if (int(active) != wasActive) {
+      fprintf(stderr, "spytify-tap: process %lu %s\n", (unsigned long)s->pid,
+              active ? "plays to its output" : "has no active audio session");
+      wasActive = active;
+    }
   }
   return 0;
 }
@@ -499,6 +548,15 @@ int wmain(int argc, wchar_t **argv) {
   const uint64_t lag = rate / 10;
   const UINT32 frameBytes = format.nBlockAlign;
   uint64_t written = 0;
+  // What each 2 s of packets brings, said when it changes: spytifyd hears
+  // silence alike when none come, when they are marked silent and when they
+  // hold only zeros, as from a player muted in the Volume Mixer.
+  enum Heard { NoPackets, MarkedSilent, Zeros, Sound };
+  static const char *const heardText[] = {"no packets", "packets marked silent", "only zeros", "sound"};
+  const uint64_t window = 2 * (uint64_t)rate;
+  uint64_t windowEnd = window, packets = 0, marked = 0;
+  bool sound = false;
+  int heard = -1;
 
   HANDLE waits[2] = {ready, target};
   for (;;) {
@@ -516,6 +574,13 @@ int wmain(int argc, wchar_t **argv) {
       UINT64 devicePos = 0, qpcPos = 0;
       hr = capture->GetBuffer(&data, &frames, &flags, &devicePos, &qpcPos);
       if (FAILED(hr)) return fail("IAudioCaptureClient::GetBuffer", hr);
+      packets++;
+      if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+        marked++;
+      } else {
+        const float *sample = reinterpret_cast<const float *>(data);
+        for (uint64_t i = 0; !sound && i < (uint64_t)frames * format.nChannels; i++) sound = sample[i] != 0;
+      }
       Placement p = place(written, frameAt(qpcPos), frames, (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) != 0, rate);
       out.zeros(p.zeros, frameBytes);
       if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
@@ -531,6 +596,14 @@ int wmain(int argc, wchar_t **argv) {
     if (clock > lag && clock - lag > written) {
       out.zeros(clock - lag - written, frameBytes);
       written = clock - lag;
+    }
+    if (clock >= windowEnd) {
+      int now = sound ? Sound : packets == 0 ? NoPackets : marked == packets ? MarkedSilent : Zeros;
+      if (now != heard) fprintf(stderr, "spytify-tap: %s from process %lu\n", heardText[now], (unsigned long)pid);
+      heard = now;
+      packets = marked = 0;
+      sound = false;
+      windowEnd = clock + window;
     }
     if (!out.flush()) return 0;
     if (source->changed) return 3;
