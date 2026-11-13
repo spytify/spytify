@@ -567,7 +567,13 @@ int wmain(int argc, wchar_t **argv) {
       return 3;
     }
     UINT32 next = 0;
-    while (SUCCEEDED(capture->GetNextPacketSize(&next)) && next > 0) {
+    // A failure, such as the device gone (AUDCLNT_E_DEVICE_INVALIDATED),
+    // ends the helper: taken for no packet, it would write silence for
+    // good, and spytifyd starts it again on the device there is now.
+    for (;;) {
+      hr = capture->GetNextPacketSize(&next);
+      if (FAILED(hr)) return fail("IAudioCaptureClient::GetNextPacketSize", hr);
+      if (next == 0) break;
       BYTE *data = nullptr;
       UINT32 frames = 0;
       DWORD flags = 0;
