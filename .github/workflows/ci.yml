@@ -284,7 +284,7 @@ jobs:
       - name: An audio output for the runner (the Scream virtual driver)
         shell: pwsh
         run: src/scripts/ci/windows-audio-device.ps1
-      - name: The capture helper records a process playing a tone at its output's mix rate, and pins its volume
+      - name: The capture helper records a process playing a tone at its output's mix rate, pins its volume, and its messages come while it runs
         run: |
           # A process playing, by its Windows PID (bash's $! is not one).
           pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
@@ -310,6 +310,15 @@ jobs:
           v=$(./spytify-tap.exe --pid "$pid" --get-volume | tr -d '\r')
           echo "volume $v"
           test "$v" = "0.250"
+          # spytifyd reads the helper's lines as it writes them and kills it
+          # at the end: a line held in a buffer until it exits never comes.
+          ./spytify-tap.exe --pid "$pid" > /dev/null 2> live.err &
+          tap=$!
+          for i in $(seq 40); do grep -q -F "recording $pid at" live.err && break; sleep 0.5; done
+          cat live.err
+          kill -0 "$tap" || { echo "the helper exited before its first line came"; exit 1; }
+          kill "$tap"
+          grep -F "recording $pid at $mix Hz" live.err
 
   macos-build:
     runs-on: macos-15
