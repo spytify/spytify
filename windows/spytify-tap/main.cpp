@@ -395,6 +395,9 @@ static DWORD WINAPI followSource(void *arg) {
 }
 
 int wmain(int argc, wchar_t **argv) {
+  // MSVCRT buffers stderr when it is a pipe: spytifyd would read nothing
+  // until the helper exits, and nothing at all when it is killed.
+  setvbuf(stderr, nullptr, _IONBF, 0);
   DWORD pid = 0;
   DWORD given = 0;
   bool badRate = false, getVolume = false, setVolume = false;
