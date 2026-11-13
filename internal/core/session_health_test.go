@@ -26,7 +26,7 @@ func statusEvent(st meta.Status) meta.Event {
 }
 
 // A capture that delivers nothing while the player plays is reported once,
-// on the tick after captureStall, and again after it delivered and stopped
+// on the tick after captureQuiet, and again after it delivered and stopped
 // once more; not while the player is paused or gone. The clock is moved by
 // setting when the last chunk came.
 func TestPinnedStallAndRecovery(t *testing.T) {
@@ -123,7 +123,7 @@ func TestAStallSaysWhatWasKnown(t *testing.T) {
 }
 
 // A capture that delivers frames, all silent, while the player plays is
-// reported once, on the tick after captureSilent, and withdrawn at the
+// reported once, on the tick after captureQuiet, and withdrawn at the
 // first sound, on every system: a player muted in its own volume or in the
 // system's mixer gives silence, as macOS does when System Audio Recording
 // was refused. Not while the player is paused, nor while the session mutes
@@ -132,8 +132,8 @@ func TestPinnedSilentCapture(t *testing.T) {
 	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
 	loud := capture.Chunk{Data: slices.Repeat([]byte{0x00, 0x40}, len(silent.Data)/2), Format: f44}
 	reported := []string{
-		"log error: only silence from the capture for 30s while the player plays",
-		`error capture_silent "only silence from the capture for 30s while the player plays"`,
+		"log error: only silence from the capture for 10s while the player plays",
+		`error capture_silent "only silence from the capture for 10s while the player plays"`,
 		"log info: sound from the capture again",
 		`error capture_silent ""`,
 	}
@@ -175,8 +175,26 @@ func TestPinnedSilentCapture(t *testing.T) {
 	}
 }
 
+// Only silence is told as soon as no audio is: a muted player gives
+// Windows' capture zeros where macOS's tap can give nothing, and Windows
+// said so 30 s in, macOS 10 s in. 11 s of silence is reported.
+func TestOnlySilenceIsToldAsSoonAsNoAudio(t *testing.T) {
+	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
+	r := bareRig(t, map[string]any{}, endOnStop)
+	s := r.s
+	s.deps.watchSilence = true
+	s.onMeta(context.Background(), statusEvent(meta.Playing))
+	s.onChunk(silent)
+	s.lastSound = time.Now().Add(-11 * time.Second)
+	s.onTick()
+	want := `error capture_silent "only silence from the capture for 10s while the player plays"`
+	if got := r.lines(); !slices.Contains(got, want) {
+		t.Fatalf("11 s of silence: trace %q, want %q", got, want)
+	}
+}
+
 // An ad brings no silence warning, muted by the session or not: it may be
-// silent, as when the player mutes it. The 30 s start again when it ends.
+// silent, as when the player mutes it. The 10 s start again when it ends.
 func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
 	for _, muted := range []bool{false, true} {
@@ -201,8 +219,8 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 			s.lastSound = long
 			s.onTick()
 			want := []string{"state waiting", "state ad", "state recording",
-				"log error: only silence from the capture for 30s while the player plays",
-				`error capture_silent "only silence from the capture for 30s while the player plays"`}
+				"log error: only silence from the capture for 10s while the player plays",
+				`error capture_silent "only silence from the capture for 10s while the player plays"`}
 			if got := r.lines(); !slices.Equal(got, want) {
 				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
 			}
@@ -210,7 +228,7 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 	}
 }
 
-// Silence is reported for a track that played captureSilent with no sound
+// Silence is reported for a track that played captureQuiet with no sound
 // since it started, at any point of the session, as when the player is
 // muted between two tracks. The quiet end of a song had sound before it,
 // and the track after it is watched from its own start. The clock is moved

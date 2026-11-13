@@ -14,13 +14,12 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// captureStall is how long the player may play with no audio arriving
-// before the session says so.
-var captureStall = 10 * time.Second
-
-// captureSilent is how long a track may play with only silence arriving
-// since it started before the session says so.
-var captureSilent = 30 * time.Second
+// captureQuiet is how long the player may play with no sound from the
+// capture before the session says so: no audio arriving, or, for a track,
+// only silence since it started. One delay for both: the same player,
+// muted, gives one or the other by system, Windows' loopback delivering
+// zeros where macOS's tap can deliver nothing.
+var captureQuiet = 10 * time.Second
 
 // unmuteGrace is how long after an ad's mute is undone a volume of 0 may
 // still be the mute's: the player is polled.
@@ -44,17 +43,17 @@ func (s *Session) onTick() {
 	if last.IsZero() {
 		last = s.started
 	}
-	if s.status == meta.Playing && !s.stalled && !last.IsZero() && time.Since(last) > captureStall {
+	if s.status == meta.Playing && !s.stalled && !last.IsZero() && time.Since(last) > captureQuiet {
 		s.stalled = true
-		msg := fmt.Sprintf("no audio from the capture for %s while the player plays", captureStall)
+		msg := fmt.Sprintf("no audio from the capture for %s while the player plays", captureQuiet)
 		s.deps.log.Errorf("%s", msg)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: msg, Facts: s.stallFacts(last)})
 	}
 	// An ad may be silent, muted by the session or not. A player at 0% is
 	// silent too, and its volume warning says so.
-	if s.deps.watchSilence && !(s.volumeLow && s.volumePct == 0) && !s.trackHeard && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureSilent && time.Since(s.trackStarted) > captureSilent {
+	if s.deps.watchSilence && !(s.volumeLow && s.volumePct == 0) && !s.trackHeard && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureQuiet && time.Since(s.trackStarted) > captureQuiet {
 		s.silent = true
-		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureSilent)
+		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureQuiet)
 		s.deps.log.Errorf("%s", msg)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent, Msg: msg})
 		if s.deps.silence != nil {
