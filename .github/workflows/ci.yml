@@ -284,7 +284,7 @@ jobs:
       - name: An audio output for the runner (the Scream virtual driver)
         shell: pwsh
         run: src/scripts/ci/windows-audio-device.ps1
-      - name: The capture helper records a process playing a tone at its output's mix rate, pins its volume, and its messages come while it runs
+      - name: The capture helper records a process playing a tone at its output's mix rate, pins its volume, and says what it hears while it runs
         run: |
           # A process playing, by its Windows PID (bash's $! is not one).
           pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
@@ -306,6 +306,10 @@ jobs:
           head -n 1 tap.raw | grep -F "SPYTIFY-TAP f32le $mix 2"
           grep -F "recording $pid at $mix Hz, the mix rate of" tap.err
           if grep -q -F "the default output" tap.err; then echo "the helper did not find the tone's audio session"; exit 1; fi
+          # What the helper says of the tone, for a silent recording's report.
+          grep -E "the output is .+, active$" tap.err
+          grep -F "process $pid plays to its output" tap.err
+          grep -F "sound from process $pid" tap.err
           ./spytify-tap.exe --pid "$pid" --set-volume 0.25
           v=$(./spytify-tap.exe --pid "$pid" --get-volume | tr -d '\r')
           echo "volume $v"
@@ -319,6 +323,13 @@ jobs:
           kill -0 "$tap" || { echo "the helper exited before its first line came"; exit 1; }
           kill "$tap"
           grep -F "recording $pid at $mix Hz" live.err
+          # Turned down to 0 in the Volume Mixer, the tone still plays but
+          # the helper hears silence, and says which.
+          ./spytify-tap.exe --pid "$pid" --set-volume 0
+          set +e; timeout 5 ./spytify-tap.exe --pid "$pid" > /dev/null 2> muted.err; set -e
+          cat muted.err
+          grep -E "(no packets|packets marked silent|only zeros) from process $pid" muted.err
+          if grep -q -F "sound from process $pid" muted.err; then echo "the helper heard the muted tone"; exit 1; fi
 
   macos-build:
     runs-on: macos-15
