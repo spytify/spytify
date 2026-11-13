@@ -2,16 +2,20 @@
 // shortcuts and Task Manager read from them, an icon and version
 // information, and that they do not link opengl32.dll: Spytify.exe loads
 // it itself, so that it can load Mesa's first when no graphics driver
-// offers OpenGL (internal/ui/opengl). scripts/build-windows.sh runs it on
-// Spytify.exe:
+// offers OpenGL (internal/ui/opengl). It also checks that nothing follows
+// their last section, which antivirus engines take for a hidden payload;
+// with -helper, for the binaries with no icon, that alone.
+// scripts/build-windows.sh runs it on every binary it builds:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
+//	go run ./internal/tools/checkexe -helper bin/windows/spytify-tap.exe
 package main
 
 import (
 	"debug/pe"
 	"encoding/binary"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,32 +30,82 @@ const (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: checkexe file.exe...")
+	helper := flag.Bool("helper", false, "a helper, with no icon or version information: check only what follows its last section")
+	flag.Usage = func() { fmt.Fprintln(os.Stderr, "usage: checkexe [-helper] file.exe...") }
+	flag.Parse()
+	if flag.NArg() == 0 {
+		flag.Usage()
 		os.Exit(2)
 	}
 	failed := false
-	for _, path := range os.Args[1:] {
-		counts, err := resources(path)
-		if err == nil && (counts[rtGroupIcon] == 0 || counts[rtIcon] == 0 || counts[rtVersion] == 0) {
-			err = fmt.Errorf("%d icon groups, %d icon images, %d version resources", counts[rtGroupIcon], counts[rtIcon], counts[rtVersion])
-		}
-		if err == nil {
-			var gl []string
-			if gl, err = linked(path, "opengl32.dll"); err == nil && len(gl) > 0 {
-				err = fmt.Errorf("links opengl32.dll for %s: build it with scripts/build-windows.sh's go-gl/gl", strings.Join(gl, ", "))
-			}
-		}
+	for _, path := range flag.Args() {
+		found, err := check(path, *helper)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "checkexe: %s: %v\n", path, err)
 			failed = true
 			continue
 		}
-		fmt.Printf("%s: an icon of %d images, version information, opengl32.dll not linked\n", filepath.Base(path), counts[rtIcon])
+		fmt.Printf("%s: %s\n", filepath.Base(path), found)
 	}
 	if failed {
 		os.Exit(1)
 	}
+}
+
+// check runs the checks on the file at path and says what they found.
+func check(path string, helper bool) (string, error) {
+	n, err := trailing(path)
+	if err != nil {
+		return "", err
+	}
+	if n > 0 {
+		return "", fmt.Errorf("%d bytes past its last section, which antivirus engines read as a hidden payload: link it stripped (-s)", n)
+	}
+	if helper {
+		return "nothing past the last section", nil
+	}
+	counts, err := resources(path)
+	if err != nil {
+		return "", err
+	}
+	if counts[rtGroupIcon] == 0 || counts[rtIcon] == 0 || counts[rtVersion] == 0 {
+		return "", fmt.Errorf("%d icon groups, %d icon images, %d version resources", counts[rtGroupIcon], counts[rtIcon], counts[rtVersion])
+	}
+	gl, err := linked(path, "opengl32.dll")
+	if err != nil {
+		return "", err
+	}
+	if len(gl) > 0 {
+		return "", fmt.Errorf("links opengl32.dll for %s: build it with scripts/build-windows.sh's go-gl/gl", strings.Join(gl, ", "))
+	}
+	return fmt.Sprintf("an icon of %d images, version information, opengl32.dll not linked, nothing past the last section", counts[rtIcon]), nil
+}
+
+// trailing counts the bytes of the file at path past the end of its last
+// section: an overlay, as antivirus engines call it.
+func trailing(path string) (int64, error) {
+	f, err := pe.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return overlay(fi.Size(), f.Sections), nil
+}
+
+// overlay is what a file of size bytes holds past the raw data of its
+// sections. A linker that does not strip writes its COFF symbol table
+// there; the Authenticode signature goes there too, but after checkexe
+// runs, in scripts/sign-windows.sh.
+func overlay(size int64, sections []*pe.Section) int64 {
+	var end int64
+	for _, s := range sections {
+		end = max(end, int64(s.Offset)+int64(s.Size))
+	}
+	return size - end
 }
 
 // resources counts the resources of each type in a PE file, from the
