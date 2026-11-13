@@ -5,9 +5,12 @@ package meta
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -15,9 +18,23 @@ import (
 	"github.com/spytify/spytify/internal/target"
 )
 
+// restricted runs the scripts under the Restricted execution policy,
+// Windows 10 and 11's default and the strictest, which they must work
+// under now that they run without -ExecutionPolicy Bypass.
+func restricted(t *testing.T) {
+	old := powershell
+	powershell = func(ctx context.Context, script string) *exec.Cmd {
+		cmd := old(ctx, script)
+		cmd.Args = slices.Insert(cmd.Args, 1, "-ExecutionPolicy", "Restricted")
+		return cmd
+	}
+	t.Cleanup(func() { powershell = old })
+}
+
 // The poller loads the media session API in Windows PowerShell and reports a
 // player that is not running: no session, no error.
 func TestSMTCPollerRunsOnWindows(t *testing.T) {
+	restricted(t)
 	var mu sync.Mutex
 	var logs []string
 	m := NewSMTC()
@@ -54,9 +71,21 @@ func TestSMTCPollerRunsOnWindows(t *testing.T) {
 	}
 }
 
+// The control script loads the same API and finds no session: exit 3,
+// no player, rather than a script Windows PowerShell refused to run.
+func TestSMTCControlRunsOnWindows(t *testing.T) {
+	restricted(t)
+	m := NewSMTC()
+	m.Target(target.Target{ProcessNames: []string{"spytify-no-such-player"}})
+	if err := m.Control("next"); !errors.Is(err, ErrNoPlayer) {
+		t.Fatalf("next with no player: %v", err)
+	}
+}
+
 // A thumbnail stream, as a player hands one over, is saved whole: here
 // the stream of a file, which Windows opens the same way.
 func TestSMTCSavesAThumbnail(t *testing.T) {
+	restricted(t)
 	dir := t.TempDir()
 	src, dst := filepath.Join(dir, "cover.jpg"), filepath.Join(dir, "saved.jpg")
 	want := make([]byte, 70000)
