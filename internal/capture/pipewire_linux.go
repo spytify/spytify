@@ -3,11 +3,13 @@
 package capture
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"sync"
@@ -437,15 +439,29 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 // another rate, would be converted to it. node.dont-reconnect leaves the
 // recording unlinked instead.
 func (pipewireTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.Cmd {
-	return proc.CommandContext(ctx, "pw-record",
-		"--target", n.key,
-		"--raw",
+	args := []string{"--target", n.key}
+	if rawOption() {
+		args = append(args, "--raw")
+	}
+	return proc.CommandContext(ctx, "pw-record", append(args,
 		"--rate", strconv.Itoa(f.Rate),
 		"--channels", strconv.Itoa(f.Channels),
 		"--format", "f32",
 		"--latency", "100ms",
 		"-P", "{ node.name = spytify-capture node.description = \"Spytify capture\" node.dont-reconnect = true }",
-		"-")
+		"-")...)
+}
+
+// rawOption reports whether pw-record takes --raw, as its help lists it.
+// Up to PipeWire 1.2 it refuses the option, and "-" alone writes raw
+// samples to stdout; from 1.4 "-" alone writes a sound file, header first.
+// It is asked at each recording, so a PipeWire updated while spytifyd runs
+// is followed.
+func rawOption() bool {
+	cmd := proc.Command("pw-record", "--help")
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, _ := cmd.Output()
+	return bytes.Contains(out, []byte("--raw"))
 }
 
 func str(v any) string {
