@@ -2,6 +2,7 @@ package capture
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -112,5 +113,42 @@ func TestAWaitingHelperSaysSo(t *testing.T) {
 			t.Fatalf("health %v, want %v", h.Health(), want)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// The lines a helper writes as it exits, as the Windows tap's C runtime
+// flushes its stderr then, are read before its exit is counted: Wait
+// closes the pipe they wait in.
+func TestTheHelpersLastLinesAreKept(t *testing.T) {
+	dir := t.TempDir()
+	runs := filepath.Join(dir, "runs")
+	script := filepath.Join(dir, "helper")
+	body := `#!/bin/sh
+echo run >> "` + runs + `"
+n=$(wc -l < "` + runs + `" | tr -d ' ')
+seq 300 | sed "s/^/spytify-tap: run $n line /" >&2
+exit 1
+`
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := newHelper(script, func(target.Target) ([]string, bool) { return nil, true }, t.Logf)
+	if _, err := h.Open(context.Background(), target.Target{}); err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	for run := 1; run <= 3; run++ {
+		exits := strings.TrimSuffix(strings.Repeat("1,", run), ",")
+		deadline := time.Now().Add(10 * time.Second)
+		for h.Health()["capture.last_exits"] != exits {
+			if time.Now().After(deadline) {
+				t.Fatalf("run %d: health %v", run, h.Health())
+			}
+			time.Sleep(time.Millisecond)
+		}
+		lines := strings.Split(h.Health()["capture.stderr"], "\n")
+		if last, want := lines[len(lines)-1], fmt.Sprintf("run %d line 300", run); last != want {
+			t.Fatalf("run %d ended: its last line kept is %q, want %q", run, last, want)
+		}
 	}
 }
