@@ -6,13 +6,13 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// themed draws its content in a theme of its own, as container.ThemeOverride
-// does, without the override's refresh. Fyne 2.8.2 gives an override a new
-// scope at each refresh, and its font cache is keyed by scope: each refresh
-// parsed the theme's fonts again and kept them, about 17 MB per track in the
-// Record list, until the app ran out of memory (#764, fyne#6640). A refresh
-// from above refreshes the content only, in the scope it got once. Back to
-// container.ThemeOverride once a Fyne release has fyne#6642.
+// themed draws its content in a theme of its own: a container.ThemeOverride
+// that only the widgets switching on *themed know about. Each refresh stamps
+// the theme again on everything under it, which brings it back to a widget
+// Fyne let go of after a minute undrawn, as in a tab hidden that long. Every
+// stamp is a new scope, which Fyne 2.8.2 gave a new parse of the theme's
+// fonts, about 17 MB per track in the Record list (#764): the Fyne in go.mod
+// has fyne#6642, which keys its font cache by the font.
 type themed struct {
 	widget.BaseWidget
 	o *container.ThemeOverride
@@ -30,6 +30,6 @@ type themedRenderer struct{ t *themed }
 
 func (r themedRenderer) Layout(s fyne.Size)           { r.t.o.Resize(s) }
 func (r themedRenderer) MinSize() fyne.Size           { return r.t.o.MinSize() }
-func (r themedRenderer) Refresh()                     { r.t.o.Content.Refresh() }
+func (r themedRenderer) Refresh()                     { r.t.o.Refresh() }
 func (r themedRenderer) Objects() []fyne.CanvasObject { return []fyne.CanvasObject{r.t.o} }
 func (r themedRenderer) Destroy()                     {}
