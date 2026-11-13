@@ -3,8 +3,9 @@
 // information, and that they do not link opengl32.dll: Spytify.exe loads
 // it itself, so that it can load Mesa's first when no graphics driver
 // offers OpenGL (internal/ui/opengl). It also checks that nothing follows
-// their last section, which antivirus engines take for a hidden payload;
-// with -helper, for the binaries with no icon, that alone.
+// their last section and that they export nothing, which antivirus
+// engines take for a hidden payload and a loader's entry points; with
+// -helper, for the binaries with no icon, those alone.
 // scripts/build-windows.sh runs it on every binary it builds:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
@@ -61,8 +62,15 @@ func check(path string, helper bool) (string, error) {
 	if n > 0 {
 		return "", fmt.Errorf("%d bytes past its last section, which antivirus engines read as a hidden payload: link it stripped (-s)", n)
 	}
+	dir, err := directory(path, pe.IMAGE_DIRECTORY_ENTRY_EXPORT)
+	if err != nil {
+		return "", err
+	}
+	if dir.VirtualAddress != 0 {
+		return "", fmt.Errorf("an export table of %d bytes, which antivirus engines read as a loader's entry points: clear it with noexports", dir.Size)
+	}
 	if helper {
-		return "nothing past the last section", nil
+		return "nothing past the last section, no exports", nil
 	}
 	counts, err := resources(path)
 	if err != nil {
@@ -78,7 +86,23 @@ func check(path string, helper bool) (string, error) {
 	if len(gl) > 0 {
 		return "", fmt.Errorf("links opengl32.dll for %s: build it with scripts/build-windows.sh's go-gl/gl", strings.Join(gl, ", "))
 	}
-	return fmt.Sprintf("an icon of %d images, version information, opengl32.dll not linked, nothing past the last section", counts[rtIcon]), nil
+	return fmt.Sprintf("an icon of %d images, version information, opengl32.dll not linked, nothing past the last section, no exports", counts[rtIcon]), nil
+}
+
+// directory reads entry i of the data directories of the PE file at path.
+func directory(path string, i int) (pe.DataDirectory, error) {
+	f, err := pe.Open(path)
+	if err != nil {
+		return pe.DataDirectory{}, err
+	}
+	defer f.Close()
+	switch h := f.OptionalHeader.(type) {
+	case *pe.OptionalHeader64:
+		return h.DataDirectory[i], nil
+	case *pe.OptionalHeader32:
+		return h.DataDirectory[i], nil
+	}
+	return pe.DataDirectory{}, errors.New("no optional header")
 }
 
 // trailing counts the bytes of the file at path past the end of its last
