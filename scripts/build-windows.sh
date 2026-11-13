@@ -47,7 +47,7 @@ trap 'rm -rf "$tmp" cmd/spytify-ui/rsrc_windows_amd64.syso' EXIT
 # windows/spytify.rc into an object, which go build links from the
 # package's folder. The tools that make the icon and check the result run
 # here, so they build before GOOS is set.
-go build -o "$tmp/" ./internal/tools/genico ./internal/tools/checkexe
+go build -o "$tmp/" ./internal/tools/genico ./internal/tools/checkexe ./internal/tools/noexports
 "$tmp/genico" -o "$tmp/spytify.ico" assets/logo256px.png
 IFS=. read -r major minor patch <<<"${version%%[-+]*}"
 # windres passes -D to the preprocessor through a shell: the quotes of a
@@ -84,9 +84,17 @@ for cmd in spytifyd spytify-cli; do
 done
 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
   go build -modfile "$tmp/go.mod" -trimpath -ldflags "$ldflags -H=windowsgui" -o "$out/Spytify.exe" ./cmd/spytify-ui
-x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -std=c++17 -static -municode \
+# cgo exports go-gl/glfw's input callbacks (goKeyCB and the others), which
+# antivirus engines read as a keylogger's entry points; GLFW calls them
+# through pointers, so the table goes.
+"$tmp/noexports" "$out/Spytify.exe"
+# -s, as -ldflags "-s -w" for Go: unstripped, two thirds of the tap were
+# its symbol table and DWARF, the table past its last section, an overlay
+# antivirus engines take for a hidden payload.
+x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -std=c++17 -static -municode -s \
   -o "$out/spytify-tap.exe" windows/spytify-tap/main.cpp -lole32 -luuid
 "$tmp/checkexe" "$out/Spytify.exe"
+"$tmp/checkexe" -helper "$out/spytifyd.exe" "$out/spytify-cli.exe" "$out/spytify-tap.exe"
 
 # ffmpeg, beside spytifyd.exe, which looks there first after PATH.
 if [ "${SPYTIFY_NO_FFMPEG:-}" != 1 ]; then
