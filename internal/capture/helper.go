@@ -208,7 +208,9 @@ func (c *Helper) stream(ctx context.Context, args []string, t target.Target) int
 		c.logf("capture: start %s: %v", c.helper, err)
 		return 1
 	}
+	logged := make(chan struct{})
 	go func() {
+		defer close(logged)
 		sc := bufio.NewScanner(stderr)
 		for sc.Scan() {
 			line := strings.TrimPrefix(sc.Text(), "spytify-tap: ")
@@ -253,6 +255,12 @@ wait:
 			_ = cmd.Process.Kill()
 			break wait
 		}
+	}
+	// Wait closes stderr: the lines the helper wrote as it exited are read
+	// first, unless something it started keeps the pipe open.
+	select {
+	case <-logged:
+	case <-time.After(cmd.WaitDelay):
 	}
 	err = cmd.Wait()
 	var ee *exec.ExitError
