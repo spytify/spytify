@@ -68,6 +68,7 @@ An empty object.
 | `source` | [AudioSource](#audiosource), optional |
 | `free_mb` | integer, optional |
 | `volume` | integer, optional |
+| `facts` | object of string, optional |
 
 #### EventsRecentResult
 
