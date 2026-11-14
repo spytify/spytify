@@ -78,7 +78,7 @@ echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new) or on [r/s
 echo
 # SmartScreen also stops the programs Spytify starts, unseen.
 if [ "${SIGNED:-}" != true ]; then
-  echo "Because the Windows files are unsigned, \"Run anyway\" may also be needed for \`spytifyd.exe\` and \`spytify-tap.exe\`, which Spytify starts on its own: run each once from the Spytify folder. Otherwise, wait until enough people have downloaded the version for it to become known."
+  echo "Because the Windows files are unsigned, \"Run anyway\" may also be needed for \`spytifyd.exe\` and \`spytify-tap.exe\`, which Spytify starts on its own: run each once from the Spytify folder. Otherwise, wait until enough people have downloaded the version for it to become known, or build Spytify from its sources yourself: see the [README](https://github.com/$repo#build-and-contribute)."
   echo
 fi
 echo "## Downloads"
