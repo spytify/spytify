@@ -3,6 +3,23 @@ layout: page
 title: F.A.Q.
 ---
 
+### [macOS or Windows will not open Spytify](#open-anyway)
+{: #open-anyway}
+
+Spytify is not notarised for macOS (_$99 USD/yr_) nor signed for Windows (_$129 USD/yr_), so each system warns the first time a version opens:
+
+- **macOS:** allow it in System Settings > Privacy & Security > Open Anyway.
+- **Windows:** when SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**. Spytify starts two programs of its own, the recorder `spytifyd.exe` and the capture helper `spytify-tap.exe`, and Windows can hold them without showing it: open each once from the Spytify folder and allow it the same way.
+
+No such warning is known on Linux.
+
+### [Security software blocks Spytify](#security-software)
+{: #security-software}
+
+Security software holds a version it does not know yet, until enough people have downloaded it. When its scan says a file looks suspicious but reports no threat, choose to run it anyway in its alert, then open `spytifyd.exe` and `spytify-tap.exe` once from the Spytify folder and allow them the same way. Otherwise, wait until the version becomes known, or build Spytify from its sources (see [Build and contribute](https://github.com/spytify/spytify#build-and-contribute)).
+
+If it reports a virus or a threat, or deletes Spytify's files, we want to know so we can fix it: tell us in [GitHub issues](https://github.com/spytify/spytify/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/), with the name of the security software and of what it detected. The bug tracker cannot see a Spytify that never starts.
+
 ### [Nothing is recorded](#nothing-recorded)
 
 Press **Diagnostics** in the Logs tab, or **Open diagnostics** on Record: the checks say what is wrong, such as "ffmpeg not found", and **Send to the developers** sends the checks that fail. When `spytifyd`, the recorder, is not running, Record says so and offers **Start the recorder**. If the application plays and no audio reaches Spytify for 10 seconds, the app also says where to look.

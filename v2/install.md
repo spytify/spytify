@@ -25,13 +25,14 @@ Every release has a build per system on the [releases page]({{ site.repository_d
 ### [macOS](#macos)
 
 - macOS 14.2 or later. Open the `.dmg` and drag Spytify to Applications.
-- The app is not notarised yet: the first time, macOS refuses to open it. Allow it in System Settings > Privacy & Security > Open Anyway.
+- The app is not notarised (_$99 USD/yr_): the first time, macOS refuses to open it. Allow it in System Settings > Privacy & Security > Open Anyway.
 - macOS asks once for two permissions: **System Audio Recording**, for the capture, and **Automation**, to read what is playing. If you said no, turn them on in System Settings > Privacy & Security and open Spytify again.
 - The app comes with its own ffmpeg, an LGPL build (see `ffmpeg-README.txt` in the app's `Contents/Resources`): nothing to install.
 
 ### [Windows](#windows)
 
 - Windows 10 version 2004 or later, or Windows 11. Unzip the release anywhere and open `Spytify.exe`.
+- The files are not signed (_$129 USD/yr_): when SmartScreen warns, click **More info**, then **Run anyway**, and do the same once for `spytifyd.exe` and `spytify-tap.exe`, which Spytify starts on its own. If security software holds them, see the [FAQ](faq.html#security-software).
 - The zip comes with `ffmpeg.exe`, an LGPL build with only what Spytify runs (see `ffmpeg-README.txt`). One installed with winget, Chocolatey or Scoop works too.
 - Without a graphics driver offering OpenGL, such as on a computer whose graphics card is disabled, Spytify draws its window in software with the copy of Mesa in its `opengl` folder.
 - The application must show what it plays in the Windows media controls (the volume flyout).
