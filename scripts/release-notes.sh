@@ -9,50 +9,14 @@
 # Reads the release with gh, from GITHUB_REPOSITORY (spytify/spytify by
 # default). NOTARIZED=true and SIGNED=true say the macOS app is notarised
 # and the Windows files signed.
+#
+# The files are named, not linked: a draft's download links answer 404, and
+# GitHub lists the files under the notes anyway.
 set -euo pipefail
 
 tag="$1"
 repo="${GITHUB_REPOSITORY:-spytify/spytify}"
-release="$(gh release view "$tag" --repo "$repo" --json assets,body)"
-
-# GitHub renames some files as it stores them (a .deb's "~" becomes "."):
-# the links take the names it gives back.
-link() { echo "[$1](https://github.com/$repo/releases/download/$tag/$1)"; }
-# In MiB, as GitHub shows the sizes.
-size() { awk -v b="$1" 'BEGIN { m = b / 1048576; printf(m >= 10 ? "%.0f MB" : "%.1f MB", m) }'; }
-
-# Each file, by the end of its name, and the system it is for, in the
-# table's order.
-systems=(
-  "-windows-amd64.zip|Windows 10 (2004 or later) or 11"
-  "-macos.dmg|macOS 14.2 or later"
-  "_amd64.deb|Debian 12, Ubuntu 22.04 or later (x64)"
-  "_arm64.deb|Debian 12, Ubuntu 22.04 or later (ARM)"
-  ".x86_64.rpm|Fedora, openSUSE (x64)"
-  ".aarch64.rpm|Fedora, openSUSE (ARM)"
-  "-linux-amd64.tar.gz|Another Linux (x64)"
-  "-linux-arm64.tar.gz|Another Linux (ARM)"
-  "-macos-cli.zip|macOS, the command line alone"
-)
-
-assets="$(jq -r '.assets[] | "\(.name)\t\(.size)"' <<<"$release")"
-rows=""
-listed=" SHA256SUMS "
-for s in "${systems[@]}"; do
-  suffix="${s%%|*}"
-  while IFS=$'\t' read -r name bytes; do
-    if [[ -n "$name" && "$name" == *"$suffix" ]]; then
-      rows+="| ${s#*|} | $(link "$name") | $(size "$bytes") |"$'\n'
-      listed+="$name "
-    fi
-  done <<<"$assets"
-done
-# A file the list above does not know still gets its row.
-while IFS=$'\t' read -r name bytes; do
-  if [[ -n "$name" && "$listed" != *" $name "* ]]; then
-    rows+="| Other | $(link "$name") | $(size "$bytes") |"$'\n'
-  fi
-done <<<"$assets"
+body="$(gh release view "$tag" --repo "$repo" --json body --jq .body)"
 
 # What the files lack, a paragraph each: nothing once they are signed and
 # notarised.
@@ -67,12 +31,19 @@ if [ ${#lacks[@]} -gt 0 ]; then
   done
   echo
 fi
-echo "## Downloads"
-echo
-echo "| System | File | Size |"
-echo "|---|---|---|"
-printf '%s' "$rows"
-echo
-echo "The Windows zip and the macOS app come with ffmpeg, and the .deb installs it. Elsewhere, install it first: \`brew install ffmpeg\` for the macOS command line, or from the system's packages on Linux. $(link SHA256SUMS) has every file's checksum, and the [install page](https://spytify.github.io/spytify/v2/install.html) says more."
-echo
-jq -r .body <<<"$release"
+cat <<'NOTES'
+## Downloads
+
+Take your system's file from the Assets below:
+
+- Windows 10 (2004 or later) or 11: the `-windows-amd64.zip`
+- macOS 14.2 or later: the `-macos.dmg`
+- Debian 12, Ubuntu 22.04 or later: the `.deb`, `_amd64` on x64, `_arm64` on ARM
+- Fedora, openSUSE: the `.rpm`, `x86_64` on x64, `aarch64` on ARM
+- Another Linux: the `-linux-amd64.tar.gz` on x64, `-linux-arm64.tar.gz` on ARM
+- macOS, the command line alone: the `-macos-cli.zip`
+
+The Windows zip and the macOS app come with ffmpeg, and the .deb installs it. Elsewhere, install it first: `brew install ffmpeg` for the macOS command line, or from the system's packages on Linux. `SHA256SUMS` has every file's checksum, and the [install page](https://spytify.github.io/spytify/v2/install.html) says more.
+
+NOTES
+echo "$body"

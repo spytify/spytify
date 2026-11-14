@@ -242,6 +242,6 @@ jobs:
           # version that has none yet.
           gh release create "$TAG" files/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" $draft $pre \
             --title "Spytify $TAG" --generate-notes
-          # The notes link the files by the names GitHub gave them.
+          # The notes go above GitHub's list of changes, which they keep.
           src/scripts/release-notes.sh "$TAG" > notes.md
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
