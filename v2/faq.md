@@ -18,7 +18,7 @@ No such warning is known on Linux.
 
 Security software holds a version it does not know yet, until enough people have downloaded it. When its scan says a file looks suspicious but reports no threat, choose to run it anyway in its alert, then open `spytifyd.exe` and `spytify-tap.exe` once from the Spytify folder and allow them the same way. Otherwise, wait until the version becomes known, or build Spytify from its sources (see [Build and contribute](https://github.com/spytify/spytify#build-and-contribute)).
 
-If it reports a virus or a threat, or deletes Spytify's files, we want to know so we can fix it: tell us in [GitHub issues](https://github.com/spytify/spytify/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/), with the name of the security software and of what it detected. The bug tracker cannot see a Spytify that never starts.
+If it reports a virus or a threat, or deletes Spytify's files, we want to know so we can fix it: tell us in [GitHub issues](https://github.com/spytify/spytify/issues/new), on [r/spytify](https://www.reddit.com/r/spytify/) or at [jwallet.spytify@gmail.com](mailto:jwallet.spytify@gmail.com), with the name of the security software and of what it detected. The bug tracker cannot see a Spytify that never starts.
 
 ### [Nothing is recorded](#nothing-recorded)
 
