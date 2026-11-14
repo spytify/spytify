@@ -59,7 +59,6 @@ done <<<"$assets"
 lacks=()
 [ "${NOTARIZED:-}" = true ] || lacks+=("The macOS app is not notarised (_\$99 USD/yr_): the first time, allow it in System Settings > Privacy & Security > Open Anyway.")
 [ "${SIGNED:-}" = true ] || lacks+=("The Windows files are not signed (_\$129 USD/yr_), so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\".")
-[ "${SIGNED:-}" = true ] || lacks+=("Security software may block Spytify or move its files to quarantine while a version is new to it. Add the Spytify folder to its exceptions, and tell us in [GitHub issues](https://github.com/$repo/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/): the bug tracker cannot see a Spytify that never starts.")
 if [ ${#lacks[@]} -gt 0 ]; then
   echo "> [!NOTE]"
   for i in "${!lacks[@]}"; do
@@ -80,6 +79,6 @@ echo
 # end Spytify before its report leaves.
 echo "## Something went wrong?"
 echo
-echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/), above all when Spytify crashes and closes: the bug tracker cannot see that in full detail."
+echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/), above all when security software keeps Spytify from starting or Spytify crashes and closes: the bug tracker cannot see those in full detail."
 echo
 jq -r .body <<<"$release"
