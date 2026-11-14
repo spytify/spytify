@@ -15,6 +15,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 
+	"github.com/spytify/spytify/internal/safenet"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -144,8 +145,7 @@ func (c *Client) sendFeedback(event sentry.EventID, message string) error {
 	}
 	req.Header.Set("Content-Type", "application/x-sentry-envelope")
 	req.Header.Set("X-Sentry-Auth", fmt.Sprintf("Sentry sentry_version=7, sentry_client=spytify/%s, sentry_key=%s", proto.Version, dsn.GetPublicKey()))
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := safenet.Client(15 * time.Second).Do(req)
 	if err != nil {
 		return fmt.Errorf("your message did not reach the developers: %w", err)
 	}

@@ -22,6 +22,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 
+	"github.com/spytify/spytify/internal/safenet"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -184,6 +185,7 @@ func (c *Client) newHub() (*sentry.Hub, error) {
 		BeforeSendLog:         c.beforeSendLog,
 		BeforeSendMetric:      c.beforeSendMetric,
 		BeforeBreadcrumb:      c.beforeBreadcrumb,
+		HTTPTransport:         safenet.Transport(),
 	})
 	if err != nil {
 		return nil, err
