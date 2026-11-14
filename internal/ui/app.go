@@ -76,6 +76,8 @@ type App struct {
 	m    *model.Model
 	link *link.Link
 	opts Options
+	// toast shows a desktop notification (systemToast); tests keep them.
+	toast func(title, text string)
 
 	screens []screen
 	tabs    *container.AppTabs
@@ -166,6 +168,9 @@ type App struct {
 // New builds the window; call ShowAndRun to start.
 func New(fa fyne.App, l *link.Link, m *model.Model, opts Options) *App {
 	a := &App{fa: fa, m: m, link: l, opts: opts, tel: opts.Telemetry, launch: launchTrace{start: time.Now()}, masks: map[fyne.CanvasObject]bool{}}
+	a.toast = systemToast(fa, func(err error) {
+		a.tel.Breadcrumb("ui", "notification not shown", map[string]any{"error": err.Error()})
+	})
 	a.tel.SetScreenshot(a.screenshot)
 	a.applyTheme(settings.ThemeSystem)
 	a.covers = newCovers(a.scheduleRender)

@@ -91,8 +91,7 @@ func (a *App) hideToTray() {
 	prefs := a.fa.Preferences()
 	if !prefs.Bool(trayNoticeKey) {
 		prefs.SetBool(trayNoticeKey, true)
-		a.fa.SendNotification(fyne.NewNotification(lang.StillRunning,
-			lang.StillRunningText))
+		a.toast(lang.StillRunning, lang.StillRunningText)
 	}
 }
 
