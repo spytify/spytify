@@ -186,6 +186,36 @@ jobs:
           name: release-windows
           path: dist/*.zip
 
+  # Spytify's four Windows programs go to VirusTotal before the release is
+  # published, so a false detection is known, and reported to its vendor,
+  # before anyone downloads the version. The job's summary lists each
+  # program's detections. It does not hold the draft back, and without the
+  # VIRUSTOTAL_API_KEY secret it sends nothing.
+  virustotal:
+    needs: [version, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci/virustotal.sh
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-windows
+          path: files
+      - name: Scan the Windows programs
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          TAG: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -z "$VIRUSTOTAL_API_KEY" ]; then
+            echo "::notice title=VirusTotal::No VIRUSTOTAL_API_KEY secret: nothing was sent"
+            exit 0
+          fi
+          unzip -q "files/spytify-$TAG-windows-amd64.zip" -d files
+          d="files/spytify-$TAG-windows-amd64"
+          scripts/ci/virustotal.sh "$d/Spytify.exe" "$d/spytifyd.exe" "$d/spytify-cli.exe" "$d/spytify-tap.exe"
+
   # The site's settings page and protocol section are what gendocs writes
   # from the code, deployed to gh-pages by hand: this job fails when they
   # no longer match the release's code. It does not hold the draft back.
