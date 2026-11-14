@@ -59,7 +59,7 @@ done <<<"$assets"
 lacks=()
 [ "${NOTARIZED:-}" = true ] || lacks+=("The macOS app is not notarised (_\$99 USD/yr_): the first time, allow it in System Settings > Privacy & Security > Open Anyway.")
 [ "${SIGNED:-}" = true ] || lacks+=("The Windows files are not signed (_\$129 USD/yr_), so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\".")
-[ "${SIGNED:-}" = true ] || lacks+=("If security software blocks Spytify, deletes its files or reports a threat, help us improve it by opening an issue (see [Something went wrong?](#something-went-wrong)).")
+[ "${SIGNED:-}" = true ] || lacks+=("If security software blocks Spytify, deletes its files or reports a threat, help us improve it by opening an issue (see [Something went wrong?](#user-content-something-went-wrong)).")
 if [ ${#lacks[@]} -gt 0 ]; then
   echo "> [!NOTE]"
   for i in "${!lacks[@]}"; do
@@ -69,7 +69,9 @@ if [ ${#lacks[@]} -gt 0 ]; then
   echo
 fi
 # The bug tracker misses what happens before Spytify runs, and a crash can
-# end Spytify before its report leaves.
+# end Spytify before its report leaves. GitHub gives a release's headings no
+# anchor, so the note's link lands on this one.
+echo '<a id="something-went-wrong"></a>'
 echo "## Something went wrong?"
 echo
 echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/), above all when security software keeps Spytify from starting or Spytify crashes and closes: the bug tracker cannot see those in full detail."
