@@ -35,9 +35,8 @@ func TestSMTCWithAPlayer(t *testing.T) {
 	defer func() {
 		if t.Failed() {
 			t.Logf("player output:\n%s", playerOut.String())
-			list := smtcPrelude + "foreach ($s in $manager.GetSessions()) { $s.SourceAppUserModelId }"
-			out, err := exec.Command("powershell", "-NoProfile", "-Command", list).CombinedOutput()
-			t.Logf("media sessions (%v):\n%s", err, out)
+			ids, err := smtcAppIDs()
+			t.Logf("media sessions (%v): %q", err, ids)
 		}
 	}()
 
