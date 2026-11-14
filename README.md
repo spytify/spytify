@@ -18,6 +18,16 @@ Spytify records the sound one application plays, nothing else, and saves each tr
 
 **[Download](https://github.com/spytify/spytify/releases)** · [Install](https://spytify.github.io/spytify/v2/install.html) · [Documentation](https://spytify.github.io/spytify/v2/overview.html) · [FAQ](https://spytify.github.io/spytify/v2/faq.html)
 
+## Opening it the first time
+
+Spytify is not notarised for macOS (_$99 USD/yr_) nor signed for Windows (_$129 USD/yr_), so the first launch of each version asks you to confirm:
+
+- **macOS:** allow it in System Settings > Privacy & Security > Open Anyway.
+- **Windows:** when SmartScreen warns, click **More info**, then **Run anyway**. Spytify starts the recorder `spytifyd.exe` and the capture helper `spytify-tap.exe` on its own: open each once from the Spytify folder and allow it the same way.
+- **Security software** may hold a new version until enough people have downloaded it. When its scan says a file looks suspicious but reports no threat, run it anyway from its alert, and `spytifyd.exe` and `spytify-tap.exe` the same way. If it reports a virus or deletes Spytify's files, we want to know so we can fix it: tell us in [GitHub issues](https://github.com/spytify/spytify/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/).
+
+More in the [FAQ](https://spytify.github.io/spytify/v2/faq.html#open-anyway).
+
 ## A recorder, not a downloader
 
 Spytify records what your computer already plays, like Audio Hijack or OBS. It downloads nothing, emulates no streaming protocol and circumvents no DRM.
