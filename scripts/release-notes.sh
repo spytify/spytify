@@ -59,7 +59,7 @@ done <<<"$assets"
 lacks=()
 [ "${NOTARIZED:-}" = true ] || lacks+=("The macOS app is not notarised (_\$99 USD/yr_): the first time, allow it in System Settings > Privacy & Security > Open Anyway.")
 [ "${SIGNED:-}" = true ] || lacks+=("The Windows files are not signed (_\$129 USD/yr_), so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\".")
-[ "${SIGNED:-}" = true ] || lacks+=("If security software blocks Spytify, deletes its files or reports a threat, help us improve it by opening an issue (see below).")
+[ "${SIGNED:-}" = true ] || lacks+=("If security software blocks Spytify, deletes its files or reports a threat, help us improve it by opening an issue (see [Something went wrong?](#something-went-wrong)).")
 if [ ${#lacks[@]} -gt 0 ]; then
   echo "> [!NOTE]"
   for i in "${!lacks[@]}"; do
