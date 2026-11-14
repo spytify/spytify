@@ -85,6 +85,30 @@ func (s *Session) onSeek(posMs, at int64) {
 	}
 }
 
+// onRestartAsked starts the track over when Spytify had the player do so
+// while it was paused: nothing plays until the player is back at the
+// start, however late it gets there, so the take starts with the first
+// sound. A playing player goes on where it was until then: its track
+// starts over once the player says it went back, and is left as it was
+// when it never says so.
+func (s *Session) onRestartAsked() {
+	var info meta.TrackInfo
+	switch {
+	case s.pend != nil:
+		info = s.pend.info
+	case s.cur != nil && !s.cur.awaitStart:
+		// A track paused at its start is recorded from its first sound
+		// already.
+		info = s.cur.info
+	}
+	if s.status != meta.Paused || s.ring == nil || info.Empty() {
+		return
+	}
+	s.deps.log.Debugf("%q started over by Spytify while paused", info.Title)
+	s.onTrack(info, s.ring.End(), true)
+	s.progress()
+}
+
 // claimCover copies a cover the watcher published as a file into the
 // session's temp dir. On Windows the poller replaces its temporary cover
 // file when the next track's art arrives — before the finisher reads it

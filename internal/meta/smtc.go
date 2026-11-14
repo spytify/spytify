@@ -136,6 +136,7 @@ type SMTC struct {
 
 	mu    sync.Mutex
 	names []string
+	ask   restartAsk
 }
 
 func NewSMTC() *SMTC { return &SMTC{} }
@@ -225,7 +226,7 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 		go watchMixer(ctx, m.Mixer, mixerInterval, out)
 	}
 	// SMTC lengths are whole milliseconds.
-	tracker := &pollTracker{unit: "ms"}
+	tracker := &pollTracker{unit: "ms", ask: &m.ask}
 	go func() {
 		defer cmd.Wait()
 		sc := bufio.NewScanner(stdout)
@@ -294,7 +295,15 @@ func (m *SMTC) Control(cmd proto.PlayerCmd) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	if cmd == proto.CmdRestart {
+		// Armed first: a poll may see the restart before the script
+		// returns.
+		m.ask.arm(time.Now())
+	}
 	out, err := powershell(ctx, smtcScript(names, map[string]string{"cmd": psQuote(string(cmd))}, smtcControl)).CombinedOutput()
+	if err != nil && cmd == proto.CmdRestart {
+		m.ask.disarm()
+	}
 	var ee *exec.ExitError
 	switch {
 	case errors.As(err, &ee) && ee.ExitCode() == 3:

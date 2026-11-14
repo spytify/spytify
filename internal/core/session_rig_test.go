@@ -124,6 +124,8 @@ func bareRig(t *testing.T, extra map[string]any, opts SessionOptions) *rig {
 	r.fin = &finisher{values: store.Values, emit: r.emit, log: log, jobs: make(chan finishJob, 256),
 		records: openRecords(out)}
 	r.s = newSession("t", sessionDeps{values: store.Values, emit: r.emit, log: log, fin: r.fin, control: r.control, mute: r.mute}, opts)
+	// Unbuffered, a restart asked is taken before the next input.
+	r.s.restartCh = make(chan struct{})
 	return r
 }
 
@@ -490,6 +492,18 @@ func (r *rig) volume(v float64) {
 
 func (r *rig) status(st meta.Status) {
 	r.send(meta.Event{Kind: meta.StatusChanged, Status: st, PositionMs: -1})
+}
+
+// restartAsked tells the session that Spytify had the player start over,
+// as the app's button and spytify-cli control restart do.
+func (r *rig) restartAsked() {
+	if r.ended {
+		return
+	}
+	r.note("Spytify has the player start over")
+	if deliver(r, r.s.restartCh, struct{}{}) {
+		r.settle()
+	}
 }
 
 // stop asks the session to stop and waits until it has taken the request.
