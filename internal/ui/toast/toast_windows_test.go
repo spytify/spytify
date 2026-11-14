@@ -1,4 +1,4 @@
-package ui
+package toast
 
 import (
 	"errors"
@@ -49,4 +49,14 @@ func TestAToastIsMadeInProcess(t *testing.T) {
 	}
 	defer toast.Release()
 	t.Logf("shown: %v", pushToast("org.spytify.ui.test", toast))
+}
+
+// Show starts its thread in the Windows Runtime and makes the toast there;
+// only Windows' answer to showing it may be an error.
+func TestShowMakesTheToastOnItsThread(t *testing.T) {
+	err := Show("org.spytify.ui.test", "Track saved", "Song · Artist", "")
+	if err != nil && !strings.HasPrefix(err.Error(), "IToastNotifier.Show") && !strings.HasPrefix(err.Error(), "IToastNotificationManagerStatics") {
+		t.Fatal(err)
+	}
+	t.Logf("shown: %v", err)
 }
