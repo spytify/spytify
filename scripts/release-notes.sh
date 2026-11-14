@@ -74,7 +74,7 @@ fi
 echo '<a id="something-went-wrong"></a>'
 echo "## Something went wrong?"
 echo
-echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/), above all when security software keeps Spytify from starting or Spytify crashes and closes: the bug tracker cannot see those in full detail."
+echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new), on [r/spytify](https://www.reddit.com/r/spytify/) or at [jwallet.spytify@gmail.com](mailto:jwallet.spytify@gmail.com), above all when security software keeps Spytify from starting or Spytify crashes and closes: the bug tracker cannot see those in full detail."
 echo
 # SmartScreen also stops the programs Spytify starts, unseen.
 if [ "${SIGNED:-}" != true ]; then
