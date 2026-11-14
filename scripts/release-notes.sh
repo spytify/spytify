@@ -57,8 +57,8 @@ done <<<"$assets"
 # What the files lack, a paragraph each: nothing once they are signed and
 # notarised.
 lacks=()
-[ "${NOTARIZED:-}" = true ] || lacks+=("The macOS app is not notarised: the first time, allow it in System Settings > Privacy & Security > Open Anyway.")
-[ "${SIGNED:-}" = true ] || lacks+=("The Windows files are not signed, so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\".")
+[ "${NOTARIZED:-}" = true ] || lacks+=("The macOS app is not notarised (_\$99 USD/yr_, so no!): the first time, allow it in System Settings > Privacy & Security > Open Anyway.")
+[ "${SIGNED:-}" = true ] || lacks+=("The Windows files are not signed (_\$129 USD/yr_, so no!), so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\".")
 if [ ${#lacks[@]} -gt 0 ]; then
   echo "> [!NOTE]"
   for i in "${!lacks[@]}"; do
@@ -74,5 +74,11 @@ echo "|---|---|---|"
 printf '%s' "$rows"
 echo
 echo "The Windows zip and the macOS app come with ffmpeg, and the .deb installs it. Elsewhere, install it first: \`brew install ffmpeg\` for the macOS command line, or from the system's packages on Linux. $(link SHA256SUMS) has every file's checksum, and the [install page](https://spytify.github.io/spytify/v2/install.html) says more."
+echo
+# The bug tracker misses what happens before Spytify runs, and a crash can
+# end Spytify before its report leaves.
+echo "## Something went wrong?"
+echo
+echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/), above all when security software keeps Spytify from starting or Spytify crashes and closes: the bug tracker cannot see those in full detail."
 echo
 jq -r .body <<<"$release"
