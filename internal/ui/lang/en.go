@@ -233,7 +233,7 @@ const (
 // one when the check fails if it says so, then the details that word what
 // the recorder found. CheckEncoder takes the encoder; TargetProcess the
 // process names; ForFormat the format; MacOSVersion the version;
-// WindowsBuild the build; HelperMacOS and PowerShellReads a path;
+// WindowsBuild the build; HelperMacOS a path;
 // NoCaptureBackend the system; Rates and RatesOnly the allowed rates.
 const (
 	CheckTarget             = "target configured"
@@ -251,7 +251,7 @@ const (
 	CheckWindows            = "Windows 10 2004 or later"
 	CheckHelper             = "capture helper"
 	CheckAppleScript        = "AppleScript"
-	CheckPowerShell         = "Windows PowerShell"
+	CheckMediaSessions      = "Windows media sessions"
 	CheckCapture            = "capture"
 	CheckSessionBus         = "D-Bus session bus"
 	CheckSampleRates        = "PipeWire sample rates"
@@ -264,7 +264,7 @@ const (
 	WindowsBuild            = "build %s"
 	HelperMacOS             = "%s; macOS asks once for System Audio Recording permission"
 	AppleScriptAsks         = "macOS asks once to let spytify control the player"
-	PowerShellReads         = "%s; reads what plays through the media session API"
+	MediaSessionsRead       = "reads what plays through the media session API"
 	CapturePipeWire         = "PipeWire (pw-record)"
 	CapturePulseAudio       = "PulseAudio (parec)"
 	InstallCapture          = "install pipewire-bin (pw-record, pw-dump) or pulseaudio-utils"
