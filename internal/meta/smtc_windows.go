@@ -338,6 +338,13 @@ func readRandomAccessStream(stream *ole.IUnknown) ([]byte, error) {
 	}
 }
 
+func (w *winSMTC) answers() error {
+	return w.do(func() error {
+		_, err := w.sessionManager()
+		return err
+	})
+}
+
 func (w *winSMTC) control(names []string, cmd proto.PlayerCmd) error {
 	return w.do(func() error {
 		s, err := w.find(names)

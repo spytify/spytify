@@ -70,10 +70,10 @@ func (b Backends) Probe() []proto.Check {
 	} else {
 		checks = append(checks, proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: true, Detail: p, Args: []string{p}})
 	}
-	if p, err := meta.PowerShell(); err != nil {
-		checks = append(checks, proto.Check{ID: proto.CheckPowerShell, Name: "Windows PowerShell", OK: false, Detail: err.Error()})
+	if err := meta.SMTCAnswers(); err != nil {
+		checks = append(checks, proto.Check{ID: proto.CheckMediaSessions, Name: "Windows media sessions", OK: false, Detail: err.Error()})
 	} else {
-		checks = append(checks, proto.Check{ID: proto.CheckPowerShell, Name: "Windows PowerShell", OK: true, Detail: p + "; reads what plays through the media session API", Args: []string{p}})
+		checks = append(checks, proto.Check{ID: proto.CheckMediaSessions, Name: "Windows media sessions", OK: true, Detail: "reads what plays through the media session API"})
 	}
 	return checks
 }

@@ -59,6 +59,14 @@ func TestSMTCPollerRunsOnWindows(t *testing.T) {
 	}
 }
 
+// The checks find the media session API answering, as on every Windows 10
+// and 11 install with its media features.
+func TestSMTCAnswersOnWindows(t *testing.T) {
+	if err := SMTCAnswers(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A command finds no session: no player, rather than an API that failed.
 func TestSMTCControlRunsOnWindows(t *testing.T) {
 	m := NewSMTC()

@@ -41,6 +41,18 @@ type smtcAPI interface {
 	// control sends cmd to that session: ErrNoPlayer when there is none,
 	// errRefused when the player said no.
 	control(names []string, cmd proto.PlayerCmd) error
+	// answers says whether the API gives its session manager.
+	answers() error
+}
+
+// SMTCAnswers says whether Windows' media session API answers: without
+// it, nothing tells what plays.
+func SMTCAnswers() error {
+	api, err := openSMTC()
+	if err != nil {
+		return err
+	}
+	return api.answers()
 }
 
 var errRefused = errors.New("the player refused")

@@ -40,9 +40,10 @@ func TestSMTCPollLines(t *testing.T) {
 type fakeSMTC struct {
 	mu       sync.Mutex
 	reads    []fakeRead
-	answers  []error
+	replies  []error
 	names    [][]string
 	controls []proto.PlayerCmd
+	answer   error
 }
 
 type fakeRead struct {
@@ -66,10 +67,12 @@ func (f *fakeSMTC) control(names []string, cmd proto.PlayerCmd) error {
 	defer f.mu.Unlock()
 	f.names = append(f.names, names)
 	f.controls = append(f.controls, cmd)
-	err := f.answers[0]
-	f.answers = f.answers[1:]
+	err := f.replies[0]
+	f.replies = f.replies[1:]
 	return err
 }
+
+func (f *fakeSMTC) answers() error { return f.answer }
 
 func useSMTC(t *testing.T, f *fakeSMTC) {
 	t.Helper()
@@ -234,7 +237,7 @@ func TestSMTCWatchReadsTheSession(t *testing.T) {
 
 // Control says what went wrong: no session, or the player refused.
 func TestSMTCControlSaysTheAnswer(t *testing.T) {
-	api := &fakeSMTC{answers: []error{nil, ErrNoPlayer, errRefused, errors.New("no answer in 10s")}}
+	api := &fakeSMTC{replies: []error{nil, ErrNoPlayer, errRefused, errors.New("no answer in 10s")}}
 	useSMTC(t, api)
 	m := NewSMTC()
 	m.Target(target.Target{ProcessNames: []string{"player"}})
@@ -303,5 +306,18 @@ func TestTheMixerWatchReportsChanges(t *testing.T) {
 	watchMixer(ctx2, &mixerSteps{err: errors.New("no session")}, time.Millisecond, failing)
 	if len(failing) != 0 {
 		t.Fatalf("a failed read reported %+v", <-failing)
+	}
+}
+
+// The checks ask the API whether it answers.
+func TestSMTCAnswersSaysTheAPIsAnswer(t *testing.T) {
+	api := &fakeSMTC{}
+	useSMTC(t, api)
+	if err := SMTCAnswers(); err != nil {
+		t.Fatalf("answering API: %v", err)
+	}
+	api.answer = errors.New("Class not registered")
+	if err := SMTCAnswers(); err == nil || err.Error() != "Class not registered" {
+		t.Fatalf("silent API: %v", err)
 	}
 }
