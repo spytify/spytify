@@ -39,6 +39,15 @@ func TestSMTCScriptQuotesItsParameters(t *testing.T) {
 	}
 }
 
+// The scripts run under the machine's execution policy: -ExecutionPolicy
+// Bypass is a flag antivirus engines weigh. smtc_windows_test.go runs them
+// under Restricted.
+func TestPowerShellKeepsTheExecutionPolicy(t *testing.T) {
+	if args := powershell(context.Background(), "$null").Args; slices.Contains(args, "-ExecutionPolicy") {
+		t.Fatalf("powershell %q", args)
+	}
+}
+
 // The Windows poller prints the macOS poller's shape; the tracker reads it
 // with lengths in milliseconds and keeps the cover saved to a file.
 func TestSMTCPollLines(t *testing.T) {

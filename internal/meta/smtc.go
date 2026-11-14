@@ -181,14 +181,18 @@ func encodeCommand(script string) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-// powershell runs script in Windows PowerShell. Tests replace it.
+// powershell runs script in Windows PowerShell. Tests replace it. The
+// execution policy governs script files, and the script comes as a
+// command, so no -ExecutionPolicy Bypass: antivirus engines weigh that
+// flag, as a malware launcher's, in a hidden PowerShell an unsigned
+// program starts.
 var powershell = func(ctx context.Context, script string) *exec.Cmd {
 	path, err := PowerShell()
 	if err != nil {
 		// Start fails with PATH's own error.
 		path = "powershell.exe"
 	}
-	return proc.CommandContext(ctx, path, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodeCommand(script))
+	return proc.CommandContext(ctx, path, "-NoProfile", "-NonInteractive", "-EncodedCommand", encodeCommand(script))
 }
 
 func (m *SMTC) current() []string {
