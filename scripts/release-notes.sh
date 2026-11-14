@@ -76,6 +76,11 @@ echo "## Something went wrong?"
 echo
 echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new) or on [r/spytify](https://www.reddit.com/r/spytify/), above all when security software keeps Spytify from starting or Spytify crashes and closes: the bug tracker cannot see those in full detail."
 echo
+# SmartScreen also stops the programs Spytify starts, unseen.
+if [ "${SIGNED:-}" != true ]; then
+  echo "Because the Windows files are unsigned, \"Run anyway\" may also be needed for \`spytifyd.exe\` and \`spytify-tap.exe\`, which Spytify starts on its own: run each once from the Spytify folder. Otherwise, wait until enough people have downloaded the version for it to become known."
+  echo
+fi
 echo "## Downloads"
 echo
 echo "The Windows zip and the macOS app come with ffmpeg, and the .deb installs it. Elsewhere, install it first: \`brew install ffmpeg\` for the macOS command line, or from the system's packages on Linux. $(link SHA256SUMS) has every file's checksum, and the [install page](https://spytify.github.io/spytify/v2/install.html) says more."
