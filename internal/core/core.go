@@ -65,10 +65,13 @@ type Core struct {
 
 	// keep holds the last take cut short, across sessions.
 	keep *keeper
-	// silent is set while the capture hears only silence as the player
-	// plays, across sessions until it hears sound: the player heard check
-	// fails.
-	silent atomic.Bool
+	// silent holds what was known when the capture heard only silence as
+	// the player played, across sessions until it hears sound: the player
+	// heard check fails with it. nil while it hears sound.
+	silent atomic.Pointer[map[string]string]
+	// wakes is when the computer last woke from sleep: a capture may hear
+	// nothing after it.
+	wakes wakes
 	// playlist is the last session's, which keeps following track.keep
 	// until the next session starts.
 	playlist atomic.Pointer[playlist]
@@ -197,7 +200,11 @@ func (c *Core) WatchTarget(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case now := <-t.C:
+			// The same ticker sees the computer sleep.
+			if slept := c.wakes.tick(now); slept > 0 {
+				c.log.Infof("the computer woke after about %s asleep", slept.Round(time.Minute))
+			}
 		}
 	}
 }
@@ -353,7 +360,11 @@ func (c *Core) Info() proto.CoreInfoResult {
 		}
 	}
 	info.Checks = append(info.Checks, c.backends.Probe()...)
-	info.Checks = append(info.Checks, playerHeardCheck(c.silent.Load()))
+	var silent map[string]string
+	if f := c.silent.Load(); f != nil {
+		silent = *f
+	}
+	info.Checks = append(info.Checks, playerHeardCheck(silent))
 	dir := v.Path(settings.OutputDir)
 	err := outputWritable(dir)
 	facts := outputFacts(dir, err, v.String(settings.OutputDir) == settings.Defaults().String(settings.OutputDir))
@@ -479,9 +490,16 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		control:      np.Control,
 		mute:         adMuter(np),
 		watchSilence: true,
-		silence:      c.silent.Store,
-		playlist:     list.name,
-		health:       captureHealth(capt),
+		silence: func(facts map[string]string) {
+			if facts == nil {
+				c.silent.Store(nil)
+				return
+			}
+			c.silent.Store(&facts)
+		},
+		sinceWake: func() (time.Duration, bool) { return c.wakes.since(time.Now()) },
+		playlist:  list.name,
+		health:    captureHealth(capt),
 	}, opts)
 	if c.store.Values().Bool(settings.PlayerMuteOutput) && runtime.GOOS == "windows" {
 		c.log.Infof("player.mute_output is not applied on Windows in the alpha; the player stays audible")

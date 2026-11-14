@@ -26,7 +26,7 @@ func statusEvent(st meta.Status) meta.Event {
 }
 
 // A capture that delivers nothing while the player plays is reported once,
-// on the tick after captureStall, and again after it delivered and stopped
+// on the tick after captureQuiet, and again after it delivered and stopped
 // once more; not while the player is paused or gone. The clock is moved by
 // setting when the last chunk came.
 func TestPinnedStallAndRecovery(t *testing.T) {
@@ -122,8 +122,50 @@ func TestAStallSaysWhatWasKnown(t *testing.T) {
 	}
 }
 
+// A capture that hears only silence says what the session knew: the
+// player's status and volume, whether any sound came, the track's and the
+// session's age and how long ago the computer woke, and what the capture
+// says of itself; the player heard check is given the same.
+func TestASilenceSaysWhatWasKnown(t *testing.T) {
+	r := bareRig(t, nil, endOnStop)
+	s := r.s
+	s.deps.watchSilence = true
+	s.deps.health = captureHealth(sayingCapture{})
+	var told map[string]string
+	s.deps.silence = func(facts map[string]string) { told = facts }
+	var silences []proto.ErrorEvent
+	emit := s.deps.emit
+	s.deps.emit = func(method string, payload any) {
+		if e, ok := payload.(proto.ErrorEvent); ok && e.Code == proto.ErrorCaptureSilent {
+			silences = append(silences, e)
+		}
+		emit(method, payload)
+	}
+	want := map[string]string{"silent.player_status": "Playing", "silent.any_sound": "no", "silent.track_age_s": "60", "silent.session_age_s": "120",
+		"silent.since_wake_s": "none", "capture.backend": "fake", "capture.restarts": "4"}
+	for _, woke := range []bool{false, true} {
+		if woke {
+			s.deps.sinceWake = func() (time.Duration, bool) { return 90 * time.Second, true }
+			s.volumeLow, s.volumePct = true, 40
+			want["silent.since_wake_s"], want["silent.player_volume_pct"] = "90", "40"
+			s.hear()
+			s.heard = false
+		}
+		s.onMeta(context.Background(), statusEvent(meta.Playing))
+		s.onChunk(capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44})
+		s.started, s.trackStarted, s.lastSound = time.Now().Add(-2*time.Minute), time.Now().Add(-time.Minute), time.Now().Add(-time.Hour)
+		s.onTick()
+		if len(silences) == 0 || !maps.Equal(silences[len(silences)-1].Facts, want) {
+			t.Fatalf("woke %v: silences %+v, want the last with facts %v", woke, silences, want)
+		}
+		if !maps.Equal(told, want) {
+			t.Errorf("woke %v: the player heard check was given %v, want %v", woke, told, want)
+		}
+	}
+}
+
 // A capture that delivers frames, all silent, while the player plays is
-// reported once, on the tick after captureSilent, and withdrawn at the
+// reported once, on the tick after captureQuiet, and withdrawn at the
 // first sound, on every system: a player muted in its own volume or in the
 // system's mixer gives silence, as macOS does when System Audio Recording
 // was refused. Not while the player is paused, nor while the session mutes
@@ -132,8 +174,8 @@ func TestPinnedSilentCapture(t *testing.T) {
 	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
 	loud := capture.Chunk{Data: slices.Repeat([]byte{0x00, 0x40}, len(silent.Data)/2), Format: f44}
 	reported := []string{
-		"log error: only silence from the capture for 30s while the player plays",
-		`error capture_silent "only silence from the capture for 30s while the player plays"`,
+		"log error: only silence from the capture for 10s while the player plays",
+		`error capture_silent "only silence from the capture for 10s while the player plays"`,
 		"log info: sound from the capture again",
 		`error capture_silent ""`,
 	}
@@ -142,7 +184,7 @@ func TestPinnedSilentCapture(t *testing.T) {
 	s.deps.watchSilence = true
 	s.deps.mute = func(bool) error { return nil }
 	var told []bool
-	s.deps.silence = func(on bool) { told = append(told, on) }
+	s.deps.silence = func(facts map[string]string) { told = append(told, facts != nil) }
 	ctx := context.Background()
 	long := time.Now().Add(-time.Hour)
 	s.onMeta(ctx, statusEvent(meta.Playing))
@@ -175,8 +217,26 @@ func TestPinnedSilentCapture(t *testing.T) {
 	}
 }
 
+// Only silence is told as soon as no audio is: a muted player gives
+// Windows' capture zeros where macOS's tap can give nothing, and Windows
+// said so 30 s in, macOS 10 s in. 11 s of silence is reported.
+func TestOnlySilenceIsToldAsSoonAsNoAudio(t *testing.T) {
+	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
+	r := bareRig(t, map[string]any{}, endOnStop)
+	s := r.s
+	s.deps.watchSilence = true
+	s.onMeta(context.Background(), statusEvent(meta.Playing))
+	s.onChunk(silent)
+	s.lastSound = time.Now().Add(-11 * time.Second)
+	s.onTick()
+	want := `error capture_silent "only silence from the capture for 10s while the player plays"`
+	if got := r.lines(); !slices.Contains(got, want) {
+		t.Fatalf("11 s of silence: trace %q, want %q", got, want)
+	}
+}
+
 // An ad brings no silence warning, muted by the session or not: it may be
-// silent, as when the player mutes it. The 30 s start again when it ends.
+// silent, as when the player mutes it. The 10 s start again when it ends.
 func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 	silent := capture.Chunk{Data: make([]byte, f44.FramesFromMs(10)*int64(f44.FrameBytes())), Format: f44}
 	for _, muted := range []bool{false, true} {
@@ -201,8 +261,8 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 			s.lastSound = long
 			s.onTick()
 			want := []string{"state waiting", "state ad", "state recording",
-				"log error: only silence from the capture for 30s while the player plays",
-				`error capture_silent "only silence from the capture for 30s while the player plays"`}
+				"log error: only silence from the capture for 10s while the player plays",
+				`error capture_silent "only silence from the capture for 10s while the player plays"`}
 			if got := r.lines(); !slices.Equal(got, want) {
 				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
 			}
@@ -210,7 +270,7 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 	}
 }
 
-// Silence is reported for a track that played captureSilent with no sound
+// Silence is reported for a track that played captureQuiet with no sound
 // since it started, at any point of the session, as when the player is
 // muted between two tracks. The quiet end of a song had sound before it,
 // and the track after it is watched from its own start. The clock is moved
@@ -271,14 +331,18 @@ func TestSilenceWarningIsForATrackSilentFromItsStart(t *testing.T) {
 	}
 }
 
-// The player heard check fails while the capture hears only silence; the
-// window words why, as the silence warning (model.CheckDetail).
+// The player heard check fails while the capture hears only silence, with
+// what was known then; the window words why, as the silence warning
+// (model.CheckDetail).
 func TestPlayerHeardCheck(t *testing.T) {
-	same := func(a, b proto.Check) bool { return a.Name == b.Name && a.OK == b.OK && a.Detail == b.Detail }
-	if got, want := playerHeardCheck(false), (proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", OK: true, Detail: "no silence heard"}); !same(got, want) {
+	same := func(a, b proto.Check) bool {
+		return a.Name == b.Name && a.OK == b.OK && a.Detail == b.Detail && maps.Equal(a.Facts, b.Facts)
+	}
+	if got, want := playerHeardCheck(nil), (proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", OK: true, Detail: "no silence heard"}); !same(got, want) {
 		t.Errorf("with sound: %+v, want %+v", got, want)
 	}
-	if got, want := playerHeardCheck(true), (proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", Detail: "only silence from the capture while the player played"}); !same(got, want) {
+	facts := map[string]string{"silent.any_sound": "no"}
+	if got, want := playerHeardCheck(facts), (proto.Check{ID: proto.CheckPlayerHeard, Name: "player heard", Detail: "only silence from the capture while the player played", Facts: facts}); !same(got, want) {
 		t.Errorf("with only silence: %+v, want %+v", got, want)
 	}
 }
