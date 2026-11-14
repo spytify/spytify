@@ -1,129 +1,66 @@
 package meta
 
 import (
-	"bufio"
 	"context"
-	"encoding/base64"
-	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
+	"math"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf16"
 
-	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// smtcPrelude loads the Windows media session API (SMTC) in Windows
-// PowerShell and finds the target's session by its app id, which holds the
-// executable or package name.
-const smtcPrelude = `
-$ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
-  $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation` + "`" + `1'
-})[0]
-function Await($op, [Type]$type) {
-  $task = $asTask.MakeGenericMethod($type).Invoke($null, @($op))
-  $null = $task.Wait(-1)
-  $task.Result
-}
-$managerType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
-$propsType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties, Windows.Media.Control, ContentType = WindowsRuntime]
-$streamType = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime]
-$inputType = [Windows.Storage.Streams.IInputStream, Windows.Storage.Streams, ContentType = WindowsRuntime]
-$asStreamForRead = [System.IO.WindowsRuntimeStreamExtensions].GetMethod('AsStreamForRead', [Type[]]@($inputType))
-$manager = Await ($managerType::RequestAsync()) $managerType
-# Save-Thumbnail writes a thumbnail to path. Windows PowerShell sees the
-# stream as a bare COM object, with no methods of its own and no overload
-# that takes it; called through reflection, as Await calls AsTask, the
-# runtime casts it.
-function Save-Thumbnail($ref, [string]$path) {
-  $stream = Await ($ref.OpenReadAsync()) $streamType
-  $in = $asStreamForRead.Invoke($null, @($stream))
-  try {
-    $f = [System.IO.File]::Create($path)
-    try { $in.CopyTo($f) } finally { $f.Close() }
-  } finally { $in.Close() }
-}
-function Find-Session {
-  foreach ($s in $manager.GetSessions()) {
-    $id = $s.SourceAppUserModelId.ToLowerInvariant()
-    foreach ($n in $names) { if ($n -and $id.Contains($n)) { return $s } }
-  }
-  $null
-}
-`
+// smtcSession is one read of the target's media session.
+type smtcSession struct {
+	// Status is playing, paused or stopped.
+	Status string
+	// Position is where the player was at Updated, its last report.
+	Position time.Duration
+	Updated  time.Time
+	Length   time.Duration
 
-// smtcPoll prints one JSON line per interval, in the shape the macOS poller
-// prints, so pollTracker turns both into events. SMTC has no track id and
-// reports the position as of its last update; the cover is a thumbnail
-// stream, saved to a temporary file once per track.
-const smtcPoll = `
-$lastKey = ''; $cover = ''; $coverFile = ''; $coverKey = ''
-while ($true) {
-  $out = [ordered]@{ running = $false }
-  try {
-    $s = Find-Session
-    if ($s) {
-      $out.running = $true
-      $state = switch ($s.GetPlaybackInfo().PlaybackStatus.ToString()) { 'Playing' { 'playing' } 'Paused' { 'paused' } default { 'stopped' } }
-      $out.state = $state
-      $tl = $s.GetTimelineProperties()
-      $pos = $tl.Position.TotalSeconds
-      if ($state -eq 'playing') { $pos += ([DateTimeOffset]::Now - $tl.LastUpdatedTime).TotalSeconds }
-      $out.position = [math]::Max(0, $pos)
-      $p = Await ($s.TryGetMediaPropertiesAsync()) $propsType
-      if ($p -and $p.Title) {
-        $key = "$($p.Artist)|$($p.AlbumTitle)|$($p.Title)"
-        if ($key -ne $lastKey) { $lastKey = $key; $cover = ''; $coverKey = '' }
-        # The thumbnail often comes a moment after the title; a cover that
-        # cannot be read is tried once per track and never costs the track.
-        if (-not $cover -and $p.Thumbnail -and $coverKey -ne $key) {
-          $coverKey = $key
-          if ($coverFile) { Remove-Item -LiteralPath $coverFile -ErrorAction SilentlyContinue; $coverFile = '' }
-          try {
-            $coverFile = Join-Path $env:TEMP ('spytify-cover-' + [guid]::NewGuid().ToString('N'))
-            Save-Thumbnail $p.Thumbnail $coverFile
-            $cover = ([Uri]$coverFile).AbsoluteUri
-          } catch {
-            $coverFile = ''
-            $out.error = "cover: $($_.Exception.Message)"
-          }
-        }
-        $out.track = [ordered]@{
-          id = $null; name = $p.Title; artist = $p.Artist; album = $p.AlbumTitle; albumArtist = $p.AlbumArtist
-          duration = [math]::Round(($tl.EndTime - $tl.StartTime).TotalMilliseconds); trackNumber = $p.TrackNumber; artworkUrl = $cover
-        }
-      }
-    }
-  } catch { $out.error = $_.Exception.Message }
-  [Console]::Out.WriteLine(($out | ConvertTo-Json -Compress -Depth 4))
-  [Console]::Out.Flush()
-  Start-Sleep -Milliseconds $interval
+	Title, Artist, Album, AlbumArtist string
+	TrackNumber                       int
+	// Thumbnail reads the cover; nil when the session has none. It reads
+	// this session's cover only until the next read.
+	Thumbnail func() ([]byte, error)
 }
-`
 
-// smtcControl sends one transport command; exit 3 means no session, 4 that
-// the player refused.
-const smtcControl = `
-$s = Find-Session
-if (-not $s) { exit 3 }
-$op = switch ($cmd) {
-  'play' { $s.TryPlayAsync() } 'pause' { $s.TryPauseAsync() } 'playpause' { $s.TryTogglePlayPauseAsync() }
-  'next' { $s.TrySkipNextAsync() } 'previous' { $s.TrySkipPreviousAsync() } 'restart' { $s.TryChangePlaybackPositionAsync(0) }
+// smtcAPI is Windows' media session API (SMTC), which the player
+// publishes what it plays to. Tests replace it.
+type smtcAPI interface {
+	// session reads the first session whose app id, which holds the
+	// executable or package name, contains one of names; nil when none does.
+	session(names []string) (*smtcSession, error)
+	// control sends cmd to that session: ErrNoPlayer when there is none,
+	// errRefused when the player said no.
+	control(names []string, cmd proto.PlayerCmd) error
+	// answers says whether the API gives its session manager.
+	answers() error
 }
-if (-not (Await $op ([bool]))) { exit 4 }
-`
 
-// SMTC reads what plays on Windows through Windows PowerShell, which every
-// Windows 10 and 11 install has, and the media session API.
+// SMTCAnswers says whether Windows' media session API answers: without
+// it, nothing tells what plays.
+func SMTCAnswers() error {
+	api, err := openSMTC()
+	if err != nil {
+		return err
+	}
+	return api.answers()
+}
+
+var errRefused = errors.New("the player refused")
+
+// openSMTC gives the media session API; tests replace it.
+var openSMTC = newSMTCAPI
+
+// SMTC reads what plays on Windows through the media session API.
 type SMTC struct {
 	Interval time.Duration
 	Logf     func(format string, args ...any)
@@ -152,73 +89,26 @@ func (m *SMTC) Target(t target.Target) {
 	}
 }
 
-// smtcScript assembles a script with its parameters as PowerShell literals.
-func smtcScript(names []string, vars map[string]string, body string) string {
-	var b strings.Builder
-	quoted := make([]string, len(names))
-	for i, n := range names {
-		quoted[i] = psQuote(n)
-	}
-	fmt.Fprintf(&b, "$names = @(%s)\n", strings.Join(quoted, ", "))
-	for k, v := range vars {
-		fmt.Fprintf(&b, "$%s = %s\n", k, v)
-	}
-	b.WriteString(smtcPrelude)
-	b.WriteString(body)
-	return b.String()
-}
-
-// psQuote is a single-quoted PowerShell string: nothing in it is expanded.
-func psQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
-
-// encodeCommand is the -EncodedCommand form of a script: base64 of UTF-16LE.
-func encodeCommand(script string) string {
-	units := utf16.Encode([]rune(script))
-	b := make([]byte, 2*len(units))
-	for i, u := range units {
-		binary.LittleEndian.PutUint16(b[2*i:], u)
-	}
-	return base64.StdEncoding.EncodeToString(b)
-}
-
-// powershell runs script in Windows PowerShell. Tests replace it. The
-// execution policy governs script files, and the script comes as a
-// command, so no -ExecutionPolicy Bypass: antivirus engines weigh that
-// flag, as a malware launcher's, in a hidden PowerShell an unsigned
-// program starts.
-var powershell = func(ctx context.Context, script string) *exec.Cmd {
-	path, err := PowerShell()
-	if err != nil {
-		// Start fails with PATH's own error.
-		path = "powershell.exe"
-	}
-	return proc.CommandContext(ctx, path, "-NoProfile", "-NonInteractive", "-EncodedCommand", encodeCommand(script))
-}
-
 func (m *SMTC) current() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return append([]string(nil), m.names...)
 }
 
-// Watch starts the poller and reports changes.
+// Watch reads the session at each interval and reports changes.
 func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error) {
 	m.Target(t)
 	names := m.current()
 	if len(names) == 0 {
 		return nil, ErrNoPlayer
 	}
-	interval := m.Interval
-	if interval <= 0 {
-		interval = 250 * time.Millisecond
-	}
-	cmd := powershell(ctx, smtcScript(names, map[string]string{"interval": fmt.Sprint(interval.Milliseconds())}, smtcPoll))
-	stdout, err := cmd.StdoutPipe()
+	api, err := openSMTC()
 	if err != nil {
 		return nil, err
 	}
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("powershell: %w", err)
+	interval := m.Interval
+	if interval <= 0 {
+		interval = 250 * time.Millisecond
 	}
 	out := make(chan Event, 64)
 	if m.Mixer != nil {
@@ -227,32 +117,123 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 	// SMTC lengths are whole milliseconds.
 	tracker := &pollTracker{unit: "ms"}
 	go func() {
-		defer cmd.Wait()
-		sc := bufio.NewScanner(stdout)
-		sc.Buffer(make([]byte, 1<<16), 1<<20)
+		var p smtcPoller
+		tick := time.NewTicker(interval)
+		defer tick.Stop()
 		lastErr := ""
-		for sc.Scan() {
-			var p playerPoll
-			if json.Unmarshal(sc.Bytes(), &p) != nil {
-				continue
-			}
-			p.at = time.Now()
-			if p.Error != lastErr {
-				lastErr = p.Error
-				if p.Error != "" && m.Logf != nil {
-					m.Logf("now playing: %s", p.Error)
+		for {
+			poll := p.poll(api, names, time.Now())
+			if poll.Error != lastErr {
+				lastErr = poll.Error
+				if poll.Error != "" && m.Logf != nil {
+					m.Logf("now playing: %s", poll.Error)
 				}
 			}
-			for _, e := range tracker.next(p) {
+			for _, e := range tracker.next(poll) {
 				select {
 				case out <- e:
 				case <-ctx.Done():
 					return
 				}
 			}
+			select {
+			case <-tick.C:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return out, nil
+}
+
+// smtcPoller turns session reads into polls, in the shape the macOS poller
+// gives, so pollTracker turns both into events. SMTC has no track id and
+// reports the position as of its last update; the cover is a thumbnail,
+// saved to a temporary file once per track.
+type smtcPoller struct {
+	lastKey, cover, coverFile, coverKey string
+}
+
+func (p *smtcPoller) poll(api smtcAPI, names []string, now time.Time) playerPoll {
+	out := playerPoll{at: now}
+	// A read that fails after finding the session still gives what it read.
+	s, err := api.session(names)
+	if err != nil {
+		out.Error = err.Error()
+	}
+	if s == nil {
+		return out
+	}
+	out.Running = true
+	out.State = s.Status
+	pos := s.Position
+	if s.Status == "playing" && !s.Updated.IsZero() {
+		pos += now.Sub(s.Updated)
+	}
+	secs := max(0, pos.Seconds())
+	out.Position = &secs
+	if s.Title == "" {
+		return out
+	}
+	key := s.Artist + "|" + s.Album + "|" + s.Title
+	if key != p.lastKey {
+		p.lastKey, p.cover, p.coverKey = key, "", ""
+	}
+	// The thumbnail often comes a moment after the title; a cover that
+	// cannot be read is tried once per track and never costs the track.
+	if p.cover == "" && s.Thumbnail != nil && p.coverKey != key {
+		p.coverKey = key
+		p.removeCover()
+		if u, err := p.saveCover(s.Thumbnail); err != nil {
+			out.Error = "cover: " + err.Error()
+		} else {
+			p.cover = u
+		}
+	}
+	length := math.Round(float64(s.Length) / float64(time.Millisecond))
+	out.Track = &polledTrack{
+		Name: s.Title, Artist: s.Artist, Album: s.Album, AlbumArtist: s.AlbumArtist,
+		Duration: &length, TrackNumber: s.TrackNumber, ArtworkURL: p.cover,
+	}
+	return out
+}
+
+func (p *smtcPoller) saveCover(read func() ([]byte, error)) (string, error) {
+	data, err := read()
+	if err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp("", "spytify-cover-")
+	if err != nil {
+		return "", err
+	}
+	p.coverFile = f.Name()
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		p.removeCover()
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		p.removeCover()
+		return "", err
+	}
+	return fileURL(p.coverFile), nil
+}
+
+func (p *smtcPoller) removeCover() {
+	if p.coverFile != "" {
+		os.Remove(p.coverFile)
+		p.coverFile = ""
+	}
+}
+
+// fileURL is path as a file URL: file:///C:/Users/... on Windows.
+func fileURL(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
 }
 
 // mixerInterval is how often the player's Volume Mixer slider is read: each
@@ -292,17 +273,15 @@ func (m *SMTC) Control(cmd proto.PlayerCmd) error {
 	if len(names) == 0 {
 		return ErrNoPlayer
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	out, err := powershell(ctx, smtcScript(names, map[string]string{"cmd": psQuote(string(cmd))}, smtcControl)).CombinedOutput()
-	var ee *exec.ExitError
-	switch {
-	case errors.As(err, &ee) && ee.ExitCode() == 3:
-		return ErrNoPlayer
-	case errors.As(err, &ee) && ee.ExitCode() == 4:
+	api, err := openSMTC()
+	if err != nil {
+		return err
+	}
+	switch err := api.control(names, cmd); {
+	case errors.Is(err, errRefused):
 		return fmt.Errorf("the player refused %q", cmd)
 	case err != nil:
-		return fmt.Errorf("powershell: %v: %s", err, strings.TrimSpace(string(out)))
+		return err
 	}
 	return nil
 }
