@@ -32,6 +32,7 @@ type MPRIS struct {
 	last  TrackInfo
 	// clock tells a Seeked signal that restates the position from a jump.
 	clock posClock
+	ask   restartAsk
 }
 
 // NewMPRIS returns a backend; nothing connects until Watch or Control.
@@ -224,10 +225,14 @@ func (m *MPRIS) handle(conn *dbus.Conn, sig *dbus.Signal, at time.Time) []Event 
 		m.mu.Lock()
 		last := m.last
 		want := m.clock.read(at)
+		asked := m.clock.playing && m.ask.made(at, ms, want)
 		m.clock.ms, m.clock.at = ms, at
 		m.mu.Unlock()
 		if last.Empty() {
 			return nil
+		}
+		if asked {
+			return []Event{{Kind: TrackChanged, Track: last, PositionMs: ms, Restart: true}}
 		}
 		// Some players restate where they are, when their window comes back
 		// for one: a position where the clock says is no jump.
@@ -403,11 +408,18 @@ func (m *MPRIS) restart() error {
 	m.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+	// Armed first: the player's Seeked may come before its answer.
+	m.ask.arm(time.Now())
 	if id != "" && dbus.ObjectPath(id).IsValid() {
-		return obj.CallWithContext(ctx, mprisPlayer+".SetPosition", 0, dbus.ObjectPath(id), int64(0)).Err
+		err = obj.CallWithContext(ctx, mprisPlayer+".SetPosition", 0, dbus.ObjectPath(id), int64(0)).Err
+	} else {
+		// Seeking back past the start puts the position at 0.
+		err = obj.CallWithContext(ctx, mprisPlayer+".Seek", 0, int64(-1<<40)).Err
 	}
-	// Seeking back past the start puts the position at 0.
-	return obj.CallWithContext(ctx, mprisPlayer+".Seek", 0, int64(-1<<40)).Err
+	if err != nil {
+		m.ask.disarm()
+	}
+	return err
 }
 
 func (m *MPRIS) Volume() (float64, error) {

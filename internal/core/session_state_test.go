@@ -530,6 +530,57 @@ func TestPinnedSeeks(t *testing.T) {
 			r.send(meta.Event{Kind: meta.Seeked, Track: trackA, PositionMs: -1})
 			thenB(r)
 		}},
+		// #812: A paused 980 ms in when the session starts, then started
+		// over from Spytify. The player gives no sign of it under 2 s in,
+		// and plays only 920 ms after Play: A is taken from its first
+		// sound.
+		"restart-asked-while-paused": {endOnStop, nil, func(r *rig) {
+			r.track(trackA, 980)
+			r.status(meta.Paused)
+			r.quiet(500)
+			r.restartAsked()
+			r.quiet(300)
+			r.status(meta.Playing)
+			r.quiet(920)
+			r.sound(1, 3000)
+			r.quiet(500)
+			r.track(trackB, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		}},
+		// Playing, A goes on where it was until the player says it went
+		// back: the take starts there, not at the ask.
+		"restart-asked-while-playing": {endOnStop, nil, func(r *rig) {
+			r.track(trackA, 980)
+			r.status(meta.Playing)
+			r.sound(1, 500)
+			r.restartAsked()
+			r.sound(1, 920)
+			r.rewind(1)
+			r.send(meta.Event{Kind: meta.TrackChanged, Track: trackA, PositionMs: 4, Restart: true})
+			r.sound(1, 3000)
+			r.quiet(500)
+			r.track(trackB, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		}},
+		// Playing, and the player never says it went back, as one that
+		// reports no position: A is left unrecorded, never taken from
+		// its middle.
+		"restart-asked-while-playing-never-seen": {endOnStop, nil, func(r *rig) {
+			r.track(trackA, 980)
+			r.status(meta.Playing)
+			r.sound(1, 500)
+			r.restartAsked()
+			r.sound(1, 1500)
+			r.quiet(500)
+			r.track(trackB, 0)
+			r.sound(2, 3000)
+			r.quiet(1500)
+			r.status(meta.Stopped)
+		}},
 		"seek-while-waiting-for-the-next-track": {endOnStop, nil, func(r *rig) {
 			r.track(trackA, 2000)
 			r.status(meta.Playing)

@@ -651,6 +651,14 @@ func (c *Core) Control(cmd proto.PlayerCmd) error {
 		}
 		return err
 	}
+	if cmd == proto.CmdRestart {
+		c.mu.Lock()
+		s := c.sess
+		c.mu.Unlock()
+		if s != nil {
+			s.RestartAsked()
+		}
+	}
 	return nil
 }
 
