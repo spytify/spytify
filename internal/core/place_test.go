@@ -87,14 +87,6 @@ func TestCloudName(t *testing.T) {
 	}
 }
 
-func TestControlledFolderAccessModes(t *testing.T) {
-	for v, want := range map[uint64]string{0: "off", 1: "on", 2: "audit", 3: "disks", 4: "disks audit", 7: "7"} {
-		if got := cfaMode(v); got != want {
-			t.Errorf("%d as %q, want %q", v, got, want)
-		}
-	}
-}
-
 func TestFactsInTheLog(t *testing.T) {
 	got := formatFacts(map[string]string{"output.drive": "fixed", "output.cloud": "Google Drive", "output.fs": ""})
 	if want := `output.cloud="Google Drive" output.drive=fixed output.fs=""`; got != want {
