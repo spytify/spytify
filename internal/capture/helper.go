@@ -37,6 +37,16 @@ var (
 	frameTimeout  = 3 * time.Second
 )
 
+// A helper that exits without its header, as one refused permission or
+// quarantined does at once, is started again after retryFirst, then twice
+// as late each time up to retryLast; one that gave its header starts the
+// wait over. A helper started every second for a whole session wrote its
+// stderr to the log every second (#836).
+var (
+	retryFirst = time.Second
+	retryLast  = 30 * time.Second
+)
+
 // Helper records the target through a small native program, spytify-tap,
 // that writes a header line then frames to stdout: a Core Audio process
 // tap on macOS, WASAPI process loopback on Windows. The helper exits when
@@ -50,8 +60,10 @@ type Helper struct {
 	// running reports whether the target runs; while it does not, a helper
 	// that waits for it has nothing to say yet.
 	running func(target.Target) bool
-	// headerTimeout and frameTimeout are the package's, read once.
+	// headerTimeout, frameTimeout, retryFirst and retryLast are the
+	// package's, read once.
 	headerTimeout, frameTimeout time.Duration
+	retryFirst, retryLast       time.Duration
 
 	frames   chan Chunk
 	overruns atomic.Int64
@@ -75,7 +87,7 @@ func newHelper(helper string, args func(target.Target) ([]string, bool), logf fu
 		logf = func(string, ...any) {}
 	}
 	return &Helper{logf: logf, helper: helper, args: args, headerTimeout: headerTimeout, frameTimeout: frameTimeout,
-		frames: make(chan Chunk, 256), done: make(chan struct{})}
+		retryFirst: retryFirst, retryLast: retryLast, frames: make(chan Chunk, 256), done: make(chan struct{})}
 }
 
 // FindTapHelper locates spytify-tap: the given path, next to the running
@@ -161,6 +173,8 @@ func (c *Helper) run(ctx context.Context, t target.Target) {
 	defer close(c.done)
 	defer close(c.frames)
 	waiting := false
+	// retry is the wait before the next run; said, the one last logged.
+	retry, said := c.retryFirst, time.Duration(0)
 	for ctx.Err() == nil {
 		args, ok := c.args(t)
 		if !ok {
@@ -179,8 +193,22 @@ func (c *Helper) run(ctx context.Context, t target.Target) {
 			return
 		}
 		c.exited(code)
-		if code != helperExitChanged {
-			sleep(ctx, time.Second)
+		c.mu.Lock()
+		header := c.header
+		c.mu.Unlock()
+		if header {
+			retry, said = c.retryFirst, 0
+		}
+		if code == helperExitChanged {
+			continue
+		}
+		if retry > c.retryFirst && retry != said {
+			c.logf("capture: the helper keeps ending with no audio; trying again in %s", retry)
+			said = retry
+		}
+		sleep(ctx, retry)
+		if !header {
+			retry = min(retry*2, c.retryLast)
 		}
 	}
 }
