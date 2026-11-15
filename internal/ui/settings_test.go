@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -502,5 +503,45 @@ func TestTheSettingsCardsAreSquare(t *testing.T) {
 		if r := test.TempWidgetRenderer(t, p).(*panelRenderer).box.CornerRadius; r != 0 {
 			t.Errorf("the %s is rounded %v", name, r)
 		}
+	}
+}
+
+// The screen shows every setting again at each recorder event, a log line
+// included. A setting that did not change is left as it is: a select is not
+// set again, which in Fyne calls its OnChanged, and a field keeps its undo
+// history, so an edit the recorder echoes back can still be undone.
+func TestSettingsThatDidNotChangeAreLeftAsTheyAre(t *testing.T) {
+	a, m, s := settingsApp(t)
+	sel := s.fields["encode.format"].input.(*selectField)
+	changed := 0
+	sel.OnChanged = func(string) { changed++ }
+	// The counter's width is a field once file names start with a counter.
+	values := defaults()
+	values["output.prefix"] = "counter"
+	m.SetSettings(values)
+	a.render()
+	e := s.fields["output.counter_width"].input.(*applyEntry)
+	if e.Text != "3" || e.Disabled() {
+		t.Fatalf("counter width shows %q, disabled %v", e.Text, e.Disabled())
+	}
+	// An edit the user made and the recorder took.
+	e.TypedRune('4')
+	typed, err := strconv.Atoi(e.Text)
+	if err != nil || typed == 3 {
+		t.Fatalf("after typing the field shows %q", e.Text)
+	}
+	values["output.counter_width"] = float64(typed)
+	m.SetSettings(values)
+	a.render()
+	for range 3 {
+		m.Apply(event(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: "a line"}))
+		a.render()
+	}
+	if changed != 0 {
+		t.Fatalf("the format's select was set again %d times with no change", changed)
+	}
+	e.Undo()
+	if e.Text != "3" {
+		t.Fatalf("after undo the field shows %q, want 3: its history was lost", e.Text)
 	}
 }
