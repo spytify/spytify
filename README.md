@@ -18,6 +18,8 @@ Spytify records the sound one application plays, nothing else, and saves each tr
 
 **[Download](https://github.com/spytify/spytify/releases)** · [Install](https://spytify.github.io/spytify/v2/install.html) · [Documentation](https://spytify.github.io/spytify/v2/overview.html) · [FAQ](https://spytify.github.io/spytify/v2/faq.html)
 
+On a work or school PC, Microsoft Defender can stop a new Spytify version from starting until enough people run it: ask IT to allow the Spytify folder in Defender. On your own PC, see the [FAQ](https://spytify.github.io/spytify/v2/faq.html#open-anyway) for the first launch.
+
 ## A recorder, not a downloader
 
 Spytify records what your computer already plays, like Audio Hijack or OBS. It downloads nothing, emulates no streaming protocol and circumvents no DRM.
