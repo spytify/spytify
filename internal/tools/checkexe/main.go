@@ -5,9 +5,9 @@
 // offers OpenGL (internal/ui/opengl). It also checks that nothing follows
 // their last section and that they export nothing, which antivirus
 // engines take for a hidden payload and a loader's entry points; with
-// -helper, for the binaries with no icon, those alone, and that they do
-// not import LoadLibraryA or LoadLibraryW, which look for a DLL in the
-// program's folder first.
+// -helper, for the binaries with no icon, those alone, and that one
+// importing LoadLibraryA or LoadLibraryW, which look for a DLL in the
+// program's folder first, imports SetDefaultDllDirectories too.
 // scripts/build-windows.sh runs it on every binary it builds:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
@@ -77,9 +77,9 @@ func check(path string, helper bool) (string, error) {
 			return "", err
 		}
 		if len(loaders) > 0 {
-			return "", fmt.Errorf("imports %s, which looks for a DLL in the program's folder first: use LoadLibraryExW with LOAD_LIBRARY_SEARCH_SYSTEM32", strings.Join(loaders, ", "))
+			return "", fmt.Errorf("imports %s, which looks for a DLL in the program's folder first, and not SetDefaultDllDirectories: call it with LOAD_LIBRARY_SEARCH_SYSTEM32 first thing", strings.Join(loaders, ", "))
 		}
-		return "nothing past the last section, no exports, no DLL loaded by name", nil
+		return "nothing past the last section, no exports, no DLL search in its folder", nil
 	}
 	counts, err := resources(path)
 	if err != nil {
@@ -240,9 +240,8 @@ func linked(path, dll string) ([]string, error) {
 }
 
 // bareLoaders lists the functions of kernel32.dll the PE file at path
-// imports that load a DLL by name from the program's folder first.
-// LoadLibraryEx takes the folders to look in: Go's runtime passes
-// LOAD_LIBRARY_SEARCH_SYSTEM32.
+// imports that load a DLL by name from the program's folder first, when it
+// does not also import SetDefaultDllDirectories to keep that folder out.
 func bareLoaders(path string) ([]string, error) {
 	f, err := pe.Open(path)
 	if err != nil {
@@ -256,11 +255,17 @@ func bareLoaders(path string) ([]string, error) {
 	return loadersByName(importsFrom(syms, "kernel32.dll")), nil
 }
 
-// loadersByName keeps LoadLibraryA and LoadLibraryW from functions.
+// loadersByName keeps LoadLibraryA and LoadLibraryW from functions, unless
+// SetDefaultDllDirectories is one of them. LoadLibraryEx takes the folders
+// to look in: Go's runtime passes LOAD_LIBRARY_SEARCH_SYSTEM32. MinGW's
+// CRT imports LoadLibraryW for advapi32.dll, a KnownDLL, before main.
 func loadersByName(functions []string) []string {
 	var out []string
 	for _, fn := range functions {
-		if fn == "LoadLibraryA" || fn == "LoadLibraryW" {
+		switch fn {
+		case "SetDefaultDllDirectories":
+			return nil
+		case "LoadLibraryA", "LoadLibraryW":
 			out = append(out, fn)
 		}
 	}

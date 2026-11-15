@@ -19,7 +19,8 @@ func TestImportsFrom(t *testing.T) {
 	}
 }
 
-// The capture helper as it was: LoadLibraryW(L"Mmdevapi.dll").
+// The capture helper as it was: LoadLibraryW(L"Mmdevapi.dll"), with no
+// SetDefaultDllDirectories.
 func TestLoadersByName(t *testing.T) {
 	syms := []string{"CoCreateInstance:ole32.dll", "LoadLibraryW:KERNEL32.dll", "LoadLibraryExW:KERNEL32.dll", "GetProcAddress:KERNEL32.dll"}
 	if got := loadersByName(importsFrom(syms, "kernel32.dll")); !slices.Equal(got, []string{"LoadLibraryW"}) {
@@ -27,6 +28,11 @@ func TestLoadersByName(t *testing.T) {
 	}
 	if got := loadersByName(importsFrom(syms[2:], "kernel32.dll")); len(got) != 0 {
 		t.Errorf("LoadLibraryExW counted: %q", got)
+	}
+	// As the helper is now, built with a CRT that loads advapi32.dll by name.
+	fixed := append(syms, "SetDefaultDllDirectories:KERNEL32.dll")
+	if got := loadersByName(importsFrom(fixed, "kernel32.dll")); len(got) != 0 {
+		t.Errorf("LoadLibraryW counted with SetDefaultDllDirectories: %q", got)
 	}
 }
 
