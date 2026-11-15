@@ -8,14 +8,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spytify/spytify/internal/hidden"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/tag"
 	"github.com/spytify/spytify/internal/ui/model"
 )
 
-// coverFolder is the hidden folder of the output folder that holds the
-// Record list's covers.
+// coverFolder is the folder of the output folder that holds the Record
+// list's covers. The dot hides it on macOS and Linux; on Windows it is left
+// shown: a program that hides a folder it writes in the user's files looks
+// like malware to a behaviour engine.
 const coverFolder = ".covers"
 
 // coverCopies keeps a copy of the cover the player showed for each track of
@@ -80,7 +81,7 @@ func (c *coverCopies) keep(dir, id, url string) {
 			}
 			folder := filepath.Join(dir, coverFolder)
 			p = filepath.Join(folder, copyName(id)+ext)
-			if hidden.MkdirAll(folder) != nil || os.WriteFile(p, data, 0o644) != nil {
+			if os.MkdirAll(folder, 0o755) != nil || os.WriteFile(p, data, 0o644) != nil {
 				p = ""
 			}
 		}
