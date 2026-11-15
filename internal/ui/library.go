@@ -62,6 +62,8 @@ type libraryScreen struct {
 	tagged *tagCache
 	ffOnce sync.Once
 	ff     *encode.FFmpeg
+	// ffFound is set once ffmpeg was looked for, ff then holding it or nil.
+	ffFound atomic.Bool
 	// redraw is set while a redraw for covers or tags that came in waits
 	// for the toolkit's goroutine: those that come in meanwhile join it.
 	redraw atomic.Bool
@@ -210,22 +212,37 @@ func (l *libraryScreen) cover(f libraryFile) thumbs {
 	if strings.EqualFold(filepath.Ext(f.path), ".wav") {
 		return thumbs{}
 	}
-	ff := l.ffmpeg()
-	if ff == nil {
+	// ffmpeg is looked for by the loader, off the toolkit's goroutine: the
+	// search runs ffmpeg -version, which an antivirus can hold for seconds
+	// the first time on Windows (#841).
+	if l.ffFound.Load() && l.ff == nil {
 		return thumbs{}
 	}
 	path := f.path
-	return l.covers.load(f.key(), func(ctx context.Context) ([]byte, error) { return ff.Cover(ctx, path) })
+	return l.covers.load(f.key(), func(ctx context.Context) ([]byte, error) {
+		ff := l.ffmpeg()
+		if ff == nil {
+			return nil, errNoFFmpeg
+		}
+		return ff.Cover(ctx, path)
+	})
 }
 
-// ffmpeg reads the files' covers and tags; nil without one.
+var errNoFFmpeg = errors.New("no ffmpeg")
+
+// findFFmpeg finds ffmpeg; tests replace it.
+var findFFmpeg = encode.Find
+
+// ffmpeg reads the files' covers and tags; nil without one. Finding it
+// runs ffmpeg: never call it on the toolkit's goroutine.
 func (l *libraryScreen) ffmpeg() *encode.FFmpeg {
 	l.ffOnce.Do(func() {
 		name := os.Getenv("SPYTIFY_FFMPEG")
 		if name == "" {
 			name = "ffmpeg"
 		}
-		l.ff, _ = encode.Find(name)
+		l.ff, _ = findFFmpeg(name)
+		l.ffFound.Store(true)
 	})
 	return l.ff
 }

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 )
@@ -822,5 +824,41 @@ func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
 	lib.list.ScrollTo(200)
 	if len(drawn) == 0 || len(drawn) > 12 || !drawn[200] {
 		t.Errorf("scrolled to the 200th file, drew rows %v", slices.Sorted(maps.Keys(drawn)))
+	}
+}
+
+// The first rows are drawn without waiting for ffmpeg to be found: finding
+// it runs ffmpeg -version, which an antivirus can hold for seconds the
+// first time on Windows. The search here ends only when the test says so,
+// so the Library is drawn while it is still on.
+func TestTheLibraryDrawsBeforeFFmpegIsFound(t *testing.T) {
+	found := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(found) }) }
+	defer func(f func(string) (*encode.FFmpeg, error)) { findFFmpeg = f }(findFFmpeg)
+	findFFmpeg = func(string) (*encode.FFmpeg, error) {
+		<-found
+		return nil, errors.New("no ffmpeg")
+	}
+	// Should the toolkit's goroutine wait after all, it is let go in 10 s
+	// and the test fails instead of hanging.
+	defer time.AfterFunc(10*time.Second, release).Stop()
+	_, lib, _, releaseTags := libraryOf(t, map[string]string{"Artist - Song.mp3": ""}, "Artist - Song.mp3")
+	defer releaseTags()
+	// The search ends before findFFmpeg is put back.
+	defer func() {
+		release()
+		eventually(t, "ffmpeg was never looked for", lib.ffFound.Load)
+	}()
+	if lib.ffFound.Load() {
+		t.Fatal("the Library was drawn only once ffmpeg was found")
+	}
+	if len(lib.shown) != 1 || lib.cover(lib.shown[0]).row != nil {
+		t.Fatalf("%d files, or a cover with no ffmpeg", len(lib.shown))
+	}
+	release()
+	eventually(t, "ffmpeg was never looked for", lib.ffFound.Load)
+	if lib.cover(lib.shown[0]).row != nil {
+		t.Fatal("a cover with no ffmpeg")
 	}
 }
