@@ -20,6 +20,12 @@ import (
 // catches a change it missed, from what it read: it starts no program.
 const monitorPoll = 2 * time.Second
 
+// monitorRatePoll is how often a recording checks the graph's rate while
+// the monitor runs. A running graph changes rate only when its driver
+// restarts, which the monitor sees as nodes changing state, so the rate is
+// read after a node changes; the poll only catches a restart it missed.
+const monitorRatePoll = 10 * time.Second
+
 // graphMonitor is a backend that can follow the graph for the whole
 // capture, instead of reading all of it at every poll.
 type graphMonitor interface {
@@ -31,9 +37,12 @@ type graphMonitor interface {
 // change, each object whole, a removed one as {"id": N, "info": null}. It
 // keeps the nodes and clients, which is all finding the stream reads.
 type pwMonitor struct {
-	// changed receives after a node or client changed, and once more when
-	// the monitor ends.
-	changed chan struct{}
+	// changed receives after a node or client changed, nodeChanged after a
+	// node changed, and both once more when the monitor ends. Clients come
+	// and go with every PipeWire tool, pw-top included, so reading the rate
+	// after one would start pw-top again and again.
+	changed     chan struct{}
+	nodeChanged chan struct{}
 
 	mu    sync.Mutex
 	objs  map[int]pwObject
@@ -42,7 +51,7 @@ type pwMonitor struct {
 }
 
 func newMonitor() *pwMonitor {
-	return &pwMonitor{changed: make(chan struct{}, 1), objs: map[int]pwObject{}}
+	return &pwMonitor{changed: make(chan struct{}, 1), nodeChanged: make(chan struct{}, 1), objs: map[int]pwObject{}}
 }
 
 func (pipewireTools) monitor(ctx context.Context) (*pwMonitor, error) {
@@ -85,24 +94,30 @@ func (m *pwMonitor) read(r io.Reader) error {
 			}
 			return fmt.Errorf("pw-dump --monitor output: %w", err)
 		}
-		if m.apply(update) {
-			m.signal()
+		changed, nodes := m.apply(update)
+		if changed {
+			signal(m.changed)
+		}
+		if nodes {
+			signal(m.nodeChanged)
 		}
 	}
 }
 
 // apply keeps what an array says of the nodes and clients, and reports
-// whether any of them changed. The first array is the whole graph.
-func (m *pwMonitor) apply(update []pwEntry) bool {
+// whether any of them changed, and whether a node did. The first array is
+// the whole graph.
+func (m *pwMonitor) apply(update []pwEntry) (changed, nodes bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	changed := !m.ready
+	changed, nodes = !m.ready, !m.ready
 	m.ready = true
 	for _, e := range update {
 		if string(e.Info) == "null" {
-			if _, ok := m.objs[e.ID]; ok {
+			if o, ok := m.objs[e.ID]; ok {
 				delete(m.objs, e.ID)
 				changed = true
+				nodes = nodes || o.Type == "PipeWire:Interface:Node"
 			}
 			continue
 		}
@@ -115,13 +130,14 @@ func (m *pwMonitor) apply(update []pwEntry) bool {
 		}
 		m.objs[e.ID] = o
 		changed = true
+		nodes = nodes || e.Type == "PipeWire:Interface:Node"
 	}
-	return changed
+	return changed, nodes
 }
 
-func (m *pwMonitor) signal() {
+func signal(c chan struct{}) {
 	select {
-	case m.changed <- struct{}{}:
+	case c <- struct{}{}:
 	default:
 	}
 }
@@ -135,7 +151,8 @@ func (m *pwMonitor) end(err error) {
 		m.ended = errors.New("pw-dump --monitor ended")
 	}
 	m.mu.Unlock()
-	m.signal()
+	signal(m.changed)
+	signal(m.nodeChanged)
 }
 
 // find picks the target's stream from the graph read so far. usable is
