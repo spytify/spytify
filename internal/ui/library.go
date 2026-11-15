@@ -64,6 +64,9 @@ type libraryScreen struct {
 	ff     *encode.FFmpeg
 	// ffFound is set once ffmpeg was looked for, ff then holding it or nil.
 	ffFound atomic.Bool
+	// readCover reads the picture a file holds for the tests; nil, ffmpeg
+	// does.
+	readCover func(ctx context.Context, path string) ([]byte, error)
 	// redraw is set while a redraw for covers or tags that came in waits
 	// for the toolkit's goroutine: those that come in meanwhile join it.
 	redraw atomic.Bool
@@ -100,7 +103,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 			})
 		}
 	}
-	l.covers = newCovers(loaded)
+	l.covers = newRowCovers(loaded)
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 	l.search = newSearch(a, lang.SearchLibrary, func(string) { l.filter() })
 	l.sortBy = newSelectField([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
@@ -215,11 +218,15 @@ func (l *libraryScreen) cover(f libraryFile) thumbs {
 	// ffmpeg is looked for by the loader, off the toolkit's goroutine: the
 	// search runs ffmpeg -version, which an antivirus can hold for seconds
 	// the first time on Windows (#841).
-	if l.ffFound.Load() && l.ff == nil {
+	read := l.readCover
+	if read == nil && l.ffFound.Load() && l.ff == nil {
 		return thumbs{}
 	}
 	path := f.path
 	return l.covers.load(f.key(), func(ctx context.Context) ([]byte, error) {
+		if read != nil {
+			return read(ctx, path)
+		}
 		ff := l.ffmpeg()
 		if ff == nil {
 			return nil, errNoFFmpeg
