@@ -58,8 +58,14 @@ def main():
                 os.remove(p)
                 dropped += 1
                 continue
-            with open(p, "rb") as fh:
-                data = fh.read()
+            try:
+                with open(p, "rb") as fh:
+                    data = fh.read()
+            except OSError:
+                # Held or refused by the antivirus: not uploaded.
+                os.remove(p)
+                dropped += 1
+                continue
             new = data
             for pat, rep in pats:
                 new = pat.sub(rep, new)

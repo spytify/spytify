@@ -108,9 +108,15 @@ Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
 
 # Positive control 2: the script scanning test string in Windows PowerShell.
 $amsi = Invoke-Tool -Name 'amsi-probe' -File 'powershell.exe' -Arguments @('-NoProfile', '-NonInteractive', '-Command', "Invoke-Expression ('AMSI Test Sample: ' + '7e72c3ce-861b-4339-8740-0ac1484c1386')") -TimeoutSec 60 -Quiet
-$err = ''
-if (Test-Path -LiteralPath $amsi.Err) { $err = Get-Content -LiteralPath $amsi.Err -Raw }
-$amsiBlocked = $err -match 'malicious content'
+# Its output echoes the test string, so Defender may refuse to let it be
+# read: that counts as blocked too. The file is not kept either way.
+$amsiBlocked = $false
+foreach ($f in $amsi.Err, $amsi.Out) {
+  try {
+    if ((Test-Path -LiteralPath $f) -and ((Get-Content -LiteralPath $f -Raw -ErrorAction Stop) -match 'malicious content')) { $amsiBlocked = $true }
+  } catch { $amsiBlocked = $true }
+  Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+}
 Add-Json (Join-Path $Report 'defender\positive-control.json') ([ordered]@{ t = (Get-Stamp); eicar = $verdict; amsi_blocked = $amsiBlocked; cloud_block_level = $CloudBlockLevel })
 Write-Host "== positive controls: test file $verdict; script scanning blocked: $amsiBlocked"
 
