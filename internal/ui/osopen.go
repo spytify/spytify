@@ -1,11 +1,7 @@
 package ui
 
 import (
-	"path/filepath"
-	"runtime"
-
 	"github.com/spytify/spytify/internal/osopen"
-	"github.com/spytify/spytify/internal/proc"
 	"github.com/spytify/spytify/internal/trash"
 )
 
@@ -14,15 +10,7 @@ var moveToTrash = trash.Move
 
 // reveal shows a file in the OS file manager, selected where possible.
 // Tests replace it.
-var reveal = func(path string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return proc.Command("open", "-R", path).Start()
-	case "windows":
-		return proc.Command("explorer", "/select,", path).Start()
-	}
-	return proc.Command("xdg-open", filepath.Dir(path)).Start()
-}
+var reveal = osopen.Reveal
 
 // openPath opens a file or folder with its default application. Tests
 // replace it.

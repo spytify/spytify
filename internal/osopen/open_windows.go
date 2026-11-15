@@ -1,9 +1,18 @@
 package osopen
 
 import (
+	"fmt"
 	"runtime"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
+)
+
+var (
+	shell32                        = windows.NewLazySystemDLL("shell32.dll")
+	procILCreateFromPathW          = shell32.NewProc("ILCreateFromPathW")
+	procILFree                     = shell32.NewProc("ILFree")
+	procSHOpenFolderAndSelectItems = shell32.NewProc("SHOpenFolderAndSelectItems")
 )
 
 // Open hands a file or folder to the Windows shell, as a double-click in
@@ -19,16 +28,45 @@ func Open(path string) error {
 	if err != nil {
 		return err
 	}
-	// ShellExecute wants COM on its thread, since a file type's handler can
-	// be a shell extension. The thread is one of its own: locked to the
-	// goroutine, it ends with it.
+	return onCOMThread(func() error {
+		return windows.ShellExecute(0, verb, file, nil, nil, windows.SW_SHOWNORMAL)
+	})
+}
+
+// Reveal shows a file selected in its folder, in an Explorer window. The
+// shell does it in-process: no explorer.exe is started with the file on its
+// command line.
+func Reveal(path string) error {
+	file, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	return onCOMThread(func() error {
+		pidl, _, _ := procILCreateFromPathW.Call(uintptr(unsafe.Pointer(file)))
+		if pidl == 0 {
+			return fmt.Errorf("no shell item for %s", path)
+		}
+		defer procILFree.Call(pidl)
+		// With no child items, the shell selects the item pidl names.
+		hr, _, _ := procSHOpenFolderAndSelectItems.Call(pidl, 0, 0, 0)
+		if int32(hr) < 0 {
+			return fmt.Errorf("show %s in its folder: %w", path, windows.Errno(uint32(hr)))
+		}
+		return nil
+	})
+}
+
+// onCOMThread runs fn on a thread of its own with COM initialised, as the
+// shell wants, since a file type's handler can be a shell extension. Locked
+// to the goroutine, the thread ends with it.
+func onCOMThread(fn func() error) error {
 	done := make(chan error, 1)
 	go func() {
 		runtime.LockOSThread()
 		if windows.CoInitializeEx(0, windows.COINIT_APARTMENTTHREADED|windows.COINIT_DISABLE_OLE1DDE) == nil {
 			defer windows.CoUninitialize()
 		}
-		done <- windows.ShellExecute(0, verb, file, nil, nil, windows.SW_SHOWNORMAL)
+		done <- fn()
 	}()
 	return <-done
 }
