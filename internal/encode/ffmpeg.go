@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/proc"
@@ -25,6 +26,11 @@ import (
 type FFmpeg struct {
 	Path    string
 	Version string
+
+	// encoders is the build's encoder list once read: core.info asks at
+	// every connection, and the list never changes (#845).
+	mu       sync.Mutex
+	encoders map[string]bool
 }
 
 // ErrMissing means ffmpeg could not be run; session.start is refused.
@@ -88,20 +94,24 @@ func Find(name string) (*FFmpeg, error) {
 	return &FFmpeg{Path: path, Version: strings.TrimSpace(version)}, nil
 }
 
-// HasEncoder reports whether this ffmpeg build has an encoder.
+// HasEncoder reports whether this ffmpeg build has an encoder. The list is
+// read once; a run that fails is tried again at the next call.
 func (f *FFmpeg) HasEncoder(name string) bool {
-	encoders := proc.Command(f.Path, "-hide_banner", "-encoders")
-	out, err := encoders.Output()
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[1] == name {
-			return true
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.encoders == nil {
+		out, err := proc.Command(f.Path, "-hide_banner", "-encoders").Output()
+		if err != nil {
+			return false
+		}
+		f.encoders = map[string]bool{}
+		for _, line := range strings.Split(string(out), "\n") {
+			if fields := strings.Fields(line); len(fields) >= 2 {
+				f.encoders[fields[1]] = true
+			}
 		}
 	}
-	return false
+	return f.encoders[name]
 }
 
 // Preset is the container and codec of an output format.
