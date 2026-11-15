@@ -353,6 +353,30 @@ jobs:
         run: scripts/build-macos.sh dist
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
+      # Each program keeps its identifier from one build to the next, as
+      # built and once signed again as the release signs (#894).
+      - name: Each program is signed with its own lasting identifier
+        run: |
+          check() {
+            for f in Spytify.app Spytify.app/Contents/MacOS/spytify-ui spytify-ui; do want "$1/$f" org.spytify.ui; done
+            for f in spytify-tap Spytify.app/Contents/MacOS/spytify-tap; do want "$1/$f" org.spytify.tap; done
+            for n in spytifyd spytify-cli; do
+              want "$1/$n" "org.spytify.$n"
+              want "$1/Spytify.app/Contents/MacOS/$n" "org.spytify.$n"
+            done
+            want "$1/Spytify.app/Contents/MacOS/ffmpeg" org.spytify.ffmpeg
+          }
+          want() {
+            got=$(codesign -dv "$1" 2>&1 | sed -n 's/^Identifier=//p')
+            echo "$1: $got"
+            [ "$got" = "$2" ] || { echo "want $2"; exit 1; }
+          }
+          check dist
+          resigned="$RUNNER_TEMP/resigned"
+          mkdir -p "$resigned"
+          ditto dist "$resigned"
+          SPYTIFY_SIGN_IDENTITY=- scripts/sign-macos.sh "$resigned"
+          check "$resigned"
       - name: The encode and tag tests with the app's ffmpeg, on each processor
         run: |
           # It has only what Spytify runs: a test that needs more fails.
@@ -373,6 +397,15 @@ jobs:
         run: |
           scripts/dmg-macos.sh dist/Spytify.app dist/Spytify-macos.dmg
           (cd dist && zip -q -y -r spytify-macos-cli.zip spytifyd spytify-cli spytify-tap)
+      - name: The disk image holds the app, signed, and a link to Applications
+        run: |
+          mnt="$RUNNER_TEMP/dmg"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" dist/Spytify-macos.dmg
+          ls -la "$mnt"
+          test "$(readlink "$mnt/Applications")" = /Applications
+          codesign --verify --strict --deep "$mnt/Spytify.app"
+          codesign -dv "$mnt/Spytify.app/Contents/MacOS/spytifyd" 2>&1 | grep -qx Identifier=org.spytify.spytifyd
+          hdiutil detach "$mnt"
       - uses: actions/upload-artifact@v7
         with:
           name: spytify-macos
