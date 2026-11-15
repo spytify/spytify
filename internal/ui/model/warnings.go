@@ -32,8 +32,27 @@ func perSystem(macOS, windows, linux string) map[string]string {
 // lexicon's words for its code, with the facts the event carries. A code
 // the lexicon does not word, or an event without the facts its words need,
 // as from a recorder older than the window, keeps the recorder's message.
-// Systems other than macOS and Windows get Linux's advice.
+// Systems other than macOS and Windows get Linux's advice. A write to the
+// output folder the system refused says, on Windows, what may refuse it.
 func WarningText(e proto.ErrorEvent, goos string) string {
+	text := wording(e, goos)
+	if e.Denied && e.Msg != "" {
+		text = withDenied(text, goos)
+	}
+	return text
+}
+
+// withDenied adds to why a write to the output folder failed, access
+// denied, what may refuse it on goos and how to allow Spytify. Only
+// Windows has such a cause to name.
+func withDenied(text, goos string) string {
+	if goos != "windows" {
+		return text
+	}
+	return text + " " + lang.OutputDeniedWindows
+}
+
+func wording(e proto.ErrorEvent, goos string) string {
 	w, ok := warnings[e.Code]
 	if !ok {
 		return e.Msg

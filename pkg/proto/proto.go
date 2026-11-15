@@ -142,6 +142,7 @@ const (
 	CheckPlayerHeard CheckID = "player_heard"
 	// CheckOutputWritable is the output folder written to; Detail: the
 	// folder, or why not. Without it, no recording starts (CodeOutputDir).
+	// Args: "denied" when the system refused the write, access denied.
 	CheckOutputWritable CheckID = "output_writable"
 	// CheckMacOS is macOS 14.2 or later: the version.
 	CheckMacOS CheckID = "macos"
@@ -440,6 +441,9 @@ type ErrorEvent struct {
 	FreeMB *int64 `json:"free_mb,omitempty"`
 	// Volume is the player's own volume in percent, for player_volume_low.
 	Volume *int `json:"volume,omitempty"`
+	// Denied is a write to the output folder the system refused, access
+	// denied: on Windows, ransomware protection may hold the folder.
+	Denied bool `json:"denied,omitempty"`
 	// Facts say what the recorder knew when it happened, without a name or
 	// a path, for the bug tracker.
 	Facts map[string]string `json:"facts,omitempty"`

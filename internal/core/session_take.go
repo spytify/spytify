@@ -160,7 +160,7 @@ func (s *Session) write(c *segment, from, to int64) {
 			s.dropWriter(c)
 			c.reason = proto.SkipIncomplete
 			if !s.outputLost(err) {
-				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorWrite, Msg: err.Error()})
+				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorWrite, Msg: err.Error(), Denied: denied(err)})
 			}
 		}
 	}
@@ -288,7 +288,7 @@ func (s *Session) classify(seg *segment) {
 		if err != nil {
 			seg.reason = proto.SkipIncomplete
 			if !s.outputLost(err) {
-				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorTempFile, Msg: err.Error()})
+				s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorTempFile, Msg: err.Error(), Denied: denied(err)})
 			}
 			return
 		}
@@ -378,7 +378,7 @@ func (s *Session) closeSegment(c *segment, end int64) {
 	}
 	path := c.w.Path()
 	if err := c.w.Close(); err != nil {
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorWrite, Msg: err.Error()})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorWrite, Msg: err.Error(), Denied: denied(err)})
 	}
 	c.w = nil
 	info := c.info

@@ -563,7 +563,7 @@ func (f *finisher) failWith(j finishJob, code proto.ErrorCode, err error, facts 
 	if _, gone := os.Stat(f.values().Path(settings.OutputDir)); gone != nil {
 		code, msg, lost = proto.ErrorOutputDir, "the output folder cannot be reached, so the recording stopped: "+msg, true
 	}
-	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg, Facts: facts})
+	f.emit(proto.EventError, proto.ErrorEvent{Code: code, Msg: msg, Facts: facts, Denied: denied(err)})
 	f.skip(j.id, proto.SkipIncomplete)
 	if lost && f.lost != nil {
 		f.lost()
