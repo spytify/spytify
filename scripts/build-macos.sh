@@ -47,9 +47,9 @@ lipo -create -output "$out/spytify-tap" "$tmp/spytify-tap-arm64" "$tmp/spytify-t
 
 # The UI links Cocoa and OpenGL through cgo.
 CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CC="clang -arch arm64" MACOSX_DEPLOYMENT_TARGET=14.2 \
-  go build -trimpath -ldflags "$ldflags" -o "$tmp/spytify-ui-arm64" ./cmd/spytify-ui
+  go build -trimpath -tags migrated_fynedo -ldflags "$ldflags" -o "$tmp/spytify-ui-arm64" ./cmd/spytify-ui
 CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" MACOSX_DEPLOYMENT_TARGET=14.2 \
-  go build -trimpath -ldflags "$ldflags" -o "$tmp/spytify-ui-amd64" ./cmd/spytify-ui
+  go build -trimpath -tags migrated_fynedo -ldflags "$ldflags" -o "$tmp/spytify-ui-amd64" ./cmd/spytify-ui
 lipo -create -output "$out/spytify-ui" "$tmp/spytify-ui-arm64" "$tmp/spytify-ui-amd64"
 
 # ffmpeg goes in the app only, beside spytifyd, which looks there first

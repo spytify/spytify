@@ -29,7 +29,7 @@ mkdir -p "$dist"
 for cmd in spytifyd spytify-cli; do
   CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$dist/$cmd" "./cmd/$cmd"
 done
-CGO_ENABLED=1 go build -trimpath -ldflags "$ldflags" -o "$dist/spytify-ui" ./cmd/spytify-ui
+CGO_ENABLED=1 go build -trimpath -tags migrated_fynedo -ldflags "$ldflags" -o "$dist/spytify-ui" ./cmd/spytify-ui
 # The app needs the newest glibc symbol it links, which comes from this
 # machine's glibc.
 glibc="$(objdump -T "$dist/spytify-ui" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"

@@ -83,7 +83,7 @@ for cmd in spytifyd spytify-cli; do
   CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$out/$cmd.exe" "./cmd/$cmd"
 done
 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
-  go build -modfile "$tmp/go.mod" -trimpath -ldflags "$ldflags -H=windowsgui" -o "$out/Spytify.exe" ./cmd/spytify-ui
+  go build -modfile "$tmp/go.mod" -trimpath -tags migrated_fynedo -ldflags "$ldflags -H=windowsgui" -o "$out/Spytify.exe" ./cmd/spytify-ui
 # cgo exports go-gl/glfw's input callbacks (goKeyCB and the others), which
 # antivirus engines read as a keylogger's entry points; GLFW calls them
 # through pointers, so the table goes.
