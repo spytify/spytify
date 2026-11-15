@@ -25,6 +25,15 @@ import (
 // recorder follows it.
 const pollInterval = 250 * time.Millisecond
 
+// retryMin and retryMax bound the wait before the recorder starts again.
+// It doubles each time the recorder ends by itself with nothing recorded,
+// as an old pw-record does at once (#794), so a recorder that cannot work
+// is not restarted ten times a second for the whole session (#833).
+const (
+	retryMin = 100 * time.Millisecond
+	retryMax = 5 * time.Second
+)
+
 // streamNode is a player's audio output stream as PipeWire or PulseAudio
 // describes it.
 type streamNode struct {
@@ -217,6 +226,7 @@ func (p *PipeWire) run(ctx context.Context, t target.Target) {
 	defer close(p.done)
 	defer close(p.frames)
 	waiting := false
+	retry := retryMin
 	for ctx.Err() == nil {
 		node, ok, err := p.backend.find(t)
 		p.looked(node, ok, err)
@@ -234,8 +244,15 @@ func (p *PipeWire) run(ctx context.Context, t target.Target) {
 		waiting = false
 		f, fromStream := p.format(ctx, node)
 		p.silence(node)
-		p.stream(ctx, t, node, f, fromStream)
-		sleep(ctx, 100*time.Millisecond)
+		switch failed := p.stream(ctx, t, node, f, fromStream); {
+		case !failed:
+			retry = retryMin
+		case retry < retryMax:
+			if retry = min(retry*2, retryMax); retry == retryMax {
+				p.logf("capture: the recorder keeps ending with nothing recorded; trying again every %v", retryMax)
+			}
+		}
+		sleep(ctx, retry)
 	}
 }
 
@@ -264,7 +281,9 @@ func (p *PipeWire) format(ctx context.Context, node streamNode) (pcm.Format, boo
 // graph runs at another rate, or, when the recording takes the stream's
 // rate, until the stream changes rate. A stream gets its rate a moment
 // after it appears; a recording at the graph's rate goes on through that.
-func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode, f pcm.Format, fromStream bool) {
+// It reports whether the recorder failed: it did not start, or ended by
+// itself before it recorded anything.
+func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode, f pcm.Format, fromStream bool) (failed bool) {
 	sctx, cancel := context.WithCancel(ctx)
 	var watchers sync.WaitGroup
 	defer watchers.Wait()
@@ -278,14 +297,14 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		p.logf("capture: %v", err)
-		return
+		return true
 	}
 	if err := cmd.Start(); err != nil {
 		p.logf("capture: start %s: %v", cmd.Path, err)
 		p.mu.Lock()
 		p.recordExit = "not started"
 		p.mu.Unlock()
-		return
+		return true
 	}
 	// driver is the running stream's driver, 0 while the stream is not running.
 	var driver atomic.Int64
@@ -339,23 +358,28 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 		}
 	}()
 	chunk := make([]byte, f.FramesFromMs(10)*int64(f.FrameBytes()))
+	recorded := false
 	for {
 		if _, err := io.ReadFull(out, chunk); err != nil {
 			break
 		}
+		recorded = true
 		c := Chunk{Data: append([]byte(nil), chunk...), Format: f}
 		select {
 		case p.frames <- c:
 		case <-ctx.Done():
 			cancel()
 			p.recorded(cmd.Wait())
-			return
+			return false
 		default:
 			p.overruns.Add(1)
 		}
 	}
+	// Stopped by a watcher, the recorder did not fail.
+	failed = !recorded && sctx.Err() == nil
 	cancel()
 	p.recorded(cmd.Wait())
+	return failed
 }
 
 type pipewireTools struct{}
