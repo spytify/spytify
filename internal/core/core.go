@@ -55,6 +55,9 @@ type Core struct {
 	log      *Logger
 	backends Backends
 	find     func(target.Target) (target.Process, bool)
+	// alive reports whether the known pid is still the target's, for the
+	// real lookup only (target.Running); nil, the watch lists every time.
+	alive func(target.Target, int) bool
 
 	ffmpeg *encode.FFmpeg
 	ffErr  error
@@ -98,7 +101,7 @@ func New(o Options) *Core {
 		crashed:  o.Crashed,
 	}
 	if c.find == nil {
-		c.find = target.FindProcess
+		c.find, c.alive = target.FindProcess, target.Running
 	}
 	c.keep = &keeper{emit: c.emit}
 	c.ffmpeg, c.ffErr = encode.Find(o.Env.FFmpeg)
@@ -210,6 +213,15 @@ func (c *Core) WatchTarget(ctx context.Context) {
 }
 
 func (c *Core) pollTarget() {
+	// Once the player's process is known, asking about it alone is enough:
+	// listing every process every 2 s forked ps on macOS and read every
+	// /proc entry on Linux, player running or not (#835).
+	c.mu.Lock()
+	pid := c.pid
+	c.mu.Unlock()
+	if pid != 0 && c.alive != nil && c.alive(c.env.Target, pid) {
+		return
+	}
 	p, ok := c.find(c.env.Target)
 	c.mu.Lock()
 	changed := ok != c.running || p.PID != c.pid
