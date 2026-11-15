@@ -138,6 +138,10 @@ func TestCrashLogsAreReadOffTheToolkitsGoroutine(t *testing.T) {
 		<-disk
 		return find(dir, prefs, now)
 	}
+	// As the app runs, not as tests do; the test touches the window only
+	// once the look is done, through reports.
+	a.opts.ManualRender = false
+	defer func() { a.opts.ManualRender = true }()
 	done := make(chan struct{})
 	go func() {
 		fyne.DoAndWait(a.checkCrashesLater)

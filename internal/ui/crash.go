@@ -27,6 +27,12 @@ func (a *App) checkCrashes() {
 // toolkit's goroutine: at launch, before the first frame, and at every
 // connection to the recorder or loss of it (#855).
 func (a *App) checkCrashesLater() {
+	// Fyne's test driver runs fyne.Do on the calling goroutine, not the
+	// toolkit's: tests look on theirs, as the Library's scan does.
+	if a.opts.ManualRender {
+		a.checkCrashes()
+		return
+	}
 	a.reports.Go(func() {
 		if crashes := a.takeCrashes(); len(crashes) > 0 {
 			fyne.Do(func() { a.handleCrashes(crashes) })
