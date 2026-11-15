@@ -219,9 +219,10 @@ jobs:
         shell: pwsh
         run: |
           # The runner has no graphics card, so no driver offers OpenGL, as on
-          # a computer whose card is disabled. The app starts itself again
-          # with Mesa's, from opengl\.
-          Start-Process .\Spytify.exe -RedirectStandardError gl-err.txt -RedirectStandardOutput gl-out.txt
+          # a computer whose card is disabled. The app loads Mesa's, from
+          # opengl\, in its own process: a copy of itself it would start
+          # reads as a sacrificial process to behaviour engines.
+          $p = Start-Process .\Spytify.exe -PassThru -RedirectStandardError gl-err.txt -RedirectStandardOutput gl-out.txt
           $window = $null
           for ($i = 0; $i -lt 30 -and -not $window; $i++) {
             Start-Sleep -Seconds 1
@@ -229,14 +230,20 @@ jobs:
           }
           $gl = if ($window) { ($window.Modules | Where-Object ModuleName -eq 'opengl32.dll').FileName }
           $title = if ($window) { $window.MainWindowTitle }
+          # Mesa loads d3d12.dll when it tries its Direct3D 12 driver, which
+          # GALLIUM_DRIVER=llvmpipe skips.
+          $d3d12 = if ($window) { [bool]($window.Modules | Where-Object ModuleName -eq 'd3d12.dll') }
+          $others = @(Get-Process Spytify -ErrorAction SilentlyContinue | Where-Object Id -ne $p.Id)
           Get-Process Spytify, spytifyd -ErrorAction SilentlyContinue | Stop-Process -Force
           Start-Sleep -Seconds 1
           $said = Get-Content gl-err.txt -Raw
-          "window '$title', drawn with $gl"
+          "window '$title' of process $($window.Id) (started $($p.Id)), drawn with $gl"
+          "d3d12.dll loaded: $d3d12"
           "Spytify.exe said: $said"
           if (-not $window) { throw "no Spytify window within 30 s" }
           if ($said -match 'no graphics driver offers OpenGL') { throw "Spytify.exe said why it has no window instead of drawing it with Mesa" }
           if ($gl -ne (Join-Path (Resolve-Path opengl).Path 'opengl32.dll')) { throw "the window is drawn with $gl, not Mesa's" }
+          if ($window.Id -ne $p.Id -or $others.Count -gt 0) { throw "the window is drawn by Spytify.exe $($window.Id), not by the one started ($($p.Id)): it started a copy of itself" }
       - name: Without an OpenGL driver or Mesa, the app says why instead of closing without a word
         shell: pwsh
         run: |
