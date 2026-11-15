@@ -1,0 +1,138 @@
+# Throwaway: lives on the scan-behaviour branch only and is never merged.
+# Runs the published release on clean machines with the system's own
+# security tools switched on, and keeps what they saw.
+name: Behaviour scan
+
+on:
+  push:
+    branches: [scan-behaviour]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: behaviour-scan
+  cancel-in-progress: true
+
+env:
+  RELEASE: "2.0.2"
+
+jobs:
+  windows:
+    name: Windows (${{ matrix.os }}, cloud ${{ matrix.cloud }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2022, cloud: Default }
+          - { os: windows-2022, cloud: High }
+          - { os: windows-2025, cloud: High }
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Audio device
+        continue-on-error: true
+        run: scripts/ci/windows-audio-device.ps1
+      - name: Player names
+        run: scan/windows-names.ps1
+      - name: Defender on
+        run: scan/windows-defender-on.ps1 -CloudBlockLevel ${{ matrix.cloud }}
+      - name: Sysmon
+        continue-on-error: true
+        run: scan/windows-sysmon.ps1
+      - name: Download as a browser would
+        run: scan/windows-download.ps1
+      - name: First day with the app
+        run: scan/windows-scenario.ps1
+      - name: What the system saw
+        if: always()
+        run: scan/windows-collect.ps1
+      - name: Hayabusa
+        if: always()
+        continue-on-error: true
+        run: scan/windows-hayabusa.ps1
+      - name: Summary
+        if: always()
+        run: python scan/windows-summary.py "$env:RUNNER_TEMP\report" "$env:RUNNER_TEMP\player-names.txt"
+      - name: Take the player's name out
+        id: scrub
+        if: always()
+        run: python scan/scrub.py "$env:RUNNER_TEMP\report" "$env:RUNNER_TEMP\player-names.txt"
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.scrub.outcome == 'success'
+        with:
+          name: behaviour-scan-${{ matrix.os }}-${{ matrix.cloud }}
+          path: ${{ runner.temp }}/report
+          retention-days: 3
+
+  linux:
+    name: Linux (strace, Falco)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Download the release
+        run: bash scan/linux-download.sh
+      - name: Install the package and the tools
+        run: |
+          scripts/ci/apt-install.sh "$RUNNER_TEMP/assets/spytify_${RELEASE}_amd64.deb" \
+            pipewire pipewire-bin pipewire-pulse wireplumber dbus dbus-bin pulseaudio-utils \
+            procps python3 xvfb xauth xdotool libgl1-mesa-dri mesa-utils strace
+          mkdir -p "$RUNNER_TEMP/bin"
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/bin/fakeplayer" ./cmd/fakeplayer
+      - name: Player names
+        run: bash scan/linux-names.sh
+      - name: A session under strace
+        run: bash scan/linux-scenario.sh strace
+      - name: The same session under Falco
+        continue-on-error: true
+        run: bash scan/linux-falco.sh
+      - name: Summary
+        if: always()
+        run: python3 scan/linux-summary.py "$RUNNER_TEMP/report" "$RUNNER_TEMP/player-names.txt"
+      - name: Take the player's name out
+        id: scrub
+        if: always()
+        run: python3 scan/scrub.py "$RUNNER_TEMP/report" "$RUNNER_TEMP/player-names.txt"
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.scrub.outcome == 'success'
+        with:
+          name: behaviour-scan-linux
+          path: ${{ runner.temp }}/report
+          retention-days: 3
+
+  files:
+    name: Files (ClamAV, YARA, capa, lintian)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download the release
+        run: bash scan/linux-download.sh
+      - name: Player names
+        run: bash scan/linux-names.sh tarball
+      - name: Scan the files
+        run: bash scan/files-scan.sh
+      - name: Take the player's name out
+        id: scrub
+        if: always()
+        run: python3 scan/scrub.py "$RUNNER_TEMP/report" "$RUNNER_TEMP/player-names.txt"
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.scrub.outcome == 'success'
+        with:
+          name: behaviour-scan-files
+          path: ${{ runner.temp }}/report
+          retention-days: 3
