@@ -75,6 +75,9 @@ static const GUID kIMMDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x4
 static const GUID kIAudioSessionManager2 = {0x77AA99A0, 0x1BD6, 0x484F, {0x8B, 0xC7, 0x2C, 0x65, 0x4C, 0x9A, 0x9B, 0x6F}};
 static const GUID kIAudioSessionControl2 = {0xbfb7ff88, 0x7239, 0x4fc9, {0x8f, 0xa2, 0x07, 0xc9, 0x50, 0xbe, 0x9c, 0x6d}};
 static const GUID kISimpleAudioVolume = {0x87CE5498, 0x68D6, 0x44E5, {0x92, 0x15, 0x6D, 0xA4, 0x7E, 0xF8, 0x83, 0xD8}};
+static const GUID kIMMNotificationClient = {0x7991EEC9, 0x7E89, 0x4D85, {0x83, 0x90, 0x6C, 0x70, 0x3C, 0xEC, 0x60, 0xC0}};
+static const GUID kIAudioSessionNotification = {0x641DD20B, 0x4D41, 0x49CC, {0xAB, 0xA3, 0x17, 0x4B, 0x94, 0x77, 0xBB, 0x08}};
+static const GUID kIAudioSessionEvents = {0x24918ACC, 0x64B3, 0x37C1, {0x8C, 0xA9, 0x74, 0xA6, 0x6E, 0x99, 0x57, 0xA8}};
 static const PROPERTYKEY kFriendlyName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};
 static const PROPERTYKEY kFormFactor = {{0x1da5d803, 0xd492, 0x4edd, {0x8c, 0x23, 0xe0, 0xc0, 0xff, 0xee, 0x7f, 0x0e}}, 0};
 
@@ -333,8 +336,9 @@ static HRESULT defaultOutput(IMMDeviceEnumerator *devices, Output &o) {
 
 // treeDevices lists the devices the tree has audio sessions on, and the one
 // it plays to now, with an active session.
-static void treeDevices(IMMDeviceEnumerator *devices, DWORD pid, std::wstring &playing, std::vector<std::wstring> &sessions) {
-  eachSession(devices, processTree(pid), [&](IMMDevice *device, IAudioSessionControl *control) {
+static void treeDevices(IMMDeviceEnumerator *devices, const std::set<DWORD> &tree, std::wstring &playing,
+                        std::vector<std::wstring> &sessions) {
+  eachSession(devices, tree, [&](IMMDevice *device, IAudioSessionControl *control) {
     LPWSTR id = nullptr;
     if (FAILED(device->GetId(&id))) return;
     AudioSessionState state = AudioSessionStateInactive;
@@ -363,7 +367,7 @@ static DWORD pickRate(Source &s, DWORD given) {
     hr = defaultOutput(devices, byDefault);
     std::wstring playing;
     std::vector<std::wstring> sessions;
-    treeDevices(devices, s.pid, playing, sessions);
+    treeDevices(devices, processTree(s.pid), playing, sessions);
     std::wstring id = playerDevice(playing, sessions, byDefault.id);
     if (!id.empty()) deviceOutput(devices, id, player);
     devices->Release();
@@ -395,12 +399,12 @@ static DWORD pickRate(Source &s, DWORD given) {
 // sourceChanged says whether the recording must start again at another
 // rate: the player left the device the rate comes from, or that device is
 // gone or mixes at another rate now. active says whether the player has an
-// active audio session.
-static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &active) {
+// active audio session. tree is the player's process tree.
+static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, const std::set<DWORD> &tree, bool &active) {
   std::wstring playing;
   std::vector<std::wstring> sessions;
   Output byDefault, now;
-  treeDevices(devices, s.pid, playing, sessions);
+  treeDevices(devices, tree, playing, sessions);
   active = !playing.empty();
   defaultOutput(devices, byDefault);
   if (moved(playing, s.device.id, byDefault.id, s.defaultAtStart)) {
@@ -419,9 +423,151 @@ static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &a
   return false;
 }
 
-// followSource checks the source about once a second, on a thread of its
-// own: reading the devices can take longer than the capture's 20 ms buffer.
-// It says when the player's audio session turns active or inactive.
+// Wake is what Windows tells the follower: an output device added, removed,
+// enabled or disabled, the default output changed, a property of the
+// followed device changed, such as its mix format (IMMNotificationClient);
+// an audio session created (IAudioSessionNotification); one of the
+// player's sessions turned active or inactive, or gone
+// (IAudioSessionEvents). Windows calls it on threads of its own, which must
+// not wait: it only notes what to read again and wakes the follower. Like
+// Source, it is never freed.
+class Wake : public IMMNotificationClient, public IAudioSessionNotification, public IAudioSessionEvents {
+ public:
+  HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  // devices: register on the devices again; sessions: take the process
+  // tree again, as a new session may be a new child's.
+  std::atomic<bool> devices{false}, sessions{false};
+  // followed is the device the rate comes from; set before registering.
+  std::wstring followed;
+
+  STDMETHODIMP QueryInterface(REFIID riid, void **out) override {
+    if (IsEqualGUID(riid, IID_IUnknown) || IsEqualGUID(riid, kIMMNotificationClient)) {
+      *out = static_cast<IMMNotificationClient *>(this);
+    } else if (IsEqualGUID(riid, kIAudioSessionNotification)) {
+      *out = static_cast<IAudioSessionNotification *>(this);
+    } else if (IsEqualGUID(riid, kIAudioSessionEvents)) {
+      *out = static_cast<IAudioSessionEvents *>(this);
+    } else {
+      *out = nullptr;
+      return E_NOINTERFACE;
+    }
+    return S_OK;
+  }
+  STDMETHODIMP_(ULONG) AddRef() override { return 2; }
+  STDMETHODIMP_(ULONG) Release() override { return 1; }
+
+  STDMETHODIMP OnDeviceStateChanged(LPCWSTR, DWORD) override { return device(); }
+  STDMETHODIMP OnDeviceAdded(LPCWSTR) override { return device(); }
+  STDMETHODIMP OnDeviceRemoved(LPCWSTR) override { return device(); }
+  STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole, LPCWSTR) override { return flow == eRender ? device() : S_OK; }
+  STDMETHODIMP OnPropertyValueChanged(LPCWSTR id, const PROPERTYKEY) override {
+    if (id && followed == id) SetEvent(event);
+    return S_OK;
+  }
+
+  STDMETHODIMP OnSessionCreated(IAudioSessionControl *) override {
+    sessions = true;
+    SetEvent(event);
+    return S_OK;
+  }
+
+  STDMETHODIMP OnDisplayNameChanged(LPCWSTR, LPCGUID) override { return S_OK; }
+  STDMETHODIMP OnIconPathChanged(LPCWSTR, LPCGUID) override { return S_OK; }
+  STDMETHODIMP OnSimpleVolumeChanged(float, WINBOOL, LPCGUID) override { return S_OK; }
+  STDMETHODIMP OnChannelVolumeChanged(DWORD, float[], DWORD, LPCGUID) override { return S_OK; }
+  STDMETHODIMP OnGroupingParamChanged(LPCGUID, LPCGUID) override { return S_OK; }
+  STDMETHODIMP OnStateChanged(AudioSessionState) override {
+    SetEvent(event);
+    return S_OK;
+  }
+  STDMETHODIMP OnSessionDisconnected(AudioSessionDisconnectReason) override {
+    sessions = true;
+    SetEvent(event);
+    return S_OK;
+  }
+
+ private:
+  HRESULT device() {
+    devices = true;
+    SetEvent(event);
+    return S_OK;
+  }
+};
+
+// Watched holds what Wake is registered on: each active output's session
+// manager, for new sessions, and each audio session of the tree, for its
+// state.
+struct Watched {
+  std::vector<IAudioSessionManager2 *> managers;
+  std::vector<IAudioSessionControl *> sessions;
+
+  void clear(Wake *wake) {
+    for (auto *m : managers) {
+      m->UnregisterSessionNotification(wake);
+      m->Release();
+    }
+    for (auto *c : sessions) {
+      c->UnregisterAudioSessionNotification(wake);
+      c->Release();
+    }
+    managers.clear();
+    sessions.clear();
+  }
+
+  // arm registers wake again on the active outputs and the tree's sessions.
+  void arm(IMMDeviceEnumerator *devices, const std::set<DWORD> &tree, Wake *wake) {
+    clear(wake);
+    IMMDeviceCollection *list = nullptr;
+    if (FAILED(devices->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &list))) return;
+    UINT count = 0;
+    list->GetCount(&count);
+    for (UINT d = 0; d < count; d++) {
+      IMMDevice *device = nullptr;
+      IAudioSessionManager2 *manager = nullptr;
+      if (FAILED(list->Item(d, &device))) continue;
+      if (SUCCEEDED(device->Activate(kIAudioSessionManager2, CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&manager)))) {
+        if (SUCCEEDED(manager->RegisterSessionNotification(wake))) {
+          managers.push_back(manager);
+          manager->AddRef();
+        }
+        // Windows sends new sessions only once the sessions were listed.
+        IAudioSessionEnumerator *listed = nullptr;
+        if (SUCCEEDED(manager->GetSessionEnumerator(&listed))) {
+          int n = 0;
+          listed->GetCount(&n);
+          for (int i = 0; i < n; i++) {
+            IAudioSessionControl *control = nullptr;
+            IAudioSessionControl2 *control2 = nullptr;
+            DWORD owner = 0;
+            if (SUCCEEDED(listed->GetSession(i, &control)) &&
+                SUCCEEDED(control->QueryInterface(kIAudioSessionControl2, reinterpret_cast<void **>(&control2))) &&
+                SUCCEEDED(control2->GetProcessId(&owner)) && tree.count(owner) &&
+                SUCCEEDED(control->RegisterAudioSessionNotification(wake))) {
+              sessions.push_back(control);
+              control = nullptr;
+            }
+            if (control2) control2->Release();
+            if (control) control->Release();
+          }
+          listed->Release();
+        }
+        manager->Release();
+      }
+      device->Release();
+    }
+    list->Release();
+  }
+};
+
+// recheck is how often the follower reads the source with no word from
+// Windows, should a notification be missed.
+static const DWORD recheck = 10000;
+
+// followSource reads the source each time Windows says something it reads
+// changed, and every 10 s, on a thread of its own: reading the devices can
+// take longer than the capture's 20 ms buffer. It says when the player's
+// audio session turns active or inactive. With SPYTIFY_TAP_FOLLOW_TRACE
+// set, it says each time it reads and why, for the CI to count.
 static DWORD WINAPI followSource(void *arg) {
   Source *s = static_cast<Source *>(arg);
   IMMDeviceEnumerator *devices = nullptr;
@@ -429,17 +575,40 @@ static DWORD WINAPI followSource(void *arg) {
       FAILED(CoCreateInstance(kMMDeviceEnumerator, nullptr, CLSCTX_ALL, kIMMDeviceEnumerator, reinterpret_cast<void **>(&devices)))) {
     return 0;
   }
+  const bool trace = _wgetenv(L"SPYTIFY_TAP_FOLLOW_TRACE") != nullptr;
+  Wake *wake = new Wake();
+  wake->followed = s->device.id;
+  devices->RegisterEndpointNotificationCallback(wake);
+  Watched watched;
+  std::set<DWORD> tree;
+  bool retree = true, rearm = true;
+  const char *why = "the start";
   int wasActive = -1;
-  while (!s->changed) {
-    Sleep(1000);
+  for (;;) {
+    if (retree) tree = processTree(s->pid);
+    // Registered before reading: a change after the read wakes the next.
+    if (rearm) watched.arm(devices, tree, wake);
     bool active = false;
-    s->changed = sourceChanged(devices, *s, active);
+    s->changed = sourceChanged(devices, *s, tree, active);
+    if (trace) fprintf(stderr, "spytify-tap: follow: read after %s\n", why);
     if (int(active) != wasActive) {
       fprintf(stderr, "spytify-tap: process %lu %s\n", (unsigned long)s->pid,
               active ? "plays to its output" : "has no active audio session");
       wasActive = active;
     }
+    if (s->changed) break;
+    DWORD w = WaitForSingleObject(wake->event, recheck);
+    // A change comes as a burst of notifications: one read for them all.
+    if (w == WAIT_OBJECT_0) Sleep(100);
+    ResetEvent(wake->event);
+    const bool newSessions = wake->sessions.exchange(false), newDevices = wake->devices.exchange(false);
+    const bool timeout = w != WAIT_OBJECT_0;
+    retree = newSessions || timeout;
+    rearm = newSessions || newDevices || timeout;
+    why = timeout ? "10 s" : newDevices ? "a device change" : newSessions ? "a new or closed audio session" : "a session's state";
   }
+  watched.clear(wake);
+  devices->UnregisterEndpointNotificationCallback(wake);
   return 0;
 }
 

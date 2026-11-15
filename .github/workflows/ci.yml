@@ -330,6 +330,31 @@ jobs:
           cat muted.err
           grep -E "(no packets|packets marked silent|only zeros) from process $pid" muted.err
           if grep -q -F "sound from process $pid" muted.err; then echo "the helper heard the muted tone"; exit 1; fi
+      - name: The capture helper reads the player's audio sessions when Windows says they changed, not every second
+        run: |
+          # A tone, by its Windows PID, that plays only once its WAV is
+          # written: the helper starts while it has no audio session yet.
+          pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1","-Path",(Join-Path $env:RUNNER_TEMP "follow.wav") -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
+          SPYTIFY_TAP_FOLLOW_TRACE=1 ./spytify-tap.exe --pid "$pid" > /dev/null 2> follow.err &
+          tap=$!
+          ready="$(cygpath -u "$RUNNER_TEMP")/follow.wav.playing"
+          for i in $(seq 60); do [ -f "$ready" ] && break; sleep 1; done
+          test -f "$ready" || { echo "the tone did not play within 60 s"; exit 1; }
+          for i in $(seq 10); do grep -q -F "process $pid plays to its output" follow.err && break; sleep 0.5; done
+          before=$(grep -c -F "follow: read after" follow.err || true)
+          sleep 6
+          after=$(grep -c -F "follow: read after" follow.err || true)
+          kill "$tap" || true
+          cat follow.err
+          # Read at once, then because the tone's session appeared or turned
+          # active, not by the 10 s recheck.
+          grep -F "follow: read after the start" follow.err
+          awk '/follow: read after/ { last = $0 } /plays to its output/ { print last; exit }' follow.err |
+            grep -E "follow: read after (a new or closed audio session|a session's state)"
+          # While the tone plays on, nothing changes: a read every second
+          # made 6.
+          echo "reads in 6 s of steady play: $((after - before))"
+          test $((after - before)) -le 2
 
   macos-build:
     runs-on: macos-15
