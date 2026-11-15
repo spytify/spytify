@@ -33,6 +33,12 @@ func main() {
 	}
 }
 
+// connectTimeout bounds reaching spytifyd for the commands that then follow
+// it: over tcp:// to a host that drops packets, the system's own connect
+// timeout is one to two minutes, and a recorder that is stuck never answers
+// (#858). Tests shorten it.
+var connectTimeout = 10 * time.Second
+
 type app struct {
 	socket string
 	asJSON bool
@@ -292,13 +298,18 @@ func (a *app) tailCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			c, err := a.dial(ctx)
+			start, cancel := context.WithTimeout(ctx, connectTimeout)
+			defer cancel()
+			c, err := a.dial(start)
 			if err != nil {
 				return err
 			}
 			defer c.Close()
 			var res proto.LogTailResult
-			if err := c.Call(ctx, proto.MethodLogTail, proto.LogTailParams{Lines: lines}, &res); err != nil {
+			if err := c.Call(start, proto.MethodLogTail, proto.LogTailParams{Lines: lines}, &res); err != nil {
+				if errors.Is(err, context.DeadlineExceeded) {
+					return fmt.Errorf("spytifyd did not answer in %s", connectTimeout)
+				}
 				return err
 			}
 			for _, l := range res.Lines {
@@ -355,7 +366,9 @@ func (a *app) eventsCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			c, err := a.dial(ctx)
+			start, cancel := context.WithTimeout(ctx, connectTimeout)
+			defer cancel()
+			c, err := a.dial(start)
 			if err != nil {
 				return err
 			}
