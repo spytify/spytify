@@ -19,6 +19,7 @@ env:
 
 jobs:
   windows:
+    if: false # done in run 43678523243
     name: Windows (${{ matrix.os }}, cloud ${{ matrix.cloud }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -72,7 +73,7 @@ jobs:
           retention-days: 3
 
   linux:
-    if: false # rerun in the run of 53cf72c5
+    if: false # done in run 43678431303
     name: Linux (strace, Falco)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -114,7 +115,6 @@ jobs:
           retention-days: 3
 
   files:
-    if: false # rerun in the run of 53cf72c5
     name: Files (ClamAV, YARA, capa, lintian)
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -126,8 +126,8 @@ jobs:
         run: bash scan/linux-download.sh
       - name: Player names
         run: bash scan/linux-names.sh tarball
-      - name: Scan the files
-        run: bash scan/files-scan.sh
+      - name: Which ClamAV signature
+        run: bash scan/clam-sig.sh
       - name: Take the player's name out
         id: scrub
         if: always()
