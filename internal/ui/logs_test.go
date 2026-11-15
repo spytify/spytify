@@ -84,3 +84,28 @@ func TestTheDiagnosticsChecksGoToTheDialogsEdge(t *testing.T) {
 	}
 	snapshot(t, a, "diagnostics-dark-to-the-edge")
 }
+
+// The Logs list is rebuilt when a line comes in, not at every event: a
+// level or a session state leaves it as it is.
+func TestTheLogsListIsRebuiltOnlyForNewLines(t *testing.T) {
+	a, m := connectedTestApp(t, defaults())
+	a.showTab(tabLogs)
+	m.Apply(event(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: "first"}))
+	a.render()
+	l := a.screens[tabLogs].(*logsScreen)
+	if len(l.lines) == 0 {
+		t.Fatal("no line shown")
+	}
+	drawn := &l.lines[0]
+	m.Apply(event(t, proto.EventLevel, proto.LevelEvent{PeakDBFS: -12}))
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	a.render()
+	if &l.lines[0] != drawn {
+		t.Fatal("the list was rebuilt with no new line")
+	}
+	m.Apply(event(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: "second"}))
+	a.render()
+	if l.lines[0].Msg != "second" {
+		t.Fatalf("the newest line shown is %q", l.lines[0].Msg)
+	}
+}
