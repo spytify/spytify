@@ -104,3 +104,26 @@ func TestFirstAboveAndSilenceStart(t *testing.T) {
 		t.Fatalf("SilenceStart with floor = %d", s)
 	}
 }
+
+// AppendBytes gives what Bytes does, across the ring's end too, and into a
+// buffer it reuses allocates nothing: the session writes 100 chunks a
+// second.
+func TestAppendBytesReusesItsBuffer(t *testing.T) {
+	f := pcm.Format{Rate: 1000, Channels: 2, Sample: pcm.S16LE}
+	r := NewRing(f, 1)
+	chunk := make([]byte, 300*f.FrameBytes())
+	for i := range chunk {
+		chunk[i] = byte(i)
+	}
+	for range 4 {
+		r.Append(chunk)
+	}
+	// Frames 900 to 1100 run across the end of the 1000-frame ring.
+	buf := r.AppendBytes(nil, 900, 1100)
+	if !bytes.Equal(buf, r.Bytes(900, 1100)) || len(buf) != 200*f.FrameBytes() {
+		t.Fatalf("AppendBytes gave %d bytes, unlike Bytes", len(buf))
+	}
+	if n := testing.AllocsPerRun(100, func() { buf = r.AppendBytes(buf[:0], 900, 1100) }); n != 0 {
+		t.Fatalf("%v allocations a call into a buffer that fits", n)
+	}
+}
