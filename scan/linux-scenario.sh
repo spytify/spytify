@@ -32,9 +32,9 @@ run_traced() {
   local phase="$1"; shift
   if [ "$mode" = strace ]; then
     mkdir -p "$report/trace-raw/$phase"
-    strace -ff -tt -y -s 400 -o "$report/trace-raw/$phase/t" -e "trace=$calls" "$@"
+    timeout -k 10 "${limit:-0}" strace -ff -tt -y -s 400 -o "$report/trace-raw/$phase/t" -e "trace=$calls" "$@"
   else
-    "$@"
+    timeout -k 10 "${limit:-0}" "$@"
   fi
 }
 
@@ -90,9 +90,13 @@ mkdir -p "$work/out"
 (
   export SPYTIFY_TARGET_PROCESS=fakeplayer SPYTIFY_SOCKET="$work/s.sock" SPYTIFY_CONFIG="$work/config.toml" XDG_STATE_HOME="$work/state"
   "$RUNNER_TEMP/bin/fakeplayer" -start-delay 6s -lead-in 2s "$repo/testdata/timelines/basic.json" >"$report/fakeplayer.log" 2>&1 &
-  run_traced daemon spytifyd --once --events "$report/events.jsonl" --idle-exit 10s --wait-target 20s \
+  fp=$!
+  # Ubuntu 24.04's PipeWire (1.0) cannot play the fake player's raw audio;
+  # the recorder then waits for good, so it gets three minutes.
+  limit=180 run_traced daemon spytifyd --once --events "$report/events.jsonl" --idle-exit 10s --wait-target 20s \
     --set "output.dir=$work/out" >"$report/spytifyd-once.out" 2>"$report/spytifyd-once.err"
   echo "$?" >"$work/exit"
+  kill "$fp" 2>/dev/null
   wait
 )
 say "spytifyd --once: exit $(cat "$work/exit"); files: $(find "$work/out" -type f | wc -l)"

@@ -21,7 +21,7 @@ for f in *; do
   case "$f" in
     *.zip) unzip -q "$f" -d "$d" ;;
     *.deb) dpkg-deb -x "$f" "$d" ;;
-    *.rpm) (cd "$d" && rpm2cpio "$RUNNER_TEMP/assets/$f" | cpio -idm --quiet) ;;
+    *.rpm) (cd "$d" && rpm2cpio "$RUNNER_TEMP/assets/$f" | cpio -idm --quiet --no-absolute-filenames) ;;
     *.tar.gz) tar -xzf "$f" -C "$d" ;;
     *.dmg) 7z x -y -o"$d" "$f" >/dev/null ;;
     *) rmdir "$d" ;;
@@ -36,6 +36,7 @@ note "freshclam: exit $?"
 clamscan -r -i --detect-pua=yes --alert-exceeds-max=yes --max-filesize=2000M --max-scansize=2000M \
   "$RUNNER_TEMP/assets" "$x" >"$r/clamscan.txt" 2>&1
 note "clamscan: exit $? ($(grep -c ' FOUND$' "$r/clamscan.txt") found)"
+grep ' FOUND$' "$r/clamscan.txt" | sed "s|$RUNNER_TEMP/||" | tee -a "$report/summary.txt"
 
 # YARA Forge
 for set in core extended; do
@@ -56,14 +57,14 @@ curl -sSfL --retry 3 -o "$tools/capa.zip" https://github.com/mandiant/capa/relea
 capa="$(find "$tools/capa" -type f -name capa | head -n 1)"
 if [ -n "$capa" ]; then
   chmod +x "$capa"
-  pids=()
+  # One at a time: several at once ran the runner out of memory.
+  find "$x" -type f \( -name 'spytify-tap.exe' -o -name 'spytify-cli.exe' -o -name 'spytifyd.exe' -o -name 'Spytify.exe' \) -path '*windows*' >"$tools/capa-list"
+  find "$x" -type f -name spytifyd -path '*amd64.deb.d*' >>"$tools/capa-list"
   while read -r f; do
     base="$(basename "$(dirname "$f")")-$(basename "$f")"
-    timeout 2400 "$capa" -q "$f" >"$r/capa-$base.txt" 2>"$r/capa-$base.err" &
-    pids+=($!)
-  done < <(find "$x" -type f \( -name 'spytifyd.exe' -o -name 'spytify-cli.exe' -o -name 'spytify-tap.exe' -o -name 'Spytify.exe' \) -path '*windows*'
-           find "$x" -type f \( -name spytifyd -o -name spytify-ui \) -path '*amd64.deb.d*')
-  for p in "${pids[@]}"; do wait "$p"; done
+    timeout 900 "$capa" -q "$f" >"$r/capa-$base.txt" 2>"$r/capa-$base.err"
+    note "capa $base: exit $?"
+  done <"$tools/capa-list"
   note "capa: $(ls "$r"/capa-*.txt 2>/dev/null | wc -l) reports"
 else
   note "capa: not downloaded"

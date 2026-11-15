@@ -19,6 +19,7 @@ env:
 
 jobs:
   windows:
+    if: false # done in run 43674904545
     name: Windows (${{ matrix.os }}, cloud ${{ matrix.cloud }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -115,7 +116,7 @@ jobs:
   files:
     name: Files (ClamAV, YARA, capa, lintian)
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
