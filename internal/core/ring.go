@@ -105,10 +105,30 @@ func (r *Ring) Truncate(to int64) {
 	}
 }
 
-// RMS is the level of frames [from, to) in dBFS.
+// sample reads channel c of frame i where the ring holds it, without a copy.
+func (r *Ring) sample(i int64, c int) float64 {
+	return r.format.SampleAt(r.buf, int(i%r.cap)*r.format.Channels+c)
+}
+
+// RMS is the level of frames [from, to) in dBFS. It reads the ring in place
+// and sums the samples in the order pcm.Format.Level does, so the level is
+// the same to the bit.
 func (r *Ring) RMS(from, to int64) float64 {
-	_, rms := r.format.Level(r.Bytes(from, to))
-	return rms
+	from, to = max(from, r.start), min(to, r.end)
+	if to <= from {
+		return pcm.Silence
+	}
+	n := int(to-from) * r.format.Channels
+	k, wrap := int(from%r.cap)*r.format.Channels, int(r.cap)*r.format.Channels
+	var sum float64
+	for done := 0; done < n; done++ {
+		v := r.format.SampleAt(r.buf, k)
+		sum += v * v
+		if k++; k == wrap {
+			k = 0
+		}
+	}
+	return pcm.DBFS(math.Sqrt(sum / float64(n)))
 }
 
 // Quietest slides a window of win frames over [lo, hi] in steps of step
@@ -163,11 +183,10 @@ func (r *Ring) FirstAbove(from int64, db float64, block int64) (int64, bool) {
 	for at := from; at+block <= r.end; at += block {
 		if r.RMS(at, at+block) > db {
 			// Refine to the frame inside the block.
-			data := r.Bytes(at, at+block)
 			thr := math.Pow(10, db/20)
 			for i := int64(0); i < block; i++ {
 				for c := 0; c < r.format.Channels; c++ {
-					if math.Abs(r.format.SampleAt(data, int(i)*r.format.Channels+c)) > thr {
+					if math.Abs(r.sample(at+i, c)) > thr {
 						return at + i, true
 					}
 				}
@@ -192,11 +211,10 @@ func (r *Ring) QuietestPeak(lo, hi, win int64) (at int64, peakDB, medianDB float
 	if n < int(win) || win <= 0 {
 		return lo, pcm.Silence, pcm.Silence
 	}
-	data := r.Bytes(lo, hi)
 	peak := make([]float64, n)
 	for i := 0; i < n; i++ {
 		for c := 0; c < r.format.Channels; c++ {
-			if v := math.Abs(r.format.SampleAt(data, i*r.format.Channels+c)); v > peak[i] {
+			if v := math.Abs(r.sample(lo+int64(i), c)); v > peak[i] {
 				peak[i] = v
 			}
 		}
@@ -239,12 +257,11 @@ func (r *Ring) RefineCut(cut, span, win int64) int64 {
 	if hi < lo {
 		return cut
 	}
-	data := r.Bytes(lo, hi+win)
 	n := int(hi + win - lo)
 	peak := make([]float64, n)
 	for i := 0; i < n; i++ {
 		for c := 0; c < r.format.Channels; c++ {
-			if v := math.Abs(r.format.SampleAt(data, i*r.format.Channels+c)); v > peak[i] {
+			if v := math.Abs(r.sample(lo+int64(i), c)); v > peak[i] {
 				peak[i] = v
 			}
 		}
@@ -274,14 +291,13 @@ func (r *Ring) ExtendBack(at int64, floorDB float64, run, max, limit int64) int6
 	if from < limit {
 		from = limit
 	}
-	data := r.Bytes(from, at)
 	thr := math.Pow(10, floorDB/20)
 	quiet := int64(0)
 	best := at
 	for i := at - 1; i >= from && quiet < run; i-- {
 		loud := false
 		for c := 0; c < r.format.Channels; c++ {
-			if math.Abs(r.format.SampleAt(data, int(i-from)*r.format.Channels+c)) > thr {
+			if math.Abs(r.sample(i, c)) > thr {
 				loud = true
 				break
 			}
