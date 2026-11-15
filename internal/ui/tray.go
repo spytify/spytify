@@ -84,6 +84,7 @@ const trayNoticeKey = "tray-notice-seen"
 func (a *App) hideToTray() {
 	a.win.Hide()
 	a.notes.hidden = true
+	a.inTray.set(true)
 	if a.opts.ManualRender {
 		return
 	}
@@ -98,6 +99,7 @@ func (a *App) hideToTray() {
 
 func (a *App) showWindow() {
 	a.notes.hidden = false
+	a.inTray.set(false)
 	if !a.opts.ManualRender {
 		showInDock(true)
 	}
