@@ -155,9 +155,9 @@ const (
 	CheckTapHelper CheckID = "tap_helper"
 	// CheckAppleScript is osascript found; Detail: why not.
 	CheckAppleScript CheckID = "applescript"
-	// CheckPowerShell is Windows PowerShell found: its path; Detail: why
-	// not.
-	CheckPowerShell CheckID = "powershell"
+	// CheckMediaSessions is Windows' media session API answering, which
+	// tells what plays; Detail: why not.
+	CheckMediaSessions CheckID = "media_sessions"
 	// CheckCapture is a Linux capture found: pipewire or pulseaudio.
 	CheckCapture CheckID = "capture"
 	// CheckNoCapture is a system with no capture: the system.

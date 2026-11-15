@@ -9,8 +9,10 @@ require (
 	github.com/dweymouth/fyne-tooltip v0.4.0
 	github.com/getsentry/sentry-go v0.50.0
 	github.com/go-gl/glfw/v3.4/glfw v0.1.0-pre.2
+	github.com/go-ole/go-ole v1.3.0
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/joho/godotenv v1.5.1
+	github.com/saltosystems/winrt-go v0.0.0-20261016124014-b298124d7472
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
