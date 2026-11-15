@@ -151,6 +151,8 @@ type App struct {
 	// one still going must not touch the next test's window.
 	reports sync.WaitGroup
 	calls   sync.WaitGroup
+	// crashMu makes the looks for crashes left behind one at a time.
+	crashMu sync.Mutex
 	// heard is the link goroutine's: the first sound.
 	heard bool
 
@@ -303,7 +305,7 @@ func (a *App) ShowAndRun() {
 		a.renderPrivacy(a.last)
 		a.tel.Step("launched")
 		a.tel.Breadcrumb("app", "launched", nil)
-		a.checkCrashes()
+		a.checkCrashesLater()
 	})
 	a.fa.Run()
 	// Every way out (this window, the tray's Quit, Cmd+Q, a signal) ends

@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"fyne.io/fyne/v2"
 
 	"github.com/spytify/spytify/internal/telemetry"
 	"github.com/spytify/spytify/internal/telemetry/fakesentry"
@@ -114,5 +117,44 @@ func TestACrashLeavesOnItsOwn(t *testing.T) {
 	}
 	if left := telemetry.FindCrashes(a.opts.StateDir, a.fa.Preferences(), time.Now()); len(left) != 0 {
 		t.Error("the crash would leave again")
+	}
+}
+
+// At launch and at each connection to the recorder or loss of it, the
+// crash logs are read off the toolkit's goroutine; a crash found shows
+// then.
+func TestCrashLogsAreReadOffTheToolkitsGoroutine(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, false)
+	connect(t, a, m, false)
+	leaveACrash(t, a, "boom")
+	disk := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(disk) }) }
+	defer release()
+	defer func(f func(string, telemetry.Prefs, time.Time) []telemetry.Crash) { findCrashes = f }(findCrashes)
+	find := findCrashes
+	findCrashes = func(dir string, prefs telemetry.Prefs, now time.Time) []telemetry.Crash {
+		<-disk
+		return find(dir, prefs, now)
+	}
+	done := make(chan struct{})
+	go func() {
+		fyne.DoAndWait(a.checkCrashesLater)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		release()
+		t.Fatal("the toolkit's goroutine waited for the crash logs")
+	}
+	if a.win.Canvas().Overlays().Top() != nil {
+		t.Fatal("a crash shows before its log was read")
+	}
+	release()
+	a.reports.Wait()
+	if all := strings.Join(texts(overlay(t, a)), "\n"); !strings.Contains(all, fmt.Sprintf(lang.StoppedUnexpectedly, lang.TheRecorder)) {
+		t.Errorf("dialog texts %v", all)
 	}
 }
