@@ -14,9 +14,8 @@ import (
 
 // The two ways the player is installed: the Store puts an alias on PATH,
 // reached by its name with no extension through PATHEXT; the installer
-// registers it in App Paths. App finds both, as cmd /C start did. Each
-// program is a .cmd that leaves a marker, so the tests open a console
-// window: CI only, or with SPYTIFY_REAL_OPEN set.
+// registers it in App Paths. App finds both, as cmd /C start did. The
+// tests open a console window: CI only, or with SPYTIFY_REAL_OPEN set.
 func TestAppFindsAProgramOnPathByItsName(t *testing.T) {
 	realOpen(t)
 	dir, marker := markerProgram(t, "spytifypath829.cmd")
@@ -28,25 +27,37 @@ func TestAppFindsAProgramOnPathByItsName(t *testing.T) {
 	waitFor(t, marker)
 }
 
+// App Paths can name a program only, with no arguments, so the program is a
+// copy of whoami.exe: App succeeding is the proof, since the name is found
+// nowhere else and an unknown name fails (TestAppFailsAtOnceOnAnUnknownName).
+// Installers register the name with .exe; the player's name has none.
 func TestAppFindsAProgramInAppPaths(t *testing.T) {
 	realOpen(t)
-	dir, marker := markerProgram(t, "target.cmd")
+	exe := filepath.Join(t.TempDir(), "player829.exe")
+	whoami, err := os.ReadFile(filepath.Join(os.Getenv("SystemRoot"), "System32", "whoami.exe"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, exe, string(whoami))
 	const sub = `Software\Microsoft\Windows\CurrentVersion\App Paths\spytifyapppaths829.exe`
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, sub, registry.SET_VALUE)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { registry.DeleteKey(registry.CURRENT_USER, sub) })
-	err = k.SetStringValue("", filepath.Join(dir, "target.cmd"))
+	err = k.SetStringValue("", exe)
 	k.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := App("spytifyapppaths829"); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"spytifyapppaths829.exe", "spytifyapppaths829"} {
+		t.Run(name, func(t *testing.T) {
+			if err := App(name); err != nil {
+				t.Error(err)
+			}
+		})
 	}
-	waitFor(t, marker)
 }
 
 // A name that resolves to nothing fails at once, and never waits on the
