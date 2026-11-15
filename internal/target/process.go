@@ -150,7 +150,7 @@ func zombie(pid string) bool {
 }
 
 func listPS() []Process {
-	out, err := proc.Command("ps", "-axo", "pid=,comm=").Output()
+	out, err := proc.Command("/bin/ps", "-axo", "pid=,comm=").Output()
 	if err != nil {
 		return nil
 	}

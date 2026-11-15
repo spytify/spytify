@@ -346,7 +346,7 @@ func (j *JXA) Watch(ctx context.Context, t target.Target) (<-chan Event, error) 
 	if interval <= 0 {
 		interval = 250 * time.Millisecond
 	}
-	cmd := proc.CommandContext(ctx, "osascript", "-l", "JavaScript", "-e", pollScript, spec, strconv.FormatFloat(interval.Seconds(), 'f', 3, 64))
+	cmd := proc.CommandContext(ctx, "/usr/bin/osascript", "-l", "JavaScript", "-e", pollScript, spec, strconv.FormatFloat(interval.Seconds(), 'f', 3, 64))
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -393,7 +393,7 @@ func (j *JXA) run(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmdArgs := append([]string{"-l", "JavaScript", "-e", controlScript, spec}, args...)
-	b, err := proc.CommandContext(ctx, "osascript", cmdArgs...).CombinedOutput()
+	b, err := proc.CommandContext(ctx, "/usr/bin/osascript", cmdArgs...).CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(b))
 		if strings.Contains(msg, "not running") || strings.Contains(msg, "(-2700)") || strings.Contains(msg, "can't be found") {

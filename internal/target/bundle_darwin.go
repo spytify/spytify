@@ -33,7 +33,7 @@ func bundleIDOf(name string) string {
 				continue
 			}
 			plist := filepath.Join(dir, e.Name(), "Contents", "Info.plist")
-			out, err := proc.Command("plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", plist).Output()
+			out, err := proc.Command("/usr/bin/plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", plist).Output()
 			if err == nil {
 				return strings.TrimSpace(string(out))
 			}

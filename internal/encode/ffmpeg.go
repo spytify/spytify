@@ -30,22 +30,29 @@ type FFmpeg struct {
 // ErrMissing means ffmpeg could not be run; session.start is refused.
 var ErrMissing = errors.New("ffmpeg not found; install it or set SPYTIFY_FFMPEG")
 
-// wellKnown are tried when ffmpeg is not on PATH, as for an app started
-// from a desktop launcher with a minimal PATH, or on Windows, where PATH
-// rarely has it: first the copy shipped beside spytifyd, then where
-// package managers and people put it.
-func wellKnown(goos string, getenv func(string) string) []string {
-	var c []string
-	exe := "ffmpeg"
+// besideProgram is the copy the macOS app and the Windows zip ship, in
+// the folder of spytifyd and the app.
+func besideProgram(goos string) string {
+	self, err := os.Executable()
+	if err != nil {
+		return ""
+	}
 	if goos == "windows" {
-		exe = "ffmpeg.exe"
+		return filepath.Join(filepath.Dir(self), "ffmpeg.exe")
 	}
-	if self, err := os.Executable(); err == nil {
-		c = append(c, filepath.Join(filepath.Dir(self), exe))
-	}
+	return filepath.Join(filepath.Dir(self), "ffmpeg")
+}
+
+// wellKnown are tried when ffmpeg is neither beside the program nor on
+// PATH, as for an app started from a desktop launcher with a minimal PATH,
+// or on Windows, where PATH rarely has it: where package managers and
+// people put it.
+func wellKnown(goos string, getenv func(string) string) []string {
 	if goos != "windows" {
-		return append(c, "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "/snap/bin/ffmpeg")
+		return []string{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "/snap/bin/ffmpeg"}
 	}
+	var c []string
+	exe := "ffmpeg.exe"
 	join := func(env string, parts ...string) {
 		if base := getenv(env); base != "" {
 			c = append(c, filepath.Join(append([]string{base}, parts...)...))
@@ -65,17 +72,12 @@ func wellKnown(goos string, getenv func(string) string) []string {
 	return c
 }
 
-// Find resolves name (a path or a command on PATH) and reads its version.
+// Find resolves name and reads its version. A name other than "ffmpeg",
+// from SPYTIFY_FFMPEG, is taken as given: a path, or a command on PATH.
+// "ffmpeg" is the copy beside the program first, so a program of that
+// name earlier on PATH cannot stand in for it, then PATH, then wellKnown.
 func Find(name string) (*FFmpeg, error) {
-	path, err := exec.LookPath(name)
-	if err != nil && name == "ffmpeg" {
-		for _, p := range wellKnown(runtime.GOOS, os.Getenv) {
-			if _, serr := os.Stat(p); serr == nil {
-				path, err = p, nil
-				break
-			}
-		}
-	}
+	path, err := locate(name)
 	if err != nil {
 		return nil, fmt.Errorf("%w (%s)", ErrMissing, name)
 	}
@@ -86,6 +88,26 @@ func Find(name string) (*FFmpeg, error) {
 	}
 	version := strings.SplitN(string(out), "\n", 2)[0]
 	return &FFmpeg{Path: path, Version: strings.TrimSpace(version)}, nil
+}
+
+func locate(name string) (string, error) {
+	if name != "ffmpeg" {
+		return exec.LookPath(name)
+	}
+	if p := besideProgram(runtime.GOOS); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	for _, p := range wellKnown(runtime.GOOS, os.Getenv) {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	return "", exec.ErrNotFound
 }
 
 // HasEncoder reports whether this ffmpeg build has an encoder.
