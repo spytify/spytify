@@ -299,3 +299,15 @@ func (m *SMTC) SetVolume(v float64) error {
 	}
 	return m.Mixer.SetVolume(v)
 }
+
+// awaitFirst and awaitLast bound the wait between two looks at a call the
+// player answers. The wait doubles from the first: most calls end within a
+// few milliseconds, and looking every millisecond woke each poll a burst
+// of times, four polls a second (#847).
+const (
+	awaitFirst = time.Millisecond
+	awaitLast  = 16 * time.Millisecond
+)
+
+// nextAwait is the wait after d.
+func nextAwait(d time.Duration) time.Duration { return min(d*2, awaitLast) }
