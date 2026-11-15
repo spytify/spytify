@@ -12,12 +12,14 @@ import (
 	"testing"
 )
 
-// Scrolling the Library down a few hundred files and back reads each
-// file's cover once: ffmpeg starts once per file, not again for a row that
-// comes back. The Library keeps a row's thumbnail alone, not the live
-// card's two.
+// Scrolling the Library down well past the Record screen's 60 covers and
+// back reads each file's cover once: ffmpeg starts once per file, not
+// again for a row that comes back. The Library keeps a row's thumbnail
+// alone, not the live card's two.
 func TestScrollingTheLibraryBackAndForthReadsEachCoverOnce(t *testing.T) {
-	const files = 400
+	// 150 files and a picture twice the row thumbnail keep the test under
+	// a few seconds: internal/ui is close to CI's 20 minutes under -race.
+	const files = 150
 	dir := t.TempDir()
 	for i := range files {
 		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("Artist - Song %03d.mp3", i)), nil, 0o644); err != nil {
@@ -25,7 +27,7 @@ func TestScrollingTheLibraryBackAndForthReadsEachCoverOnce(t *testing.T) {
 		}
 	}
 	var picture bytes.Buffer
-	if err := jpeg.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 600, 600)), nil); err != nil {
+	if err := jpeg.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 4*rowCover, 4*rowCover)), nil); err != nil {
 		t.Fatal(err)
 	}
 	// The test reads the covers: no ffmpeg before it does.
