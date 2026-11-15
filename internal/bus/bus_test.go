@@ -303,3 +303,39 @@ func TestAClientThatStopsReadingIsDropped(t *testing.T) {
 		}
 	}
 }
+
+// Params the core already encoded go out byte for byte: the bus does not
+// encode them a second time, nor wrap them through a second Marshal.
+func TestEncodedParamsAreSentAsTheyAre(t *testing.T) {
+	srv, path := echoServer(t)
+	nc, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nc.Close()
+	r := bufio.NewReader(nc)
+	if _, err := nc.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"echo"}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	nc.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := r.ReadString('\n'); err != nil {
+		t.Fatal(err)
+	}
+	// Spaces a second encode would compact away.
+	srv.Broadcast("log", json.RawMessage(`{"level": "debug", "msg": "a <b> & c"}`))
+	srv.Broadcast(proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording})
+	srv.Broadcast("empty", json.RawMessage(nil))
+	for _, want := range []string{
+		`{"jsonrpc":"2.0","method":"log","params":{"level": "debug", "msg": "a <b> & c"}}`,
+		`{"jsonrpc":"2.0","method":"session.state","params":{"state":"recording"}}`,
+		`{"jsonrpc":"2.0","method":"empty","params":null}`,
+	} {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.TrimSuffix(line, "\n"); got != want {
+			t.Fatalf("got  %s\nwant %s", got, want)
+		}
+	}
+}

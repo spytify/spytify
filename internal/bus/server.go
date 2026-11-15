@@ -134,18 +134,30 @@ func (s *Server) accept(ln net.Listener) {
 }
 
 // Broadcast sends a notification to every client. A client that cannot
-// keep up is disconnected rather than allowed to stall the core.
+// keep up is disconnected rather than allowed to stall the core. Params
+// the core already encoded, a json.RawMessage, go out as they are.
 func (s *Server) Broadcast(method string, params any) {
-	raw, err := json.Marshal(params)
+	raw, ok := params.(json.RawMessage)
+	if !ok {
+		var err error
+		if raw, err = json.Marshal(params); err != nil {
+			s.logf("bus: event %s: %v", method, err)
+			return
+		}
+	}
+	name, err := json.Marshal(method)
 	if err != nil {
-		s.logf("bus: event %s: %v", method, err)
 		return
 	}
-	line, err := json.Marshal(proto.Message{JSONRPC: proto.JSONRPCVersion, Method: method, Params: raw})
-	if err != nil {
-		return
+	if len(raw) == 0 {
+		raw = json.RawMessage("null")
 	}
-	line = append(line, '\n')
+	line := make([]byte, 0, len(name)+len(raw)+40)
+	line = append(line, `{"jsonrpc":"`+proto.JSONRPCVersion+`","method":`...)
+	line = append(line, name...)
+	line = append(line, `,"params":`...)
+	line = append(line, raw...)
+	line = append(line, "}\n"...)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for c := range s.conns {
