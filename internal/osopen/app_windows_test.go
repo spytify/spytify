@@ -10,6 +10,8 @@ import (
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
+
+	"github.com/spytify/spytify/internal/proc"
 )
 
 // The two ways the player is installed: the Store puts an alias on PATH,
@@ -58,6 +60,45 @@ func TestAppFindsAProgramInAppPaths(t *testing.T) {
 			}
 		})
 	}
+	if t.Failed() {
+		diagnoseAppPaths(t, exe)
+	}
+}
+
+// diagnoseAppPaths says whether cmd /C start finds the HKCU entry, and
+// whether App finds one in HKLM. Temporary: it tells a CI runner that
+// ignores App Paths from a fault in App.
+func diagnoseAppPaths(t *testing.T, exe string) {
+	cmd := proc.Command("cmd", "/C", "start", "", "spytifyapppaths829")
+	if err := cmd.Start(); err != nil {
+		t.Logf("cmd /C start: %v", err)
+	} else {
+		done := make(chan error, 1)
+		go func() { done <- cmd.Wait() }()
+		select {
+		case err := <-done:
+			t.Logf("cmd /C start, HKCU entry: exit %v", err)
+		case <-time.After(10 * time.Second):
+			cmd.Process.Kill()
+			t.Logf("cmd /C start, HKCU entry: still waiting after 10 s (a dialog)")
+		}
+	}
+	const sub = `Software\Microsoft\Windows\CurrentVersion\App Paths\spytifyapppathslm829.exe`
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, sub, registry.SET_VALUE)
+	if err != nil {
+		t.Logf("HKLM: %v", err)
+		return
+	}
+	defer registry.DeleteKey(registry.LOCAL_MACHINE, sub)
+	err = k.SetStringValue("", exe)
+	k.Close()
+	if err != nil {
+		t.Logf("HKLM: %v", err)
+		return
+	}
+	t.Logf("App, HKLM entry, with .exe: %v", App("spytifyapppathslm829.exe"))
+	t.Logf("App, HKLM entry, bare: %v", App("spytifyapppathslm829"))
+	t.Logf("windows.ShellExecute, HKCU entry: %v", Open("spytifyapppaths829.exe"))
 }
 
 // A name that resolves to nothing fails at once, and never waits on the
