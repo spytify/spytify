@@ -36,11 +36,20 @@ func FindProcess(t Target) (Process, bool) {
 	case "windows":
 		procs = listToolhelp()
 	case "darwin":
-		procs = listSysctl()
+		procs = orElse(listSysctl(), listPS)
 	default:
 		procs = listPS()
 	}
 	return pickRoot(t, procs)
+}
+
+// orElse returns procs, or what fallback lists when procs is empty: a
+// listing that failed would take a running player for a stopped one.
+func orElse(procs []Process, fallback func() []Process) []Process {
+	if len(procs) > 0 {
+		return procs
+	}
+	return fallback()
 }
 
 // pickRoot returns the first matching process whose parent does not match.

@@ -132,6 +132,30 @@ func TestFindProcessFindsItself(t *testing.T) {
 	}
 }
 
+// When the kernel's list comes back empty on macOS, ps lists instead, and
+// finds the player as before #835.
+func TestAnEmptyListingFallsBackToPS(t *testing.T) {
+	calls := 0
+	fallback := func() []Process { calls++; return []Process{{PID: 7, Name: "player"}} }
+	if got := orElse([]Process{{PID: 3, Name: "player"}}, fallback); calls != 0 || got[0].PID != 3 {
+		t.Errorf("a listing that worked: %v, fallback called %d times", got, calls)
+	}
+	if got := orElse(nil, fallback); calls != 1 || len(got) != 1 || got[0].PID != 7 {
+		t.Errorf("an empty listing: %v, fallback called %d times", got, calls)
+	}
+	// The fallback is macOS's alone.
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skip(err)
+	}
+	if p, ok := pickRoot(Target{ProcessNames: []string{exe}}, listPS()); !ok || p.PID != os.Getpid() {
+		t.Errorf("ps found %v, %v; want the test binary, pid %d", p, ok, os.Getpid())
+	}
+}
+
 func TestPickRootFindsTheTreeRoot(t *testing.T) {
 	tg := Target{ProcessNames: []string{"Player"}}
 	procs := []Process{
