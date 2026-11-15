@@ -30,51 +30,25 @@ type coverCopies struct {
 	// paths holds each track tried: its copy, or "" when none was made.
 	paths   map[string]string
 	pending map[string]bool
-	// found holds each track looked for on disk and not tried: the copy an
-	// earlier window made, or "" for none. looking holds those being
-	// looked for.
-	found   map[string]string
-	looking map[string]bool
 	loaded  func()
 }
 
 func newCoverCopies(loaded func()) *coverCopies {
-	return &coverCopies{paths: map[string]string{}, pending: map[string]bool{}, found: map[string]string{}, looking: map[string]bool{}, loaded: loaded}
+	return &coverCopies{paths: map[string]string{}, pending: map[string]bool{}, loaded: loaded}
 }
 
 // path is the copy of the cover of track id in dir, "" while there is none.
-// A copy made by an earlier window, for a list it replayed, is looked for
-// on disk once, off the toolkit's goroutine: rows are drawn on it at every
-// event, and the output folder can be on a slow drive (#842). loaded runs
-// once a copy is found.
+// A copy made by an earlier window, for a list it replayed, is found on disk.
 func (c *coverCopies) path(dir, id string) string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if p, ok := c.paths[id]; ok || dir == "" {
 		return p
 	}
-	if p, ok := c.found[id]; ok || c.looking[id] {
-		return p
-	}
-	c.looking[id] = true
-	go func() {
-		p := onDisk(dir, id)
-		c.mu.Lock()
-		delete(c.looking, id)
-		c.found[id] = p
-		c.mu.Unlock()
-		if p != "" && c.loaded != nil {
-			c.loaded()
-		}
-	}()
-	return ""
-}
-
-// onDisk is the copy of the cover of track id in dir, "" when there is none.
-func onDisk(dir, id string) string {
 	for _, ext := range []string{".jpg", ".png"} {
 		p := filepath.Join(dir, coverFolder, copyName(id)+ext)
-		if _, err := statCopy(p); err == nil {
+		if _, err := os.Stat(p); err == nil {
+			c.paths[id] = p
 			return p
 		}
 	}
@@ -82,30 +56,19 @@ func onDisk(dir, id string) string {
 }
 
 // keep copies the cover at url of track id into dir once, off the toolkit's
-// goroutine, unless an earlier window made the copy.
+// goroutine.
 func (c *coverCopies) keep(dir, id, url string) {
-	if dir == "" || id == "" || url == "" {
+	if dir == "" || id == "" || url == "" || c.path(dir, id) != "" {
 		return
 	}
 	c.mu.Lock()
-	_, tried := c.paths[id]
-	if tried || c.pending[id] || c.found[id] != "" {
+	if _, tried := c.paths[id]; tried || c.pending[id] {
 		c.mu.Unlock()
 		return
 	}
 	c.pending[id] = true
 	c.mu.Unlock()
 	go func() {
-		if p := onDisk(dir, id); p != "" {
-			c.mu.Lock()
-			delete(c.pending, id)
-			c.paths[id] = p
-			c.mu.Unlock()
-			if c.loaded != nil {
-				c.loaded()
-			}
-			return
-		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		data, mime, err := tag.FetchCover(ctx, nil, url)
 		cancel()
@@ -140,11 +103,6 @@ func (c *coverCopies) prune(dir string, held map[string]bool) {
 			delete(c.paths, id)
 		}
 	}
-	for id := range c.found {
-		if !held[id] {
-			delete(c.found, id)
-		}
-	}
 	c.mu.Unlock()
 	if dir == "" {
 		return
@@ -170,9 +128,6 @@ func (c *coverCopies) prune(dir string, held map[string]bool) {
 		}
 	}()
 }
-
-// statCopy is os.Stat; tests replace it.
-var statCopy = os.Stat
 
 // copyName is a track id fit for a file name.
 func copyName(id string) string {
