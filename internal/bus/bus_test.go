@@ -327,3 +327,31 @@ func TestAClientThatStopsReadingIsDropped(t *testing.T) {
 		}
 	}
 }
+
+// A subscriber that falls behind loses the events past the 1024 that wait
+// for it, keeps its connection, and is told how many it lost.
+func TestASubscriberThatFallsBehindCountsWhatItLost(t *testing.T) {
+	srv, path := echoServer(t)
+	ctx := context.Background()
+	c, err := Dial(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Call(ctx, "echo", 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	for range 1100 {
+		srv.Broadcast(proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording})
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for c.Dropped() != 76 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d events lost, want 1100 - 1024 = 76", c.Dropped())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := c.Call(ctx, "echo", 1, nil); err != nil {
+		t.Fatalf("the connection after the loss: %v", err)
+	}
+}

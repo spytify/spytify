@@ -307,6 +307,8 @@ func (a *app) tailCmd() *cobra.Command {
 			if !follow {
 				return nil
 			}
+			var told int64
+			defer lost(c, cmd.ErrOrStderr(), &told)
 			for {
 				select {
 				case <-ctx.Done():
@@ -315,6 +317,7 @@ func (a *app) tailCmd() *cobra.Command {
 					if !ok {
 						return errors.New("spytifyd closed the connection")
 					}
+					lost(c, cmd.ErrOrStderr(), &told)
 					if ev.Method != proto.EventLog {
 						continue
 					}
@@ -357,6 +360,8 @@ func (a *app) eventsCmd() *cobra.Command {
 				return err
 			}
 			defer c.Close()
+			var told int64
+			defer lost(c, cmd.ErrOrStderr(), &told)
 			for {
 				select {
 				case <-ctx.Done():
@@ -365,10 +370,21 @@ func (a *app) eventsCmd() *cobra.Command {
 					if !ok {
 						return errors.New("spytifyd closed the connection")
 					}
+					lost(c, cmd.ErrOrStderr(), &told)
 					fmt.Fprintf(a.out, "{\"method\":%q,\"params\":%s}\n", ev.Method, ev.Params)
 				}
 			}
 		},
+	}
+}
+
+// lost says on w how many events c lost since told, which it moves on:
+// the output did not keep up (a pager not scrolling, a slow pipe), and a
+// copy of the events with holes must not look whole.
+func lost(c *bus.Client, w io.Writer, told *int64) {
+	if n := c.Dropped(); n > *told {
+		fmt.Fprintf(w, "spytify-cli: %d events lost: the output did not keep up\n", n-*told)
+		*told = n
 	}
 }
 
