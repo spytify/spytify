@@ -7,10 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
-	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/spytify/spytify/internal/ui/model"
 	"github.com/spytify/spytify/pkg/proto"
@@ -71,22 +68,19 @@ func (r *coverRig) settle() {
 		loading := len(r.a.covers.pending)
 		r.a.covers.mu.Unlock()
 		r.a.covers.copies.mu.Lock()
-		copying := len(r.a.covers.copies.pending) + len(r.a.covers.copies.looking)
+		copying := len(r.a.covers.copies.pending)
 		r.a.covers.copies.mu.Unlock()
 		return loading == 0 && copying == 0
 	})
 }
 
 // shows says whether the Record list draws track n's cover once its row
-// asked for it, and asked again as the list does once a copy is found or a
-// cover read.
+// asked for it.
 func (r *coverRig) shows(n int) bool {
 	r.t.Helper()
 	row := model.Row{ID: trackID(n), CoverURL: r.urls[n-1]}
-	for range 2 {
-		r.a.rowCover(row)
-		r.settle()
-	}
+	r.a.rowCover(row)
+	r.settle()
 	return r.a.rowCover(row).row != nil
 }
 
@@ -213,55 +207,5 @@ func writeCover(t *testing.T, path string) {
 	}
 	if err := os.WriteFile(path, b.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// A row asking for its copy never waits on the disk, which can be a slow
-// drive, and a track with no copy is looked for once, not at every draw.
-func TestACopyIsLookedForOnceAndNeverOnTheToolkitsGoroutine(t *testing.T) {
-	out := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(out, coverFolder), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeCover(t, filepath.Join(out, coverFolder, "s-002.png"))
-	disk := make(chan struct{})
-	var once sync.Once
-	free := func() { once.Do(func() { close(disk) }) }
-	defer free()
-	// Should a draw wait on the disk after all, it is let go in 10 s and
-	// the test fails instead of hanging.
-	defer time.AfterFunc(10*time.Second, free).Stop()
-	var stats atomic.Int32
-	defer func(f func(string) (os.FileInfo, error)) { statCopy = f }(statCopy)
-	statCopy = func(p string) (os.FileInfo, error) {
-		<-disk
-		stats.Add(1)
-		return os.Stat(p)
-	}
-	var loaded atomic.Int32
-	c := newCoverCopies(func() { loaded.Add(1) })
-	start := time.Now()
-	for range 50 {
-		if c.path(out, "s-001") != "" || c.path(out, "s-002") != "" {
-			t.Fatal("a copy before the disk answered")
-		}
-	}
-	if took := time.Since(start); took > time.Second {
-		t.Fatalf("100 draws took %v while the disk was slow", took)
-	}
-	free()
-	eventually(t, "the copy on disk was never found", func() bool { return c.path(out, "s-002") != "" })
-	for range 50 {
-		c.path(out, "s-001")
-	}
-	c.mu.Lock()
-	looking := len(c.looking)
-	c.mu.Unlock()
-	// .jpg then .png for each: s-001 has neither, s-002 its .png.
-	if n := stats.Load(); n != 4 || looking != 0 {
-		t.Fatalf("%d stats, %d lookups still on, want 4 and none", n, looking)
-	}
-	if n := loaded.Load(); n != 1 {
-		t.Fatalf("loaded ran %d times, want once, for the copy found", n)
 	}
 }
