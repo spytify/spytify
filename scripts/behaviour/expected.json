@@ -13,7 +13,7 @@
     {"alert": "asr: 01443614-cd74-433a-b99e-2ecdc07bfc25 on spytify-tap.exe", "issue": 886, "note": "reputation"},
     {"alert": "cfa: spytifyd.exe writes under a protected folder", "issue": 887, "note": "the scan records into Music on purpose"},
     {"alert": "cfa: ffmpeg.exe writes under a protected folder", "issue": 887, "note": "the scan records into Music on purpose"},
-    {"alert": "dns: spytify.exe looks up api.github.com", "issue": null, "note": "the update check, by design"}
+    {"alert": "dns: spytify.exe looks up api.github.com", "issue": null, "may_not_fire": true, "note": "the update check, by design; dev builds (every CI build but a tag's) skip it (devBuild)"}
   ],
   "linux": [],
   "files": [
