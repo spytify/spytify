@@ -89,7 +89,7 @@ def parse_events(report):
             text = raw.decode("utf-16", errors="replace")
         else:
             text = raw.decode("utf-8", errors="replace")
-        text = re.sub(r'\sxmlns(:\w+)?="[^"]*"', "", text)
+        text = re.sub(r"""\sxmlns(:\w+)?=(["'])[^"']*\2""", "", text)
         text = re.sub(r"&#x?0*([0-8bcef]|1[0-9a-f]);", "", text, flags=re.I)
         good = bad = 0
         dest = path[:-4] + ".jsonl"
@@ -128,8 +128,6 @@ def parse_events(report):
                 f.write(json.dumps(row) + "\n")
                 good += 1
         out_counts[os.path.basename(path)[:-4]] = (good, bad)
-        if bad == 0:
-            os.remove(path)
     return out_counts
 
 

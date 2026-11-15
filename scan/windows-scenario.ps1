@@ -15,7 +15,8 @@ $script:Tap = Join-Path $App 'spytify-tap.exe'
 $script:Ui = Join-Path $App 'Spytify.exe'
 $script:Dsn = @{ SPYTIFY_SENTRY_DSN = 'http://scan@127.0.0.1:19090/1' }
 
-function Cli([string]$Label, [string[]]$Arguments, [int]$TimeoutSec = 30, [switch]$Quiet) {
+# Not "Cli": PowerShell has an alias cli (Clear-Item), and aliases win.
+function Run-Cli([string]$Label, [string[]]$Arguments, [int]$TimeoutSec = 30, [switch]$Quiet) {
   return Invoke-Tool -Name "cli-$Label" -File $Cli -Arguments $Arguments -WorkingDirectory $App -TimeoutSec $TimeoutSec -Console -Quiet:$Quiet
 }
 
@@ -38,7 +39,7 @@ function Stop-App {
 
 function Wait-Recorder([int]$Tries) {
   for ($i = 0; $i -lt $Tries; $i++) {
-    $r = Cli 'info-json' @('info', '--json') -Quiet
+    $r = Run-Cli 'info-json' @('info', '--json') -Quiet
     if ($r.Record.exit -eq 0) { return $true }
     Start-Sleep -Seconds 2
   }
@@ -92,23 +93,23 @@ Phase 'first launch' {
     $script:DaemonRun = Start-Tool -Name 'spytifyd' -File $Daemon -WorkingDirectory $App
     $null = Wait-Recorder 15
   }
-  $null = Cli 'info' @('info')
-  $null = Cli 'status' @('status')
-  $null = Cli 'get' @('get')
+  $null = Run-Cli 'info' @('info')
+  $null = Run-Cli 'status' @('status')
+  $null = Run-Cli 'get' @('get')
   Cli-Opening 'launch' @('launch') 15
   Cli-Opening 'start' @('start') 60
-  $null = Cli 'status' @('status')
-  $null = Cli 'stop' @('stop')
+  $null = Run-Cli 'status' @('status')
+  $null = Run-Cli 'stop' @('stop')
 
   # Closing the window with "minimize to tray" on: the tray notice.
-  $null = Cli 'set-tray' @('set', 'app.minimize_to_tray=true')
+  $null = Run-Cli 'set-tray' @('set', 'app.minimize_to_tray=true')
   Start-Sleep -Seconds 3
   $w = Get-AppWindow
   if ($w) { $null = $w.CloseMainWindow() }
   for ($i = 0; $i -lt 6; $i++) { Start-Sleep -Seconds 2; Save-Processes "after close +$(2 * ($i + 1)) s" }
   Mark 'tray' "Spytify.exe still running: $(@(Get-Process -Name Spytify -ErrorAction SilentlyContinue).Count)"
 
-  $null = Cli 'shutdown' @('shutdown')
+  $null = Run-Cli 'shutdown' @('shutdown')
   Start-Sleep -Seconds 3
   Stop-App
   $null = Complete-Tool -Run $script:UiRun -StopNow
@@ -131,13 +132,13 @@ Phase 'recording a stand-in player' {
   for ($i = 0; $i -lt 5; $i++) { Start-Sleep -Seconds 5; Save-Processes "recording +$(5 * ($i + 1)) s" }
   Stop-Children 'spytifyd.exe' 'cmd.exe'
   $null = Complete-Tool -Run $run -TimeoutSec 30
-  $null = Cli 'status' @('status')
-  $null = Cli 'info' @('info')
+  $null = Run-Cli 'status' @('status')
+  $null = Run-Cli 'info' @('info')
   # Stopped from outside the window while it is hidden: "Recording stopped".
-  $null = Cli 'stop' @('stop')
+  $null = Run-Cli 'stop' @('stop')
   Start-Sleep -Seconds 12
   Save-Processes 'after the stop'
-  $null = Cli 'shutdown' @('shutdown')
+  $null = Run-Cli 'shutdown' @('shutdown')
   Start-Sleep -Seconds 3
   Stop-App
   $null = Complete-Tool -Run $script:UiRun -StopNow
@@ -175,8 +176,8 @@ Phase 'recording the fake player' {
 
 Phase 'small commands' {
   $null = Invoke-Tool -Name 'spytifyd-version' -File $Daemon -Arguments @('--version') -WorkingDirectory $App -Console
-  $null = Cli 'help' @('--help')
-  $null = Cli 'service-status' @('service', 'status')
+  $null = Run-Cli 'help' @('--help')
+  $null = Run-Cli 'service-status' @('service', 'status')
 }
 
 Save-Processes 'end'

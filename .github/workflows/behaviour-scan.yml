@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: behaviour-scan
+  group: behaviour-scan-${{ github.sha }}
   cancel-in-progress: true
 
 env:
@@ -19,7 +19,6 @@ env:
 
 jobs:
   windows:
-    if: false # done in run 43674904545
     name: Windows (${{ matrix.os }}, cloud ${{ matrix.cloud }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -73,6 +72,7 @@ jobs:
           retention-days: 3
 
   linux:
+    if: false # rerun in the run of 53cf72c5
     name: Linux (strace, Falco)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -114,6 +114,7 @@ jobs:
           retention-days: 3
 
   files:
+    if: false # rerun in the run of 53cf72c5
     name: Files (ClamAV, YARA, capa, lintian)
     runs-on: ubuntu-24.04
     timeout-minutes: 120
