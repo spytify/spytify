@@ -78,3 +78,14 @@ func TestCountResources(t *testing.T) {
 		}
 	}
 }
+
+func TestShellText(t *testing.T) {
+	// The tail of upstream Fyne's runScript and OpenURL, as linked.
+	upstream := []byte("\x00-ExecutionPolicy\x00Bypass\x00 -Raw) | Invoke-Expression\x00url.dll,FileProtocolHandler\x00")
+	if got := shellText(upstream); !slices.Equal(got, []string{"Invoke-Expression", "ExecutionPolicy", "FileProtocolHandler"}) {
+		t.Errorf("upstream Fyne: %v", got)
+	}
+	if got := shellText([]byte("\x00ShellExecuteW\x00RoActivateInstance\x00")); len(got) != 0 {
+		t.Errorf("the fork: %v", got)
+	}
+}

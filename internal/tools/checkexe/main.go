@@ -2,10 +2,11 @@
 // shortcuts and Task Manager read from them, an icon and version
 // information, and that they do not link opengl32.dll: Spytify.exe loads
 // it itself, so that it can load Mesa's first when no graphics driver
-// offers OpenGL (internal/ui/opengl). It also checks that nothing follows
-// their last section and that they export nothing, which antivirus
-// engines take for a hidden payload and a loader's entry points; with
-// -helper, for the binaries with no icon, those alone.
+// offers OpenGL (internal/ui/opengl), and that they hold none of the
+// PowerShell or rundll32 text upstream Fyne would link in. It also checks
+// that nothing follows their last section and that they export nothing,
+// which antivirus engines take for a hidden payload and a loader's entry
+// points; with -helper, for the binaries with no icon, those alone.
 // scripts/build-windows.sh runs it on every binary it builds:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
@@ -13,6 +14,7 @@
 package main
 
 import (
+	"bytes"
 	"debug/pe"
 	"encoding/binary"
 	"errors"
@@ -86,7 +88,29 @@ func check(path string, helper bool) (string, error) {
 	if len(gl) > 0 {
 		return "", fmt.Errorf("links opengl32.dll for %s: build it with scripts/build-windows.sh's go-gl/gl", strings.Join(gl, ", "))
 	}
-	return fmt.Sprintf("an icon of %d images, version information, opengl32.dll not linked, nothing past the last section, no exports", counts[rtIcon]), nil
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if found := shellText(data); len(found) > 0 {
+		return "", fmt.Errorf("holds %s, from Fyne's PowerShell notifications or rundll32 OpenURL: build it with the spytify/fyne-fix-6642 fork go.mod replaces Fyne with", strings.Join(found, ", "))
+	}
+	return fmt.Sprintf("an icon of %d images, version information, opengl32.dll not linked, no PowerShell or rundll32 text, nothing past the last section, no exports", counts[rtIcon]), nil
+}
+
+// shellText lists the text of upstream Fyne's Windows shell launches that
+// data holds: the PowerShell script its notifications run hidden,
+// with -ExecutionPolicy Bypass and Invoke-Expression, and the rundll32
+// handler OpenURL starts. Spytify starts neither (#828, #831), but engines
+// that read the strings score them all the same.
+func shellText(data []byte) []string {
+	var found []string
+	for _, s := range []string{"Invoke-Expression", "ExecutionPolicy", "FileProtocolHandler"} {
+		if bytes.Contains(data, []byte(s)) {
+			found = append(found, s)
+		}
+	}
+	return found
 }
 
 // directory reads entry i of the data directories of the PE file at path.
