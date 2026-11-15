@@ -329,21 +329,36 @@ func TestAClientThatStopsReadingIsDropped(t *testing.T) {
 }
 
 // A subscriber that falls behind loses the events past the 1024 that wait
-// for it, keeps its connection, and is told how many it lost.
+// for it, while the client keeps reading, and is told how many it lost. The
+// events come straight down the socket, as the server writes them: a
+// server's own queue drops a client too slow for it, which on Windows'
+// slower sockets would come first.
 func TestASubscriberThatFallsBehindCountsWhatItLost(t *testing.T) {
-	srv, path := echoServer(t)
-	ctx := context.Background()
-	c, err := Dial(ctx, path)
+	path := socketPath(t)
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		line := []byte(`{"jsonrpc":"2.0","method":"session.state","params":{"state":"recording"}}` + "\n")
+		for range 1100 {
+			if _, err := conn.Write(line); err != nil {
+				return
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}()
+	c, err := Dial(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	if err := c.Call(ctx, "echo", 0, nil); err != nil {
-		t.Fatal(err)
-	}
-	for range 1100 {
-		srv.Broadcast(proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording})
-	}
 	deadline := time.Now().Add(5 * time.Second)
 	for c.Dropped() != 76 {
 		if time.Now().After(deadline) {
@@ -351,7 +366,7 @@ func TestASubscriberThatFallsBehindCountsWhatItLost(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if err := c.Call(ctx, "echo", 1, nil); err != nil {
-		t.Fatalf("the connection after the loss: %v", err)
+	if got := len(c.Subscribe()); got != 1024 {
+		t.Fatalf("%d events wait for the subscriber, want 1024", got)
 	}
 }
