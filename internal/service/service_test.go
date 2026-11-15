@@ -31,6 +31,136 @@ func TestSystemdUnit(t *testing.T) {
 	}
 }
 
+// With the .deb or .rpm installed, service install enables the packaged
+// unit and writes no second one in the user's folder, which would shadow
+// it. It removes the one an earlier install wrote, unless the user edited
+// it.
+func TestThePackagedUnitIsEnabledNotWritten(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the plan's commands are POSIX")
+	}
+	dir := t.TempDir()
+	old := packagedUnit
+	packagedUnit = filepath.Join(dir, "usr-lib", "spytifyd.service")
+	t.Cleanup(func() { packagedUnit = old })
+	if err := os.MkdirAll(filepath.Dir(packagedUnit), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(packagedUnit, []byte("[Service]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(dir, "home")
+
+	p, err := For("linux", "/usr/bin/spytifyd", home, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Path != "" || p.Content != nil || p.Packaged != packagedUnit {
+		t.Fatalf("plan writes %q (packaged %q), want no file and the packaged unit", p.Path, p.Packaged)
+	}
+	if !reflect.DeepEqual(p.Install, [][]string{{"systemctl", "--user", "daemon-reload"}, {"systemctl", "--user", "reenable", "spytifyd.service"}, {"systemctl", "--user", "start", "spytifyd.service"}}) {
+		t.Errorf("install %v", p.Install)
+	}
+	if !reflect.DeepEqual(p.Uninstall, [][]string{{"systemctl", "--user", "disable", "--now", "spytifyd.service"}}) {
+		t.Errorf("uninstall %v", p.Uninstall)
+	}
+
+	// A spytifyd of its own, built or unpacked elsewhere, still gets the
+	// written unit.
+	if q, _ := For("linux", "/opt/spytify/spytifyd", home, 1000); q.Path == "" || q.Packaged != "" {
+		t.Errorf("own spytifyd: path %q, packaged %q", q.Path, q.Packaged)
+	}
+
+	// Install runs the commands and writes nothing; the unit an earlier
+	// install wrote goes, before and after the hardening.
+	user := filepath.Join(home, ".config", "systemd", "user", "spytifyd.service")
+	for i, earlier := range p.StaleContents {
+		if err := os.MkdirAll(filepath.Dir(user), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(user, earlier, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		ran := filepath.Join(dir, "ran")
+		_ = os.Remove(ran)
+		q := p
+		q.Install = [][]string{{"sh", "-c", "echo enabled >> " + ran}}
+		if err := Install(q); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(user); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("earlier unit %d still in the user's folder: %v", i, err)
+		}
+		if b, _ := os.ReadFile(ran); string(b) != "enabled\n" {
+			t.Errorf("commands ran as %q", b)
+		}
+	}
+	if !strings.Contains(string(p.StaleContents[1]), "RestartSec=5\n\n[Install]") {
+		t.Errorf("the unit before the hardening is not the one earlier installs wrote:\n%s", p.StaleContents[1])
+	}
+	edited := []byte("[Service]\nExecStart=/usr/bin/spytifyd --verbose\n")
+	if err := os.WriteFile(user, edited, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	q := p
+	q.Install = nil
+	if err := Install(q); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(user); err != nil || string(b) != string(edited) {
+		t.Errorf("an edited unit was removed or changed: %q, %v", b, err)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(user))
+	if len(entries) != 1 {
+		t.Errorf("install wrote in the user's folder: %v", entries)
+	}
+
+	// Installed asks systemd whether the packaged unit is enabled.
+	q.Enabled = []string{"true"}
+	if !Installed(q) {
+		t.Error("enabled packaged unit reported not installed")
+	}
+	q.Enabled = []string{"false"}
+	if Installed(q) {
+		t.Error("disabled packaged unit reported installed")
+	}
+}
+
+// The packaged unit and the one service install writes carry the same
+// hardening, none of it needing a user namespace (ProtectSystem, PrivateTmp
+// and the like would hide output folders and /tmp from spytifyd).
+func TestBothUnitsAreHardened(t *testing.T) {
+	packaged, err := os.ReadFile(filepath.Join("..", "..", "packaging", "linux", "spytifyd.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := For("linux", "/opt/spytify/spytifyd", "/home/u", 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, unit := range map[string]string{"packaged": string(packaged), "written": string(p.Content)} {
+		lines := strings.Split(unit, "\n")
+		for _, want := range []string{
+			"NoNewPrivileges=yes",
+			"LockPersonality=yes",
+			"RestrictSUIDSGID=yes",
+			"SystemCallArchitectures=native",
+			"RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6",
+		} {
+			if !contains(lines, want) {
+				t.Errorf("%s unit lacks %q", name, want)
+			}
+		}
+		for _, l := range lines {
+			for _, ns := range []string{"ProtectSystem=", "ProtectHome=", "PrivateTmp=", "PrivateUsers=", "ReadWritePaths="} {
+				if strings.HasPrefix(l, ns) {
+					t.Errorf("%s unit has %q, which needs a user namespace", name, l)
+				}
+			}
+		}
+	}
+}
+
 func TestLaunchdAgent(t *testing.T) {
 	p, err := For("darwin", "/Applications/A & B.app/Contents/MacOS/spytifyd", "/Users/u", 501)
 	if err != nil {

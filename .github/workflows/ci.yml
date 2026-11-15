@@ -432,6 +432,19 @@ jobs:
           if ldd /usr/bin/spytify-ui | grep 'not found'; then exit 1; fi
           spytifyd -version
           spytify-cli --help > /dev/null
+      # Across these images the unhardened unit rated 9.2 to 9.8 and the
+      # hardened one 8.2 to 8.8. --offline and --threshold came with systemd
+      # 250: Ubuntu 22.04 (249) only verifies the unit.
+      - name: The packaged user unit is valid and keeps its hardening
+        run: |
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq systemd > /dev/null
+          export XDG_RUNTIME_DIR=/tmp/xdg-unit
+          mkdir -m 700 "$XDG_RUNTIME_DIR"
+          unit=/usr/lib/systemd/user/spytifyd.service
+          systemd-analyze --user verify "$unit"
+          if systemd-analyze security --help | grep -q -- --offline; then
+            systemd-analyze security --user --offline=yes --threshold=88 "$unit"
+          fi
       - name: The app opens its window with Mesa's software renderer
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb xdotool mesa-utils

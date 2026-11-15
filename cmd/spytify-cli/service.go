@@ -45,6 +45,10 @@ func (a *app) serviceCmd() *cobra.Command {
 			if err := service.Install(p); err != nil {
 				return err
 			}
+			if p.Packaged != "" {
+				fmt.Fprintf(a.out, "enabled %s; spytifyd now starts at login\n", p.Packaged)
+				return nil
+			}
 			fmt.Fprintf(a.out, "installed %s; spytifyd now starts at login\n", p.Path)
 			return nil
 		},
