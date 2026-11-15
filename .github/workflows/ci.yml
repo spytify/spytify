@@ -353,6 +353,28 @@ jobs:
         run: scripts/build-macos.sh dist
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
+      # The bug tracker on and its choice already shown, the app reads the
+      # computer's ID through IOKit: an ioreg first on PATH tells if it runs
+      # (#890). The Sentry project is out of reach, so nothing leaves.
+      - name: The app reads the computer's ID without starting ioreg
+        run: |
+          dir="$RUNNER_TEMP/no-ioreg"
+          prefs="$dir/home/Library/Preferences/fyne/org.spytify.ui"
+          mkdir -p "$dir/bin" "$dir/home/Library/Caches" "$prefs"
+          printf '#!/bin/sh\necho "ioreg $*" >> "%s/ran"\nexec /usr/sbin/ioreg "$@"\n' "$dir" > "$dir/bin/ioreg"
+          chmod +x "$dir/bin/ioreg"
+          echo '{"first-run-seen":true,"bug-tracker-choice-seen":true}' > "$prefs/preferences.json"
+          HOME="$dir/home" PATH="$dir/bin:$PATH" SPYTIFY_SENTRY_DSN=http://public@127.0.0.1:1/1 \
+            SPYTIFY_SOCKET="$dir/spytify.sock" SPYTIFY_CONFIG="$dir/config.toml" \
+            dist/Spytify.app/Contents/MacOS/spytify-ui > "$dir/ui.log" 2>&1 &
+          pid=$!
+          # The tracker notes the launch once it is on, the ID read.
+          for i in $(seq 30); do grep -q telemetry.step.launched "$prefs/preferences.json" && break; sleep 1; done
+          sleep 2
+          kill $pid || true
+          cat "$dir/ui.log" "$prefs/preferences.json"
+          if [ -e "$dir/ran" ]; then cat "$dir/ran"; echo "the app started ioreg"; exit 1; fi
+          grep -q telemetry.step.launched "$prefs/preferences.json" || { echo "the bug tracker did not turn on"; exit 1; }
       - name: The encode and tag tests with the app's ffmpeg, on each processor
         run: |
           # It has only what Spytify runs: a test that needs more fails.
