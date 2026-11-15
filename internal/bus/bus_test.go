@@ -270,6 +270,30 @@ func TestTCPServesTheSameProtocol(t *testing.T) {
 	}
 }
 
+// The bus has no authentication: --listen takes a loopback address only,
+// never one that other computers reach.
+func TestTCPListensOnLoopbackOnly(t *testing.T) {
+	for _, addr := range []string{":9000", "0.0.0.0:9000", ":0", "0.0.0.0:0", "[::]:0", "192.168.1.10:0", "example.com:0"} {
+		srv, _ := echoServer(t)
+		err := srv.ListenTCP(addr)
+		if err == nil {
+			t.Errorf("%s: listening on %v", addr, srv.Addrs())
+		} else if !strings.Contains(err.Error(), "not a loopback address") {
+			t.Errorf("%s: %v, want a refusal that says why", addr, err)
+		}
+	}
+	for _, addr := range []string{"127.0.0.1:0", "[::1]:0", "localhost:0"} {
+		srv, _ := echoServer(t)
+		if err := srv.ListenTCP(addr); err != nil {
+			if addr == "[::1]:0" && !strings.Contains(err.Error(), "loopback") {
+				t.Logf("%s: %v (no IPv6 here)", addr, err)
+				continue
+			}
+			t.Errorf("%s: %v", addr, err)
+		}
+	}
+}
+
 // A client that stops reading is dropped once its backlog is full, so
 // events never wait for it.
 func TestAClientThatStopsReadingIsDropped(t *testing.T) {

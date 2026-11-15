@@ -87,7 +87,7 @@ func newHelper(helper string, args func(target.Target) ([]string, bool), logf fu
 		logf = func(string, ...any) {}
 	}
 	return &Helper{logf: logf, helper: helper, args: args, headerTimeout: headerTimeout, frameTimeout: frameTimeout,
-		retryFirst: retryFirst, retryLast: retryLast, frames: make(chan Chunk, 256), done: make(chan struct{})}
+		retryFirst: retryFirst, retryLast: retryLast, frames: make(chan Chunk, queuedChunks), done: make(chan struct{})}
 }
 
 // FindTapHelper locates spytify-tap: the given path, next to the running

@@ -75,4 +75,6 @@ printf '%s' "$rows"
 echo
 echo "The Windows zip and the macOS app come with ffmpeg, and the .deb installs it. Elsewhere, install it first: \`brew install ffmpeg\` for the macOS command line, or from the system's packages on Linux. $(link SHA256SUMS) has every file's checksum, and the [install page](https://spytify.github.io/spytify/v2/install.html) says more."
 echo
-jq -r .body <<<"$release"
+# GitHub's list leaves two blank lines above its last line and ends without
+# a newline: the notes keep one blank line and end as the list does.
+printf '%s' "$(jq -r .body <<<"$release" | cat -s)"

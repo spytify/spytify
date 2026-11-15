@@ -535,3 +535,30 @@ func TestALevelReportReplacesTheLast(t *testing.T) {
 		t.Fatalf("level %+v, want -6 dBFS and no channels", l)
 	}
 }
+
+// Snapshots share the log lines instead of copying them, and the lines a
+// snapshot holds never change: the model adds lines after its last one
+// and drops old ones from the front, and a line a reader appends goes to a
+// copy of its own.
+func TestSnapshotsShareLogLinesThatNeverChange(t *testing.T) {
+	m := New()
+	for i := range 10 {
+		m.Apply(ev(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: fmt.Sprintf("line %d", i)}))
+	}
+	a, b := m.Snapshot(), m.Snapshot()
+	if &a.Logs[0] != &b.Logs[0] {
+		t.Fatal("two snapshots copied the log lines")
+	}
+	_ = append(a.Logs, proto.LogEvent{Msg: "a reader's"})
+	for i := range 2 * maxLogs {
+		m.Apply(ev(t, proto.EventLog, proto.LogEvent{Level: "info", Msg: fmt.Sprintf("later %d", i)}))
+	}
+	for i, l := range a.Logs {
+		if want := fmt.Sprintf("line %d", i); l.Msg != want {
+			t.Fatalf("snapshot line %d became %q, want %q", i, l.Msg, want)
+		}
+	}
+	if s := m.Snapshot(); len(s.Logs) != maxLogs || s.Logs[len(s.Logs)-1].Msg != fmt.Sprintf("later %d", 2*maxLogs-1) {
+		t.Fatalf("the model holds %d lines, the last %q", len(s.Logs), s.Logs[len(s.Logs)-1].Msg)
+	}
+}

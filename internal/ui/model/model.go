@@ -259,7 +259,11 @@ func (m *Model) Snapshot() State {
 		s.Current = &c
 	}
 	s.Rows = append([]Row(nil), s.Rows...)
-	s.Logs = append([]proto.LogEvent(nil), s.Logs...)
+	// The log lines are shared, not copied (#853): the model only ever adds
+	// lines after its last one and drops old ones from the front, so no
+	// line a snapshot holds changes. Capped, a line a reader appends goes to
+	// a copy of its own.
+	s.Logs = s.Logs[:len(s.Logs):len(s.Logs)]
 	s.Settings = make(map[string]any, len(m.s.Settings))
 	for k, v := range m.s.Settings {
 		s.Settings[k] = v
