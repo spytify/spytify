@@ -1,6 +1,10 @@
 package telemetry
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/denisbrodbeck/machineid"
+)
 
 var computer struct {
 	once sync.Once
@@ -12,6 +16,6 @@ var computer struct {
 // after a reinstall, and of no use to another app. Empty when the system
 // has none.
 func computerID() string {
-	computer.once.Do(func() { computer.id, _ = protectedID("spytify") })
+	computer.once.Do(func() { computer.id, _ = machineid.ProtectedID("spytify") })
 	return computer.id
 }

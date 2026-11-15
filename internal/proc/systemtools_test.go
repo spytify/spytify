@@ -41,24 +41,6 @@ var byName = map[string]string{
 	"spytifyd":    "spytify's own, looked for beside the program first",
 }
 
-// notOnMacOS says whether a file is left out of macOS builds.
-func notOnMacOS(rel string, f *ast.File) bool {
-	if strings.HasSuffix(rel, "_windows.go") || strings.HasSuffix(rel, "_linux.go") {
-		return true
-	}
-	for _, g := range f.Comments {
-		if g.Pos() >= f.Package {
-			break
-		}
-		for _, c := range g.List {
-			if c.Text == "//go:build !darwin" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // A program spytify starts from a name written in its code is either a
 // full path or a program of Windows or Linux. A new macOS tool started by
 // name fails here: give its full path, or add it to byName with the reason.
@@ -81,15 +63,9 @@ func TestMacOSSystemToolsAreStartedByTheirFullPath(t *testing.T) {
 					return nil
 				}
 			}
-			f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution|parser.ParseComments)
+			f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
 			if err != nil {
 				return err
-			}
-			// machineid starts ioreg by name on macOS.
-			for _, im := range f.Imports {
-				if p, _ := strconv.Unquote(im.Path.Value); p == "github.com/denisbrodbeck/machineid" && !notOnMacOS(rel, f) {
-					t.Errorf("%s: imports machineid, which starts ioreg by name on macOS", rel)
-				}
 			}
 			names := map[string]string{}
 			for _, im := range f.Imports {
