@@ -510,3 +510,138 @@ jobs:
           pipewire-pulse >"$XDG_RUNTIME_DIR/pipewire-pulse.log" 2>&1 &
           for i in $(seq 50); do pactl info >/dev/null 2>&1 && break; sleep 0.1; done
           go test -tags integration -v -count=1 -run TestTheCaptureAddsNoConversionToA44100HzSource ./internal/capture/
+
+  # Security software on the builds, as a user's PC has it. Windows: Defender
+  # switched back on (cloud protection, behaviour monitoring, script
+  # scanning, the attack-surface rules in audit), Sysmon, and the Sigma rules
+  # Hayabusa ships, over a first day with the app (window, checks, tray,
+  # capture helper, recordings). A Spytify program that starts a shell, or an
+  # alert scripts/behaviour/expected.json does not list, fails the job; so
+  # does a listed alert that no longer fires: the PR that fixes one removes
+  # its line, and this job proves it gone.
+  behaviour-windows:
+    needs: windows-build
+    runs-on: windows-2022
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: spytify-windows
+          path: ${{ runner.temp }}/build
+      - name: Where the build is
+        run: '"SPYTIFY_BUILD=$env:RUNNER_TEMP\build" >> $env:GITHUB_ENV'
+      - name: A sound card (Scream)
+        continue-on-error: true
+        run: scripts/ci/windows-audio-device.ps1
+      - name: The player's names, to keep them out of the report
+        run: scripts/behaviour/windows-names.ps1
+      - name: Defender on, with its cloud protection
+        run: scripts/behaviour/windows-defender-on.ps1 -CloudBlockLevel High
+      - name: Sysmon
+        run: scripts/behaviour/windows-sysmon.ps1
+      - name: The build where a download lands, marked as from the Internet
+        run: scripts/behaviour/windows-place.ps1
+      - name: A first day with the app
+        run: scripts/behaviour/windows-scenario.ps1
+      - name: What Defender and the event logs saw
+        if: always()
+        run: scripts/behaviour/windows-collect.ps1
+      - name: Sigma rules over the event logs (Hayabusa)
+        if: always()
+        run: scripts/behaviour/windows-hayabusa.ps1
+      - name: Summary
+        if: always()
+        run: python scripts/behaviour/windows-summary.py "$env:RUNNER_TEMP\report" "$env:RUNNER_TEMP\player-names.txt"
+      - name: No alert beyond the known ones, and every known one still fires
+        run: python scripts/behaviour/check.py windows "$env:RUNNER_TEMP\report"
+      - name: Take the player's name out of the report
+        id: scrub
+        if: always()
+        run: python scripts/behaviour/scrub.py "$env:RUNNER_TEMP\report" "$env:RUNNER_TEMP\player-names.txt"
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.scrub.outcome == 'success'
+        with:
+          name: behaviour-windows
+          path: ${{ runner.temp }}/report
+          retention-days: 14
+
+  # The .deb on Ubuntu 24.04 with a desktop session, watched by Falco (its
+  # stable, incubating and sandbox rules): the window, the CLI and the login
+  # service. Any Falco rule on a Spytify program fails the job unless
+  # expected.json lists it.
+  behaviour-linux:
+    needs: linux-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: spytify-linux
+          path: ${{ runner.temp }}/build
+      - name: Install the .deb and a desktop session
+        run: |
+          scripts/ci/apt-install.sh "$(ls "$RUNNER_TEMP"/build/spytify_*_amd64.deb)" \
+            pipewire pipewire-bin pipewire-pulse wireplumber dbus dbus-bin pulseaudio-utils \
+            procps python3 xvfb xauth xdotool libgl1-mesa-dri mesa-utils
+      - name: The player's names, to keep them out of the report
+        run: bash scripts/behaviour/linux-names.sh
+      - name: A session under Falco
+        env:
+          SPYTIFY_GATE_SKIP_FAKE: "1"
+        run: bash scripts/behaviour/linux-falco.sh
+      - name: Summary
+        if: always()
+        run: python3 scripts/behaviour/linux-summary.py "$RUNNER_TEMP/report" "$RUNNER_TEMP/player-names.txt"
+      - name: No Falco rule beyond the known ones
+        run: python3 scripts/behaviour/check.py linux "$RUNNER_TEMP/report"
+      - name: Take the player's name out of the report
+        id: scrub
+        if: always()
+        run: python3 scripts/behaviour/scrub.py "$RUNNER_TEMP/report" "$RUNNER_TEMP/player-names.txt"
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.scrub.outcome == 'success'
+        with:
+          name: behaviour-linux
+          path: ${{ runner.temp }}/report
+          retention-days: 14
+
+  # Every file of the Windows and Linux builds through ClamAV (potentially
+  # unwanted programs included) and the YARA Forge rules. A match that
+  # expected.json does not list fails the job.
+  behaviour-files:
+    needs: [windows-build, linux-build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: spytify-windows
+          path: ${{ runner.temp }}/windows
+      - uses: actions/download-artifact@v8
+        with:
+          name: spytify-linux
+          path: ${{ runner.temp }}/linux
+      - name: ClamAV and YARA Forge
+        run: bash scripts/behaviour/files.sh "$RUNNER_TEMP/windows" "$RUNNER_TEMP/linux"
+      - name: No match beyond the known ones
+        run: python3 scripts/behaviour/check.py files "$RUNNER_TEMP/report"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: behaviour-files
+          path: |
+            ${{ runner.temp }}/report/clamscan.txt
+            ${{ runner.temp }}/report/yara-*.txt
+          retention-days: 14

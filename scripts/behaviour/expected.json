@@ -1,0 +1,22 @@
+{
+  "windows": [
+    {"alert": "child: spytify.exe starts powershell.exe", "issue": 831, "note": "Fyne's toast runs a .ps1 from %TEMP% with -ExecutionPolicy Bypass"},
+    {"alert": "sigma: Script Interpreter Execution From Suspicious Folder", "issue": 831, "note": "high; the toast's PowerShell"},
+    {"alert": "sigma: Potentially Suspicious Powershell Script Execution From Temp Folder", "issue": 831, "note": "the toast's PowerShell"},
+    {"alert": "sigma: Change PowerShell Policies to an Insecure Level", "issue": 831, "note": "the toast's -ExecutionPolicy Bypass"},
+    {"alert": "sigma: Non Interactive PowerShell Process Spawned", "issue": 831, "note": "the toast's PowerShell"},
+    {"alert": "child: spytifyd.exe starts cmd.exe", "issue": 829, "note": "cmd /C start \"\" <player> when the player is not running"},
+    {"alert": "sigma: Potential Executable Run Itself As Sacrificial Process", "issue": 888, "note": "the app starts itself again with Mesa (the runner has no OpenGL driver)"},
+    {"alert": "asr: 01443614-cd74-433a-b99e-2ecdc07bfc25 on spytify.exe", "issue": 886, "note": "reputation: a build nobody has seen; no code fix"},
+    {"alert": "asr: 01443614-cd74-433a-b99e-2ecdc07bfc25 on spytifyd.exe", "issue": 886, "note": "reputation"},
+    {"alert": "asr: 01443614-cd74-433a-b99e-2ecdc07bfc25 on spytify-cli.exe", "issue": 886, "note": "reputation"},
+    {"alert": "asr: 01443614-cd74-433a-b99e-2ecdc07bfc25 on spytify-tap.exe", "issue": 886, "note": "reputation"},
+    {"alert": "cfa: spytifyd.exe writes under a protected folder", "issue": 887, "note": "the scan records into Music on purpose"},
+    {"alert": "cfa: ffmpeg.exe writes under a protected folder", "issue": 887, "note": "the scan records into Music on purpose"},
+    {"alert": "dns: spytify.exe looks up api.github.com", "issue": null, "note": "the update check, by design"}
+  ],
+  "linux": [],
+  "files": [
+    {"alert": "clamav: PUA.Win.Packer.Pseudosigner-96 on Spytify.exe", "issue": 889, "note": "16 bytes of Fyne's NotoSans-BoldItalic.ttf; reported as a false positive"}
+  ]
+}

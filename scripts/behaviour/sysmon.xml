@@ -1,0 +1,132 @@
+<!-- Behaviour gate (ci.yml). What Sysmon keeps during the scan:
+     every process start, and for the programs of the release (their path
+     holds "spytify") what they load, write, reach and open. -->
+<Sysmon schemaversion="4.90">
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <EventFiltering>
+    <!-- 1: every process start on the machine -->
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="exclude"/>
+    </RuleGroup>
+    <!-- 2 -->
+    <RuleGroup name="" groupRelation="or">
+      <FileCreateTime onmatch="include">
+        <Image condition="contains">spytify</Image>
+      </FileCreateTime>
+    </RuleGroup>
+    <!-- 3 -->
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="include">
+        <Image condition="contains">spytify</Image>
+        <Image condition="image">powershell.exe</Image>
+        <Image condition="image">cmd.exe</Image>
+        <Image condition="image">rundll32.exe</Image>
+      </NetworkConnect>
+    </RuleGroup>
+    <!-- 5 -->
+    <RuleGroup name="" groupRelation="or">
+      <ProcessTerminate onmatch="include">
+        <Image condition="contains">spytify</Image>
+        <Image condition="image">powershell.exe</Image>
+        <Image condition="image">cmd.exe</Image>
+        <Image condition="image">rundll32.exe</Image>
+      </ProcessTerminate>
+    </RuleGroup>
+    <!-- 6: nothing -->
+    <RuleGroup name="" groupRelation="or">
+      <DriverLoad onmatch="include"/>
+    </RuleGroup>
+    <!-- 7 -->
+    <RuleGroup name="" groupRelation="or">
+      <ImageLoad onmatch="include">
+        <Image condition="contains">spytify</Image>
+      </ImageLoad>
+    </RuleGroup>
+    <!-- 8: every remote thread -->
+    <RuleGroup name="" groupRelation="or">
+      <CreateRemoteThread onmatch="exclude"/>
+    </RuleGroup>
+    <!-- 9 -->
+    <RuleGroup name="" groupRelation="or">
+      <RawAccessRead onmatch="include">
+        <Image condition="contains">spytify</Image>
+      </RawAccessRead>
+    </RuleGroup>
+    <!-- 10: what the programs open, and who opens them -->
+    <RuleGroup name="" groupRelation="or">
+      <ProcessAccess onmatch="include">
+        <SourceImage condition="contains">spytify</SourceImage>
+        <TargetImage condition="contains">spytify</TargetImage>
+      </ProcessAccess>
+    </RuleGroup>
+    <!-- 11 -->
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="include">
+        <Image condition="contains">spytify</Image>
+        <Image condition="image">powershell.exe</Image>
+      </FileCreate>
+    </RuleGroup>
+    <!-- 12, 13, 14 -->
+    <RuleGroup name="" groupRelation="or">
+      <RegistryEvent onmatch="include">
+        <Image condition="contains">spytify</Image>
+      </RegistryEvent>
+    </RuleGroup>
+    <!-- 15 -->
+    <RuleGroup name="" groupRelation="or">
+      <FileCreateStreamHash onmatch="include">
+        <Image condition="contains">spytify</Image>
+      </FileCreateStreamHash>
+    </RuleGroup>
+    <!-- 17, 18 -->
+    <RuleGroup name="" groupRelation="or">
+      <PipeEvent onmatch="include">
+        <Image condition="contains">spytify</Image>
+      </PipeEvent>
+    </RuleGroup>
+    <!-- 19, 20, 21: nothing -->
+    <RuleGroup name="" groupRelation="or">
+      <WmiEvent onmatch="include"/>
+    </RuleGroup>
+    <!-- 22 -->
+    <RuleGroup name="" groupRelation="or">
+      <DnsQuery onmatch="include">
+        <Image condition="contains">spytify</Image>
+        <Image condition="image">powershell.exe</Image>
+        <Image condition="image">cmd.exe</Image>
+        <Image condition="image">rundll32.exe</Image>
+      </DnsQuery>
+    </RuleGroup>
+    <!-- 23 keeps a copy of each deleted file: nothing -->
+    <RuleGroup name="" groupRelation="or">
+      <FileDelete onmatch="include"/>
+    </RuleGroup>
+    <!-- 24: nothing -->
+    <RuleGroup name="" groupRelation="or">
+      <ClipboardChange onmatch="include"/>
+    </RuleGroup>
+    <!-- 25: every tampering -->
+    <RuleGroup name="" groupRelation="or">
+      <ProcessTampering onmatch="exclude"/>
+    </RuleGroup>
+    <!-- 26 -->
+    <RuleGroup name="" groupRelation="or">
+      <FileDeleteDetected onmatch="include">
+        <Image condition="contains">spytify</Image>
+      </FileDeleteDetected>
+    </RuleGroup>
+    <!-- 27, 28 block what they match: nothing -->
+    <RuleGroup name="" groupRelation="or">
+      <FileBlockExecutable onmatch="include"/>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <FileBlockShredding onmatch="include"/>
+    </RuleGroup>
+    <!-- 29 -->
+    <RuleGroup name="" groupRelation="or">
+      <FileExecutableDetected onmatch="include">
+        <Image condition="contains">spytify</Image>
+      </FileExecutableDetected>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>
