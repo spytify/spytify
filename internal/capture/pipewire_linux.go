@@ -123,7 +123,7 @@ func NewLinux(logf func(format string, args ...any)) (*PipeWire, error) {
 	default:
 		return nil, errors.New("neither PipeWire (pw-record, pw-dump) nor PulseAudio (parec, pactl) tools were found")
 	}
-	return &PipeWire{logf: logf, backend: b, clock: pipewireClock{}, frames: make(chan Chunk, 256), done: make(chan struct{})}, nil
+	return &PipeWire{logf: logf, backend: b, clock: pipewireClock{}, frames: make(chan Chunk, queuedChunks), done: make(chan struct{})}, nil
 }
 
 func have(name string) bool {

@@ -62,6 +62,13 @@ func (r *Ring) Append(data []byte) (lost int64) {
 
 // Bytes copies frames [from, to), clamped to what the ring holds.
 func (r *Ring) Bytes(from, to int64) []byte {
+	return r.AppendBytes(nil, from, to)
+}
+
+// AppendBytes appends frames [from, to), clamped to what the ring holds, to
+// dst: given a buffer it reuses, the session writes each take with no new
+// allocation (#838).
+func (r *Ring) AppendBytes(dst []byte, from, to int64) []byte {
 	if from < r.start {
 		from = r.start
 	}
@@ -69,20 +76,19 @@ func (r *Ring) Bytes(from, to int64) []byte {
 		to = r.end
 	}
 	if to <= from {
-		return nil
+		return dst
 	}
 	fb := int64(r.format.FrameBytes())
-	out := make([]byte, (to-from)*fb)
 	for done := int64(0); done < to-from; {
 		pos := (from + done) % r.cap
 		run := r.cap - pos
 		if run > to-from-done {
 			run = to - from - done
 		}
-		copy(out[done*fb:(done+run)*fb], r.buf[pos*fb:(pos+run)*fb])
+		dst = append(dst, r.buf[pos*fb:(pos+run)*fb]...)
 		done += run
 	}
-	return out
+	return dst
 }
 
 // Discard forgets frames before upTo.

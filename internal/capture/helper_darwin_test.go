@@ -152,3 +152,35 @@ exit 1
 		}
 	}
 }
+
+// A session that stops reading for a while, as one writing to a disk that
+// stalls does, loses nothing of the first 15 s the helper sends meanwhile.
+func TestAStalledSessionLosesNoAudioForAWhile(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "helper")
+	// 1000 chunks of 10 ms at 48 kHz stereo float: 10 s of audio, at once.
+	body := `#!/bin/sh
+printf 'SPYTIFY-TAP f32le 48000 2\n'
+head -c 3840000 /dev/zero
+exec sleep 30
+`
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := newHelper(script, func(target.Target) ([]string, bool) { return nil, true }, t.Logf)
+	if _, err := h.Open(context.Background(), target.Target{}); err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	time.Sleep(time.Second)
+	if n := h.Overruns(); n != 0 {
+		t.Fatalf("%d chunks dropped while the session did not read for 1 s", n)
+	}
+	for i := range 1000 {
+		select {
+		case <-h.Frames():
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d chunks of 1000", i)
+		}
+	}
+}
