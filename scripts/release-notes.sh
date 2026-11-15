@@ -89,4 +89,6 @@ echo "| System | File | Size |"
 echo "|---|---|---|"
 printf '%s' "$rows"
 echo
-jq -r .body <<<"$release"
+# GitHub's list leaves two blank lines above its last line and ends without
+# a newline: the notes keep one blank line and end as the list does.
+printf '%s' "$(jq -r .body <<<"$release" | cat -s)"
