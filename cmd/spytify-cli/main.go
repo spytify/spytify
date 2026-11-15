@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -313,31 +315,20 @@ func (a *app) tailCmd() *cobra.Command {
 				return err
 			}
 			for _, l := range res.Lines {
-				a.printLog(l)
+				a.printLog(a.out, l)
 			}
 			if !follow {
 				return nil
 			}
 			var told int64
 			defer lost(c, cmd.ErrOrStderr(), &told)
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case ev, ok := <-c.Subscribe():
-					if !ok {
-						return errors.New("spytifyd closed the connection")
-					}
-					lost(c, cmd.ErrOrStderr(), &told)
-					if ev.Method != proto.EventLog {
-						continue
-					}
-					var l proto.LogEvent
-					if ev.Decode(&l) == nil {
-						a.printLog(l)
-					}
+			return followEvents(ctx, c.Subscribe(), a.out, func(w *bufio.Writer, ev proto.Event) {
+				lost(c, cmd.ErrOrStderr(), &told)
+				var l proto.LogEvent
+				if ev.Method == proto.EventLog && ev.Decode(&l) == nil {
+					a.printLog(w, l)
 				}
-			}
+			})
 		},
 	}
 	cmd.Flags().IntVarP(&lines, "lines", "n", 50, "number of lines")
@@ -345,17 +336,55 @@ func (a *app) tailCmd() *cobra.Command {
 	return cmd
 }
 
-func (a *app) printLog(l proto.LogEvent) {
+func (a *app) printLog(w io.Writer, l proto.LogEvent) {
 	if a.asJSON {
 		b, _ := json.Marshal(l)
-		fmt.Fprintln(a.out, string(b))
+		fmt.Fprintln(w, string(b))
 		return
 	}
 	ts := l.TS
 	if t, err := time.Parse(time.RFC3339Nano, l.TS); err == nil {
 		ts = t.Format("15:04:05")
 	}
-	fmt.Fprintf(a.out, "%s %-5s %s\n", ts, l.Level, l.Msg)
+	fmt.Fprintf(w, "%s %-5s %s\n", ts, l.Level, l.Msg)
+}
+
+// burst bounds how many waiting events follow writes before it flushes and
+// looks at Ctrl-C again.
+const burst = 256
+
+// followEvents hands write each event of sub, with every one already waiting
+// behind it, then flushes out once: one write a burst, where printing
+// each event straight to stdout was a system call each (#857). It ends
+// when ctx does, or with an error once spytifyd closes the connection.
+func followEvents(ctx context.Context, sub <-chan proto.Event, out io.Writer, write func(*bufio.Writer, proto.Event)) error {
+	w := bufio.NewWriter(out)
+	defer w.Flush()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-sub:
+			for n := 0; ok; n++ {
+				write(w, ev)
+				if n == burst {
+					break
+				}
+				select {
+				case ev, ok = <-sub:
+					continue
+				default:
+				}
+				break
+			}
+			if err := w.Flush(); err != nil {
+				return err
+			}
+			if !ok {
+				return errors.New("spytifyd closed the connection")
+			}
+		}
+	}
 }
 
 func (a *app) eventsCmd() *cobra.Command {
@@ -375,20 +404,21 @@ func (a *app) eventsCmd() *cobra.Command {
 			defer c.Close()
 			var told int64
 			defer lost(c, cmd.ErrOrStderr(), &told)
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case ev, ok := <-c.Subscribe():
-					if !ok {
-						return errors.New("spytifyd closed the connection")
-					}
-					lost(c, cmd.ErrOrStderr(), &told)
-					fmt.Fprintf(a.out, "{\"method\":%q,\"params\":%s}\n", ev.Method, ev.Params)
-				}
-			}
+			return followEvents(ctx, c.Subscribe(), a.out, func(w *bufio.Writer, ev proto.Event) {
+				lost(c, cmd.ErrOrStderr(), &told)
+				writeEvent(w, ev)
+			})
 		},
 	}
+}
+
+// writeEvent writes ev as a JSON line, its params as they came.
+func writeEvent(w *bufio.Writer, ev proto.Event) {
+	w.WriteString(`{"method":`)
+	w.WriteString(strconv.Quote(ev.Method))
+	w.WriteString(`,"params":`)
+	w.Write(ev.Params)
+	w.WriteString("}\n")
 }
 
 // lost says on w how many events c lost since told, which it moves on:
