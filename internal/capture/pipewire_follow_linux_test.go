@@ -88,6 +88,7 @@ type fakeClock struct {
 	mu    sync.Mutex
 	rates map[int]int
 	s     clockSettings
+	reads int // how many times running was asked, as pw-top runs
 }
 
 func (c *fakeClock) set(driver, rate int) {
@@ -102,7 +103,14 @@ func (c *fakeClock) set(driver, rate int) {
 func (c *fakeClock) running(_ context.Context, driver int) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.reads++
 	return c.rates[driver]
+}
+
+func (c *fakeClock) readCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.reads
 }
 
 func (c *fakeClock) settings(context.Context) clockSettings {

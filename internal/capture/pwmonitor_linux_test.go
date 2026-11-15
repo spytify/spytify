@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/target"
 )
 
@@ -39,6 +40,14 @@ var (
   {"id": 49, "type": "PipeWire:Interface:Port", "info": {"direction": "output"}}
 ]
 `
+	// pw-top, or any PipeWire tool, comes and goes as a client.
+	monTool = `[
+  {"id": 53, "type": "PipeWire:Interface:Client", "info": {"props": {"application.name": "pw-top"}}}
+]
+[
+  {"id": 53, "info": null}
+]
+`
 	monGone = `[
   {"id": 48, "info": null},
   {"id": 47, "info": null}
@@ -56,47 +65,50 @@ func TestTheMonitorFollowsTheGraph(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- m.read(r) }()
 
-	step := func(name, update string, signal bool) {
+	signalled := func(c chan struct{}) bool {
+		select {
+		case <-c:
+			return true
+		case <-time.After(300 * time.Millisecond):
+			return false
+		}
+	}
+	step := func(name, update string, changed, nodes bool) {
 		t.Helper()
 		if _, err := io.WriteString(w, update); err != nil {
 			t.Fatal(err)
 		}
-		select {
-		case <-m.changed:
-			if !signal {
-				t.Fatalf("%s: a change was signalled", name)
-			}
-		case <-time.After(300 * time.Millisecond):
-			if signal {
-				t.Fatalf("%s: no change signalled", name)
-			}
+		if got := signalled(m.changed); got != changed {
+			t.Fatalf("%s: change signalled %v, want %v", name, got, changed)
+		}
+		if got := signalled(m.nodeChanged); got != nodes {
+			t.Fatalf("%s: node change signalled %v, want %v", name, got, nodes)
 		}
 	}
-	step("the graph", monGraph, true)
+	step("the graph", monGraph, true, true)
 	if _, found, usable := m.find(tg); !usable || found {
 		t.Fatalf("the graph alone: found %v, usable %v", found, usable)
 	}
-	step("the player", monPlayer, true)
+	step("the player", monPlayer, true, true)
 	n, found, _ := m.find(tg)
 	if !found || n.key != "60" || n.running {
 		t.Fatalf("the player's stream: %+v, found %v", n, found)
 	}
-	step("running", monRunning, true)
+	step("running", monRunning, true, true)
 	n, _, _ = m.find(tg)
 	if !n.running || n.rate != 44100 || n.channels != 2 || n.driver != 39 || n.id != 48 {
 		t.Fatalf("the running stream: %+v", n)
 	}
-	step("a port", monPort, false)
-	step("gone", monGone, true)
+	step("a port", monPort, false, false)
+	step("a tool", monTool, true, false)
+	step("gone", monGone, true, true)
 	if _, found, usable := m.find(tg); !usable || found {
 		t.Fatalf("once the player quits: found %v, usable %v", found, usable)
 	}
 
 	w.Close()
 	m.end(<-done)
-	select {
-	case <-m.changed:
-	default:
+	if !signalled(m.changed) || !signalled(m.nodeChanged) {
 		t.Fatal("the end was not signalled")
 	}
 	if _, _, usable := m.find(tg); usable || m.err() == nil {
@@ -166,4 +178,35 @@ func TestTheCaptureFollowsTheMonitor(t *testing.T) {
 	if h := p.Health(); h["capture.graph_monitor"] == "running" {
 		t.Fatalf("health %v once the monitor ended", h)
 	}
+}
+
+// With the graph monitor, a recording reads the graph's rate after a node
+// changes, as when the driver restarts at another rate, and not every
+// second: a client coming and going, as pw-top does, reads nothing.
+func TestTheCaptureReadsTheRateAfterANodeChanges(t *testing.T) {
+	tools := monitoredTools{fakeTools: &fakeTools{}, mon: newMonitor()}
+	clock := &fakeClock{}
+	clock.set(39, 48000)
+	r, w := io.Pipe()
+	go func() { tools.mon.end(tools.mon.read(r)) }()
+	p := &PipeWire{logf: t.Logf, backend: tools, clock: clock, frames: make(chan Chunk, 256), done: make(chan struct{})}
+	if _, err := p.Open(context.Background(), target.Target{ProcessNames: []string{"player"}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { p.Close() })
+	io.WriteString(w, monGraph)
+	io.WriteString(w, monPlayer)
+	io.WriteString(w, monRunning)
+	waitFormat(t, p, pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE})
+
+	before := clock.readCount()
+	io.WriteString(w, monTool)
+	time.Sleep(3 * rateInterval)
+	if n := clock.readCount() - before; n > 1 {
+		t.Fatalf("the rate was read %d times in %v with no node change", n, 3*rateInterval)
+	}
+	clock.set(39, 44100)
+	io.WriteString(w, strings.ReplaceAll(monRunning, `"running"`, `"suspended"`))
+	io.WriteString(w, monRunning)
+	waitFormat(t, p, pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.F32LE})
 }

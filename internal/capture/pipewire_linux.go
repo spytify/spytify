@@ -372,22 +372,37 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 		}
 	}()
 	// pw-top takes longer than a poll, so the graph's rate has a loop of
-	// its own and never delays following a recreated stream.
+	// its own and never delays following a recreated stream. With the graph
+	// monitor, it reads the rate after a node changes, at most once per
+	// rateInterval, and every monitorRatePoll otherwise (#833).
 	go func() {
 		defer watchers.Done()
-		tick := time.NewTicker(rateInterval)
-		defer tick.Stop()
+		every, nodes := rateInterval, (<-chan struct{})(nil)
+		if p.mon != nil && p.mon.err() == nil {
+			every, nodes = monitorRatePoll, p.mon.nodeChanged
+		}
+		last := time.Now()
+		timer := time.NewTimer(every)
+		defer timer.Stop()
 		for {
 			select {
 			case <-sctx.Done():
 				return
-			case <-tick.C:
-				if r := p.clock.running(sctx, int(driver.Load())); r > 0 && r != f.Rate && sctx.Err() == nil {
-					p.logf("capture: PipeWire runs at %d Hz now; recording again", r)
-					cancel()
-					return
-				}
+			case <-nodes:
+				timer.Reset(max(rateInterval-time.Since(last), 0))
+				continue
+			case <-timer.C:
 			}
+			last = time.Now()
+			if r := p.clock.running(sctx, int(driver.Load())); r > 0 && r != f.Rate && sctx.Err() == nil {
+				p.logf("capture: PipeWire runs at %d Hz now; recording again", r)
+				cancel()
+				return
+			}
+			if p.mon != nil && p.mon.err() != nil {
+				every, nodes = rateInterval, nil
+			}
+			timer.Reset(every)
 		}
 	}()
 	chunk := make([]byte, f.FramesFromMs(10)*int64(f.FrameBytes()))
