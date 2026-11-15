@@ -19,6 +19,17 @@ func TestImportsFrom(t *testing.T) {
 	}
 }
 
+// The capture helper as it was: LoadLibraryW(L"Mmdevapi.dll").
+func TestLoadersByName(t *testing.T) {
+	syms := []string{"CoCreateInstance:ole32.dll", "LoadLibraryW:KERNEL32.dll", "LoadLibraryExW:KERNEL32.dll", "GetProcAddress:KERNEL32.dll"}
+	if got := loadersByName(importsFrom(syms, "kernel32.dll")); !slices.Equal(got, []string{"LoadLibraryW"}) {
+		t.Errorf("loadersByName = %q, want LoadLibraryW", got)
+	}
+	if got := loadersByName(importsFrom(syms[2:], "kernel32.dll")); len(got) != 0 {
+		t.Errorf("LoadLibraryExW counted: %q", got)
+	}
+}
+
 func TestOverlay(t *testing.T) {
 	section := func(offset, size uint32) *pe.Section {
 		return &pe.Section{SectionHeader: pe.SectionHeader{Offset: offset, Size: size}}

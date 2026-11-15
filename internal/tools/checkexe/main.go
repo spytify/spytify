@@ -5,7 +5,9 @@
 // offers OpenGL (internal/ui/opengl). It also checks that nothing follows
 // their last section and that they export nothing, which antivirus
 // engines take for a hidden payload and a loader's entry points; with
-// -helper, for the binaries with no icon, those alone.
+// -helper, for the binaries with no icon, those alone, and that they do
+// not import LoadLibraryA or LoadLibraryW, which look for a DLL in the
+// program's folder first.
 // scripts/build-windows.sh runs it on every binary it builds:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
@@ -70,7 +72,14 @@ func check(path string, helper bool) (string, error) {
 		return "", fmt.Errorf("an export table of %d bytes, which antivirus engines read as a loader's entry points: clear it with noexports", dir.Size)
 	}
 	if helper {
-		return "nothing past the last section, no exports", nil
+		loaders, err := bareLoaders(path)
+		if err != nil {
+			return "", err
+		}
+		if len(loaders) > 0 {
+			return "", fmt.Errorf("imports %s, which looks for a DLL in the program's folder first: use LoadLibraryExW with LOAD_LIBRARY_SEARCH_SYSTEM32", strings.Join(loaders, ", "))
+		}
+		return "nothing past the last section, no exports, no DLL loaded by name", nil
 	}
 	counts, err := resources(path)
 	if err != nil {
@@ -228,6 +237,34 @@ func linked(path, dll string) ([]string, error) {
 		return nil, err
 	}
 	return importsFrom(syms, dll), nil
+}
+
+// bareLoaders lists the functions of kernel32.dll the PE file at path
+// imports that load a DLL by name from the program's folder first.
+// LoadLibraryEx takes the folders to look in: Go's runtime passes
+// LOAD_LIBRARY_SEARCH_SYSTEM32.
+func bareLoaders(path string) ([]string, error) {
+	f, err := pe.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	syms, err := f.ImportedSymbols()
+	if err != nil {
+		return nil, err
+	}
+	return loadersByName(importsFrom(syms, "kernel32.dll")), nil
+}
+
+// loadersByName keeps LoadLibraryA and LoadLibraryW from functions.
+func loadersByName(functions []string) []string {
+	var out []string
+	for _, fn := range functions {
+		if fn == "LoadLibraryA" || fn == "LoadLibraryW" {
+			out = append(out, fn)
+		}
+	}
+	return out
 }
 
 // importsFrom keeps the imports, given as "function:DLL", from dll.

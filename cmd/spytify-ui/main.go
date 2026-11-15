@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/app"
 
 	"github.com/spytify/spytify/internal/crash"
+	"github.com/spytify/spytify/internal/dllsearch"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/internal/telemetry"
@@ -25,6 +26,9 @@ import (
 )
 
 func main() {
+	// Before GLFW and Fyne load any DLL by name. Should Windows refuse,
+	// the app runs as it did.
+	_ = dllsearch.System32Only()
 	target.LoadDotEnv()
 	env := target.Load()
 
