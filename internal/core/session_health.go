@@ -25,6 +25,18 @@ var captureQuiet = 10 * time.Second
 // still be the mute's: the player is polled.
 const unmuteGrace = time.Second
 
+// A track that had sound and goes digitally silent, every sample at zero,
+// for mutedZeros is a player muted in its own volume, which Windows does
+// not tell: a quiet passage or a fade keeps some signal. Its first and last
+// mutedEdge are left out, where a song may begin or end in digital
+// silence. With no length known its end cannot be told, and the run must
+// last mutedZerosBlind.
+const (
+	mutedZeros      = 5 * time.Second
+	mutedEdge       = 10 * time.Second
+	mutedZerosBlind = 15 * time.Second
+)
+
 // diskFree reports the free space of a folder's disk; tests replace it.
 var diskFree = freeBytes
 
@@ -52,11 +64,18 @@ func (s *Session) onTick() {
 	}
 	// An ad may be silent, muted by the session or not. A player at 0% is
 	// silent too, and its volume warning says so.
-	if s.deps.watchSilence && !(s.volumeLow && s.volumePct == 0) && !s.trackHeard && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureQuiet && time.Since(s.trackStarted) > captureQuiet {
+	fromStart := !s.trackHeard && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureQuiet && time.Since(s.trackStarted) > captureQuiet
+	if s.deps.watchSilence && !(s.volumeLow && s.volumePct == 0) && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && (fromStart || s.mutedMidTrack()) {
 		s.silent = true
 		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureQuiet)
+		if !fromStart {
+			msg = "only zeros from the capture in the middle of a track while the player plays"
+		}
 		s.deps.log.Errorf("%s", msg)
 		facts := s.silenceFacts()
+		if !fromStart {
+			facts["silent.mid_track"] = "yes"
+		}
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureSilent, Msg: msg, Facts: facts})
 		if s.deps.silence != nil {
 			s.deps.silence(facts)
@@ -67,6 +86,24 @@ func (s *Session) onTick() {
 		s.endOfPlayback()
 		s.finish()
 	}
+}
+
+// mutedMidTrack reports the current track's last frames all at zero for
+// mutedZeros, counted from mutedEdge into the track, and its end at least
+// mutedEdge away; with no length known, for mutedZerosBlind.
+func (s *Session) mutedMidTrack() bool {
+	c := s.cur
+	if c == nil || s.ring == nil || s.zeroRun == 0 {
+		return false
+	}
+	f := s.ring.Format()
+	frames := func(d time.Duration) int64 { return f.FramesFromMs(d.Milliseconds()) }
+	end := s.ring.End()
+	from := max(end-s.zeroRun, c.origin+frames(mutedEdge))
+	if c.length <= 0 {
+		return end-from >= frames(mutedZerosBlind)
+	}
+	return end-from >= frames(mutedZeros) && c.origin+c.length-end >= frames(mutedEdge)
 }
 
 // stallFacts is what is known of a stalled capture, for the bug tracker:

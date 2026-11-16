@@ -152,6 +152,9 @@ type Session struct {
 	// before it.
 	trackStarted time.Time
 	trackHeard   bool
+	// zeroRun is how many frames the ring took last in a row with every
+	// sample at zero, as a player muted in its own volume sends.
+	zeroRun int64
 	// lowFormat is set while the capture's format is too poor for music.
 	lowFormat bool
 	// peak and sum are each channel's since the last level reported, over

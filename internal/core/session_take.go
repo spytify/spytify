@@ -52,6 +52,11 @@ func (s *Session) onChunk(ch capture.Chunk) {
 		}
 	}
 	s.makeRoom(int64(len(data) / ch.Format.FrameBytes()))
+	if slices.Max(peaks) <= pcm.Silence {
+		s.zeroRun += int64(len(data) / ch.Format.FrameBytes())
+	} else {
+		s.zeroRun = 0
+	}
 	if lost := s.ring.Append(data); lost > 0 {
 		s.deps.fin.addOverruns(lost)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorRingOverflow, Msg: fmt.Sprintf("%d frames lost", lost)})
