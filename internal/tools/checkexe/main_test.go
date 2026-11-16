@@ -3,7 +3,10 @@ package main
 import (
 	"debug/pe"
 	"encoding/binary"
+	"encoding/xml"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -75,6 +78,31 @@ func TestCountResources(t *testing.T) {
 	for _, n := range []int{10, 50, 100} {
 		if _, err := countResources(dir[:n]); err == nil {
 			t.Errorf("a directory cut at %d bytes was read", n)
+		}
+	}
+}
+
+// A manifest Windows cannot read stops the program before main ("the
+// side-by-side configuration is incorrect"), which checkexe, counting
+// resources, would not see.
+func TestManifestsRead(t *testing.T) {
+	for _, name := range []string{"spytify.manifest", "helper.manifest"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "..", "windows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m struct {
+			XMLName xml.Name `xml:"urn:schemas-microsoft-com:asm.v1 assembly"`
+			Level   struct {
+				Level string `xml:"level,attr"`
+			} `xml:"urn:schemas-microsoft-com:asm.v3 trustInfo>security>requestedPrivileges>requestedExecutionLevel"`
+		}
+		if err := xml.Unmarshal(data, &m); err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if m.Level.Level != "asInvoker" {
+			t.Errorf("%s: execution level %q, want asInvoker", name, m.Level.Level)
 		}
 	}
 }
