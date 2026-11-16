@@ -171,12 +171,14 @@ type Session struct {
 	volumePct int
 
 	stopCh chan stopMode
-	mu     sync.Mutex
-	snap   proto.SessionStatusResult
+	// restartCh says Spytify had the player start its track over.
+	restartCh chan struct{}
+	mu        sync.Mutex
+	snap      proto.SessionStatusResult
 }
 
 func newSession(id string, deps sessionDeps, opts SessionOptions) *Session {
-	s := &Session{id: id, deps: deps, opts: opts, status: meta.Stopped, stopCh: make(chan stopMode, 4), lastSound: time.Now()}
+	s := &Session{id: id, deps: deps, opts: opts, status: meta.Stopped, stopCh: make(chan stopMode, 4), restartCh: make(chan struct{}, 1), lastSound: time.Now()}
 	s.snap = proto.SessionStatusResult{State: proto.StateIdle, SessionID: id}
 	return s
 }
@@ -205,6 +207,16 @@ func (s *Session) Stop(now bool) {
 	case s.stopCh <- mode:
 	default:
 		// Enough stop requests are queued; the session is ending.
+	}
+}
+
+// RestartAsked tells the session that Spytify had the player start its
+// track over.
+func (s *Session) RestartAsked() {
+	select {
+	case s.restartCh <- struct{}{}:
+	default:
+		// One is queued already.
 	}
 }
 
@@ -319,6 +331,8 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 			s.handleStop(stopNow)
 		case mode := <-s.stopCh:
 			s.handleStop(mode)
+		case <-s.restartCh:
+			s.onRestartAsked()
 		case ch, ok := <-frames:
 			if !ok {
 				s.deps.log.Infof("capture stream ended")

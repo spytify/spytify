@@ -133,6 +133,7 @@ type JXA struct {
 	mu   sync.Mutex
 	spec string
 	unit string
+	ask  restartAsk
 }
 
 // NewJXA returns a backend polling every 250 ms.
@@ -255,6 +256,21 @@ type pollTracker struct {
 	// volume is the last volume reported, from 0 to 1, once known.
 	volume      float64
 	volumeKnown bool
+	// ask is the backend's restart asked by Spytify, nil for none.
+	ask *restartAsk
+}
+
+// expected is where the player should be at p from the last poll: as far
+// on as the clock went while it played. It is -1 when unknown.
+func (k *pollTracker) expected(p playerPoll) int64 {
+	if k.lastPos < 0 || p.at.IsZero() || k.lastAt.IsZero() {
+		return -1
+	}
+	e := k.lastPos
+	if k.status == Playing {
+		e += p.at.Sub(k.lastAt).Milliseconds()
+	}
+	return e
 }
 
 // volumeChange is a VolumeChanged for a volume first known or changed.
@@ -312,15 +328,13 @@ func (k *pollTracker) next(p playerPoll) []Event {
 	if !equalInfo(info, k.last) {
 		k.last = info
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos})
+	} else if !info.Empty() && k.status == Playing && k.ask.made(p.at, pos, k.expected(p)) {
+		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos, Restart: true})
 	} else if !info.Empty() && pos >= 0 && pos < restartToMs && info.LengthMs > 0 && k.lastPos >= info.LengthMs-endResetMs {
 		// The item ended; the next one's metadata follows.
 	} else if !info.Empty() && pos >= 0 && pos < restartToMs && k.lastPos-pos > restartFromMs {
 		out = append(out, Event{Kind: TrackChanged, Track: info, PositionMs: pos, Restart: true})
-	} else if !info.Empty() && pos >= 0 && k.lastPos >= 0 && !p.at.IsZero() && !k.lastAt.IsZero() {
-		expected := k.lastPos
-		if k.status == Playing {
-			expected += p.at.Sub(k.lastAt).Milliseconds()
-		}
+	} else if expected := k.expected(p); !info.Empty() && pos >= 0 && expected >= 0 {
 		if d := pos - expected; d > seekSlackMs || d < -seekSlackMs {
 			out = append(out, Event{Kind: Seeked, Track: info, PositionMs: pos})
 		}
@@ -355,7 +369,7 @@ func (j *JXA) Watch(ctx context.Context, t target.Target) (<-chan Event, error) 
 		return nil, fmt.Errorf("osascript: %w", err)
 	}
 	out := make(chan Event, 64)
-	tracker := &pollTracker{unit: t.DurationUnit}
+	tracker := &pollTracker{unit: t.DurationUnit, ask: &j.ask}
 	go func() {
 		defer cmd.Wait()
 		sc := bufio.NewScanner(stdout)
@@ -413,11 +427,20 @@ func (j *JXA) Control(cmd proto.PlayerCmd) error {
 	if method == "" {
 		return ErrUnsupported
 	}
-	out, err := j.run(method)
-	if err != nil || cmd != proto.CmdRestart {
+	if cmd != proto.CmdRestart {
+		_, err := j.run(method)
 		return err
 	}
-	return restarted(out)
+	// Armed first: a poll may see the restart before the script returns.
+	j.ask.arm(time.Now())
+	out, err := j.run(method)
+	if err == nil {
+		err = restarted(out)
+	}
+	if err != nil {
+		j.ask.disarm()
+	}
+	return err
 }
 
 // restarted reads where the restart script left the player, in seconds.

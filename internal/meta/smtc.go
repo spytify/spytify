@@ -73,6 +73,7 @@ type SMTC struct {
 
 	mu    sync.Mutex
 	names []string
+	ask   restartAsk
 }
 
 func NewSMTC() *SMTC { return &SMTC{} }
@@ -115,7 +116,7 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 		go watchMixer(ctx, m.Mixer, mixerInterval, out)
 	}
 	// SMTC lengths are whole milliseconds.
-	tracker := &pollTracker{unit: "ms"}
+	tracker := &pollTracker{unit: "ms", ask: &m.ask}
 	go func() {
 		var p smtcPoller
 		tick := time.NewTicker(interval)
@@ -277,7 +278,16 @@ func (m *SMTC) Control(cmd proto.PlayerCmd) error {
 	if err != nil {
 		return err
 	}
-	switch err := api.control(names, cmd); {
+	if cmd == proto.CmdRestart {
+		// Armed first: a poll may see the restart before the call
+		// returns.
+		m.ask.arm(time.Now())
+	}
+	err = api.control(names, cmd)
+	if err != nil && cmd == proto.CmdRestart {
+		m.ask.disarm()
+	}
+	switch {
 	case errors.Is(err, errRefused):
 		return fmt.Errorf("the player refused %q", cmd)
 	case err != nil:
