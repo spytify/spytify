@@ -65,10 +65,13 @@ type SMTC struct {
 	Interval time.Duration
 	Logf     func(format string, args ...any)
 	// Mixer is the player's volume in the Windows audio sessions; the
-	// media session API has none of its own.
+	// media session API has none of its own. Volumes gives it each time it
+	// changes while the capture runs: the watch reads it from there, so it
+	// starts no process of its own.
 	Mixer interface {
 		Volume() (float64, error)
 		SetVolume(v float64) error
+		Volumes() <-chan float64
 	}
 
 	mu    sync.Mutex
@@ -113,7 +116,7 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 	}
 	out := make(chan Event, 64)
 	if m.Mixer != nil {
-		go watchMixer(ctx, m.Mixer, mixerInterval, out)
+		go watchMixer(ctx, m.Mixer.Volumes(), out)
 	}
 	// SMTC lengths are whole milliseconds.
 	tracker := &pollTracker{unit: "ms", ask: &m.ask}
@@ -237,27 +240,24 @@ func fileURL(path string) string {
 	return (&url.URL{Scheme: "file", Path: p}).String()
 }
 
-// mixerInterval is how often the player's Volume Mixer slider is read: each
-// read runs the capture helper once.
-var mixerInterval = 2 * time.Second
-
 // watchMixer reports the player's Volume Mixer slider, as the media session
-// API has no volume: when first read and each time it changes.
-func watchMixer(ctx context.Context, mixer interface{ Volume() (float64, error) }, every time.Duration, out chan<- Event) {
+// API has no volume: when first read and each time it changes. The capture
+// helper reads it as it records and says when it changes; a helper started
+// again says it once more, which is no change.
+func watchMixer(ctx context.Context, volumes <-chan float64, out chan<- Event) {
 	known, last := false, 0.0
-	tick := time.NewTicker(every)
-	defer tick.Stop()
 	for {
-		if v, err := mixer.Volume(); err == nil && (!known || v != last) {
+		select {
+		case v := <-volumes:
+			if known && v == last {
+				continue
+			}
 			known, last = true, v
 			select {
 			case out <- Event{Kind: VolumeChanged, Volume: v, PositionMs: -1}:
 			case <-ctx.Done():
 				return
 			}
-		}
-		select {
-		case <-tick.C:
 		case <-ctx.Done():
 			return
 		}

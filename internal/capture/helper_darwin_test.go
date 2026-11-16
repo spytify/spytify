@@ -240,3 +240,45 @@ exit 1
 		t.Fatalf("%d runs in 1 s after one gave its header", n)
 	}
 }
+
+// The volume the helper says it read comes out of Volumes, the latest one
+// first, and stays out of the lines kept for its health.
+func TestTheHelpersVolumeComesOutOfVolumes(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "helper")
+	body := `#!/bin/sh
+echo 'spytify-tap: recording 1 at 48000 Hz, the mix rate of My Speakers' >&2
+echo 'spytify-tap: volume 0.850' >&2
+echo 'spytify-tap: volume 0.400' >&2
+printf 'SPYTIFY-TAP f32le 48000 2\n'
+exec cat /dev/zero
+`
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := newHelper(script, func(target.Target) ([]string, bool) { return nil, true }, t.Logf)
+	if _, err := h.Open(context.Background(), target.Target{}); err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case <-h.Frames():
+		case v := <-h.Volumes():
+			if v != 0.4 {
+				// 0.85 may be taken before 0.4 comes.
+				if v == 0.85 {
+					continue
+				}
+				t.Fatalf("volume %v, want 0.4", v)
+			}
+			if e := h.Health()["capture.stderr"]; e != "recording 1 at 48000 Hz, the mix rate of a device" {
+				t.Fatalf("lines kept %q, want the recording line only", e)
+			}
+			return
+		case <-deadline:
+			t.Fatalf("no volume from the helper; health %v", h.Health())
+		}
+	}
+}

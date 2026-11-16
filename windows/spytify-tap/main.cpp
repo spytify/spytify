@@ -10,7 +10,9 @@
 // stream, as from PipeWire or Core Audio. So that a silent recording says
 // why, stderr tells what the packets bring when it changes (none, marked
 // silent, zeros, sound), whether the player's audio session is active, and
-// the kind and state of the output, never its name.
+// the kind and state of the output, never its name. It also says the
+// player's volume in the Volume Mixer, "volume 0.850", when first read and
+// each time it changes, so spytifyd starts nothing else to read it.
 //
 // Usage: spytify-tap.exe --pid <pid> [--rate <Hz>]
 // --rate asks for another rate than the device's.
@@ -36,6 +38,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <cwchar>
 #include <map>
 #include <set>
@@ -332,9 +335,19 @@ static HRESULT defaultOutput(IMMDeviceEnumerator *devices, Output &o) {
 }
 
 // treeDevices lists the devices the tree has audio sessions on, and the one
-// it plays to now, with an active session.
-static void treeDevices(IMMDeviceEnumerator *devices, DWORD pid, std::wstring &playing, std::vector<std::wstring> &sessions) {
+// it plays to now, with an active session. volume, when given, gets the
+// master volume of the first session, as --get-volume reads it, or -1 when
+// the tree has none.
+static void treeDevices(IMMDeviceEnumerator *devices, DWORD pid, std::wstring &playing, std::vector<std::wstring> &sessions,
+                        float *volume = nullptr) {
+  if (volume) *volume = -1;
   eachSession(devices, processTree(pid), [&](IMMDevice *device, IAudioSessionControl *control) {
+    ISimpleAudioVolume *simple = nullptr;
+    if (volume && *volume < 0 && SUCCEEDED(control->QueryInterface(kISimpleAudioVolume, reinterpret_cast<void **>(&simple)))) {
+      float v = 0;
+      if (SUCCEEDED(simple->GetMasterVolume(&v))) *volume = v;
+      simple->Release();
+    }
     LPWSTR id = nullptr;
     if (FAILED(device->GetId(&id))) return;
     AudioSessionState state = AudioSessionStateInactive;
@@ -395,12 +408,12 @@ static DWORD pickRate(Source &s, DWORD given) {
 // sourceChanged says whether the recording must start again at another
 // rate: the player left the device the rate comes from, or that device is
 // gone or mixes at another rate now. active says whether the player has an
-// active audio session.
-static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &active) {
+// active audio session, volume its volume (treeDevices).
+static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &active, float &volume) {
   std::wstring playing;
   std::vector<std::wstring> sessions;
   Output byDefault, now;
-  treeDevices(devices, s.pid, playing, sessions);
+  treeDevices(devices, s.pid, playing, sessions, &volume);
   active = !playing.empty();
   defaultOutput(devices, byDefault);
   if (moved(playing, s.device.id, byDefault.id, s.defaultAtStart)) {
@@ -421,7 +434,8 @@ static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &a
 
 // followSource checks the source about once a second, on a thread of its
 // own: reading the devices can take longer than the capture's 20 ms buffer.
-// It says when the player's audio session turns active or inactive.
+// It says when the player's audio session turns active or inactive, and
+// its volume when it changes.
 static DWORD WINAPI followSource(void *arg) {
   Source *s = static_cast<Source *>(arg);
   IMMDeviceEnumerator *devices = nullptr;
@@ -430,14 +444,22 @@ static DWORD WINAPI followSource(void *arg) {
     return 0;
   }
   int wasActive = -1;
+  char wasVolume[16] = "";
   while (!s->changed) {
     Sleep(1000);
     bool active = false;
-    s->changed = sourceChanged(devices, *s, active);
+    float volume = -1;
+    s->changed = sourceChanged(devices, *s, active, volume);
     if (int(active) != wasActive) {
       fprintf(stderr, "spytify-tap: process %lu %s\n", (unsigned long)s->pid,
               active ? "plays to its output" : "has no active audio session");
       wasActive = active;
+    }
+    // As --get-volume prints it: a change too small to show is none.
+    char now[16];
+    if (volume >= 0 && snprintf(now, sizeof now, "%.3f", volume) > 0 && strcmp(now, wasVolume) != 0) {
+      fprintf(stderr, "spytify-tap: volume %s\n", now);
+      memcpy(wasVolume, now, sizeof now);
     }
   }
   return 0;
