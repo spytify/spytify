@@ -37,6 +37,17 @@ func newThumbs(data []byte) (thumbs, error) {
 	return thumbs{row: shrink(live, 2*rowCover), live: live, glow: glow(live)}, nil
 }
 
+// newRowThumbs is a cover at a list row's size alone, as the Library shows
+// it: the same picture as newThumbs's row, without the live card's two,
+// which weigh ten times more.
+func newRowThumbs(data []byte) (thumbs, error) {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return thumbs{}, err
+	}
+	return thumbs{row: shrink(shrink(img, 2*liveCover), 2*rowCover)}, nil
+}
+
 // glowSide is the side, in pixels, of the cover behind the live card:
 // stretched over the card with smooth scaling, so few pixels blur into the
 // cover's colours. The graphics card stretches it; nothing is computed
@@ -92,6 +103,12 @@ func shrink(img image.Image, px int) image.Image {
 // Record list keeps.
 const maxCovers = 60
 
+// maxRowCovers is how many covers the Library keeps, the ones used last: at
+// a row's size alone, about 26 KB each, 2.6 MB at most, a few screens of
+// rows. A row scrolled back to within them shows its cover without reading
+// its file again; further back, ffmpeg reads it again.
+const maxRowCovers = 100
+
 // covers loads album art once per URL, off the toolkit's goroutine, and
 // keeps the thumbnails of the covers used last.
 type covers struct {
@@ -106,13 +123,23 @@ type covers struct {
 	slots chan struct{}
 	// max is how many covers the cache keeps: maxCovers, fewer in tests.
 	max int
+	// thumbs makes the sizes the screen shows: newThumbs, or newRowThumbs
+	// for a screen that only has rows.
+	thumbs func([]byte) (thumbs, error)
 	// copies are the Record list's covers, kept in the output folder.
 	copies *coverCopies
 }
 
 func newCovers(loaded func()) *covers {
 	return &covers{cache: map[string]thumbs{}, used: map[string]uint64{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2), max: maxCovers,
-		copies: newCoverCopies(loaded)}
+		thumbs: newThumbs, copies: newCoverCopies(loaded)}
+}
+
+// newRowCovers keeps covers at a row's size alone, maxRowCovers of them.
+func newRowCovers(loaded func()) *covers {
+	c := newCovers(loaded)
+	c.thumbs, c.max = newRowThumbs, maxRowCovers
+	return c
 }
 
 // loads is how many covers finished loading, failed ones included: a
@@ -154,7 +181,7 @@ func (c *covers) load(key string, fetch func(context.Context) ([]byte, error)) t
 			cancel()
 			var t thumbs
 			if err == nil {
-				t, _ = newThumbs(data)
+				t, _ = c.thumbs(data)
 			}
 			<-c.slots
 			c.mu.Lock()
