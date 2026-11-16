@@ -3,6 +3,7 @@ package target
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -103,12 +104,14 @@ func TestSaveUserTarget(t *testing.T) {
 func TestMatches(t *testing.T) {
 	tg := Target{ProcessNames: []string{"Player.exe", "averyveryverylongplayername"}}
 	cases := map[string]bool{
-		"player":          true,
-		"PLAYER.EXE":      true,
-		"/usr/bin/player": true,
-		"play":            false,
-		"averyveryverylo": true, // truncated /proc comm
-		"":                false,
+		"player":            true,
+		"PLAYER.EXE":        true,
+		"/usr/bin/player":   true,
+		"play":              false,
+		"averyveryverylo":   true, // truncated /proc comm
+		"averyveryverylon":  true, // truncated macOS p_comm
+		"averyveryverylonx": false,
+		"":                  false,
 	}
 	for name, want := range cases {
 		if got := tg.Matches(name); got != want {
@@ -131,6 +134,30 @@ func TestFindProcessFindsItself(t *testing.T) {
 	}
 }
 
+// When the kernel's list comes back empty on macOS, ps lists instead, and
+// finds the player as before #835.
+func TestAnEmptyListingFallsBackToPS(t *testing.T) {
+	calls := 0
+	fallback := func() []Process { calls++; return []Process{{PID: 7, Name: "player"}} }
+	if got := orElse([]Process{{PID: 3, Name: "player"}}, fallback); calls != 0 || got[0].PID != 3 {
+		t.Errorf("a listing that worked: %v, fallback called %d times", got, calls)
+	}
+	if got := orElse(nil, fallback); calls != 1 || len(got) != 1 || got[0].PID != 7 {
+		t.Errorf("an empty listing: %v, fallback called %d times", got, calls)
+	}
+	// The fallback is macOS's alone.
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skip(err)
+	}
+	if p, ok := pickRoot(Target{ProcessNames: []string{exe}}, listPS()); !ok || p.PID != os.Getpid() {
+		t.Errorf("ps found %v, %v; want the test binary, pid %d", p, ok, os.Getpid())
+	}
+}
+
 func TestPickRootFindsTheTreeRoot(t *testing.T) {
 	tg := Target{ProcessNames: []string{"Player"}}
 	procs := []Process{
@@ -142,7 +169,7 @@ func TestPickRootFindsTheTreeRoot(t *testing.T) {
 	if p, ok := pickRoot(tg, procs); !ok || p.PID != 30 {
 		t.Fatalf("root = %+v, %v", p, ok)
 	}
-	// Without parents (Linux, macOS) the first match wins, as before.
+	// Without parents (Linux) the first match wins, as before.
 	if p, ok := pickRoot(tg, []Process{{PID: 7, Name: "player"}, {PID: 3, Name: "player"}}); !ok || p.PID != 7 {
 		t.Fatalf("first match = %+v, %v", p, ok)
 	}
@@ -279,5 +306,31 @@ func TestDefaultPaths(t *testing.T) {
 		if got := DefaultSocketPath(); filepath.Dir(got) != os.TempDir() {
 			t.Errorf("without XDG_RUNTIME_DIR: %s", got)
 		}
+	}
+}
+
+// The test binary is running; a pid with no process, or another target's,
+// is not.
+func TestRunningAsksAboutOnePid(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Running cannot tell on " + runtime.GOOS)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skip(err)
+	}
+	self := Target{ProcessNames: []string{exe}}
+	if !Running(self, os.Getpid()) {
+		t.Fatalf("the test binary %q is not running", exe)
+	}
+	if Running(Target{ProcessNames: []string{"no-such-player"}}, os.Getpid()) {
+		t.Fatal("another target matched the test binary")
+	}
+	cmd := exec.Command("true")
+	if err := cmd.Run(); err != nil {
+		t.Skip(err)
+	}
+	if Running(Target{ProcessNames: []string{"true"}}, cmd.Process.Pid) {
+		t.Fatal("a process that exited is running")
 	}
 }
