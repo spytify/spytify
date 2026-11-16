@@ -584,10 +584,12 @@ func (a *App) checkUpdate() {
 	})
 }
 
+// openURL opens a web page in the default browser. Only http and https
+// pass: given a path instead, the Windows shell would run the program.
 func (a *App) openURL(raw string) {
 	a.noteAction("open " + raw)
-	if u, err := url.Parse(raw); err == nil {
-		_ = a.fa.OpenURL(u)
+	if u, err := url.Parse(raw); err == nil && (u.Scheme == "https" || u.Scheme == "http") {
+		_ = openLink(u.String())
 	}
 }
 
