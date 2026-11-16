@@ -12,7 +12,7 @@ import (
 // in the default browser.
 func Open(path string) error {
 	if runtime.GOOS == "darwin" {
-		return proc.Command("open", path).Start()
+		return proc.Command("/usr/bin/open", path).Start()
 	}
 	return proc.Command("xdg-open", path).Start()
 }

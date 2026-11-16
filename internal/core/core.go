@@ -703,9 +703,9 @@ func (c *Core) launch() error {
 	case len(t.ProcessNames) == 0:
 		return errors.New("no player chosen")
 	case runtime.GOOS == "darwin" && t.BundleID != "":
-		cmd = proc.Command("open", "-b", t.BundleID)
+		cmd = proc.Command("/usr/bin/open", "-b", t.BundleID)
 	case runtime.GOOS == "darwin":
-		cmd = proc.Command("open", "-a", t.ProcessNames[0])
+		cmd = proc.Command("/usr/bin/open", "-a", t.ProcessNames[0])
 	case runtime.GOOS == "windows":
 		cmd = proc.Command("cmd", "/C", "start", "", t.ProcessNames[0])
 	default:

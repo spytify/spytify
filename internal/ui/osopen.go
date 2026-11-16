@@ -17,7 +17,7 @@ var moveToTrash = trash.Move
 var reveal = func(path string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return proc.Command("open", "-R", path).Start()
+		return proc.Command("/usr/bin/open", "-R", path).Start()
 	case "windows":
 		return proc.Command("explorer", "/select,", path).Start()
 	}
