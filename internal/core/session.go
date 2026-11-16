@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -168,6 +169,10 @@ type Session struct {
 	diskFull  bool
 	warnedLen bool
 	adMuted   bool
+	// resolving is the change whose cut is being made, while cutAt runs:
+	// a mute or unmute it causes says how long after the player named the
+	// item it came.
+	resolving *change
 	// unmutedAt is when the session last gave the player its volume back
 	// after an ad.
 	unmutedAt time.Time
@@ -260,9 +265,26 @@ func (s *Session) muteAds(st proto.SessionState) {
 	if !want {
 		s.unmutedAt = time.Now()
 	}
+	start := time.Now()
 	if err := s.deps.mute(want); err != nil {
 		s.deps.log.Infof("mute ads: %v", err)
+		return
 	}
+	// How late the user hears it: how far into the item's audio, from its
+	// cut, and how long after the player named it; then the time the volume
+	// took to set.
+	how := "off"
+	if want {
+		how = "on"
+	}
+	if p := s.resolving; p != nil && s.ring != nil {
+		after := s.ring.Format().MsFromFrames(s.ring.End() - p.at)
+		if c := s.cur; c != nil && c.cut != nil {
+			how += fmt.Sprintf(", %d ms into the item's audio", after-c.cut.OffsetMs)
+		}
+		how += fmt.Sprintf(", %d ms after the player named it", after)
+	}
+	s.deps.log.Infof("mute ads: %s, volume set in %d ms", how, time.Since(start).Milliseconds())
 }
 
 func (s *Session) state() proto.SessionState {

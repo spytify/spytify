@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -213,8 +214,12 @@ func (r *rig) clean(s string) string {
 	for _, p := range []string{r.out, filepath.ToSlash(r.out)} {
 		s = strings.ReplaceAll(s, p, "$OUT")
 	}
+	// The time the volume took to set is the wall clock's.
+	s = volumeSetIn.ReplaceAllString(s, "volume set in N ms")
 	return strings.ReplaceAll(s, `\`, "/")
 }
+
+var volumeSetIn = regexp.MustCompile(`volume set in \d+ ms`)
 
 // stamp prefixes a trace line with how much audio the session was handed;
 // the caller holds mu.

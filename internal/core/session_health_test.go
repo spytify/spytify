@@ -207,7 +207,8 @@ func TestPinnedSilentCapture(t *testing.T) {
 	s.onChunk(loud)
 	// The player heard check is told of the silence, and of the
 	// first sound; a later sound tells it nothing new.
-	want := append(append([]string{"state waiting"}, reported...), "state paused", "state waiting", "state ad", "state recording")
+	want := append(append([]string{"state waiting"}, reported...), "state paused", "state waiting",
+		"state ad", "log info: mute ads: on, volume set in N ms", "state recording", "log info: mute ads: off, volume set in N ms")
 	wantTold := []bool{true, false}
 	if got := r.lines(); !slices.Equal(got, want) {
 		t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
@@ -255,14 +256,17 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 			s.onChunk(silent)
 			s.onTick()
 			afterAd := []string{"state waiting", "state ad", "state recording"}
+			if muted {
+				afterAd = []string{"state waiting", "state ad", "log info: mute ads: on, volume set in N ms", "state recording", "log info: mute ads: off, volume set in N ms"}
+			}
 			if got := r.lines(); !slices.Equal(got, afterAd) {
 				t.Fatalf("over the ad and just after:\n%q\nwant:\n%q", got, afterAd)
 			}
 			s.lastSound = long
 			s.onTick()
-			want := []string{"state waiting", "state ad", "state recording",
+			want := append(slices.Clone(afterAd),
 				"log error: only silence from the capture for 10s while the player plays",
-				`error capture_silent "only silence from the capture for 10s while the player plays"`}
+				`error capture_silent "only silence from the capture for 10s while the player plays"`)
 			if got := r.lines(); !slices.Equal(got, want) {
 				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
 			}
