@@ -194,7 +194,9 @@ func (s *Session) tryResolve(force bool) bool {
 		p.info.Title, f.MsFromFrames(cut), p.kind, f.MsFromFrames(p.at), f.MsFromFrames(p.lo), f.MsFromFrames(p.hi))
 	s.pend = nil
 	how := &proto.TrackCut{Kind: p.kind.String(), By: by, OffsetMs: f.MsFromFrames(cut) - f.MsFromFrames(p.at)}
+	s.resolving = p
 	s.cutAt(cut, p.info, p.kind == changeFirst, p.restart, how)
+	s.resolving = nil
 	return true
 }
 

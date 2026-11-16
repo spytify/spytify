@@ -22,6 +22,7 @@
     3820ms  skipped t-002 ad
     3820ms  state ad
     3820ms  mute true
+    3820ms  log info: mute ads: on, 320 ms into the item's audio, 20 ms after the player named it, volume set in N ms
     3820ms  take t-002 "Sponsored" start=154350(3500ms) length=132300(3000ms) no-file reason=ad
     6800ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 299880)
     6800ms  > audio music 9 at 3000ms, 8820(200ms)
@@ -30,6 +31,7 @@
     7120ms  started t-003 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=200ms source=44100/2
     7120ms  state recording
     7120ms  mute false
+    7120ms  log info: mute ads: off, 120 ms into the item's audio, 320 ms after the player named it, volume set in N ms
     7120ms  take t-003 "B" start=308700(7000ms) length=132300(3000ms) awaiting-sound
     7300ms  > audio music 2 at 0ms, 132300(3000ms)
     7310ms  log debug: "B" starts at its first sound, 7300 ms
