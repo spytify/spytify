@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -258,54 +259,64 @@ func TestSMTCControlSaysTheAnswer(t *testing.T) {
 	}
 }
 
-// mixerSteps answers each read with the next volume, then the last one.
-type mixerSteps struct {
-	mu    sync.Mutex
-	steps []float64
-	err   error
+// mixerFeed is the capture helper's side of the mixer: Volumes gives what
+// the running helper reports, and each direct read is counted, as each one
+// starts the helper once more.
+type mixerFeed struct {
+	volumes chan float64
+	reads   atomic.Int32
 }
 
-func (m *mixerSteps) Volume() (float64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.err != nil {
-		return 0, m.err
-	}
-	v := m.steps[0]
-	if len(m.steps) > 1 {
-		m.steps = m.steps[1:]
-	}
-	return v, nil
+func (m *mixerFeed) Volume() (float64, error) {
+	m.reads.Add(1)
+	return 1, nil
 }
 
-// The Volume Mixer slider is reported when first read and each time it
-// changes; a read that fails reports nothing.
-func TestTheMixerWatchReportsChanges(t *testing.T) {
+func (m *mixerFeed) SetVolume(float64) error { return nil }
+func (m *mixerFeed) Volumes() <-chan float64 { return m.volumes }
+
+// During a session the watch reports the Volume Mixer slider the capture
+// helper reads as it records, when first given and each time it changes. It
+// never reads the slider itself: each read would start the helper once more,
+// every two seconds of the session (#834).
+func TestTheMixerWatchStartsNoHelper(t *testing.T) {
+	useSMTC(t, &fakeSMTC{reads: []fakeRead{{}}})
+	mixer := &mixerFeed{volumes: make(chan float64)}
+	m := NewSMTC()
+	m.Interval = time.Millisecond
+	m.Mixer = mixer
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	out := make(chan Event, 16)
-	go watchMixer(ctx, &mixerSteps{steps: []float64{1, 1, 0.4, 0.4, 1}}, time.Millisecond, out)
+	events, err := m.Watch(ctx, target.Target{ProcessNames: []string{"Player.exe"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		for _, v := range []float64{1, 1, 0.4, 0.4, 1} {
+			select {
+			case mixer.volumes <- v:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 	var got []float64
+	timeout := time.After(5 * time.Second)
 	for len(got) < 3 {
 		select {
-		case e := <-out:
-			if e.Kind != VolumeChanged {
-				t.Fatalf("event %+v", e)
+		case e := <-events:
+			if e.Kind == VolumeChanged {
+				got = append(got, e.Volume)
 			}
-			got = append(got, e.Volume)
-		case <-time.After(5 * time.Second):
-			t.Fatalf("volumes %v, want three", got)
+		case <-timeout:
+			t.Fatalf("volumes %v, want three; the watch read the slider %d times", got, mixer.reads.Load())
 		}
 	}
 	if want := []float64{1, 0.4, 1}; !slices.Equal(got, want) {
 		t.Fatalf("volumes %v, want %v", got, want)
 	}
-	failing := make(chan Event, 1)
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel2()
-	watchMixer(ctx2, &mixerSteps{err: errors.New("no session")}, time.Millisecond, failing)
-	if len(failing) != 0 {
-		t.Fatalf("a failed read reported %+v", <-failing)
+	if n := mixer.reads.Load(); n != 0 {
+		t.Fatalf("the watch read the slider %d times, starting the helper as often", n)
 	}
 }
 
@@ -320,4 +331,30 @@ func TestSMTCAnswersSaysTheAPIsAnswer(t *testing.T) {
 	if err := SMTCAnswers(); err == nil || err.Error() != "Class not registered" {
 		t.Fatalf("silent API: %v", err)
 	}
+}
+
+// A call is looked at after 1, 2, 4, 8 then every 16 ms: one that ends in
+// 10 ms is looked at 5 times, where every millisecond made it 11.
+func TestACallIsLookedAtLessAndLessOften(t *testing.T) {
+	var waits []time.Duration
+	looks, waited := 1, time.Duration(0)
+	for w := awaitFirst; waited < 10*time.Millisecond; w = nextAwait(w) {
+		waits = append(waits, w)
+		waited += w
+		looks++
+	}
+	if want := []time.Duration{1, 2, 4, 8}; !slices.Equal(waits, scale(want, time.Millisecond)) || looks != 5 {
+		t.Fatalf("waits %v, %d looks", waits, looks)
+	}
+	if got := nextAwait(awaitLast); got != awaitLast {
+		t.Fatalf("after %v the wait is %v", awaitLast, got)
+	}
+}
+
+func scale(ds []time.Duration, unit time.Duration) []time.Duration {
+	out := make([]time.Duration, len(ds))
+	for i, d := range ds {
+		out[i] = d * unit
+	}
+	return out
 }

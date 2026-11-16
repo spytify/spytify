@@ -22,6 +22,7 @@ type fakeTools struct {
 	mu       sync.Mutex
 	node     *streamNode
 	stderr   string // what the recorder writes to stderr as it starts
+	fail     bool   // the recorder ends at once with nothing recorded
 	recorded []string
 	silenced []string
 	restored []string
@@ -48,8 +49,11 @@ func (f *fakeTools) find(target.Target) (streamNode, bool, error) {
 func (f *fakeTools) record(ctx context.Context, n streamNode, _ pcm.Format) *exec.Cmd {
 	f.mu.Lock()
 	f.recorded = append(f.recorded, n.key)
-	stderr := f.stderr
+	stderr, fail := f.stderr, f.fail
 	f.mu.Unlock()
+	if fail {
+		return exec.CommandContext(ctx, "true")
+	}
 	if stderr != "" {
 		return exec.CommandContext(ctx, "sh", "-c", `printf '%s' "$1" >&2; exec cat /dev/zero`, "sh", stderr)
 	}
@@ -88,6 +92,7 @@ type fakeClock struct {
 	mu    sync.Mutex
 	rates map[int]int
 	s     clockSettings
+	reads int // how many times running was asked, as pw-top runs
 }
 
 func (c *fakeClock) set(driver, rate int) {
@@ -102,7 +107,14 @@ func (c *fakeClock) set(driver, rate int) {
 func (c *fakeClock) running(_ context.Context, driver int) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.reads++
 	return c.rates[driver]
+}
+
+func (c *fakeClock) readCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.reads
 }
 
 func (c *fakeClock) settings(context.Context) clockSettings {
@@ -297,5 +309,30 @@ func TestTheCaptureKeepsItsLastErrors(t *testing.T) {
 	}
 	if got := p.Health()["capture.record_exit"]; got != "2" {
 		t.Fatalf("record_exit %q, want 2", got)
+	}
+}
+
+// A recorder that ends at once with nothing recorded, as an old pw-record
+// does (#794), is started again less and less often, not ten times a
+// second; once it records, a new stream is followed at once again.
+func TestAFailingRecorderIsRetriedLessOften(t *testing.T) {
+	tools := &fakeTools{fail: true}
+	tools.set(&streamNode{key: "55", rate: 48000, channels: 2, running: true})
+	p := openFake(t, tools, false)
+	time.Sleep(3 * time.Second)
+	// 100, 200, 400, 800 and 1600 ms between starts: 5 or 6 in 3 s, where
+	// a fixed 100 ms made about 30.
+	if n := len(tools.records()); n > 8 {
+		t.Fatalf("the recorder was started %d times in 3 s", n)
+	}
+	tools.mu.Lock()
+	tools.fail = false
+	tools.mu.Unlock()
+	waitFormat(t, p, pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE})
+	n := len(tools.records())
+	tools.set(&streamNode{key: "61", rate: 44100, channels: 2, running: true})
+	waitFormat(t, p, pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.F32LE})
+	if got := tools.records(); len(got) != n+1 || got[n] != "61" {
+		t.Fatalf("recorded streams %v", got)
 	}
 }

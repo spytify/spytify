@@ -138,6 +138,12 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.zip
+      # The app's programs, for VirusTotal: the disk image keeps them from
+      # the other jobs. The draft takes only the release-* files.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: virustotal-macos
+          path: dist/macos/Spytify.app/Contents/MacOS/spytify*
 
   # Authenticode signing runs once WINDOWS_CERT_PFX (base64) and
   # WINDOWS_CERT_PASSWORD exist.
@@ -185,6 +191,48 @@ jobs:
         with:
           name: release-windows
           path: dist/*.zip
+
+  # Spytify's programs, for each system, go to VirusTotal before the
+  # release is published, so a false detection is known, and reported to its
+  # vendor, before anyone downloads the version. The job's summary lists each
+  # program's detections. It does not hold the draft back, and without the
+  # VIRUSTOTAL_API_KEY secret it sends nothing.
+  virustotal:
+    needs: [version, linux, macos, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci/virustotal.sh
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: files
+      - uses: actions/download-artifact@v8
+        with:
+          name: virustotal-macos
+          path: scan/macos
+      - name: Scan the programs
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          TAG: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -z "$VIRUSTOTAL_API_KEY" ]; then
+            echo "::notice title=VirusTotal::No VIRUSTOTAL_API_KEY secret: nothing was sent"
+            exit 0
+          fi
+          unzip -q "files/spytify-$TAG-windows-amd64.zip" -d files
+          mv "files/spytify-$TAG-windows-amd64" scan/windows
+          for arch in amd64 arm64; do
+            tar -xzf "files/spytify-$TAG-linux-$arch.tar.gz" -C files
+            mv "files/spytify-$TAG-linux-$arch" "scan/linux-$arch"
+          done
+          scripts/ci/virustotal.sh \
+            scan/windows/{Spytify,spytifyd,spytify-cli,spytify-tap}.exe \
+            scan/macos/{spytify-ui,spytifyd,spytify-cli,spytify-tap} \
+            scan/linux-{amd64,arm64}/{spytify-ui,spytifyd,spytify-cli}
 
   # The site's settings page and protocol section are what gendocs writes
   # from the code, deployed to gh-pages by hand: this job fails when they

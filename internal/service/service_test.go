@@ -55,7 +55,7 @@ func TestLaunchdAgent(t *testing.T) {
 	if !contains(texts, "/Applications/A & B.app/Contents/MacOS/spytifyd") || !contains(texts, Label) || !contains(texts, "SuccessfulExit") {
 		t.Fatalf("plist texts %v", texts)
 	}
-	if !reflect.DeepEqual(p.Install[0], []string{"launchctl", "bootstrap", "gui/501", p.Path}) {
+	if !reflect.DeepEqual(p.Install[0], []string{"/bin/launchctl", "bootstrap", "gui/501", p.Path}) {
 		t.Errorf("install %v", p.Install)
 	}
 	// Where Apple's validator exists, it accepts the agent.

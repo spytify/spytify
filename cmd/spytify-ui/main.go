@@ -82,7 +82,7 @@ func main() {
 	// With a player to record, the app starts spytifyd itself; with none,
 	// it asks for one first.
 	auto := len(env.Target.ProcessNames) > 0
-	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
+	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, CoverCache: ui.DefaultCoverCache(), Socket: env.SocketPath, AutoStart: auto,
 		Telemetry: tel, Privacy: privacy, SoftwareOpenGL: software})
 	if inst != nil {
 		defer inst.Close()

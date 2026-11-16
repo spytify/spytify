@@ -3,7 +3,6 @@ package openfiles
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -18,13 +17,16 @@ var (
 	rename = os.Rename
 	sleep  = time.Sleep
 	held   = isHeld
+	heldBy = HeldBy
 )
 
 // Rename renames from to to. Windows refuses while another program holds
 // the file open, as a virus scanner, a cloud drive or an indexer does for a
 // moment with a file just written: Rename then tries again, waiting twice
-// as long each time, and logs each refusal with the programs holding the
-// file. The error it gives up with names them too.
+// as long each time, and logs each refusal. It asks Windows which programs
+// hold the file only once, when it gives up, and names them in its error:
+// a Restart Manager session on every try is what ransomware does to unlock
+// files, to a behaviour engine.
 func Rename(from, to string, logf func(format string, args ...any)) error {
 	if logf == nil {
 		logf = func(string, ...any) {}
@@ -41,11 +43,7 @@ func Rename(from, to string, logf func(format string, args ...any)) error {
 		if !held(err) || try == renameTries {
 			return Explain(err, from, to)
 		}
-		by := "a program Windows does not name"
-		if names := HeldBy(from, to); len(names) > 0 {
-			by = strings.Join(names, ", ")
-		}
-		logf("%s: try %d of %d refused, held by %s: trying again in %v", filepath.Base(to), try, renameTries, by, wait)
+		logf("%s: try %d of %d refused, held by another program: trying again in %v", filepath.Base(to), try, renameTries, wait)
 		sleep(wait)
 		wait *= 2
 	}

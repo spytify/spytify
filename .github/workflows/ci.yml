@@ -8,6 +8,9 @@ on:
     paths-ignore: ["**.md"]
   pull_request:
     paths-ignore: ["**.md"]
+  # The merge queue tests each pull request on top of main as it is when it
+  # merges, so a branch never has to be brought up to date by hand.
+  merge_group:
 
 permissions:
   contents: read
@@ -201,19 +204,19 @@ jobs:
           ./spytify-cli.exe --help > /dev/null
           set +e; ./spytify-tap.exe; code=$?; set -e
           test "$code" -eq 2
-      - name: Windows finds the app's icon and version information
+      - name: Windows finds the app's icon and every program's version information
         shell: pwsh
         run: |
           Add-Type -Namespace Win32 -Name Shell -MemberDefinition '[DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern uint ExtractIconEx(string file, int index, IntPtr[] large, IntPtr[] small, uint n);'
-          $path = (Resolve-Path Spytify.exe).Path
-          # Index -1 counts the icons in the file.
-          $icons = [Win32.Shell]::ExtractIconEx($path, -1, $null, $null, 0)
-          $v = (Get-Item $path).VersionInfo
-          "Spytify.exe: $icons icon, $($v.ProductName) $($v.ProductVersion), $($v.FileDescription)"
-          if ($icons -lt 1 -or $v.ProductName -ne "Spytify") { throw "Spytify.exe has no icon or no version information" }
-          # Only the app has one.
-          foreach ($f in "spytifyd.exe", "spytify-cli.exe", "spytify-tap.exe") {
-            if ([Win32.Shell]::ExtractIconEx((Resolve-Path $f).Path, -1, $null, $null, 0) -ne 0) { throw "$f has an icon" }
+          foreach ($f in "Spytify.exe", "spytifyd.exe", "spytify-cli.exe", "spytify-tap.exe") {
+            $path = (Resolve-Path $f).Path
+            # Index -1 counts the icons in the file.
+            $icons = [Win32.Shell]::ExtractIconEx($path, -1, $null, $null, 0)
+            $v = (Get-Item $path).VersionInfo
+            "${f}: $icons icon, $($v.CompanyName), $($v.ProductName) $($v.ProductVersion), $($v.FileDescription)"
+            if ($v.ProductName -ne "Spytify" -or $v.CompanyName -ne "Spytify" -or $v.OriginalFilename -ne $f) { throw "$f has no version information" }
+            # Only the app has one.
+            if (($f -eq "Spytify.exe") -ne ($icons -ge 1)) { throw "${f}: $icons icons" }
           }
       - name: Without an OpenGL driver, the app draws its window with Mesa's
         shell: pwsh
@@ -284,7 +287,7 @@ jobs:
       - name: An audio output for the runner (the Scream virtual driver)
         shell: pwsh
         run: src/scripts/ci/windows-audio-device.ps1
-      - name: The capture helper records a process playing a tone at its output's mix rate, pins its volume, and says what it hears while it runs
+      - name: The capture helper records a process playing a tone at its output's mix rate, pins its volume, and says what it hears and its volume while it runs
         run: |
           # A process playing, by its Windows PID (bash's $! is not one).
           pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1" -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
@@ -310,6 +313,7 @@ jobs:
           grep -E "the output is .+, active$" tap.err
           grep -F "process $pid plays to its output" tap.err
           grep -F "sound from process $pid" tap.err
+          grep -E "spytify-tap: volume [01]\.[0-9]{3}" tap.err
           ./spytify-tap.exe --pid "$pid" --set-volume 0.25
           v=$(./spytify-tap.exe --pid "$pid" --get-volume | tr -d '\r')
           echo "volume $v"
@@ -319,10 +323,18 @@ jobs:
           ./spytify-tap.exe --pid "$pid" > /dev/null 2> live.err &
           tap=$!
           for i in $(seq 40); do grep -q -F "recording $pid at" live.err && break; sleep 0.5; done
+          # spytifyd takes the Volume Mixer slider from those lines too, not
+          # from a helper started every 2 s to ask: the running helper says
+          # it when first read and each time it changes.
+          for i in $(seq 40); do grep -q -F "volume 0.250" live.err && break; sleep 0.5; done
+          ./spytify-tap.exe --pid "$pid" --set-volume 0.6
+          for i in $(seq 40); do grep -q -F "volume 0.600" live.err && break; sleep 0.5; done
           cat live.err
           kill -0 "$tap" || { echo "the helper exited before its first line came"; exit 1; }
           kill "$tap"
           grep -F "recording $pid at $mix Hz" live.err
+          grep -F "spytify-tap: volume 0.250" live.err
+          grep -F "spytify-tap: volume 0.600" live.err
           # Turned down to 0 in the Volume Mixer, the tone still plays but
           # the helper hears silence, and says which.
           ./spytify-tap.exe --pid "$pid" --set-volume 0
@@ -353,6 +365,30 @@ jobs:
         run: scripts/build-macos.sh dist
         env:
           SPYTIFY_SENTRY_DSN: ${{ vars.SPYTIFY_SENTRY_DSN }}
+      # Each program keeps its identifier from one build to the next, as
+      # built and once signed again as the release signs (#894).
+      - name: Each program is signed with its own lasting identifier
+        run: |
+          check() {
+            for f in Spytify.app Spytify.app/Contents/MacOS/spytify-ui spytify-ui; do want "$1/$f" org.spytify.ui; done
+            for f in spytify-tap Spytify.app/Contents/MacOS/spytify-tap; do want "$1/$f" org.spytify.tap; done
+            for n in spytifyd spytify-cli; do
+              want "$1/$n" "org.spytify.$n"
+              want "$1/Spytify.app/Contents/MacOS/$n" "org.spytify.$n"
+            done
+            want "$1/Spytify.app/Contents/MacOS/ffmpeg" org.spytify.ffmpeg
+          }
+          want() {
+            got=$(codesign -dv "$1" 2>&1 | sed -n 's/^Identifier=//p')
+            echo "$1: $got"
+            [ "$got" = "$2" ] || { echo "want $2"; exit 1; }
+          }
+          check dist
+          resigned="$RUNNER_TEMP/resigned"
+          mkdir -p "$resigned"
+          ditto dist "$resigned"
+          SPYTIFY_SIGN_IDENTITY=- scripts/sign-macos.sh "$resigned"
+          check "$resigned"
       - name: The encode and tag tests with the app's ffmpeg, on each processor
         run: |
           # It has only what Spytify runs: a test that needs more fails.
@@ -373,6 +409,15 @@ jobs:
         run: |
           scripts/dmg-macos.sh dist/Spytify.app dist/Spytify-macos.dmg
           (cd dist && zip -q -y -r spytify-macos-cli.zip spytifyd spytify-cli spytify-tap)
+      - name: The disk image holds the app, signed, and a link to Applications
+        run: |
+          mnt="$RUNNER_TEMP/dmg"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" dist/Spytify-macos.dmg
+          ls -la "$mnt"
+          test "$(readlink "$mnt/Applications")" = /Applications
+          codesign --verify --strict --deep "$mnt/Spytify.app"
+          codesign -dv "$mnt/Spytify.app/Contents/MacOS/spytifyd" 2>&1 | grep -qx Identifier=org.spytify.spytifyd
+          hdiutil detach "$mnt"
       - uses: actions/upload-artifact@v7
         with:
           name: spytify-macos
