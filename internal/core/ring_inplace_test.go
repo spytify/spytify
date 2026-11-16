@@ -182,15 +182,27 @@ func wrappedRing(f pcm.Format, seed int64) *Ring {
 }
 
 // Reading the ring in place measures what the copies measured, to the bit,
-// for every search the cut makes, with windows across the buffer's end.
+// for every search the cut makes, with windows across the buffer's end. The
+// helpers on Windows and macOS mix down to stereo, but PipeWire records a
+// stream in its own channels and a mix rate can reach 192 kHz: the frame's
+// stride is the format's, not two samples.
 func TestRingSearchesInPlaceMatchTheCopies(t *testing.T) {
-	formats := []pcm.Format{
-		stereo44,
-		{Rate: 48000, Channels: 2, Sample: pcm.F32LE},
-		{Rate: 22050, Channels: 1, Sample: pcm.S16LE},
+	// The wide formats weigh four to six times more per search: one ring
+	// each keeps the test short under -race.
+	formats := []struct {
+		pcm.Format
+		seeds int64
+	}{
+		{stereo44, 4},
+		{pcm.Format{Rate: 48000, Channels: 2, Sample: pcm.F32LE}, 4},
+		{pcm.Format{Rate: 22050, Channels: 1, Sample: pcm.S16LE}, 4},
+		{pcm.Format{Rate: 192000, Channels: 2, Sample: pcm.F32LE}, 1},
+		{pcm.Format{Rate: 48000, Channels: 8, Sample: pcm.F32LE}, 1},
+		{pcm.Format{Rate: 96000, Channels: 6, Sample: pcm.S16LE}, 1},
 	}
-	for _, f := range formats {
-		for seed := int64(1); seed <= 4; seed++ {
+	for _, fs := range formats {
+		f := fs.Format
+		for seed := int64(1); seed <= fs.seeds; seed++ {
 			r := wrappedRing(f, seed)
 			o := copied{r}
 			if r.start%r.cap == 0 {
