@@ -339,7 +339,13 @@ func (s *settingsScreen) newField(d *settings.Def) *field {
 			return s
 		}
 		sel := newSelectField(shown, func(c string) { s.apply(key, swap(c, shown, opts)) })
-		f.set = func(v any) { sel.SetSelected(swap(fmt.Sprint(number(v)), opts, shown)) }
+		// Fyne's select refreshes, and calls OnChanged, even for the
+		// choice it shows: only a new one is set (#840).
+		f.set = func(v any) {
+			if want := swap(fmt.Sprint(number(v)), opts, shown); sel.Selected != want {
+				sel.SetSelected(want)
+			}
+		}
 		f.input = sel
 	case settings.KindPath:
 		e := newApplyEntry(s.app, func(v string) { s.apply(key, v) })
@@ -453,9 +459,15 @@ func newApplyEntry(a *App, done func(string)) *applyEntry {
 	return e
 }
 
+// show shows text, as the recorder has it. The screen shows every setting
+// again at each recorder event, and Fyne's SetText lays the field out and
+// forgets its undo history even for the text it holds: only new text is
+// set (#840).
 func (e *applyEntry) show(text string) {
 	e.shown = text
-	e.SetText(text)
+	if e.Text != text {
+		e.SetText(text)
+	}
 }
 
 func (e *applyEntry) submit() {

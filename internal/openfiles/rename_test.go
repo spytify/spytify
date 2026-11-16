@@ -15,14 +15,15 @@ type fakeRename struct {
 	refusals int
 	err      error
 	tries    int
+	asked    int
 	waits    []time.Duration
 	logged   []string
 }
 
 func (f *fakeRename) install(t *testing.T) {
 	t.Helper()
-	oldRename, oldSleep, oldHeld := rename, sleep, held
-	t.Cleanup(func() { rename, sleep, held = oldRename, oldSleep, oldHeld })
+	oldRename, oldSleep, oldHeld, oldHeldBy := rename, sleep, held, heldBy
+	t.Cleanup(func() { rename, sleep, held, heldBy = oldRename, oldSleep, oldHeld, oldHeldBy })
 	rename = func(string, string) error {
 		f.tries++
 		if f.tries <= f.refusals {
@@ -32,6 +33,10 @@ func (f *fakeRename) install(t *testing.T) {
 	}
 	sleep = func(d time.Duration) { f.waits = append(f.waits, d) }
 	held = func(err error) bool { return errors.Is(err, errHeld) }
+	heldBy = func(...string) []string {
+		f.asked++
+		return []string{"Scanner"}
+	}
 }
 
 func (f *fakeRename) logf(format string, args ...any) {
@@ -80,5 +85,33 @@ func TestOtherRenameErrorsAreNotTriedAgain(t *testing.T) {
 	f.install(t)
 	if err := Rename("a.part", "a", nil); !errors.Is(err, gone) || f.tries != 1 || len(f.waits) != 0 {
 		t.Errorf("err %v after %d tries and waits %v", err, f.tries, f.waits)
+	}
+}
+
+// Windows is asked which programs hold the file once, when Rename gives up,
+// not before each try: a Restart Manager session on every try is a
+// ransomware unlock step to a behaviour engine.
+func TestHoldersAreAskedOnceWhenRenameGivesUp(t *testing.T) {
+	f := &fakeRename{refusals: 100, err: errHeld}
+	f.install(t)
+	err := Rename("a.part", "a", f.logf)
+	if f.tries != 7 || f.asked != 1 {
+		t.Errorf("%d refusals asked Windows for the holders %d times, want 7 and 1", f.tries, f.asked)
+	}
+	if err == nil || err.Error() != "being used by another process (held by Scanner)" {
+		t.Errorf("got %v, want the refusal naming the holder", err)
+	}
+}
+
+// A file let go before the last try is renamed without asking Windows who
+// held it.
+func TestHoldersAreNotAskedWhenTheFileIsLetGo(t *testing.T) {
+	f := &fakeRename{refusals: 6, err: errHeld}
+	f.install(t)
+	if err := Rename("a.part", "a", f.logf); err != nil {
+		t.Fatal(err)
+	}
+	if f.asked != 0 {
+		t.Errorf("asked Windows for the holders %d times, want 0", f.asked)
 	}
 }

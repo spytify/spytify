@@ -538,7 +538,12 @@ int wmain(int argc, wchar_t **argv) {
   format.wBitsPerSample = 32;
   format.nBlockAlign = format.nChannels * format.wBitsPerSample / 8;
   format.nAvgBytesPerSec = format.nSamplesPerSec * format.nBlockAlign;
-  const REFERENCE_TIME buffer = 200000;  // 20 ms, in 100 ns units
+  // The engine holds this much while the loop waits on spytifyd, which
+  // stdout's writes block for: a reader that stalls longer (a garbage
+  // collection, the previous take's encode, a disk) made the engine drop
+  // audio at 20 ms (#839). Packets still come every period, so a larger
+  // buffer adds no latency.
+  const REFERENCE_TIME buffer = 10000000;  // 1 s, in 100 ns units
   hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED,
                           AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
                           buffer, 0, &format, nullptr);
@@ -576,13 +581,19 @@ int wmain(int argc, wchar_t **argv) {
   enum Heard { NoPackets, MarkedSilent, Zeros, Sound };
   static const char *const heardText[] = {"no packets", "packets marked silent", "only zeros", "sound"};
   const uint64_t window = 2 * (uint64_t)rate;
-  uint64_t windowEnd = window, packets = 0, marked = 0;
+  // gaps counts the packets the engine marked as following audio it
+  // dropped, the reader having fallen behind; said each 2 s there is one.
+  uint64_t windowEnd = window, packets = 0, marked = 0, gaps = 0;
   bool sound = false;
   int heard = -1;
 
+  // With no packet coming (the player paused or silent) the loop wakes
+  // this often to write silence lag behind the clock: half the lag is
+  // soon enough, where 20 ms woke it 50 times a second (#850).
+  const DWORD idleWake = 50;
   HANDLE waits[2] = {ready, target};
   for (;;) {
-    DWORD w = WaitForMultipleObjects(2, waits, FALSE, 20);
+    DWORD w = WaitForMultipleObjects(2, waits, FALSE, idleWake);
     if (w == WAIT_OBJECT_0 + 1) {
       out.flush();
       fprintf(stderr, "spytify-tap: process %lu ended\n", (unsigned long)pid);
@@ -603,6 +614,7 @@ int wmain(int argc, wchar_t **argv) {
       hr = capture->GetBuffer(&data, &frames, &flags, &devicePos, &qpcPos);
       if (FAILED(hr)) return fail("IAudioCaptureClient::GetBuffer", hr);
       packets++;
+      if (flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) gaps++;
       if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
         marked++;
       } else {
@@ -628,8 +640,9 @@ int wmain(int argc, wchar_t **argv) {
     if (clock >= windowEnd) {
       int now = sound ? Sound : packets == 0 ? NoPackets : marked == packets ? MarkedSilent : Zeros;
       if (now != heard) fprintf(stderr, "spytify-tap: %s from process %lu\n", heardText[now], (unsigned long)pid);
+      if (gaps > 0) fprintf(stderr, "spytify-tap: %llu packets followed audio the engine dropped: spytifyd read too late\n", (unsigned long long)gaps);
       heard = now;
-      packets = marked = 0;
+      packets = marked = gaps = 0;
       sound = false;
       windowEnd = clock + window;
     }

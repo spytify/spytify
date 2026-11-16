@@ -3,6 +3,7 @@ package encode
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -25,5 +26,46 @@ func TestWellKnownLooksBesideSpytifydFirst(t *testing.T) {
 	}
 	if mac := wellKnown("darwin", func(string) string { return "" }); !strings.Contains(strings.Join(mac, " "), "/opt/homebrew/bin/ffmpeg") {
 		t.Errorf("macOS candidates %q", mac)
+	}
+}
+
+// The encoder list is read once, as core.info asks at every connection;
+// a run that fails is not kept.
+func TestTheEncoderListIsReadOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake ffmpeg is a shell script")
+	}
+	dir := t.TempDir()
+	runs, fail := filepath.Join(dir, "runs"), filepath.Join(dir, "fail")
+	script := filepath.Join(dir, "ffmpeg")
+	body := `#!/bin/sh
+echo run >> "` + runs + `"
+[ -e "` + fail + `" ] && exit 1
+printf 'Encoders:\n ------\n A....D libmp3lame           MP3\n A....D aac                  AAC\n'
+`
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	count := func() int {
+		b, _ := os.ReadFile(runs)
+		return strings.Count(string(b), "run")
+	}
+	if err := os.WriteFile(fail, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := &FFmpeg{Path: script}
+	if f.HasEncoder("libmp3lame") {
+		t.Fatal("an encoder from a run that failed")
+	}
+	if err := os.Remove(fail); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if !f.HasEncoder("libmp3lame") || !f.HasEncoder("aac") || f.HasEncoder("libopus") {
+			t.Fatal("the list is not what ffmpeg printed")
+		}
+	}
+	if n := count(); n != 2 {
+		t.Fatalf("ffmpeg ran %d times, want 2: the failed run, then one", n)
 	}
 }

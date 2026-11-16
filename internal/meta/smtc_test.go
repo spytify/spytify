@@ -332,3 +332,29 @@ func TestSMTCAnswersSaysTheAPIsAnswer(t *testing.T) {
 		t.Fatalf("silent API: %v", err)
 	}
 }
+
+// A call is looked at after 1, 2, 4, 8 then every 16 ms: one that ends in
+// 10 ms is looked at 5 times, where every millisecond made it 11.
+func TestACallIsLookedAtLessAndLessOften(t *testing.T) {
+	var waits []time.Duration
+	looks, waited := 1, time.Duration(0)
+	for w := awaitFirst; waited < 10*time.Millisecond; w = nextAwait(w) {
+		waits = append(waits, w)
+		waited += w
+		looks++
+	}
+	if want := []time.Duration{1, 2, 4, 8}; !slices.Equal(waits, scale(want, time.Millisecond)) || looks != 5 {
+		t.Fatalf("waits %v, %d looks", waits, looks)
+	}
+	if got := nextAwait(awaitLast); got != awaitLast {
+		t.Fatalf("after %v the wait is %v", awaitLast, got)
+	}
+}
+
+func scale(ds []time.Duration, unit time.Duration) []time.Duration {
+	out := make([]time.Duration, len(ds))
+	for i, d := range ds {
+		out[i] = d * unit
+	}
+	return out
+}
