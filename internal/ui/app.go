@@ -34,6 +34,9 @@ import (
 type Options struct {
 	// StateDir holds the daemon's log file.
 	StateDir string
+	// CoverCache is where the Library keeps its covers' thumbnails
+	// (DefaultCoverCache); "" keeps them in memory alone, as tests do.
+	CoverCache string
 	// Socket is shown when the daemon cannot be reached.
 	Socket string
 	// ManualRender leaves redrawing to the caller. Tests set it: the
