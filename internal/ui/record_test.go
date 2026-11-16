@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
@@ -812,5 +813,33 @@ func TestRecordSaysSpytifydIsGoneDuringASession(t *testing.T) {
 	a.render()
 	if !r.card.Visible() || r.waitRow.Visible() {
 		t.Errorf("spytifyd back: card %v, waiting row %v", r.card.Visible(), r.waitRow.Visible())
+	}
+}
+
+// The Record list is drawn again when a row changes or a cover loads, not
+// at every event: a level or a log line leaves it as it is.
+func TestTheRecordListRedrawsOnlyWhenARowChanges(t *testing.T) {
+	a, _, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
+	rec := a.screens[tabRecord].(*recordScreen)
+	rows := make([]model.Row, 300)
+	for i := range rows {
+		rows[i] = model.Row{ID: fmt.Sprintf("s-%03d", i), Artist: "Artiste", Title: fmt.Sprintf("Track %d", i), LengthMs: 180000, Status: model.Saved, Started: time.Unix(int64(i), 0)}
+	}
+	state := func(rows []model.Row) model.State {
+		return model.State{Conn: model.Connected, HaveInfo: true, Info: info(), Session: proto.StateRecording, Rows: slices.Clone(rows), Settings: defaults()}
+	}
+	rec.render(state(rows))
+	drawn := &rec.items[0]
+	later := state(rows)
+	later.Level = proto.LevelEvent{PeakDBFS: -12}
+	later.Logs = []proto.LogEvent{{Level: "info", Msg: "a line"}}
+	rec.render(later)
+	if &rec.items[0] != drawn {
+		t.Fatal("the list was drawn again for a level and a log line")
+	}
+	rows[5].Status = model.Skipped
+	rec.render(state(rows))
+	if &rec.items[0] == drawn {
+		t.Fatal("the list was not drawn again for a row that changed")
 	}
 }

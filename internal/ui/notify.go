@@ -93,7 +93,7 @@ func (a *App) sessionEnded() {
 		t := s.Totals()
 		why = fmt.Sprintf(lang.SavedSkipped, t.Saved, t.Skipped)
 	}
-	a.fa.SendNotification(fyne.NewNotification(lang.RecordingStopped, why))
+	a.toast(lang.RecordingStopped, why)
 }
 
 // recorderError keeps why the recorder is ending the session, told once it
@@ -112,7 +112,7 @@ func (a *App) recorderError(e proto.ErrorEvent) {
 		// Why, and what to do, wait in the diagnostics.
 		msg = fmt.Sprintf(lang.OnlySilenceHeard, playerName(s.Info))
 	}
-	a.fa.SendNotification(fyne.NewNotification(warnTitles[e.Code], msg))
+	a.toast(warnTitles[e.Code], msg)
 }
 
 // trackSaved tells of each saved track, by its title and artist.
@@ -130,7 +130,7 @@ func (a *App) trackSaved(e proto.TrackFinishedEvent) {
 			}
 		}
 	}
-	a.fa.SendNotification(fyne.NewNotification(lang.TrackSaved, name))
+	a.toast(lang.TrackSaved, name)
 }
 
 // noticeState is the model's state when a notification of level is due:

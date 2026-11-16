@@ -12,7 +12,7 @@ import (
 // Held lists what process pid holds open under dir, as lsof sees it: open
 // files, folders watched with kqueue, and the working folder.
 func Held(pid int, dir string) ([]string, error) {
-	out, err := proc.Command("lsof", "-n", "-P", "-p", strconv.Itoa(pid), "-F", "n").Output()
+	out, err := proc.Command("/usr/sbin/lsof", "-n", "-P", "-p", strconv.Itoa(pid), "-F", "n").Output()
 	if err != nil && len(out) == 0 {
 		return nil, err
 	}
