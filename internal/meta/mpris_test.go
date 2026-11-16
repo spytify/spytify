@@ -112,6 +112,60 @@ func TestSeekedOnlyWhenThePositionJumps(t *testing.T) {
 	}
 }
 
+// #812: a track barely begun, started over, comes back within the seek
+// slack of where it was. Asked by Spytify while it plays, that jump is the
+// restart; not asked, or asked while paused, it stays a position restated.
+func TestARestartSpytifyAskedIsSeenHoweverShort(t *testing.T) {
+	const owner = ":1.42"
+	changed := func(props map[string]dbus.Variant) *dbus.Signal {
+		return &dbus.Signal{Sender: owner, Name: propsInterface + ".PropertiesChanged", Body: []any{mprisPlayer, props, []string{}}}
+	}
+	seeked := func(ms int64) *dbus.Signal {
+		return &dbus.Signal{Sender: owner, Name: mprisPlayer + ".Seeked", Body: []any{ms * 1000}}
+	}
+	metadata := dbus.MakeVariant(map[string]dbus.Variant{
+		"mpris:trackid": dbus.MakeVariant(dbus.ObjectPath("/track/1")),
+		"mpris:length":  dbus.MakeVariant(uint64(88_000_000)),
+		"xesam:title":   dbus.MakeVariant("Last Hours"),
+	})
+	song := ParseMetadata(metadata)
+	restart := []Event{{Kind: TrackChanged, Track: song, PositionMs: 2, Restart: true}}
+	t0 := time.Unix(1_700_000_000, 0)
+	for _, c := range []struct {
+		what   string
+		status string
+		ask    time.Duration // after t0, -1 for none
+		at     time.Duration
+		want   []Event
+	}{
+		{"asked while playing", "Playing", 900 * time.Millisecond, 980 * time.Millisecond, restart},
+		{"asked, the player 920 ms late", "Playing", 900 * time.Millisecond, 1820 * time.Millisecond, restart},
+		{"not asked", "Playing", -1, 980 * time.Millisecond, nil},
+		{"asked while paused", "Paused", 900 * time.Millisecond, 980 * time.Millisecond, nil},
+	} {
+		m := NewMPRIS()
+		m.setOwner("org.mpris.MediaPlayer2.player", owner)
+		m.handle(nil, changed(map[string]dbus.Variant{"Metadata": metadata, "PlaybackStatus": dbus.MakeVariant(c.status)}), t0)
+		if c.ask >= 0 {
+			m.ask.arm(t0.Add(c.ask))
+		}
+		if got := m.handle(nil, seeked(2), t0.Add(c.at)); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: got %+v, want %+v", c.what, got, c.want)
+		}
+	}
+
+	// Asked, then paused 5 s at the start before playing: the ask is
+	// over, and the jump back is a position restated again.
+	m := NewMPRIS()
+	m.setOwner("org.mpris.MediaPlayer2.player", owner)
+	m.handle(nil, changed(map[string]dbus.Variant{"Metadata": metadata, "PlaybackStatus": dbus.MakeVariant("Paused")}), t0)
+	m.ask.arm(t0)
+	m.handle(nil, changed(map[string]dbus.Variant{"PlaybackStatus": dbus.MakeVariant("Playing")}), t0.Add(5*time.Second))
+	if got := m.handle(nil, seeked(2), t0.Add(5980*time.Millisecond)); got != nil {
+		t.Errorf("asked too long ago: got %+v", got)
+	}
+}
+
 // MPRIS's Volume is reported from PropertiesChanged, with an item loaded.
 func TestMPRISReportsTheVolume(t *testing.T) {
 	const owner = ":1.42"

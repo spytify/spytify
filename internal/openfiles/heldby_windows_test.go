@@ -43,9 +43,10 @@ func TestARenameRefusedNamesTheProgramHoldingTheFile(t *testing.T) {
 	}
 }
 
-// A file a program lets go of after a moment is renamed, and the log names
-// that program.
-func TestAFileLetGoIsRenamedAndItsHolderLogged(t *testing.T) {
+// A file a program lets go of after a moment is renamed, and each refusal
+// logged, without asking Windows which program held it: only a rename
+// given up names it.
+func TestAFileLetGoIsRenamedAndItsRefusalsLogged(t *testing.T) {
 	dir := t.TempDir()
 	part := filepath.Join(dir, "Artist - Title.mp3.part")
 	if err := os.WriteFile(part, []byte("ID3"), 0o644); err != nil {
@@ -67,7 +68,7 @@ func TestAFileLetGoIsRenamedAndItsHolderLogged(t *testing.T) {
 		t.Fatal(err)
 	}
 	exe, _ := os.Executable()
-	if len(logged) < 2 || !strings.Contains(logged[0], "held by ") || !strings.Contains(logged[0], filepath.Base(exe)) {
-		t.Fatalf("logged %q, want refusals naming %s", logged, filepath.Base(exe))
+	if len(logged) < 2 || !strings.Contains(logged[0], "refused") || strings.Contains(logged[0], filepath.Base(exe)) {
+		t.Fatalf("logged %q, want refusals that do not name %s", logged, filepath.Base(exe))
 	}
 }

@@ -207,7 +207,8 @@ func TestPinnedSilentCapture(t *testing.T) {
 	s.onChunk(loud)
 	// The player heard check is told of the silence, and of the
 	// first sound; a later sound tells it nothing new.
-	want := append(append([]string{"state waiting"}, reported...), "state paused", "state waiting", "state ad", "state recording")
+	want := append(append([]string{"state waiting"}, reported...), "state paused", "state waiting",
+		"state ad", "log info: mute ads: on, volume set in N ms", "state recording", "log info: mute ads: off, volume set in N ms")
 	wantTold := []bool{true, false}
 	if got := r.lines(); !slices.Equal(got, want) {
 		t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
@@ -255,14 +256,17 @@ func TestPinnedNoSilenceWarningOverAnAd(t *testing.T) {
 			s.onChunk(silent)
 			s.onTick()
 			afterAd := []string{"state waiting", "state ad", "state recording"}
+			if muted {
+				afterAd = []string{"state waiting", "state ad", "log info: mute ads: on, volume set in N ms", "state recording", "log info: mute ads: off, volume set in N ms"}
+			}
 			if got := r.lines(); !slices.Equal(got, afterAd) {
 				t.Fatalf("over the ad and just after:\n%q\nwant:\n%q", got, afterAd)
 			}
 			s.lastSound = long
 			s.onTick()
-			want := []string{"state waiting", "state ad", "state recording",
+			want := append(slices.Clone(afterAd),
 				"log error: only silence from the capture for 10s while the player plays",
-				`error capture_silent "only silence from the capture for 10s while the player plays"`}
+				`error capture_silent "only silence from the capture for 10s while the player plays"`)
 			if got := r.lines(); !slices.Equal(got, want) {
 				t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
 			}
@@ -326,6 +330,73 @@ func TestSilenceWarningIsForATrackSilentFromItsStart(t *testing.T) {
 			warned := slices.ContainsFunc(r.lines(), func(l string) bool { return strings.HasPrefix(l, "error capture_silent") })
 			if warned != c.warns {
 				t.Fatalf("silence warned %v, want %v:\n%q", warned, c.warns, r.lines())
+			}
+		})
+	}
+}
+
+// A track that had sound and goes digitally silent for 5 s, as a player
+// muted in its own volume on Windows does, is reported in its middle: not
+// in its first nor its last 10 s, and never for a quiet passage, which
+// keeps some signal. With no length known, the zeros must last 15 s. The
+// first sound withdraws it.
+func TestSilenceWarningForAPlayerMutedMidTrack(t *testing.T) {
+	long, unknown := info("/x/long", "Long", 60000), info("/x/unknown", "Unknown", 0)
+	quiet := pcm.Synth{Seed: 3, LevelDB: -70, FadeInMs: 30, FadeOut: 30}
+	for _, c := range []struct {
+		name  string
+		track meta.TrackInfo
+		// sound and zeros alternate, in ms, from the track's start.
+		parts []int64
+		// soft plays the parts after the first quietly instead of zeros.
+		soft  bool
+		warns bool
+	}{
+		{"muted 6 s in the middle", long, []int64{20000, 6000}, false, true},
+		{"muted 4 s in the middle", long, []int64{20000, 4000}, false, false},
+		{"a quiet passage of 8 s", long, []int64{20000, 8000}, true, false},
+		{"muted from 2 s to 9 s", long, []int64{2000, 7000}, false, false},
+		{"muted from 2 s to 16 s", long, []int64{2000, 14000}, false, true},
+		{"muted 6 s in the last 10 s", long, []int64{48000, 6000}, false, false},
+		{"no length, muted 6 s", unknown, []int64{20000, 6000}, false, false},
+		{"no length, muted 16 s", unknown, []int64{20000, 16000}, false, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := bareRig(t, nil, endOnStop)
+			s := r.s
+			s.tmpDir = t.TempDir()
+			t.Cleanup(s.finish)
+			s.deps.watchSilence = true
+			ctx := context.Background()
+			s.onMeta(ctx, statusEvent(meta.Playing))
+			s.onMeta(ctx, meta.Event{Kind: meta.TrackChanged, Track: c.track, PositionMs: 0})
+			play := func(data []byte) {
+				step := int(f44.FramesFromMs(100)) * f44.FrameBytes()
+				for i := 0; i < len(data); i += step {
+					s.onChunk(capture.Chunk{Data: data[i:min(i+step, len(data))], Format: f44})
+					s.onTick()
+				}
+			}
+			for i, ms := range c.parts {
+				switch {
+				case i%2 == 0:
+					play(music(1).Render(f44, f44.FramesFromMs(ms)))
+				case c.soft:
+					play(quiet.Render(f44, f44.FramesFromMs(ms)))
+				default:
+					play(make([]byte, f44.FramesFromMs(ms)*int64(f44.FrameBytes())))
+				}
+			}
+			told := `error capture_silent "only zeros from the capture in the middle of a track while the player plays"`
+			if warned := slices.Contains(r.lines(), told); warned != c.warns {
+				t.Fatalf("warned %v, want %v:\n%q", warned, c.warns, r.lines())
+			}
+			if !c.warns {
+				return
+			}
+			play(music(2).Render(f44, f44.FramesFromMs(200)))
+			if got := r.lines(); got[len(got)-1] != `error capture_silent ""` {
+				t.Fatalf("not withdrawn at the first sound:\n%q", got)
 			}
 		})
 	}

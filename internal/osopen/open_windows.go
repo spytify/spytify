@@ -15,8 +15,8 @@ var (
 	procSHOpenFolderAndSelectItems = shell32.NewProc("SHOpenFolderAndSelectItems")
 )
 
-// Open hands a file or folder to the Windows shell, as a double-click in
-// Explorer does. It never goes through cmd /C start: Go quotes an argument
+// Open hands a file, a folder or a web page to the Windows shell, as a
+// double-click in Explorer does. It never goes through cmd /C start: Go quotes an argument
 // only when it holds a space, and cmd runs whatever follows an unquoted &,
 // which a file name, made from a track's title, can hold.
 func Open(path string) error {

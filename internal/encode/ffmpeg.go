@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/proc"
@@ -25,27 +26,39 @@ import (
 type FFmpeg struct {
 	Path    string
 	Version string
+
+	// encoders is the build's encoder list once read: core.info asks at
+	// every connection, and the list never changes (#845).
+	mu       sync.Mutex
+	encoders map[string]bool
 }
 
 // ErrMissing means ffmpeg could not be run; session.start is refused.
 var ErrMissing = errors.New("ffmpeg not found; install it or set SPYTIFY_FFMPEG")
 
-// wellKnown are tried when ffmpeg is not on PATH, as for an app started
-// from a desktop launcher with a minimal PATH, or on Windows, where PATH
-// rarely has it: first the copy shipped beside spytifyd, then where
-// package managers and people put it.
-func wellKnown(goos string, getenv func(string) string) []string {
-	var c []string
-	exe := "ffmpeg"
+// besideProgram is the copy the macOS app and the Windows zip ship, in
+// the folder of spytifyd and the app.
+func besideProgram(goos string) string {
+	self, err := os.Executable()
+	if err != nil {
+		return ""
+	}
 	if goos == "windows" {
-		exe = "ffmpeg.exe"
+		return filepath.Join(filepath.Dir(self), "ffmpeg.exe")
 	}
-	if self, err := os.Executable(); err == nil {
-		c = append(c, filepath.Join(filepath.Dir(self), exe))
-	}
+	return filepath.Join(filepath.Dir(self), "ffmpeg")
+}
+
+// wellKnown are tried when ffmpeg is neither beside the program nor on
+// PATH, as for an app started from a desktop launcher with a minimal PATH,
+// or on Windows, where PATH rarely has it: where package managers and
+// people put it.
+func wellKnown(goos string, getenv func(string) string) []string {
 	if goos != "windows" {
-		return append(c, "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "/snap/bin/ffmpeg")
+		return []string{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "/snap/bin/ffmpeg"}
 	}
+	var c []string
+	exe := "ffmpeg.exe"
 	join := func(env string, parts ...string) {
 		if base := getenv(env); base != "" {
 			c = append(c, filepath.Join(append([]string{base}, parts...)...))
@@ -65,17 +78,12 @@ func wellKnown(goos string, getenv func(string) string) []string {
 	return c
 }
 
-// Find resolves name (a path or a command on PATH) and reads its version.
+// Find resolves name and reads its version. A name other than "ffmpeg",
+// from SPYTIFY_FFMPEG, is taken as given: a path, or a command on PATH.
+// "ffmpeg" is the copy beside the program first, so a program of that
+// name earlier on PATH cannot stand in for it, then PATH, then wellKnown.
 func Find(name string) (*FFmpeg, error) {
-	path, err := exec.LookPath(name)
-	if err != nil && name == "ffmpeg" {
-		for _, p := range wellKnown(runtime.GOOS, os.Getenv) {
-			if _, serr := os.Stat(p); serr == nil {
-				path, err = p, nil
-				break
-			}
-		}
-	}
+	path, err := locate(name)
 	if err != nil {
 		return nil, fmt.Errorf("%w (%s)", ErrMissing, name)
 	}
@@ -88,20 +96,44 @@ func Find(name string) (*FFmpeg, error) {
 	return &FFmpeg{Path: path, Version: strings.TrimSpace(version)}, nil
 }
 
-// HasEncoder reports whether this ffmpeg build has an encoder.
-func (f *FFmpeg) HasEncoder(name string) bool {
-	encoders := proc.Command(f.Path, "-hide_banner", "-encoders")
-	out, err := encoders.Output()
-	if err != nil {
-		return false
+func locate(name string) (string, error) {
+	if name != "ffmpeg" {
+		return exec.LookPath(name)
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[1] == name {
-			return true
+	if p := besideProgram(runtime.GOOS); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
 		}
 	}
-	return false
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	for _, p := range wellKnown(runtime.GOOS, os.Getenv) {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	return "", exec.ErrNotFound
+}
+
+// HasEncoder reports whether this ffmpeg build has an encoder. The list is
+// read once; a run that fails is tried again at the next call.
+func (f *FFmpeg) HasEncoder(name string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.encoders == nil {
+		out, err := proc.Command(f.Path, "-hide_banner", "-encoders").Output()
+		if err != nil {
+			return false
+		}
+		f.encoders = map[string]bool{}
+		for _, line := range strings.Split(string(out), "\n") {
+			if fields := strings.Fields(line); len(fields) >= 2 {
+				f.encoders[fields[1]] = true
+			}
+		}
+	}
+	return f.encoders[name]
 }
 
 // Preset is the container and codec of an output format.
@@ -139,6 +171,19 @@ type Job struct {
 	TrimEnd    int64
 	Normalize  bool
 	TargetLUFS float64
+	// Tags, when set, are written in the same run as the audio, as
+	// tag.Writer writes them into a file already encoded: MP3 gets ID3v2.3,
+	// FLAC Vorbis comments, AAC MP4 atoms. WAV takes none.
+	Tags *Tags
+}
+
+// Tags are a file's tags, as tag.Embedded gives them.
+type Tags struct {
+	// Metadata are ffmpeg's -metadata name=value pairs.
+	Metadata []string
+	// Cover is a picture to attach, of type CoverMIME; nil for none.
+	Cover     []byte
+	CoverMIME string
 }
 
 func (j Job) trimFilter() string {
@@ -232,19 +277,42 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) (*Shortfall, error) {
 		filters = append(filters, resample(rate))
 	}
 
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", j.In, "-map_metadata", "-1", "-vn"}
+	tags := j.Tags
+	if p.Format == "wav" {
+		tags = nil
+	}
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", j.In}
+	if tags != nil && tags.Cover != nil {
+		cover, err := coverFile(filepath.Dir(j.In), tags.Cover, tags.CoverMIME)
+		if err != nil {
+			return nil, err
+		}
+		defer os.Remove(cover)
+		args = append(args, "-i", cover, "-map_metadata", "-1", "-map", "0:a", "-map", "1:0", "-c:v", "copy", "-disposition:v:0", "attached_pic")
+		if p.Format != "aac" {
+			args = append(args, "-metadata:s:v", "title=Album cover", "-metadata:s:v", "comment=Cover (front)")
+		}
+	} else {
+		args = append(args, "-map_metadata", "-1", "-vn")
+	}
 	if len(filters) > 0 {
 		args = append(args, "-af", strings.Join(filters, ","))
 	}
 	args = append(args, "-ar", strconv.Itoa(rate))
 	switch p.Format {
 	case "mp3":
-		args = append(args, "-c:a", p.Encoder, "-b:a", strconv.Itoa(j.BitrateKbps)+"k", "-write_xing", "1", "-id3v2_version", "0", "-write_id3v1", "0")
+		// ID3v2.3, whose cover Windows' Explorer and Media Player show,
+		// when tagged; no tag otherwise.
+		id3 := "0"
+		if tags != nil {
+			id3 = "3"
+		}
+		args = append(args, "-c:a", p.Encoder, "-b:a", strconv.Itoa(j.BitrateKbps)+"k", "-write_xing", "1", "-id3v2_version", id3, "-write_id3v1", "0")
 	case "aac":
 		args = append(args, "-c:a", p.Encoder, "-b:a", strconv.Itoa(j.BitrateKbps)+"k", "-movflags", "+faststart")
 	case "flac":
 		if j.Source.Sample == pcm.F32LE {
-			args = append(args, "-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24")
+			args = append(args, "-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample:a", "24")
 		} else {
 			args = append(args, "-c:a", "flac", "-sample_fmt", "s16")
 		}
@@ -255,11 +323,39 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) (*Shortfall, error) {
 			args = append(args, "-c:a", "pcm_s16le")
 		}
 	}
+	if tags != nil {
+		for _, kv := range tags.Metadata {
+			args = append(args, "-metadata", kv)
+		}
+	}
 	args = append(args, "-f", p.Muxer, j.Out)
 	if err := f.run(ctx, args); err != nil {
 		return nil, err
 	}
 	return short, nil
+}
+
+// coverFile writes a cover of type mime to a temporary file in dir, for
+// ffmpeg to read as its second input.
+func coverFile(dir string, data []byte, mime string) (string, error) {
+	ext := ".jpg"
+	if mime == "image/png" {
+		ext = ".png"
+	}
+	f, err := os.CreateTemp(dir, ".cover-*"+ext)
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudness, error) {
