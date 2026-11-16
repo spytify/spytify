@@ -260,7 +260,9 @@ func (f *finisher) process(j finishJob) {
 	if !f.takeNumber(t) || !f.pickName(t) || !f.encode(ctx, t) {
 		return
 	}
-	f.writeTags(ctx, t)
+	if t.timings.Format == "wav" {
+		f.writeSidecar(ctx, t)
+	}
 	f.save(t)
 }
 
@@ -440,10 +442,12 @@ func (f *finisher) pickName(t *take) bool {
 }
 
 // encode writes the take to the .part file in the output format, trimmed
-// and normalized as set.
+// and normalized as set, with its tags and cover in the same ffmpeg run. A
+// file whose tags could not be written is encoded again without them and
+// saved all the same.
 func (f *finisher) encode(ctx context.Context, t *take) bool {
 	step := time.Now()
-	short, err := f.ffmpeg.Encode(ctx, encode.Job{
+	job := encode.Job{
 		In:          t.tmp,
 		Out:         t.part,
 		Format:      t.timings.Format,
@@ -453,7 +457,20 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 		TrimEnd:     t.trimEnd,
 		Normalize:   t.v.Bool(settings.RecorderNormalize),
 		TargetLUFS:  t.v.Float(settings.RecorderTargetLufs),
-	})
+	}
+	if job.Format != "wav" {
+		pairs, cover, mime := tag.Embedded(t.tags, job.Format, t.topts)
+		job.Tags = &encode.Tags{Metadata: pairs, Cover: cover, CoverMIME: mime}
+	}
+	short, err := f.ffmpeg.Encode(ctx, job)
+	t.tagged = job.Tags != nil
+	if err != nil && job.Tags != nil && ctx.Err() == nil {
+		tagErr := err
+		job.Tags, t.tagged = nil, false
+		if short, err = f.ffmpeg.Encode(ctx, job); err == nil {
+			f.log.Errorf("%q: tags not written: %v", t.info.Title, tagErr)
+		}
+	}
 	t.timings.EncodeMs = msSince(step)
 	if err != nil {
 		os.Remove(t.part)
@@ -486,9 +503,10 @@ func encodeFacts(root, part string) map[string]string {
 	return facts
 }
 
-// writeTags tags the .part file. A file whose tags could not be written is
-// saved all the same.
-func (f *finisher) writeTags(ctx context.Context, t *take) {
+// writeSidecar writes a WAV's tags beside its .part file, as WAV has no
+// standard tag block. A file whose tags could not be written is saved all
+// the same.
+func (f *finisher) writeSidecar(ctx context.Context, t *take) {
 	t.tagged = true
 	step := time.Now()
 	err := (tag.Writer{FFmpeg: f.ffmpeg.Path, Logf: f.log.Infof}).Write(ctx, t.part, t.timings.Format, t.tags, t.topts)

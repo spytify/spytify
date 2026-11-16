@@ -13,11 +13,13 @@ import (
 	"github.com/spytify/spytify/internal/proc"
 )
 
-// Writer writes tags into an encoded file. MP3 gets ID3v2.3, whose cover
-// Windows' Explorer and Media Player show (they show none from ID3v2.4);
-// FLAC gets Vorbis comments, AAC gets MP4 atoms, all through an ffmpeg
-// stream copy so the audio is untouched; WAV has no standard tag block and
-// gets a sidecar JSON file instead.
+// Writer writes tags into a file already encoded. MP3 gets ID3v2.3, whose
+// cover Windows' Explorer and Media Player show (they show none from
+// ID3v2.4); FLAC gets Vorbis comments, AAC gets MP4 atoms, all through an
+// ffmpeg stream copy so the audio is untouched; WAV has no standard tag
+// block and gets a sidecar JSON file instead. A track being saved gets the
+// same tags from its encode run (encode.Job.Tags, from Embedded); WAV's
+// sidecar is written here.
 type Writer struct {
 	FFmpeg string
 	// Logf logs a rename Windows refused while a program held the file.
@@ -42,9 +44,9 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 	defer os.Remove(tmp.Name())
 
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", path}
+	pairs, cover, mime := Embedded(t, format, o)
 	var coverPath string
-	if o.Cover && len(t.Cover) > 0 {
-		cover, mime := fitCover(t.Cover, t.CoverMIME, o.CoverSize)
+	if cover != nil {
 		ext := ".jpg"
 		if mime == "image/png" {
 			ext = ".png"
@@ -71,7 +73,7 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 	if format == "mp3" {
 		args = append(args, "-id3v2_version", "3", "-write_id3v1", "0")
 	}
-	for _, kv := range metadataPairs(t, format, o.ArtistSeparator) {
+	for _, kv := range pairs {
 		args = append(args, "-metadata", kv)
 	}
 	args = append(args, "-f", muxer, tmp.Name())
@@ -80,6 +82,17 @@ func (w Writer) Write(ctx context.Context, path, format string, t Track, o Optio
 		return fmt.Errorf("tag: ffmpeg: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	return openfiles.Rename(tmp.Name(), path, w.Logf)
+}
+
+// Embedded is what a file of format carries of t: its tags as ffmpeg's
+// -metadata name=value pairs, and its cover fitted to o.CoverSize with the
+// cover's MIME type, nil when o.Cover is off or t has none.
+func Embedded(t Track, format string, o Options) (pairs []string, cover []byte, mime string) {
+	pairs = metadataPairs(t, format, o.ArtistSeparator)
+	if o.Cover && len(t.Cover) > 0 {
+		cover, mime = fitCover(t.Cover, t.CoverMIME, o.CoverSize)
+	}
+	return pairs, cover, mime
 }
 
 func metadataPairs(t Track, format, sep string) []string {
