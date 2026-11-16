@@ -107,7 +107,7 @@ func await(op *foundation.IAsyncOperation) (unsafe.Pointer, error) {
 	info := (*foundation.IAsyncInfo)(unsafe.Pointer(op.MustQueryInterface(ole.NewGUID(foundation.GUIDIAsyncInfo))))
 	defer info.Release()
 	deadline := time.Now().Add(smtcCallTimeout)
-	for {
+	for wait := awaitFirst; ; wait = nextAwait(wait) {
 		st, err := info.GetStatus()
 		if err != nil {
 			return nil, err
@@ -128,7 +128,7 @@ func await(op *foundation.IAsyncOperation) (unsafe.Pointer, error) {
 			info.Cancel()
 			return nil, fmt.Errorf("no answer in %s", smtcCallTimeout)
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(wait)
 	}
 }
 
