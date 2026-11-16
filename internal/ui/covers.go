@@ -142,12 +142,16 @@ func newRowCovers(loaded func()) *covers {
 	return c
 }
 
-// loads is how many covers finished loading, failed ones included: a
-// screen that changed nothing else redraws its rows when it grows.
+// loads is how many covers finished loading, failed ones included, and
+// copies made or found: a screen that changed nothing else redraws its rows
+// when it grows.
 func (c *covers) loads() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.done
+	done := c.done
+	c.mu.Unlock()
+	c.copies.mu.Lock()
+	defer c.copies.mu.Unlock()
+	return done + c.copies.done
 }
 
 // get returns the cover at url, none while it loads or when it failed.
