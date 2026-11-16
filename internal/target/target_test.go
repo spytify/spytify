@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 func TestLoadSplitsProcessList(t *testing.T) {
@@ -149,9 +151,71 @@ func TestPickRootFindsTheTreeRoot(t *testing.T) {
 	}
 }
 
+func setVersion(t *testing.T, v string) {
+	old := proto.Version
+	proto.Version = v
+	t.Cleanup(func() { proto.Version = old })
+}
+
+// A release build reads only the user's .env: one in the working directory,
+// where a download or a shell may have left it, is ignored. And only
+// SPYTIFY_* keys are applied, from any file.
+func TestLoadDotEnvInAReleaseReadsOnlyTheUsersSpytifyKeys(t *testing.T) {
+	setVersion(t, "v2.0.2")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("USERPROFILE", home)
+	for _, k := range []string{"SPYTIFY_TEST_LAUNCH", "SPYTIFY_TEST_USER", "SPYTIFY_TEST_OTHER"} {
+		t.Setenv(k, "")
+		os.Unsetenv(k)
+	}
+	if err := os.MkdirAll(filepath.Dir(UserEnvPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(UserEnvPath(), []byte("SPYTIFY_TEST_USER=user\nSPYTIFY_TEST_OTHER=user\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	if err := os.WriteFile(filepath.Join(work, ".env"), []byte("SPYTIFY_TEST_LAUNCH=planted\nSPYTIFY_TEST_OTHER=cwd\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(work)
+	LoadDotEnv()
+	if v, set := os.LookupEnv("SPYTIFY_TEST_LAUNCH"); set {
+		t.Errorf("a release applied the working directory's .env: SPYTIFY_TEST_LAUNCH = %q", v)
+	}
+	for k, want := range map[string]string{"SPYTIFY_TEST_USER": "user", "SPYTIFY_TEST_OTHER": "user"} {
+		if got := os.Getenv(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+
+	setVersion(t, "v2.0.3-dev.4")
+	t.Setenv("SPYTIFY_TEST_OTHER", "")
+	os.Unsetenv("SPYTIFY_TEST_OTHER")
+	t.Setenv("PATH_TEST_SPYTIFY", "")
+	os.Unsetenv("PATH_TEST_SPYTIFY")
+	if err := os.WriteFile(filepath.Join(work, ".env"), []byte("PATH_TEST_SPYTIFY=cwd\nSPYTIFY_TEST_OTHER=cwd\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(UserEnvPath(), []byte("PATH_TEST_SPYTIFY=user\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	LoadDotEnv()
+	if v, set := os.LookupEnv("PATH_TEST_SPYTIFY"); set {
+		t.Errorf("a key without the SPYTIFY_ prefix was applied: %q", v)
+	}
+	if got := os.Getenv("SPYTIFY_TEST_OTHER"); got != "cwd" {
+		t.Errorf("a development build ignored the working directory's .env: SPYTIFY_TEST_OTHER = %q", got)
+	}
+}
+
 // A variable set in the environment wins over the working directory's
 // .env, which wins over the user's (the one the app writes).
 func TestLoadDotEnvKeepsTheFirstValue(t *testing.T) {
+	setVersion(t, "v2.0.3-dev.4")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))

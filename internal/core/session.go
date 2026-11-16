@@ -111,7 +111,9 @@ type Session struct {
 	deps sessionDeps
 	opts SessionOptions
 
-	ring      *Ring
+	ring *Ring
+	// written holds what write takes from the ring, reused at each call.
+	written   []byte
 	cur       *segment
 	pend      *change
 	status    meta.Status

@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/proc"
@@ -25,6 +26,11 @@ import (
 type FFmpeg struct {
 	Path    string
 	Version string
+
+	// encoders is the build's encoder list once read: core.info asks at
+	// every connection, and the list never changes (#845).
+	mu       sync.Mutex
+	encoders map[string]bool
 }
 
 // ErrMissing means ffmpeg could not be run; session.start is refused.
@@ -110,20 +116,24 @@ func locate(name string) (string, error) {
 	return "", exec.ErrNotFound
 }
 
-// HasEncoder reports whether this ffmpeg build has an encoder.
+// HasEncoder reports whether this ffmpeg build has an encoder. The list is
+// read once; a run that fails is tried again at the next call.
 func (f *FFmpeg) HasEncoder(name string) bool {
-	encoders := proc.Command(f.Path, "-hide_banner", "-encoders")
-	out, err := encoders.Output()
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[1] == name {
-			return true
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.encoders == nil {
+		out, err := proc.Command(f.Path, "-hide_banner", "-encoders").Output()
+		if err != nil {
+			return false
+		}
+		f.encoders = map[string]bool{}
+		for _, line := range strings.Split(string(out), "\n") {
+			if fields := strings.Fields(line); len(fields) >= 2 {
+				f.encoders[fields[1]] = true
+			}
 		}
 	}
-	return false
+	return f.encoders[name]
 }
 
 // Preset is the container and codec of an output format.
@@ -161,6 +171,19 @@ type Job struct {
 	TrimEnd    int64
 	Normalize  bool
 	TargetLUFS float64
+	// Tags, when set, are written in the same run as the audio, as
+	// tag.Writer writes them into a file already encoded: MP3 gets ID3v2.3,
+	// FLAC Vorbis comments, AAC MP4 atoms. WAV takes none.
+	Tags *Tags
+}
+
+// Tags are a file's tags, as tag.Embedded gives them.
+type Tags struct {
+	// Metadata are ffmpeg's -metadata name=value pairs.
+	Metadata []string
+	// Cover is a picture to attach, of type CoverMIME; nil for none.
+	Cover     []byte
+	CoverMIME string
 }
 
 func (j Job) trimFilter() string {
@@ -254,19 +277,42 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) (*Shortfall, error) {
 		filters = append(filters, resample(rate))
 	}
 
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", j.In, "-map_metadata", "-1", "-vn"}
+	tags := j.Tags
+	if p.Format == "wav" {
+		tags = nil
+	}
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", j.In}
+	if tags != nil && tags.Cover != nil {
+		cover, err := coverFile(filepath.Dir(j.In), tags.Cover, tags.CoverMIME)
+		if err != nil {
+			return nil, err
+		}
+		defer os.Remove(cover)
+		args = append(args, "-i", cover, "-map_metadata", "-1", "-map", "0:a", "-map", "1:0", "-c:v", "copy", "-disposition:v:0", "attached_pic")
+		if p.Format != "aac" {
+			args = append(args, "-metadata:s:v", "title=Album cover", "-metadata:s:v", "comment=Cover (front)")
+		}
+	} else {
+		args = append(args, "-map_metadata", "-1", "-vn")
+	}
 	if len(filters) > 0 {
 		args = append(args, "-af", strings.Join(filters, ","))
 	}
 	args = append(args, "-ar", strconv.Itoa(rate))
 	switch p.Format {
 	case "mp3":
-		args = append(args, "-c:a", p.Encoder, "-b:a", strconv.Itoa(j.BitrateKbps)+"k", "-write_xing", "1", "-id3v2_version", "0", "-write_id3v1", "0")
+		// ID3v2.3, whose cover Windows' Explorer and Media Player show,
+		// when tagged; no tag otherwise.
+		id3 := "0"
+		if tags != nil {
+			id3 = "3"
+		}
+		args = append(args, "-c:a", p.Encoder, "-b:a", strconv.Itoa(j.BitrateKbps)+"k", "-write_xing", "1", "-id3v2_version", id3, "-write_id3v1", "0")
 	case "aac":
 		args = append(args, "-c:a", p.Encoder, "-b:a", strconv.Itoa(j.BitrateKbps)+"k", "-movflags", "+faststart")
 	case "flac":
 		if j.Source.Sample == pcm.F32LE {
-			args = append(args, "-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24")
+			args = append(args, "-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample:a", "24")
 		} else {
 			args = append(args, "-c:a", "flac", "-sample_fmt", "s16")
 		}
@@ -277,11 +323,39 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) (*Shortfall, error) {
 			args = append(args, "-c:a", "pcm_s16le")
 		}
 	}
+	if tags != nil {
+		for _, kv := range tags.Metadata {
+			args = append(args, "-metadata", kv)
+		}
+	}
 	args = append(args, "-f", p.Muxer, j.Out)
 	if err := f.run(ctx, args); err != nil {
 		return nil, err
 	}
 	return short, nil
+}
+
+// coverFile writes a cover of type mime to a temporary file in dir, for
+// ffmpeg to read as its second input.
+func coverFile(dir string, data []byte, mime string) (string, error) {
+	ext := ".jpg"
+	if mime == "image/png" {
+		ext = ".png"
+	}
+	f, err := os.CreateTemp(dir, ".cover-*"+ext)
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudness, error) {

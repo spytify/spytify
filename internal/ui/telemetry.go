@@ -273,7 +273,10 @@ func (a *App) feedTracker(ev proto.Event) {
 		}
 		a.tel.Breadcrumb("error", string(e.Code), nil)
 		if problemCodes[e.Code] {
-			a.tel.ProblemWith(string(e.Code), e.Msg, e.Facts)
+			// Not on the link's goroutine: the report waits up to 2 s for
+			// the window's picture, and no recorder event would reach the
+			// model meanwhile (#854).
+			a.reports.Go(func() { a.tel.ProblemWith(string(e.Code), e.Msg, e.Facts) })
 		}
 	case proto.EventSettingsChanged:
 		var e proto.SettingsValues

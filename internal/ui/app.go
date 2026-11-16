@@ -119,6 +119,8 @@ type App struct {
 	// notes is what the notifications sent while the window is hidden in
 	// the tray keep from one event to the next.
 	notes notices
+	// inTray stops the app's timers while the window is hidden in the tray.
+	inTray trayState
 	// starting is set while spytifyd is being started; startErr is why
 	// the last start failed.
 	starting   bool
@@ -548,14 +550,15 @@ func (a *App) renderLevel() {
 	a.screens[tabRecord].(*recordScreen).renderLive(a.m.Live())
 }
 
-// clockAds moves the progress once a second while an ad plays: the
-// recorder sends level events, which move it, only while it records.
+// clockAds moves the progress once a second while an ad plays and the
+// window shows: the recorder sends level events, which move it, only while
+// it records.
 func (a *App) clockAds() {
-	for range time.Tick(time.Second) {
+	a.everyShown(time.Second, func() {
 		if a.adPlaying() {
 			a.scheduleLevel()
 		}
-	}
+	})
 }
 
 // adPlaying is whether an ad plays: clockAds moves its progress, which no
