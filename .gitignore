@@ -2,8 +2,6 @@
 /dist/
 *.part
 /cmd/spytify-ui/rsrc_windows_amd64.syso
-/cmd/spytifyd/rsrc_windows_amd64.syso
-/cmd/spytify-cli/rsrc_windows_amd64.syso
 .env
 .serena/
 .DS_Store

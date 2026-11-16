@@ -1,8 +1,8 @@
-// The version information and manifest of spytifyd.exe, spytify-cli.exe
-// and spytify-tap.exe, which scripts/build-windows.sh compiles with windres
-// once for each. Besides spytify.rc's VERSION options, -D gives NAME, the
-// file name, and DESCRIPTION. No icon: only the app has one, so it is the
-// one to open in the folder.
+// The version information and manifest of spytify-tap.exe, which
+// scripts/build-windows.sh compiles with windres; -D gives spytify.rc's
+// VERSION options. No icon: only the app has one, so it is the one to open
+// in the folder. spytifyd.exe and spytify-cli.exe carry none: antivirus
+// engines flagged spytifyd.exe with them (#830).
 #include <winver.h>
 
 1 24 "helper.manifest"
@@ -24,10 +24,10 @@ BEGIN
       VALUE "LegalCopyright", "MIT License, https://spytify.github.io/spytify/"
       VALUE "ProductName", "Spytify"
       VALUE "ProductVersion", VERSION
-      VALUE "FileDescription", DESCRIPTION
+      VALUE "FileDescription", "Spytify capture helper"
       VALUE "FileVersion", VERSION
-      VALUE "InternalName", NAME
-      VALUE "OriginalFilename", NAME
+      VALUE "InternalName", "spytify-tap.exe"
+      VALUE "OriginalFilename", "spytify-tap.exe"
     END
   END
   BLOCK "VarFileInfo"

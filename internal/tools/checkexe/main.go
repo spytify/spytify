@@ -7,11 +7,14 @@
 // nothing: antivirus engines take a program with no version information
 // or manifest for commodity malware, and the rest for a hidden payload and
 // a loader's entry points. With -helper, for the binaries with no icon,
-// all but the icon and opengl32.dll.
+// all but the icon and opengl32.dll. With -bare, for the Go helpers, no
+// resources at all: spytifyd.exe built with version information and a
+// manifest was flagged by one engine more on VirusTotal (#830).
 // scripts/build-windows.sh runs it on every binary it builds:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
 //	go run ./internal/tools/checkexe -helper bin/windows/spytify-tap.exe
+//	go run ./internal/tools/checkexe -bare bin/windows/spytifyd.exe
 package main
 
 import (
@@ -34,16 +37,24 @@ const (
 )
 
 func main() {
-	helper := flag.Bool("helper", false, "a helper, with no icon and nothing to draw: skip the icon and opengl32.dll")
-	flag.Usage = func() { fmt.Fprintln(os.Stderr, "usage: checkexe [-helper] file.exe...") }
+	asHelper := flag.Bool("helper", false, "a helper, with no icon and nothing to draw: skip the icon and opengl32.dll")
+	asBare := flag.Bool("bare", false, "a Go helper, which must carry no resources at all")
+	flag.Usage = func() { fmt.Fprintln(os.Stderr, "usage: checkexe [-helper | -bare] file.exe...") }
 	flag.Parse()
-	if flag.NArg() == 0 {
+	if flag.NArg() == 0 || (*asHelper && *asBare) {
 		flag.Usage()
 		os.Exit(2)
 	}
+	k := app
+	switch {
+	case *asHelper:
+		k = helper
+	case *asBare:
+		k = bare
+	}
 	failed := false
 	for _, path := range flag.Args() {
-		found, err := check(path, *helper)
+		found, err := check(path, k)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "checkexe: %s: %v\n", path, err)
 			failed = true
@@ -56,8 +67,18 @@ func main() {
 	}
 }
 
+// kind is what a program must carry: the app an icon, version information
+// and a manifest; a helper the last two; a bare Go helper nothing.
+type kind int
+
+const (
+	app kind = iota
+	helper
+	bare
+)
+
 // check runs the checks on the file at path and says what they found.
-func check(path string, helper bool) (string, error) {
+func check(path string, k kind) (string, error) {
 	n, err := trailing(path)
 	if err != nil {
 		return "", err
@@ -76,10 +97,20 @@ func check(path string, helper bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if k == bare {
+		total := 0
+		for _, c := range counts {
+			total += c
+		}
+		if total > 0 {
+			return "", fmt.Errorf("%d resources: spytifyd.exe built with version information and a manifest was flagged by one engine more on VirusTotal than without (#830)", total)
+		}
+		return "no resources, nothing past the last section, no exports", nil
+	}
 	if counts[rtVersion] == 0 || counts[rtManifest] == 0 {
 		return "", fmt.Errorf("%d version resources, %d manifests: unsigned, a program without them looks like commodity malware", counts[rtVersion], counts[rtManifest])
 	}
-	if helper {
+	if k == helper {
 		return "version information, a manifest, nothing past the last section, no exports", nil
 	}
 	if counts[rtGroupIcon] == 0 || counts[rtIcon] == 0 {
