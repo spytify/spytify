@@ -15,7 +15,7 @@ On Sentry's side, the project is set to:
 - mask user names in file paths;
 - run the default scrubbers.
 
-Your computer is known only by a code made from its machine ID for Spytify alone: the same after a reinstall, and of no use to any other app. Reports also carry the system, the version and the country.
+Your computer is known only by a code made from its machine ID for Spytify alone: the same after a reinstall, and of no use to any other app. Spytify reads the machine ID only once the switch is on and its choice was shown, never before. Reports also carry the system, the version and the country.
 
 ## Sent while the switch is on
 
