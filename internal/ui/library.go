@@ -84,16 +84,19 @@ type libraryRow struct {
 // The Album sort, the kinds of file the filter ticks, and the heading of
 // the files with no album.
 const (
-	byAlbum      = lang.Album
-	takeComplete = lang.Complete
-	takeFlawed   = lang.Flawed
-	noAlbum      = lang.NoAlbum
+	byAlbum        = lang.Album
+	takeComplete   = lang.Complete
+	takeLowQuality = lang.LowQuality
+	takeFlawed     = lang.Flawed
+	noAlbum        = lang.NoAlbum
 )
 
-// takeKinds are the boxes of the filter: a complete take, and a flawed one,
-// whatever its marks say, as all are worth recording again; its row's
+// takeKinds are the boxes of the filter: a complete take; one in low
+// quality, which can still be the whole track, recorded from a poor format;
+// and a flawed one, cut short or with a pause fade, a low volume or a mute,
+// whatever its marks say, as all are worth recording again. Its row's
 // badges say which.
-var takeKinds = []string{takeComplete, takeFlawed}
+var takeKinds = []string{takeComplete, takeLowQuality, takeFlawed}
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
@@ -129,7 +132,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.kinds.Selected = l.takesLabel()
 	// A select is as wide as its placeholder, which a choice made never
 	// shows: the longest label fits.
-	l.kinds.PlaceHolder = takeFlawed
+	l.kinds.PlaceHolder = takeLowQuality + ", " + takeFlawed
 	rescan := newIconButton(lang.Rescan, theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
@@ -438,12 +441,24 @@ func takeBadges(path string) []string {
 }
 
 // kindsOf are the kinds of file the filter ticks for the file at path:
-// Flawed takes for one with any mark, Complete for one with none.
+// Low quality for one recorded from a poor format, Flawed takes for one
+// with any other mark, both for a take that is both, and Complete for one
+// with none.
 func kindsOf(path string) []string {
-	if len(takeBadges(path)) > 0 {
-		return []string{takeFlawed}
+	var out []string
+	for _, b := range takeBadges(path) {
+		kind := takeFlawed
+		if b == lang.LowQuality {
+			kind = takeLowQuality
+		}
+		if !slices.Contains(out, kind) {
+			out = append(out, kind)
+		}
 	}
-	return []string{takeComplete}
+	if len(out) == 0 {
+		return []string{takeComplete}
+	}
+	return out
 }
 
 // takeMarker is a mark the recorder adds to a take's title, and the space
