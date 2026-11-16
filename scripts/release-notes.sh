@@ -57,8 +57,9 @@ done <<<"$assets"
 # What the files lack, a paragraph each: nothing once they are signed and
 # notarised.
 lacks=()
-[ "${NOTARIZED:-}" = true ] || lacks+=("The macOS app is not notarised: the first time, allow it in System Settings > Privacy & Security > Open Anyway.")
-[ "${SIGNED:-}" = true ] || lacks+=("The Windows files are not signed, so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\".")
+[ "${NOTARIZED:-}" = true ] || lacks+=("The macOS app is not notarised (_\$99 USD/yr_): the first time, allow it in System Settings > Privacy & Security > Open Anyway.")
+[ "${SIGNED:-}" = true ] || lacks+=("The Windows files are not signed (_\$129 USD/yr_), so SmartScreen warns before the first run. Click \"More info\", then select \"Run anyway\".")
+[ "${SIGNED:-}" = true ] || lacks+=("If security software blocks Spytify, deletes its files or reports a threat, help us improve it by telling us (see [Something went wrong?](#user-content-something-went-wrong)).")
 if [ ${#lacks[@]} -gt 0 ]; then
   echo "> [!NOTE]"
   for i in "${!lacks[@]}"; do
@@ -67,13 +68,26 @@ if [ ${#lacks[@]} -gt 0 ]; then
   done
   echo
 fi
+# The bug tracker misses what happens before Spytify runs, and a crash can
+# end Spytify before its report leaves. GitHub gives a release's headings no
+# anchor, so the note's link lands on this one.
+echo '<a id="something-went-wrong"></a>'
+echo "## Something went wrong?"
+echo
+echo "Tell us in [GitHub issues](https://github.com/$repo/issues/new), on [r/spytify](https://www.reddit.com/r/spytify/) or at [jwallet.spytify@gmail.com](mailto:jwallet.spytify@gmail.com), above all when security software keeps Spytify from starting or Spytify crashes and closes: the bug tracker cannot see those in full detail."
+echo
+# SmartScreen also stops the programs Spytify starts, unseen.
+if [ "${SIGNED:-}" != true ]; then
+  echo "Because the Windows files are unsigned, \"Run anyway\" may also be needed for \`spytifyd.exe\` and \`spytify-tap.exe\`, which Spytify starts on its own: run each once from the Spytify folder. Otherwise, wait until enough people have downloaded the version for it to become known, or build Spytify from its sources yourself: see the [README](https://github.com/$repo#build-and-contribute)."
+  echo
+fi
 echo "## Downloads"
+echo
+echo "The Windows zip and the macOS app come with ffmpeg, and the .deb installs it. Elsewhere, install it first: \`brew install ffmpeg\` for the macOS command line, or from the system's packages on Linux. $(link SHA256SUMS) has every file's checksum, and the [install page](https://spytify.github.io/spytify/v2/install.html) says more."
 echo
 echo "| System | File | Size |"
 echo "|---|---|---|"
 printf '%s' "$rows"
-echo
-echo "The Windows zip and the macOS app come with ffmpeg, and the .deb installs it. Elsewhere, install it first: \`brew install ffmpeg\` for the macOS command line, or from the system's packages on Linux. $(link SHA256SUMS) has every file's checksum, and the [install page](https://spytify.github.io/spytify/v2/install.html) says more."
 echo
 # GitHub's list leaves two blank lines above its last line and ends without
 # a newline: the notes keep one blank line and end as the list does.
