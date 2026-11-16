@@ -150,7 +150,7 @@ const (
 	PauseFade       = "Pause fade"
 	LowVolume       = "Low volume"
 	Muted           = "Muted"
-	Flawed          = "Flawed takes"
+	VolumeIssues    = "Volume issues"
 	NoFiles         = "No files"
 	Rescan          = "Rescan"
 	AllFiles        = "All files"
@@ -158,7 +158,7 @@ const (
 	LibraryEmpty    = "Recorded tracks land in %s."
 	TickAKind       = "Tick a kind of file to show."
 	NoTakesYet      = "None yet: Keep anyway saves takes cut short or in low quality; takes with a pause fade, a low volume or a mute are marked."
-	OnlyTakes       = "Every file here is a take in low quality, or a flawed one: cut short, or with a pause fade, a low volume or a mute."
+	OnlyTakes       = "Every file here is a take cut short, in low quality, or with a volume issue: a pause fade, a low volume or a mute."
 	NothingMatches  = `Nothing matches "%s".`
 	OneFile         = "1 file"
 	Files           = "%d files"

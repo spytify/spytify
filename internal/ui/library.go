@@ -86,17 +86,18 @@ type libraryRow struct {
 const (
 	byAlbum        = lang.Album
 	takeComplete   = lang.Complete
+	takePartial    = lang.Partial
 	takeLowQuality = lang.LowQuality
-	takeFlawed     = lang.Flawed
+	takeVolume     = lang.VolumeIssues
 	noAlbum        = lang.NoAlbum
 )
 
-// takeKinds are the boxes of the filter: a complete take; one in low
-// quality, which can still be the whole track, recorded from a poor format;
-// and a flawed one, cut short or with a pause fade, a low volume or a mute,
-// whatever its marks say, as all are worth recording again. Its row's
-// badges say which.
-var takeKinds = []string{takeComplete, takeLowQuality, takeFlawed}
+// takeKinds are the boxes of the filter. Complete, Partial and Low quality
+// are kinds of take of their own: a take cut short, or one recorded from a
+// poor format, which can still be the whole track. Every other mark, a
+// pause fade, a low volume or a mute, is the player's volume going down
+// and falls in Volume issues; its row's badges say which.
+var takeKinds = []string{takeComplete, takePartial, takeLowQuality, takeVolume}
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
@@ -132,7 +133,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.kinds.Selected = l.takesLabel()
 	// A select is as wide as its placeholder, which a choice made never
 	// shows: the longest label fits.
-	l.kinds.PlaceHolder = takeLowQuality + ", " + takeFlawed
+	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality + ", " + takeVolume
 	rescan := newIconButton(lang.Rescan, theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
@@ -441,14 +442,17 @@ func takeBadges(path string) []string {
 }
 
 // kindsOf are the kinds of file the filter ticks for the file at path:
-// Low quality for one recorded from a poor format, Flawed takes for one
-// with any other mark, both for a take that is both, and Complete for one
-// with none.
+// Partial or Low quality for a take Keep anyway saved, Volume issues for
+// one with any other mark, more than one for a take that is more than one,
+// and Complete for one with none.
 func kindsOf(path string) []string {
 	var out []string
 	for _, b := range takeBadges(path) {
-		kind := takeFlawed
-		if b == lang.LowQuality {
+		kind := takeVolume
+		switch b {
+		case lang.Partial:
+			kind = takePartial
+		case lang.LowQuality:
 			kind = takeLowQuality
 		}
 		if !slices.Contains(out, kind) {
