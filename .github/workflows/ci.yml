@@ -8,6 +8,9 @@ on:
     paths-ignore: ["**.md"]
   pull_request:
     paths-ignore: ["**.md"]
+  # The merge queue tests each pull request on top of main as it is when it
+  # merges, so a branch never has to be brought up to date by hand.
+  merge_group:
 
 permissions:
   contents: read
