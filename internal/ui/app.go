@@ -34,6 +34,9 @@ import (
 type Options struct {
 	// StateDir holds the daemon's log file.
 	StateDir string
+	// CoverCache is where the Library keeps its covers' thumbnails
+	// (DefaultCoverCache); "" keeps them in memory alone, as tests do.
+	CoverCache string
 	// Socket is shown when the daemon cannot be reached.
 	Socket string
 	// ManualRender leaves redrawing to the caller. Tests set it: the
@@ -121,6 +124,8 @@ type App struct {
 	// notes is what the notifications sent while the window is hidden in
 	// the tray keep from one event to the next.
 	notes notices
+	// inTray stops the app's timers while the window is hidden in the tray.
+	inTray trayState
 	// starting is set while spytifyd is being started; startErr is why
 	// the last start failed.
 	starting   bool
@@ -553,14 +558,15 @@ func (a *App) renderLevel() {
 	a.screens[tabRecord].(*recordScreen).renderLive(a.m.Live())
 }
 
-// clockAds moves the progress once a second while an ad plays: the
-// recorder sends level events, which move it, only while it records.
+// clockAds moves the progress once a second while an ad plays and the
+// window shows: the recorder sends level events, which move it, only while
+// it records.
 func (a *App) clockAds() {
-	for range time.Tick(time.Second) {
+	a.everyShown(time.Second, func() {
 		if a.adPlaying() {
 			a.scheduleLevel()
 		}
-	}
+	})
 }
 
 // adPlaying is whether an ad plays: clockAds moves its progress, which no
@@ -586,10 +592,12 @@ func (a *App) checkUpdate() {
 	})
 }
 
+// openURL opens a web page in the default browser. Only http and https
+// pass: given a path instead, the Windows shell would run the program.
 func (a *App) openURL(raw string) {
 	a.noteAction("open " + raw)
-	if u, err := url.Parse(raw); err == nil {
-		_ = a.fa.OpenURL(u)
+	if u, err := url.Parse(raw); err == nil && (u.Scheme == "https" || u.Scheme == "http") {
+		_ = openLink(u.String())
 	}
 }
 

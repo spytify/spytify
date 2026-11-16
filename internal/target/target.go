@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+
+	"github.com/spytify/spytify/pkg/proto"
 )
 
 const mprisPrefix = "org.mpris.MediaPlayer2."
@@ -79,15 +81,27 @@ type Env struct {
 
 var ErrNoTarget = errors.New("SPYTIFY_TARGET_PROCESS is not set; the daemon needs the player's process name")
 
-// LoadDotEnv loads a .env file next to the binary, then one in the working
-// directory, then the user's (UserEnvPath, which the UI writes). Variables
-// already set in the environment win, and earlier files win over later ones.
+// LoadDotEnv loads the user's .env file (UserEnvPath, which the UI writes).
+// A development build first loads a .env next to the binary, then one in
+// the working directory. A release build reads only the user's, so a .env
+// left in a download or a shell's folder cannot choose the commands the
+// recorder runs (SPYTIFY_TARGET_LAUNCH, SPYTIFY_FFMPEG, SPYTIFY_TAP). Only
+// SPYTIFY_* keys are applied. Variables already set in the environment win,
+// and earlier files win over later ones.
 func LoadDotEnv() {
-	if exe, err := os.Executable(); err == nil {
-		loadIfExists(filepath.Join(filepath.Dir(exe), ".env"))
+	if devBuild() {
+		if exe, err := os.Executable(); err == nil {
+			loadIfExists(filepath.Join(filepath.Dir(exe), ".env"))
+		}
+		loadIfExists(".env")
 	}
-	loadIfExists(".env")
 	loadIfExists(UserEnvPath())
+}
+
+// devBuild tells a build from source or CI, such as 2.0.1-dev.12, apart
+// from a release, as the bug tracker's environment does.
+func devBuild() bool {
+	return strings.Contains(proto.Version, "dev") || strings.Contains(proto.Version, "+")
 }
 
 // UserEnvPath is the per-user .env file, for an app started from a desktop
@@ -132,8 +146,17 @@ func SaveUserTarget(values map[string]string) error {
 }
 
 func loadIfExists(path string) {
-	if _, err := os.Stat(path); err == nil {
-		_ = godotenv.Load(path)
+	values, err := godotenv.Read(path)
+	if err != nil {
+		return
+	}
+	for k, v := range values {
+		if !strings.HasPrefix(k, "SPYTIFY_") {
+			continue
+		}
+		if _, set := os.LookupEnv(k); !set {
+			os.Setenv(k, v)
+		}
 	}
 }
 

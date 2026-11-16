@@ -3,7 +3,10 @@ package main
 import (
 	"debug/pe"
 	"encoding/binary"
+	"encoding/xml"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -87,5 +90,30 @@ func TestShellText(t *testing.T) {
 	}
 	if got := shellText([]byte("\x00ShellExecuteW\x00RoActivateInstance\x00")); len(got) != 0 {
 		t.Errorf("the fork: %v", got)
+	}
+}
+
+// A manifest Windows cannot read stops the program before main ("the
+// side-by-side configuration is incorrect"), which checkexe, counting
+// resources, would not see.
+func TestManifestsRead(t *testing.T) {
+	for _, name := range []string{"spytify.manifest", "helper.manifest"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "..", "windows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m struct {
+			XMLName xml.Name `xml:"urn:schemas-microsoft-com:asm.v1 assembly"`
+			Level   struct {
+				Level string `xml:"level,attr"`
+			} `xml:"urn:schemas-microsoft-com:asm.v3 trustInfo>security>requestedPrivileges>requestedExecutionLevel"`
+		}
+		if err := xml.Unmarshal(data, &m); err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if m.Level.Level != "asInvoker" {
+			t.Errorf("%s: execution level %q, want asInvoker", name, m.Level.Level)
+		}
 	}
 }

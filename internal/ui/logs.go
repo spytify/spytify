@@ -34,7 +34,9 @@ type logsScreen struct {
 	list  *widget.List
 	lines []proto.LogEvent
 	all   []proto.LogEvent
-	path  string
+	// listed is set once the lines were drawn.
+	listed bool
+	path   string
 
 	// diagnose opens diag, and turns to a warning while a check fails.
 	// open is whether diag shows: its checks then follow the model from
@@ -201,7 +203,13 @@ func (l *logsScreen) content() fyne.CanvasObject { return l.root }
 
 func (l *logsScreen) render(s model.State) {
 	l.renderChecks(s)
-	l.all = s.Logs
+	// The snapshot shares the model's lines: the same first and last line
+	// at the same place are the same lines, and the list is left as it is
+	// at an event that brought none (#853).
+	if len(s.Logs) == len(l.all) && (len(s.Logs) == 0 || &s.Logs[0] == &l.all[0] && &s.Logs[len(s.Logs)-1] == &l.all[len(l.all)-1]) && l.listed {
+		return
+	}
+	l.all, l.listed = s.Logs, true
 	l.filter()
 }
 

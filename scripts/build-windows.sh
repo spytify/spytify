@@ -15,7 +15,8 @@
 # Cross-compiles from Linux or macOS with Go and MinGW-w64
 # (x86_64-w64-mingw32-gcc, -g++ and -windres; Debian: apt install
 # mingw-w64), builds ffmpeg with make and nasm, and unpacks Mesa with 7-Zip
-# (7z or 7zz; Debian: apt install 7zip). Spytify.exe carries the logo as its icon and its version.
+# (7z or 7zz; Debian: apt install 7zip). Spytify.exe carries the logo as its
+# icon; every program carries its version and a manifest.
 #
 # The player recorded when none is chosen comes from SPYTIFY_DEFAULT_PROCESS,
 # from the environment or an untracked build.env; without it the app asks
@@ -38,24 +39,34 @@ ldflags+=" -X github.com/spytify/spytify/internal/telemetry.DSN=${SPYTIFY_SENTRY
 tmp=$(mktemp -d)
 # Nothing made here stays in the tree, where a later Windows build would
 # link a stale .syso.
-trap 'rm -rf "$tmp" cmd/spytify-ui/rsrc_windows_amd64.syso' EXIT
+trap 'rm -rf "$tmp" cmd/{spytify-ui,spytifyd,spytify-cli}/rsrc_windows_amd64.syso' EXIT
 
 # shellcheck source=scripts/fetch.sh
 . scripts/fetch.sh
 
-# The app's icon and version information: windres compiles
+# The app's icon, version information and manifest: windres compiles
 # windows/spytify.rc into an object, which go build links from the
-# package's folder. The tools that make the icon and check the result run
+# package's folder; the helpers' come from windows/helper.rc, the tap's
+# linked by g++. The tools that make the icon and check the result run
 # here, so they build before GOOS is set.
 go build -o "$tmp/" ./internal/tools/genico ./internal/tools/checkexe ./internal/tools/noexports
 "$tmp/genico" -o "$tmp/spytify.ico" assets/logo256px.png
 IFS=. read -r major minor patch <<<"${version%%[-+]*}"
 # windres passes -D to the preprocessor through a shell: the quotes of a
 # string are escaped.
-x86_64-w64-mingw32-windres -O coff -I "$tmp" \
+x86_64-w64-mingw32-windres -O coff -I "$tmp" -I windows \
   -D VERSION_MAJOR="$major" -D VERSION_MINOR="$minor" -D VERSION_PATCH="$patch" \
   -D "VERSION=\\\"$version\\\"" \
   -o cmd/spytify-ui/rsrc_windows_amd64.syso windows/spytify.rc
+helper() { # file name, description, object
+  x86_64-w64-mingw32-windres -O coff -I windows \
+    -D VERSION_MAJOR="$major" -D VERSION_MINOR="$minor" -D VERSION_PATCH="$patch" \
+    -D "VERSION=\\\"$version\\\"" -D "NAME=\\\"$1\\\"" -D "DESCRIPTION=\\\"$2\\\"" \
+    -o "$3" windows/helper.rc
+}
+helper spytifyd.exe "Spytify recorder" cmd/spytifyd/rsrc_windows_amd64.syso
+helper spytify-cli.exe "Spytify command line" cmd/spytify-cli/rsrc_windows_amd64.syso
+helper spytify-tap.exe "Spytify capture helper" "$tmp/spytify-tap.o"
 
 # Spytify.exe loads opengl32.dll itself, when Fyne first draws, rather than
 # linking it, which would load Windows' before main: with no graphics
@@ -92,7 +103,7 @@ CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
 # its symbol table and DWARF, the table past its last section, an overlay
 # antivirus engines take for a hidden payload.
 x86_64-w64-mingw32-g++ -O2 -Wall -Wextra -std=c++17 -static -municode -s \
-  -o "$out/spytify-tap.exe" windows/spytify-tap/main.cpp -lole32 -luuid
+  -o "$out/spytify-tap.exe" windows/spytify-tap/main.cpp "$tmp/spytify-tap.o" -lole32 -luuid
 "$tmp/checkexe" "$out/Spytify.exe"
 "$tmp/checkexe" -helper "$out/spytifyd.exe" "$out/spytify-cli.exe" "$out/spytify-tap.exe"
 

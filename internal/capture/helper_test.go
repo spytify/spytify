@@ -20,3 +20,18 @@ func TestTheHelpersLinesLoseTheDevicesName(t *testing.T) {
 		}
 	}
 }
+
+// The Windows helper says the player's Volume Mixer slider as "volume
+// 0.850"; another line, or a value out of 0..1, is not one.
+func TestTheHelpersVolumeLine(t *testing.T) {
+	for line, want := range map[string]float64{"volume 0.850": 0.85, "volume 0.000": 0, "volume 1.000": 1} {
+		if got, ok := volumeLine(line); !ok || got != want {
+			t.Errorf("volumeLine(%q) = %v, %v; want %v", line, got, ok, want)
+		}
+	}
+	for _, line := range []string{"volume", "volume loud", "volume 1.500", "volume -0.100", "process 4242 plays to its output"} {
+		if v, ok := volumeLine(line); ok {
+			t.Errorf("volumeLine(%q) = %v, want no volume", line, v)
+		}
+	}
+}

@@ -55,11 +55,7 @@ const focusCheck = 100 * time.Millisecond
 // tells nothing when the focus moves, so a timer looks; the toolkit's own
 // loop wakes 60 times a second.
 func (a *App) watchFocus() {
-	go func() {
-		for range time.Tick(focusCheck) {
-			fyne.Do(a.followFocus)
-		}
-	}()
+	go a.everyShown(focusCheck, func() { fyne.Do(a.followFocus) })
 }
 
 // followFocus scrolls Settings, or the offline screen, to the control that

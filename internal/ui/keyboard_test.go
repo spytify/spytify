@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
-	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -164,15 +163,14 @@ func tabTo(t *testing.T, a *App, name string, number int) fyne.Focusable {
 	return nil
 }
 
-// urlApp keeps the pages the app asked the browser to open.
-type urlApp struct {
-	fyne.App
-	opened []string
-}
-
-func (u *urlApp) OpenURL(link *url.URL) error {
-	u.opened = append(u.opened, link.String())
-	return nil
+// fakeBrowser keeps the pages the app asked the browser to open.
+func fakeBrowser(t *testing.T) *[]string {
+	t.Helper()
+	l := openLink
+	t.Cleanup(func() { openLink = l })
+	opened := &[]string{}
+	openLink = func(link string) error { *opened = append(*opened, link); return nil }
+	return opened
 }
 
 // fakeOS replaces the file manager and the media player for the test.
@@ -649,8 +647,7 @@ func TestTheKeyboardWorksTheLogs(t *testing.T) {
 // About: the links, then the buttons, left to right.
 func TestTheKeyboardWorksAbout(t *testing.T) {
 	a, m, _ := newTestApp(t, filepath.Join(t.TempDir(), "absent.sock"))
-	browser := &urlApp{App: a.fa}
-	a.fa = browser
+	opened := fakeBrowser(t)
 	m.SetConn(model.Connected, "")
 	m.SetInfo(info())
 	m.SetSettings(defaults())
@@ -663,8 +660,8 @@ func TestTheKeyboardWorksAbout(t *testing.T) {
 		tabTo(t, a, name, 1)
 		pressSpace(c)
 	}
-	if want := []string{donateURL, sourceURL, siteURL, donateURL}; !slices.Equal(browser.opened, want) {
-		t.Errorf("opened %v, want %v", browser.opened, want)
+	if want := []string{donateURL, sourceURL, siteURL, donateURL}; !slices.Equal(*opened, want) {
+		t.Errorf("opened %v, want %v", *opened, want)
 	}
 }
 

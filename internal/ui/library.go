@@ -62,6 +62,13 @@ type libraryScreen struct {
 	tagged *tagCache
 	ffOnce sync.Once
 	ff     *encode.FFmpeg
+	// ffFound is set once ffmpeg was looked for, ff then holding it or nil.
+	ffFound atomic.Bool
+	// readCover reads the picture a file holds for the tests; nil, ffmpeg
+	// does.
+	readCover func(ctx context.Context, path string) ([]byte, error)
+	// disk keeps the covers' thumbnails between launches.
+	disk thumbCache
 	// redraw is set while a redraw for covers or tags that came in waits
 	// for the toolkit's goroutine: those that come in meanwhile join it.
 	redraw atomic.Bool
@@ -98,7 +105,9 @@ func newLibraryScreen(a *App) *libraryScreen {
 			})
 		}
 	}
-	l.covers = newCovers(loaded)
+	l.covers = newRowCovers(loaded)
+	l.disk = thumbCache{dir: a.opts.CoverCache}
+	go l.disk.prune(time.Now())
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 	l.search = newSearch(a, lang.SearchLibrary, func(string) { l.filter() })
 	l.sortBy = newSelectField([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
@@ -210,22 +219,59 @@ func (l *libraryScreen) cover(f libraryFile) thumbs {
 	if strings.EqualFold(filepath.Ext(f.path), ".wav") {
 		return thumbs{}
 	}
-	ff := l.ffmpeg()
-	if ff == nil {
+	// ffmpeg is looked for by the loader, off the toolkit's goroutine: the
+	// search runs ffmpeg -version, which an antivirus can hold for seconds
+	// the first time on Windows (#841). Without one, the thumbnails on disk
+	// still show.
+	read := l.readCover
+	if read == nil && l.ffFound.Load() && l.ff == nil && l.disk.dir == "" {
 		return thumbs{}
 	}
-	path := f.path
-	return l.covers.load(f.key(), func(ctx context.Context) ([]byte, error) { return ff.Cover(ctx, path) })
+	path, key, disk := f.path, f.key(), l.disk
+	return l.covers.load(key, func(ctx context.Context) ([]byte, error) {
+		if data, ok := disk.read(key); ok {
+			if len(data) == 0 {
+				return nil, encode.ErrNoCover
+			}
+			return data, nil
+		}
+		if read == nil {
+			ff := l.ffmpeg()
+			if ff == nil {
+				return nil, errNoFFmpeg
+			}
+			read = ff.Cover
+		}
+		data, err := read(ctx, path)
+		switch {
+		case errors.Is(err, encode.ErrNoCover):
+			disk.write(key, nil)
+		case err == nil:
+			// The thumbnail alone is kept: a cover can weigh megabytes.
+			if row, err := rowPNG(data); err == nil {
+				disk.write(key, row)
+				return row, nil
+			}
+		}
+		return data, err
+	})
 }
 
-// ffmpeg reads the files' covers and tags; nil without one.
+var errNoFFmpeg = errors.New("no ffmpeg")
+
+// findFFmpeg finds ffmpeg; tests replace it.
+var findFFmpeg = encode.Find
+
+// ffmpeg reads the files' covers and tags; nil without one. Finding it
+// runs ffmpeg: never call it on the toolkit's goroutine.
 func (l *libraryScreen) ffmpeg() *encode.FFmpeg {
 	l.ffOnce.Do(func() {
 		name := os.Getenv("SPYTIFY_FFMPEG")
 		if name == "" {
 			name = "ffmpeg"
 		}
-		l.ff, _ = encode.Find(name)
+		l.ff, _ = findFFmpeg(name)
+		l.ffFound.Store(true)
 	})
 	return l.ff
 }
