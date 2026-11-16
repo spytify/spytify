@@ -103,10 +103,11 @@ func shrink(img image.Image, px int) image.Image {
 // Record list keeps.
 const maxCovers = 60
 
-// maxRowCovers is how many covers the Library keeps: at a row's size alone,
-// about 26 KB each, 26 MB at most. A row scrolled back to in a library of
-// that many files shows its cover without reading its file again.
-const maxRowCovers = 1000
+// maxRowCovers is how many covers the Library keeps, the ones used last: at
+// a row's size alone, about 26 KB each, 2.6 MB at most, a few screens of
+// rows. A row scrolled back to within them shows its cover without reading
+// its file again; further back, ffmpeg reads it again.
+const maxRowCovers = 100
 
 // covers loads album art once per URL, off the toolkit's goroutine, and
 // keeps the thumbnails of the covers used last.
