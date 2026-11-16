@@ -55,6 +55,9 @@ type finishJob struct {
 	// lowVolume is a take recorded while the player's own volume was
 	// under 100%: its title tag and file name end in " (low volume)".
 	lowVolume bool
+	// muted is a take the player went digitally silent in, mid-track: its
+	// title tag and file name end in " (muted)".
+	muted bool
 	// cover is a held take's file cover, read while the file was there.
 	cover     []byte
 	coverMIME string
@@ -105,9 +108,9 @@ func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(str
 	return f
 }
 
-// flawed is a take saved with a mark, a pause fade or a low volume: it does
-// not make its track recorded, which can still be recorded clean.
-func (j finishJob) flawed() bool { return j.pauseFade || j.lowVolume }
+// flawed is a take saved with a mark, a pause fade, a low volume or a mute:
+// it does not make its track recorded, which can still be recorded clean.
+func (j finishJob) flawed() bool { return j.pauseFade || j.lowVolume || j.muted }
 
 func (f *finisher) enqueue(j finishJob) {
 	// A partial take is discarded, so it does not make the track a
@@ -402,14 +405,18 @@ func (f *finisher) takeNumber(t *take) bool {
 // there takes a suffix, skips the take or is replaced, as
 // recorder.duplicates says.
 func (f *finisher) pickName(t *take) bool {
-	// A kept take's suffix, a pause fade's and a low volume's end its file
-	// name, wherever the template puts the title, and its title tag.
+	// A kept take's suffix, a pause fade's, a low volume's and a mute's end
+	// its file name, wherever the template puts the title, and its title
+	// tag.
 	suffix := t.suffix
 	if t.pauseFade {
 		suffix += " (pause fade)"
 	}
 	if t.lowVolume {
 		suffix += " (low volume)"
+	}
+	if t.muted {
+		suffix += " (muted)"
 	}
 	nt := namingTrack(t.tags, t.info)
 	nt.Suffix = suffix
@@ -564,6 +571,7 @@ func (f *finisher) save(t *take) {
 		Partial:    t.keep,
 		PauseFade:  t.pauseFade,
 		LowVolume:  t.lowVolume,
+		Muted:      t.muted,
 	})
 }
 

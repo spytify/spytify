@@ -402,6 +402,7 @@ func (s *Session) closeSegment(c *segment, end int64) {
 		rejected:  c.reason,
 		pauseFade: c.pauseFade,
 		lowVolume: c.lowVolume,
+		muted:     c.muted,
 	})
 	if s.opts.SingleTrack {
 		s.stop = stopGraceful

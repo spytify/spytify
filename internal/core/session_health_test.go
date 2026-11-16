@@ -387,6 +387,10 @@ func TestSilenceWarningForAPlayerMutedMidTrack(t *testing.T) {
 			if warned := slices.Contains(r.lines(), told); warned != c.warns {
 				t.Fatalf("warned %v, want %v:\n%q", warned, c.warns, r.lines())
 			}
+			// The take the player went silent in is marked (muted).
+			if s.cur.muted != c.warns {
+				t.Fatalf("take marked muted %v, want %v", s.cur.muted, c.warns)
+			}
 			if !c.warns {
 				return
 			}
