@@ -270,6 +270,30 @@ func TestTCPServesTheSameProtocol(t *testing.T) {
 	}
 }
 
+// The bus has no authentication: --listen takes a loopback address only,
+// never one that other computers reach.
+func TestTCPListensOnLoopbackOnly(t *testing.T) {
+	for _, addr := range []string{":9000", "0.0.0.0:9000", ":0", "0.0.0.0:0", "[::]:0", "192.168.1.10:0", "example.com:0"} {
+		srv, _ := echoServer(t)
+		err := srv.ListenTCP(addr)
+		if err == nil {
+			t.Errorf("%s: listening on %v", addr, srv.Addrs())
+		} else if !strings.Contains(err.Error(), "not a loopback address") {
+			t.Errorf("%s: %v, want a refusal that says why", addr, err)
+		}
+	}
+	for _, addr := range []string{"127.0.0.1:0", "[::1]:0", "localhost:0"} {
+		srv, _ := echoServer(t)
+		if err := srv.ListenTCP(addr); err != nil {
+			if addr == "[::1]:0" && !strings.Contains(err.Error(), "loopback") {
+				t.Logf("%s: %v (no IPv6 here)", addr, err)
+				continue
+			}
+			t.Errorf("%s: %v", addr, err)
+		}
+	}
+}
+
 // A client that stops reading is dropped once its backlog is full, so
 // events never wait for it.
 func TestAClientThatStopsReadingIsDropped(t *testing.T) {
@@ -301,5 +325,48 @@ func TestAClientThatStopsReadingIsDropped(t *testing.T) {
 		if time.Now().After(deadline.Add(20 * time.Second)) {
 			t.Fatalf("the slow client is still connected after %d events", n)
 		}
+	}
+}
+
+// A subscriber that falls behind loses the events past the 1024 that wait
+// for it, while the client keeps reading, and is told how many it lost. The
+// events come straight down the socket, as the server writes them: a
+// server's own queue drops a client too slow for it, which on Windows'
+// slower sockets would come first.
+func TestASubscriberThatFallsBehindCountsWhatItLost(t *testing.T) {
+	path := socketPath(t)
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		line := []byte(`{"jsonrpc":"2.0","method":"session.state","params":{"state":"recording"}}` + "\n")
+		for range 1100 {
+			if _, err := conn.Write(line); err != nil {
+				return
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}()
+	c, err := Dial(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for c.Dropped() != 76 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d events lost, want 1100 - 1024 = 76", c.Dropped())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := len(c.Subscribe()); got != 1024 {
+		t.Fatalf("%d events wait for the subscriber, want 1024", got)
 	}
 }

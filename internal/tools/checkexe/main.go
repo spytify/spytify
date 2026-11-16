@@ -2,10 +2,12 @@
 // shortcuts and Task Manager read from them, an icon and version
 // information, and that they do not link opengl32.dll: Spytify.exe loads
 // it itself, so that it can load Mesa's first when no graphics driver
-// offers OpenGL (internal/ui/opengl). It also checks that nothing follows
-// their last section and that they export nothing, which antivirus
-// engines take for a hidden payload and a loader's entry points; with
-// -helper, for the binaries with no icon, those alone.
+// offers OpenGL (internal/ui/opengl). It also checks that they carry a
+// manifest, that nothing follows their last section and that they export
+// nothing: antivirus engines take a program with no version information
+// or manifest for commodity malware, and the rest for a hidden payload and
+// a loader's entry points. With -helper, for the binaries with no icon,
+// all but the icon and opengl32.dll.
 // scripts/build-windows.sh runs it on every binary it builds:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
@@ -28,10 +30,11 @@ const (
 	rtIcon      = 3
 	rtGroupIcon = 14
 	rtVersion   = 16
+	rtManifest  = 24
 )
 
 func main() {
-	helper := flag.Bool("helper", false, "a helper, with no icon or version information: check only what follows its last section")
+	helper := flag.Bool("helper", false, "a helper, with no icon and nothing to draw: skip the icon and opengl32.dll")
 	flag.Usage = func() { fmt.Fprintln(os.Stderr, "usage: checkexe [-helper] file.exe...") }
 	flag.Parse()
 	if flag.NArg() == 0 {
@@ -69,15 +72,18 @@ func check(path string, helper bool) (string, error) {
 	if dir.VirtualAddress != 0 {
 		return "", fmt.Errorf("an export table of %d bytes, which antivirus engines read as a loader's entry points: clear it with noexports", dir.Size)
 	}
-	if helper {
-		return "nothing past the last section, no exports", nil
-	}
 	counts, err := resources(path)
 	if err != nil {
 		return "", err
 	}
-	if counts[rtGroupIcon] == 0 || counts[rtIcon] == 0 || counts[rtVersion] == 0 {
-		return "", fmt.Errorf("%d icon groups, %d icon images, %d version resources", counts[rtGroupIcon], counts[rtIcon], counts[rtVersion])
+	if counts[rtVersion] == 0 || counts[rtManifest] == 0 {
+		return "", fmt.Errorf("%d version resources, %d manifests: unsigned, a program without them looks like commodity malware", counts[rtVersion], counts[rtManifest])
+	}
+	if helper {
+		return "version information, a manifest, nothing past the last section, no exports", nil
+	}
+	if counts[rtGroupIcon] == 0 || counts[rtIcon] == 0 {
+		return "", fmt.Errorf("%d icon groups, %d icon images", counts[rtGroupIcon], counts[rtIcon])
 	}
 	gl, err := linked(path, "opengl32.dll")
 	if err != nil {
@@ -86,7 +92,7 @@ func check(path string, helper bool) (string, error) {
 	if len(gl) > 0 {
 		return "", fmt.Errorf("links opengl32.dll for %s: build it with scripts/build-windows.sh's go-gl/gl", strings.Join(gl, ", "))
 	}
-	return fmt.Sprintf("an icon of %d images, version information, opengl32.dll not linked, nothing past the last section, no exports", counts[rtIcon]), nil
+	return fmt.Sprintf("an icon of %d images, version information, a manifest, opengl32.dll not linked, nothing past the last section, no exports", counts[rtIcon]), nil
 }
 
 // directory reads entry i of the data directories of the PE file at path.

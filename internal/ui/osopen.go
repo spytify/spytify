@@ -17,7 +17,7 @@ var moveToTrash = trash.Move
 var reveal = func(path string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return proc.Command("open", "-R", path).Start()
+		return proc.Command("/usr/bin/open", "-R", path).Start()
 	case "windows":
 		return proc.Command("explorer", "/select,", path).Start()
 	}
@@ -27,3 +27,8 @@ var reveal = func(path string) error {
 // openPath opens a file or folder with its default application. Tests
 // replace it.
 var openPath = osopen.Open
+
+// openLink opens a web page in the default browser, through the shell as
+// openPath does a file. Fyne's OpenURL starts rundll32 on Windows, a
+// program security software watches. Tests replace it.
+var openLink = osopen.Open

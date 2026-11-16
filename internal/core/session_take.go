@@ -149,7 +149,8 @@ func (s *Session) write(c *segment, from, to int64) {
 		}
 		return
 	}
-	data := s.ring.Bytes(from, to)
+	s.written = s.ring.AppendBytes(s.written[:0], from, to)
+	data := s.written
 	if c.soundAt < 0 {
 		if at, ok := firstAbove(s.ring.Format(), data, s.silenceDB, s.block); ok {
 			c.soundAt = from + at

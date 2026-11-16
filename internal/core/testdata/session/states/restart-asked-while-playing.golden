@@ -1,0 +1,36 @@
+# states/restart-asked-while-playing
+# option EndOnStop
+# A and B are 3000 ms each
+--- trace
+       0ms  state waiting
+       0ms  take none
+       0ms  > player TrackChanged "A" id=/x/a length=3000ms pos=980 (ring at -)
+       0ms  > player Playing pos=-1 (ring at 0)
+       0ms  log info: "A" is already playing; recording starts with the next track
+       0ms  take t-pre "A" start=0(0ms) length=89082(2020ms) ghost
+       0ms  > audio music 1 at 0ms, 22050(500ms)
+     500ms  > Spytify has the player start over
+     500ms  > audio music 1 at 500ms, 40572(920ms)
+    1420ms  > player TrackChanged "A" id=/x/a length=3000ms pos=4 restart (ring at 62622)
+    1420ms  log debug: "A" started over: the player is at 4 ms
+    1420ms  > audio music 1 at 0ms, 132300(3000ms)
+    2340ms  log debug: cut for "A" at 1421 ms (kind 1, noticed at 1420 ms, window 1720..2321 ms)
+    2340ms  started t-001 "A" artist="Artist" album="Album" length=3000ms cut=boundary/edge offset=1ms source=44100/2
+    2340ms  state recording
+    2340ms  take t-001 "A" start=62677(1421.25ms) length=132300(3000ms)
+    4420ms  > audio silence, 22050(500ms)
+    4920ms  > player TrackChanged "B" id=/x/b length=3000ms pos=0 (ring at 216972)
+    4920ms  log debug: cut for "B" at 4420 ms (kind 1, noticed at 4920 ms, window 4121..4723 ms)
+    4920ms  started t-002 "B" artist="Artist" album="Album" length=3000ms cut=boundary/silence offset=-500ms source=44100/2
+    4920ms  take t-002 "B" start=194922(4420ms) length=132300(3000ms)
+    4920ms  > audio music 2 at 0ms, 132300(3000ms)
+    7920ms  > audio silence, 66150(1500ms)
+    9420ms  > player Stopped pos=-1 (ring at 415422)
+    9420ms  state waiting
+    9420ms  state stopping
+    9420ms  state idle
+    9420ms  take none
+--- jobs
+job t-001 "A" played=132245(2998.75ms) length=132300(3000ms) wav=132245 crc=18f76947
+job t-002 "B" played=154872(3511.84ms) length=132300(3000ms) wav=154872 crc=c244853d
+--- end: idle, 0 skipped, 0 ads, 0 overruns
