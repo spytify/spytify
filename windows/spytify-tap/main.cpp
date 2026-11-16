@@ -558,9 +558,13 @@ int wmain(int argc, wchar_t **argv) {
   bool sound = false;
   int heard = -1;
 
+  // With no packet coming (the player paused or silent) the loop wakes
+  // this often to write silence lag behind the clock: half the lag is
+  // soon enough, where 20 ms woke it 50 times a second (#850).
+  const DWORD idleWake = 50;
   HANDLE waits[2] = {ready, target};
   for (;;) {
-    DWORD w = WaitForMultipleObjects(2, waits, FALSE, 20);
+    DWORD w = WaitForMultipleObjects(2, waits, FALSE, idleWake);
     if (w == WAIT_OBJECT_0 + 1) {
       out.flush();
       fprintf(stderr, "spytify-tap: process %lu ended\n", (unsigned long)pid);
