@@ -319,7 +319,7 @@ func TestRecordScreenSaysATakeHasAPauseFade(t *testing.T) {
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
 	a.render()
 	a.screens[tabRecord].(*recordScreen).list.ScrollToBottom()
-	if all := texts(a.win.Content()); !contains(all, lang.SavedPauseFade) {
+	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.SavedWith, "pause fade")) {
 		t.Errorf("the take does not say it has a pause fade: %v", all)
 	}
 	snapshot(t, a, "record-pause-fade")
@@ -684,7 +684,7 @@ func TestRecordScreenSaysATakeHasALowVolume(t *testing.T) {
 	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateIdle}))
 	a.render()
 	a.screens[tabRecord].(*recordScreen).list.ScrollToBottom()
-	if all := texts(a.win.Content()); !contains(all, lang.SavedLowVolume) {
+	if all := texts(a.win.Content()); !contains(all, fmt.Sprintf(lang.SavedWith, "low volume")) {
 		t.Errorf("the take does not say it has a low volume: %v", all)
 	}
 }

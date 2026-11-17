@@ -75,6 +75,9 @@ type segment struct {
 	// lowVolume is a take recorded while the player's own volume was
 	// under 100%: its file is marked " (low volume)".
 	lowVolume bool
+	// muted is a take the player went digitally silent in, mid-track
+	// (mutedMidTrack): its file is marked " (muted)".
+	muted bool
 	// cut is how the take's start was found, for track.started.
 	cut *proto.TrackCut
 }

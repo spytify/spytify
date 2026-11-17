@@ -327,6 +327,10 @@ type TrackFinishedEvent struct {
 	// LowVolume is a take recorded while the player's own volume was under
 	// 100%: it is quieter than the track. Its name ends in " (low volume)".
 	LowVolume bool `json:"low_volume,omitempty"`
+	// Muted is a take the player went digitally silent in, mid-track, as
+	// when muted in its own volume: a gap is heard. Its name ends in
+	// " (muted)".
+	Muted bool `json:"muted,omitempty"`
 }
 
 // FinishTimings are the steps between the end of a track and its file.

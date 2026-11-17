@@ -28,7 +28,7 @@ func Open(path string) error {
 	if err != nil {
 		return err
 	}
-	return onCOMThread(func() error {
+	return onShellThread(func() error {
 		return windows.ShellExecute(0, verb, file, nil, nil, windows.SW_SHOWNORMAL)
 	})
 }
@@ -41,7 +41,7 @@ func Reveal(path string) error {
 	if err != nil {
 		return err
 	}
-	return onCOMThread(func() error {
+	return onShellThread(func() error {
 		pidl, _, _ := procILCreateFromPathW.Call(uintptr(unsafe.Pointer(file)))
 		if pidl == 0 {
 			return fmt.Errorf("no shell item for %s", path)
@@ -56,10 +56,39 @@ func Reveal(path string) error {
 	})
 }
 
-// onCOMThread runs fn on a thread of its own with COM initialised, as the
-// shell wants, since a file type's handler can be a shell extension. Locked
-// to the goroutine, the thread ends with it.
-func onCOMThread(fn func() error) error {
+// App starts a program by its name, as the Run dialog does: the shell looks
+// it up in App Paths (where installers register it) and on PATH with
+// PATHEXT (where the Store puts its app aliases), so no cmd /C start is
+// needed. A name that resolves to nothing fails at once, with no dialog:
+// the recorder that calls it has no window to show one on.
+func App(name string) error {
+	verb, err := windows.UTF16PtrFromString("open")
+	if err != nil {
+		return err
+	}
+	file, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		return err
+	}
+	info := shellExecuteInfo{
+		mask: seeMaskNoAsync | seeMaskFlagNoUI,
+		verb: verb,
+		file: file,
+		show: windows.SW_SHOWNORMAL,
+	}
+	info.size = uint32(unsafe.Sizeof(info))
+	return onShellThread(func() error {
+		if r, _, err := procShellExecuteExW.Call(uintptr(unsafe.Pointer(&info))); r == 0 {
+			return err
+		}
+		return nil
+	})
+}
+
+// onShellThread runs fn with COM on its thread, as ShellExecute wants, since
+// a file type's handler can be a shell extension. The thread is one of its
+// own: locked to the goroutine, it ends with it.
+func onShellThread(fn func() error) error {
 	done := make(chan error, 1)
 	go func() {
 		runtime.LockOSThread()
@@ -69,4 +98,32 @@ func onCOMThread(fn func() error) error {
 		done <- fn()
 	}()
 	return <-done
+}
+
+// x/sys/windows has ShellExecute but not ShellExecuteEx, the one that can
+// be told to show no error dialog.
+var procShellExecuteExW = shell32.NewProc("ShellExecuteExW")
+
+const (
+	seeMaskNoAsync  = 0x00000100 // the call's thread ends right after it
+	seeMaskFlagNoUI = 0x00000400
+)
+
+// shellExecuteInfo is SHELLEXECUTEINFOW.
+type shellExecuteInfo struct {
+	size      uint32
+	mask      uint32
+	hwnd      windows.Handle
+	verb      *uint16
+	file      *uint16
+	params    *uint16
+	dir       *uint16
+	show      int32
+	instApp   windows.Handle
+	idList    uintptr
+	class     *uint16
+	keyClass  windows.Handle
+	hotKey    uint32
+	iconOrMon windows.Handle
+	process   windows.Handle
 }
