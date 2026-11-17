@@ -22,8 +22,11 @@ func TestTheLibraryListsTheNewOutputFolder(t *testing.T) {
 	values := defaults()
 	values["output.dir"] = former
 	a, m := connectedTestApp(t, values)
-	a.showTab(tabLibrary)
 	lib := a.screens[tabLibrary].(*libraryScreen)
+	// A tag read that ends while the test sets ManualRender below reads it
+	// at the same time; this test is about the files, not their tags.
+	holdTags(t, lib)
+	a.showTab(tabLibrary)
 	if len(lib.all) != 1 {
 		t.Fatalf("%d files in the former folder", len(lib.all))
 	}
