@@ -640,6 +640,10 @@ static DWORD WINAPI followSource(void *arg) {
 }
 
 int wmain(int argc, wchar_t **argv) {
+  // Windows looks for a DLL loaded by name in the program's folder first:
+  // one dropped beside the helper would load in place of Windows' own.
+  // System32 alone, for every DLL loaded from here on, the system's too.
+  SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
   // MSVCRT buffers stderr when it is a pipe: spytifyd would read nothing
   // until the helper exits, and nothing at all when it is killed.
   setvbuf(stderr, nullptr, _IONBF, 0);
@@ -679,7 +683,7 @@ int wmain(int argc, wchar_t **argv) {
   const DWORD rate = pickRate(*source, given);
   if (given == 0) CloseHandle(CreateThread(nullptr, 0, followSource, source, 0, nullptr));
 
-  HMODULE mmdevapi = LoadLibraryW(L"Mmdevapi.dll");
+  HMODULE mmdevapi = LoadLibraryExW(L"Mmdevapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
   auto activate = mmdevapi ? reinterpret_cast<ActivateFn>(reinterpret_cast<void *>(GetProcAddress(mmdevapi, "ActivateAudioInterfaceAsync"))) : nullptr;
   if (!activate) {
     fprintf(stderr, "spytify-tap: ActivateAudioInterfaceAsync is missing; Windows 10 version 2004 or later is needed\n");

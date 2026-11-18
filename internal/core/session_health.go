@@ -64,8 +64,12 @@ func (s *Session) onTick() {
 	}
 	// An ad may be silent, muted by the session or not. A player at 0% is
 	// silent too, and its volume warning says so.
+	mid := s.status == meta.Playing && s.state() != proto.StateAd && s.mutedMidTrack()
+	if mid {
+		s.markMuted(s.cur)
+	}
 	fromStart := !s.trackHeard && !s.lastChunk.IsZero() && time.Since(s.lastSound) > captureQuiet && time.Since(s.trackStarted) > captureQuiet
-	if s.deps.watchSilence && !(s.volumeLow && s.volumePct == 0) && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && (fromStart || s.mutedMidTrack()) {
+	if s.deps.watchSilence && !(s.volumeLow && s.volumePct == 0) && s.status == meta.Playing && s.state() != proto.StateAd && !s.stalled && !s.silent && (fromStart || mid) {
 		s.silent = true
 		msg := fmt.Sprintf("only silence from the capture for %s while the player plays", captureQuiet)
 		if !fromStart {
@@ -190,6 +194,17 @@ func (s *Session) markLowVolume(c *segment) {
 	}
 	c.lowVolume = true
 	s.deps.log.Debugf("%q: recorded while the player's volume is under 100%%; the file is marked (low volume)", c.info.Title)
+}
+
+// markMuted marks a take the player went digitally silent in, mid-track:
+// the file has a gap. An ad, or audio the session does not record, has no
+// file to mark.
+func (s *Session) markMuted(c *segment) {
+	if c == nil || c.ghost || c.provisional || c.reason == proto.SkipAd || c.muted {
+		return
+	}
+	c.muted = true
+	s.deps.log.Debugf("%q: the player went silent mid-track; the file is marked (muted)", c.info.Title)
 }
 
 // hear notes sound from the capture, the session's first or the first

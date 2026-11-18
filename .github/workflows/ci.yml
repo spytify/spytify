@@ -367,6 +367,19 @@ jobs:
           # made 6.
           echo "reads in 6 s of steady play: $((after - before))"
           test $((after - before)) -le 2
+      - name: With copies of its System32 DLLs beside it, the app loads none of them
+        shell: pwsh
+        run: src/scripts/ci/planted-dlls.ps1 -Exe .\Spytify.exe -Window -Also spytifyd
+      - name: With copies of its System32 DLLs beside it, the capture helper loads none of them
+        shell: pwsh
+        run: |
+          # A process to record; it need not play.
+          $target = Start-Process powershell -ArgumentList "-NoProfile","-Command","Start-Sleep 60" -WindowStyle Hidden -PassThru
+          try {
+            src/scripts/ci/planted-dlls.ps1 -Exe .\spytify-tap.exe -Arguments "--pid", $target.Id
+          } finally {
+            Stop-Process -Id $target.Id -Force -ErrorAction SilentlyContinue
+          }
 
   macos-build:
     runs-on: macos-15
