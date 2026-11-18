@@ -14,9 +14,12 @@ ent=macos/Spytify.entitlements
 ts=--timestamp
 [ "$id" = - ] && ts=--timestamp=none
 sign() { codesign --force --options runtime "$ts" --entitlements "$ent" --sign "$id" "$@"; }
+# Signing again drops the identifier: each program gets its own back
+# (scripts/macos-identifier.sh).
+ident() { scripts/macos-identifier.sh "$(basename "$1")"; }
 
 for f in spytifyd spytify-cli spytify-tap spytify-ui; do
-  [ -f "$dir/$f" ] && sign "$dir/$f"
+  [ -f "$dir/$f" ] && sign --identifier "$(ident "$f")" "$dir/$f"
 done
 # The bundle's helpers first, then the bundle, which seals them and its
 # main executable. ffmpeg reads and writes files, and gets none of the
@@ -25,8 +28,8 @@ app="$dir/Spytify.app"
 for f in "$app"/Contents/MacOS/*; do
   case "$(basename "$f")" in
     spytify-ui) ;;
-    ffmpeg) codesign --force --options runtime "$ts" --sign "$id" "$f" ;;
-    *) sign "$f" ;;
+    ffmpeg) codesign --force --options runtime "$ts" --sign "$id" --identifier "$(ident "$f")" "$f" ;;
+    *) sign --identifier "$(ident "$f")" "$f" ;;
   esac
 done
 sign "$app"

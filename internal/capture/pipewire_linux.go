@@ -3,11 +3,13 @@
 package capture
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"sync"
@@ -22,6 +24,15 @@ import (
 // pollInterval bounds how much of a recreated stream is missed before the
 // recorder follows it.
 const pollInterval = 250 * time.Millisecond
+
+// retryMin and retryMax bound the wait before the recorder starts again.
+// It doubles each time the recorder ends by itself with nothing recorded,
+// as an old pw-record does at once (#794), so a recorder that cannot work
+// is not restarted ten times a second for the whole session (#833).
+const (
+	retryMin = 100 * time.Millisecond
+	retryMax = 5 * time.Second
+)
 
 // streamNode is a player's audio output stream as PipeWire or PulseAudio
 // describes it.
@@ -52,6 +63,11 @@ type PipeWire struct {
 	logf    func(format string, args ...any)
 	backend procBackend
 	clock   graphClock
+	// mon follows the graph when the backend can (graphMonitor), nil
+	// otherwise; set by Open, before run starts. monLost notes that its end
+	// was logged.
+	mon     *pwMonitor
+	monLost atomic.Bool
 	// silenced is the stream sent to the muted sink, if any.
 	silenced *streamNode
 
@@ -65,6 +81,7 @@ type PipeWire struct {
 	// last error looking for it, the recorder's runs, its last exit status
 	// and its last stderr lines.
 	mu         sync.Mutex
+	monErr     string // why the graph monitor did not start
 	found      bool
 	node       streamNode
 	findErr    string
@@ -106,7 +123,7 @@ func NewLinux(logf func(format string, args ...any)) (*PipeWire, error) {
 	default:
 		return nil, errors.New("neither PipeWire (pw-record, pw-dump) nor PulseAudio (parec, pactl) tools were found")
 	}
-	return &PipeWire{logf: logf, backend: b, clock: pipewireClock{}, frames: make(chan Chunk, 256), done: make(chan struct{})}, nil
+	return &PipeWire{logf: logf, backend: b, clock: pipewireClock{}, frames: make(chan Chunk, queuedChunks), done: make(chan struct{})}, nil
 }
 
 func have(name string) bool {
@@ -120,6 +137,16 @@ func (p *PipeWire) Name() string { return p.backend.name() }
 func (p *PipeWire) Open(ctx context.Context, t target.Target) (pcm.Format, error) {
 	rctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
+	if gm, ok := p.backend.(graphMonitor); ok {
+		mon, err := gm.monitor(rctx)
+		p.mu.Lock()
+		p.mon = mon
+		if err != nil {
+			p.monErr = err.Error()
+			p.logf("capture: %v; looking for the stream every %v instead", err, pollInterval)
+		}
+		p.mu.Unlock()
+	}
 	go p.run(rctx, t)
 	return pcm.Format{}, nil
 }
@@ -142,6 +169,14 @@ func (p *PipeWire) Health() map[string]string {
 	}
 	if p.findErr != "" {
 		h["capture.dump_error"] = p.findErr
+	}
+	switch {
+	case p.mon != nil && p.mon.err() != nil:
+		h["capture.graph_monitor"] = p.mon.err().Error()
+	case p.mon != nil:
+		h["capture.graph_monitor"] = "running"
+	case p.monErr != "":
+		h["capture.graph_monitor"] = p.monErr
 	}
 	if p.recordExit != "" {
 		h["capture.record_exit"] = p.recordExit
@@ -211,12 +246,48 @@ func (p *PipeWire) silence(n streamNode) {
 	p.silenced = &n
 }
 
+// find looks for the target's stream in what the graph monitor read, or
+// with a pw-dump of its own when there is no monitor, before it has read
+// the graph, and once it has ended.
+func (p *PipeWire) find(t target.Target) (streamNode, bool, error) {
+	if p.mon != nil {
+		if n, ok, usable := p.mon.find(t); usable {
+			return n, ok, nil
+		}
+		if err := p.mon.err(); err != nil && !p.monLost.Swap(true) {
+			p.logf("capture: %v; looking for the stream every %v instead", err, pollInterval)
+		}
+	}
+	return p.backend.find(t)
+}
+
+// next waits until the stream is to be looked for again: when the graph
+// monitor says the graph changed, else after a poll interval. It reports
+// false when ctx ends.
+func (p *PipeWire) next(ctx context.Context) bool {
+	every, changed := pollInterval, (<-chan struct{})(nil)
+	if p.mon != nil {
+		changed = p.mon.changed
+		if p.mon.err() == nil {
+			every = monitorPoll
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case <-changed:
+	case <-time.After(every):
+	}
+	return true
+}
+
 func (p *PipeWire) run(ctx context.Context, t target.Target) {
 	defer close(p.done)
 	defer close(p.frames)
 	waiting := false
+	retry := retryMin
 	for ctx.Err() == nil {
-		node, ok, err := p.backend.find(t)
+		node, ok, err := p.find(t)
 		p.looked(node, ok, err)
 		if err != nil {
 			p.logf("capture: %s: %v", p.backend.name(), err)
@@ -226,14 +297,21 @@ func (p *PipeWire) run(ctx context.Context, t target.Target) {
 				p.logf("capture: waiting for an audio stream from %s", t.ProcessName())
 				waiting = true
 			}
-			sleep(ctx, pollInterval)
+			p.next(ctx)
 			continue
 		}
 		waiting = false
 		f, fromStream := p.format(ctx, node)
 		p.silence(node)
-		p.stream(ctx, t, node, f, fromStream)
-		sleep(ctx, 100*time.Millisecond)
+		switch failed := p.stream(ctx, t, node, f, fromStream); {
+		case !failed:
+			retry = retryMin
+		case retry < retryMax:
+			if retry = min(retry*2, retryMax); retry == retryMax {
+				p.logf("capture: the recorder keeps ending with nothing recorded; trying again every %v", retryMax)
+			}
+		}
+		sleep(ctx, retry)
 	}
 }
 
@@ -262,7 +340,9 @@ func (p *PipeWire) format(ctx context.Context, node streamNode) (pcm.Format, boo
 // graph runs at another rate, or, when the recording takes the stream's
 // rate, until the stream changes rate. A stream gets its rate a moment
 // after it appears; a recording at the graph's rate goes on through that.
-func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode, f pcm.Format, fromStream bool) {
+// It reports whether the recorder failed: it did not start, or ended by
+// itself before it recorded anything.
+func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode, f pcm.Format, fromStream bool) (failed bool) {
 	sctx, cancel := context.WithCancel(ctx)
 	var watchers sync.WaitGroup
 	defer watchers.Wait()
@@ -276,14 +356,14 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		p.logf("capture: %v", err)
-		return
+		return true
 	}
 	if err := cmd.Start(); err != nil {
 		p.logf("capture: start %s: %v", cmd.Path, err)
 		p.mu.Lock()
 		p.recordExit = "not started"
 		p.mu.Unlock()
-		return
+		return true
 	}
 	// driver is the running stream's driver, 0 while the stream is not running.
 	var driver atomic.Int64
@@ -293,67 +373,80 @@ func (p *PipeWire) stream(ctx context.Context, t target.Target, node streamNode,
 	watchers.Add(2)
 	go func() {
 		defer watchers.Done()
-		tick := time.NewTicker(pollInterval)
-		defer tick.Stop()
-		for {
-			select {
-			case <-sctx.Done():
+		for p.next(sctx) {
+			now, ok, err := p.find(t)
+			p.looked(now, ok, err)
+			if err != nil {
+				continue
+			}
+			if !ok || now.key != node.key || (fromStream && now.rate > 0 && now.rate != f.Rate) || (now.channels > 0 && now.channels != f.Channels) {
+				cancel()
 				return
-			case <-tick.C:
-				now, ok, err := p.backend.find(t)
-				p.looked(now, ok, err)
-				if err != nil {
-					continue
-				}
-				if !ok || now.key != node.key || (fromStream && now.rate > 0 && now.rate != f.Rate) || (now.channels > 0 && now.channels != f.Channels) {
-					cancel()
-					return
-				}
-				if now.running {
-					driver.Store(int64(now.driver))
-				} else {
-					driver.Store(0)
-				}
+			}
+			if now.running {
+				driver.Store(int64(now.driver))
+			} else {
+				driver.Store(0)
 			}
 		}
 	}()
 	// pw-top takes longer than a poll, so the graph's rate has a loop of
-	// its own and never delays following a recreated stream.
+	// its own and never delays following a recreated stream. With the graph
+	// monitor, it reads the rate after a node changes, at most once per
+	// rateInterval, and every monitorRatePoll otherwise (#833).
 	go func() {
 		defer watchers.Done()
-		tick := time.NewTicker(rateInterval)
-		defer tick.Stop()
+		every, nodes := rateInterval, (<-chan struct{})(nil)
+		if p.mon != nil && p.mon.err() == nil {
+			every, nodes = monitorRatePoll, p.mon.nodeChanged
+		}
+		last := time.Now()
+		timer := time.NewTimer(every)
+		defer timer.Stop()
 		for {
 			select {
 			case <-sctx.Done():
 				return
-			case <-tick.C:
-				if r := p.clock.running(sctx, int(driver.Load())); r > 0 && r != f.Rate && sctx.Err() == nil {
-					p.logf("capture: PipeWire runs at %d Hz now; recording again", r)
-					cancel()
-					return
-				}
+			case <-nodes:
+				timer.Reset(max(rateInterval-time.Since(last), 0))
+				continue
+			case <-timer.C:
 			}
+			last = time.Now()
+			if r := p.clock.running(sctx, int(driver.Load())); r > 0 && r != f.Rate && sctx.Err() == nil {
+				p.logf("capture: PipeWire runs at %d Hz now; recording again", r)
+				cancel()
+				return
+			}
+			if p.mon != nil && p.mon.err() != nil {
+				every, nodes = rateInterval, nil
+			}
+			timer.Reset(every)
 		}
 	}()
 	chunk := make([]byte, f.FramesFromMs(10)*int64(f.FrameBytes()))
+	recorded := false
 	for {
 		if _, err := io.ReadFull(out, chunk); err != nil {
 			break
 		}
+		recorded = true
 		c := Chunk{Data: append([]byte(nil), chunk...), Format: f}
 		select {
 		case p.frames <- c:
 		case <-ctx.Done():
 			cancel()
 			p.recorded(cmd.Wait())
-			return
+			return false
 		default:
 			p.overruns.Add(1)
 		}
 	}
+	// Stopped by a watcher, the recorder did not fail.
+	failed = !recorded && sctx.Err() == nil
 	cancel()
 	p.recorded(cmd.Wait())
+	return failed
 }
 
 type pipewireTools struct{}
@@ -386,6 +479,12 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 	if err := json.Unmarshal(dump, &objs); err != nil {
 		return streamNode{}, false, fmt.Errorf("pw-dump output: %w", err)
 	}
+	n, ok := pickPipeWireNode(objs, t)
+	return n, ok, nil
+}
+
+// pickPipeWireNode is findPipeWireNode on objects already read.
+func pickPipeWireNode(objs []pwObject, t target.Target) (streamNode, bool) {
 	clients := map[int]map[string]any{}
 	for _, o := range objs {
 		if o.Type == "PipeWire:Interface:Client" {
@@ -427,7 +526,7 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 			best, found = n, true
 		}
 	}
-	return best, found, nil
+	return best, found
 }
 
 // record records the stream. When the stream goes away, the session manager
@@ -437,15 +536,29 @@ func findPipeWireNode(dump []byte, t target.Target) (streamNode, bool, error) {
 // another rate, would be converted to it. node.dont-reconnect leaves the
 // recording unlinked instead.
 func (pipewireTools) record(ctx context.Context, n streamNode, f pcm.Format) *exec.Cmd {
-	return proc.CommandContext(ctx, "pw-record",
-		"--target", n.key,
-		"--raw",
+	args := []string{"--target", n.key}
+	if rawOption() {
+		args = append(args, "--raw")
+	}
+	return proc.CommandContext(ctx, "pw-record", append(args,
 		"--rate", strconv.Itoa(f.Rate),
 		"--channels", strconv.Itoa(f.Channels),
 		"--format", "f32",
 		"--latency", "100ms",
 		"-P", "{ node.name = spytify-capture node.description = \"Spytify capture\" node.dont-reconnect = true }",
-		"-")
+		"-")...)
+}
+
+// rawOption reports whether pw-record takes --raw, as its help lists it.
+// Up to PipeWire 1.2 it refuses the option, and "-" alone writes raw
+// samples to stdout; from 1.4 "-" alone writes a sound file, header first.
+// It is asked at each recording, so a PipeWire updated while spytifyd runs
+// is followed.
+func rawOption() bool {
+	cmd := proc.Command("pw-record", "--help")
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, _ := cmd.Output()
+	return bytes.Contains(out, []byte("--raw"))
 }
 
 func str(v any) string {

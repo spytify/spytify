@@ -2,8 +2,10 @@ package ui
 
 import (
 	"errors"
+	"image"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -188,5 +190,46 @@ func TestTheBugTrackerFollowsTheSetting(t *testing.T) {
 	a.render()
 	if a.tel.Enabled() {
 		t.Fatal("the bug tracker is still on")
+	}
+}
+
+// A problem report waits for the window's picture, up to 2 s. The
+// recorder's events keep reaching the model meanwhile: the report is made
+// off the link's goroutine.
+func TestAProblemReportHoldsNoRecorderEvent(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, false)
+	connect(t, a, m, false)
+	m.Apply(event(t, proto.EventSettingsChanged, proto.SettingsValues{Values: map[string]any{trackerKey: true}}))
+	a.render()
+	if !a.tel.Enabled() {
+		t.Fatal("the bug tracker is off with the setting on")
+	}
+	picture := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(picture) }) }
+	defer release()
+	a.tel.SetScreenshot(func() image.Image {
+		<-picture
+		return nil
+	})
+	done := make(chan struct{})
+	go func() {
+		m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorCaptureStalled, Msg: "No audio from the player for 10 s"}))
+		m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		release()
+		t.Fatal("the next event waited for the problem's picture")
+	}
+	if m.Snapshot().Session != proto.StateRecording {
+		t.Fatalf("session %v after the event", m.Snapshot().Session)
+	}
+	release()
+	if ev := srv.Wait(t, "event", 1)[0].JSON(); ev["message"] != "blocked: capture_stalled" {
+		t.Errorf("problem %v", ev["message"])
 	}
 }

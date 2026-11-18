@@ -10,12 +10,14 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/spytify/spytify/internal/safenet"
 )
 
 // MaxCoverBytes caps embedded art so FLAC files do not balloon.
 const MaxCoverBytes = 1 << 20
 
-func httpClient() *http.Client { return &http.Client{Timeout: 15 * time.Second} }
+func httpClient() *http.Client { return safenet.Client(15 * time.Second) }
 
 // FetchCover downloads album art from an http(s) or file URL.
 func FetchCover(ctx context.Context, client *http.Client, raw string) ([]byte, string, error) {

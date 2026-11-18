@@ -55,6 +55,9 @@ type Core struct {
 	log      *Logger
 	backends Backends
 	find     func(target.Target) (target.Process, bool)
+	// alive reports whether the known pid is still the target's, for the
+	// real lookup only (target.Running); nil, the watch lists every time.
+	alive func(target.Target, int) bool
 
 	ffmpeg *encode.FFmpeg
 	ffErr  error
@@ -65,10 +68,13 @@ type Core struct {
 
 	// keep holds the last take cut short, across sessions.
 	keep *keeper
-	// silent is set while the capture hears only silence as the player
-	// plays, across sessions until it hears sound: the player heard check
-	// fails.
-	silent atomic.Bool
+	// silent holds what was known when the capture heard only silence as
+	// the player played, across sessions until it hears sound: the player
+	// heard check fails with it. nil while it hears sound.
+	silent atomic.Pointer[map[string]string]
+	// wakes is when the computer last woke from sleep: a capture may hear
+	// nothing after it.
+	wakes wakes
 	// playlist is the last session's, which keeps following track.keep
 	// until the next session starts.
 	playlist atomic.Pointer[playlist]
@@ -95,7 +101,7 @@ func New(o Options) *Core {
 		crashed:  o.Crashed,
 	}
 	if c.find == nil {
-		c.find = target.FindProcess
+		c.find, c.alive = target.FindProcess, target.Running
 	}
 	c.keep = &keeper{emit: c.emit}
 	c.ffmpeg, c.ffErr = encode.Find(o.Env.FFmpeg)
@@ -197,12 +203,25 @@ func (c *Core) WatchTarget(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case now := <-t.C:
+			// The same ticker sees the computer sleep.
+			if slept := c.wakes.tick(now); slept > 0 {
+				c.log.Infof("the computer woke after about %s asleep", slept.Round(time.Minute))
+			}
 		}
 	}
 }
 
 func (c *Core) pollTarget() {
+	// Once the player's process is known, asking about it alone is enough:
+	// listing every process every 2 s forked ps on macOS and read every
+	// /proc entry on Linux, player running or not (#835).
+	c.mu.Lock()
+	pid := c.pid
+	c.mu.Unlock()
+	if pid != 0 && c.alive != nil && c.alive(c.env.Target, pid) {
+		return
+	}
 	p, ok := c.find(c.env.Target)
 	c.mu.Lock()
 	changed := ok != c.running || p.PID != c.pid
@@ -354,7 +373,11 @@ func (c *Core) Info() proto.CoreInfoResult {
 		}
 	}
 	info.Checks = append(info.Checks, c.backends.Probe()...)
-	info.Checks = append(info.Checks, playerHeardCheck(c.silent.Load()))
+	var silent map[string]string
+	if f := c.silent.Load(); f != nil {
+		silent = *f
+	}
+	info.Checks = append(info.Checks, playerHeardCheck(silent))
 	dir := v.Path(settings.OutputDir)
 	err := outputWritable(dir)
 	facts := outputFacts(dir, err, v.String(settings.OutputDir) == settings.Defaults().String(settings.OutputDir))
@@ -485,9 +508,16 @@ func (c *Core) StartSession(opts SessionOptions) (string, error) {
 		control:      np.Control,
 		mute:         adMuter(np),
 		watchSilence: true,
-		silence:      c.silent.Store,
-		playlist:     list.name,
-		health:       captureHealth(capt),
+		silence: func(facts map[string]string) {
+			if facts == nil {
+				c.silent.Store(nil)
+				return
+			}
+			c.silent.Store(&facts)
+		},
+		sinceWake: func() (time.Duration, bool) { return c.wakes.since(time.Now()) },
+		playlist:  list.name,
+		health:    captureHealth(capt),
 	}, opts)
 	if c.store.Values().Bool(settings.PlayerMuteOutput) && runtime.GOOS == "windows" {
 		c.log.Infof("player.mute_output is not applied on Windows in the alpha; the player stays audible")
@@ -707,6 +737,14 @@ func (c *Core) Control(cmd proto.PlayerCmd) error {
 		}
 		return err
 	}
+	if cmd == proto.CmdRestart {
+		c.mu.Lock()
+		s := c.sess
+		c.mu.Unlock()
+		if s != nil {
+			s.RestartAsked()
+		}
+	}
 	return nil
 }
 
@@ -724,8 +762,9 @@ func (c *Core) Shutdown() {
 	}
 }
 
-// launch starts the player: SPYTIFY_TARGET_LAUNCH when it is set, else the
-// OS's own way to open an app by its bundle id or name.
+// launch starts the player: SPYTIFY_TARGET_LAUNCH when it is set (a shell
+// command, so cmd /C on Windows), else the OS's own way to open an app by
+// its bundle id or name, which on Windows is the shell with no cmd.exe.
 func (c *Core) launch() error {
 	t := c.env.Target
 	var cmd *exec.Cmd
@@ -737,11 +776,15 @@ func (c *Core) launch() error {
 	case len(t.ProcessNames) == 0:
 		return errors.New("no player chosen")
 	case runtime.GOOS == "darwin" && t.BundleID != "":
-		cmd = proc.Command("open", "-b", t.BundleID)
+		cmd = proc.Command("/usr/bin/open", "-b", t.BundleID)
 	case runtime.GOOS == "darwin":
-		cmd = proc.Command("open", "-a", t.ProcessNames[0])
+		cmd = proc.Command("/usr/bin/open", "-a", t.ProcessNames[0])
 	case runtime.GOOS == "windows":
-		cmd = proc.Command("cmd", "/C", "start", "", t.ProcessNames[0])
+		c.log.Infof("starting the player: ShellExecuteEx open %s", t.ProcessNames[0])
+		if err := openApp(t.ProcessNames[0]); err != nil {
+			return fmt.Errorf("start the player: %w", err)
+		}
+		return nil
 	default:
 		cmd = proc.Command(t.ProcessNames[0])
 	}

@@ -12,5 +12,3 @@ func cloudOf(dir string) string {
 }
 
 func knownFolders() []namedFolder { return nil }
-
-func systemFacts(map[string]string) {}

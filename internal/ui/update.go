@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spytify/spytify/internal/safenet"
 	"github.com/spytify/spytify/internal/ui/lang"
 )
 
@@ -32,7 +33,7 @@ func latestRelease(ctx context.Context) (tag, page string, err error) {
 		return "", "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := safenet.Client(0).Do(req)
 	if err != nil {
 		return "", "", err
 	}

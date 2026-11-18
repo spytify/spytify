@@ -21,6 +21,15 @@ type Chunk struct {
 	Format pcm.Format
 }
 
+// queuedChunks is how many chunks, 10 ms each, wait for a session that
+// falls behind before the next ones are dropped (Overruns): 15 s of audio,
+// about 5.8 MB at 48 kHz stereo float, held only while it is behind. The
+// session writes the take on the goroutine that reads them, so a disk that
+// stalls (a drive waking up, an antivirus scanning, a VPN holding writes)
+// stalls the reader; 256 chunks, 2.56 s, made such a stall a partial take
+// (#838).
+const queuedChunks = 1500
+
 // Capture is one OS capture backend.
 type Capture interface {
 	// Open finds the target's audio stream and starts delivering frames.

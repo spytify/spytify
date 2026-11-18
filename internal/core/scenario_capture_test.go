@@ -39,8 +39,8 @@ func directSession(t *testing.T) (*Session, *recorder) {
 }
 
 func TestNoAudioWhileThePlayerPlaysIsReported(t *testing.T) {
-	old := captureStall
-	captureStall = 300 * time.Millisecond
+	old := captureQuiet
+	captureQuiet = 300 * time.Millisecond
 	s, rec := directSession(t)
 	frames := make(chan capture.Chunk)
 	events := make(chan meta.Event)
@@ -50,11 +50,11 @@ func TestNoAudioWhileThePlayerPlaysIsReported(t *testing.T) {
 		defer close(done)
 		s.Run(ctx, frames, events)
 	}()
-	// The session reads captureStall until Run returns.
+	// The session reads captureQuiet until Run returns.
 	defer func() {
 		cancel()
 		<-done
-		captureStall = old
+		captureQuiet = old
 	}()
 	events <- meta.Event{Kind: meta.TrackChanged, Track: meta.TrackInfo{ID: "/x/track/a", Title: "A", LengthMs: 60000}, PositionMs: 0}
 	events <- meta.Event{Kind: meta.StatusChanged, Status: meta.Playing, PositionMs: 0}

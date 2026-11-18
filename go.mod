@@ -9,8 +9,10 @@ require (
 	github.com/dweymouth/fyne-tooltip v0.4.0
 	github.com/getsentry/sentry-go v0.50.0
 	github.com/go-gl/glfw/v3.4/glfw v0.1.0-pre.2
+	github.com/go-ole/go-ole v1.3.0
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/joho/godotenv v1.5.1
+	github.com/saltosystems/winrt-go v0.0.0-20261016124014-b298124d7472
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
@@ -49,3 +51,9 @@ require (
 	golang.org/x/net v0.62.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+// Fyne 2.8.2 keys its font cache by theme scope, so every theme override
+// parses the fonts again and keeps them. This is 2.8.2 with
+// fyne-io/fyne#6642, branch v2.8.2-font-cache of spytify/fyne-fix-6642.
+// Remove it once a Fyne release carries #6642.
+replace fyne.io/fyne/v2 => github.com/spytify/fyne-fix-6642/v2 v2.8.3-0.20261113014613-e57df82d8bdc

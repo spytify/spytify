@@ -10,8 +10,27 @@ import (
 //go:embed assets/logo.png
 var logoPNG []byte
 
-// Logo is the app and tray icon.
+// Logo is the app icon, and the tray's outside macOS.
 var Logo = fyne.NewStaticResource("logo.png", logoPNG)
+
+//go:embed assets/tray.svg
+var traySVG []byte
+
+// trayTemplate is the logo in one colour, for the macOS menu bar: Fyne hands
+// a themed resource to macOS as a template image, which the menu bar tints
+// like the icons beside it. Its holes are cut by winding, as Fyne drops
+// fill-rule when it colours an SVG.
+var trayTemplate = theme.NewThemedResource(fyne.NewStaticResource("tray.svg", traySVG))
+
+// trayIcon is the tray's icon on goos: the template on macOS, the logo in
+// colour on Windows and Linux, which have no template (a themed icon there
+// takes Spytify's text colour, not the panel's).
+func trayIcon(goos string) fyne.Resource {
+	if goos == "darwin" {
+		return trayTemplate
+	}
+	return Logo
+}
 
 //go:embed assets/logo-wordmark.png
 var wordmarkPNG []byte
