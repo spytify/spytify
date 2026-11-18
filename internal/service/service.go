@@ -59,9 +59,9 @@ func For(goos, daemon, home string, uid int) (Plan, error) {
 	return Plan{
 		Path:      agent,
 		Content:   launchdAgent(daemon),
-		Install:   [][]string{{"launchctl", "bootstrap", domain, agent}},
-		Uninstall: [][]string{{"launchctl", "bootout", domain, agent}},
-		Status:    []string{"launchctl", "print", domain + "/" + Label},
+		Install:   [][]string{{"/bin/launchctl", "bootstrap", domain, agent}},
+		Uninstall: [][]string{{"/bin/launchctl", "bootout", domain, agent}},
+		Status:    []string{"/bin/launchctl", "print", domain + "/" + Label},
 	}, nil
 }
 

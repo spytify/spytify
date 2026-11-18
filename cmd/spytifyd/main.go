@@ -50,7 +50,7 @@ func run() int {
 
 	overrides := setFlags{}
 	once := flag.Bool("once", false, "record one session to the output folder without the bus, then exit")
-	listen := flag.String("listen", "", "also serve the protocol on this TCP address, such as 127.0.0.1:7811")
+	listen := flag.String("listen", "", "also serve the protocol on this loopback TCP address, such as 127.0.0.1:7811")
 	fakePath := flag.String("fake", "", "play this timeline file through the fake player instead of a real one")
 	fakeRealtime := flag.Bool("fake-realtime", false, "pace the fake player in real time")
 	eventsPath := flag.String("events", "", "append every event to this file as JSON lines")

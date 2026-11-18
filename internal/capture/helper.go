@@ -37,6 +37,16 @@ var (
 	frameTimeout  = 3 * time.Second
 )
 
+// A helper that exits without its header, as one refused permission or
+// quarantined does at once, is started again after retryFirst, then twice
+// as late each time up to retryLast; one that gave its header starts the
+// wait over. A helper started every second for a whole session wrote its
+// stderr to the log every second (#836).
+var (
+	retryFirst = time.Second
+	retryLast  = 30 * time.Second
+)
+
 // Helper records the target through a small native program, spytify-tap,
 // that writes a header line then frames to stdout: a Core Audio process
 // tap on macOS, WASAPI process loopback on Windows. The helper exits when
@@ -50,10 +60,13 @@ type Helper struct {
 	// running reports whether the target runs; while it does not, a helper
 	// that waits for it has nothing to say yet.
 	running func(target.Target) bool
-	// headerTimeout and frameTimeout are the package's, read once.
+	// headerTimeout, frameTimeout, retryFirst and retryLast are the
+	// package's, read once.
 	headerTimeout, frameTimeout time.Duration
+	retryFirst, retryLast       time.Duration
 
 	frames   chan Chunk
+	volumes  chan float64
 	overruns atomic.Int64
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -75,7 +88,7 @@ func newHelper(helper string, args func(target.Target) ([]string, bool), logf fu
 		logf = func(string, ...any) {}
 	}
 	return &Helper{logf: logf, helper: helper, args: args, headerTimeout: headerTimeout, frameTimeout: frameTimeout,
-		frames: make(chan Chunk, 256), done: make(chan struct{})}
+		retryFirst: retryFirst, retryLast: retryLast, frames: make(chan Chunk, queuedChunks), volumes: make(chan float64, 1), done: make(chan struct{})}
 }
 
 // FindTapHelper locates spytify-tap: the given path, next to the running
@@ -109,6 +122,24 @@ func (c *Helper) Open(ctx context.Context, t target.Target) (pcm.Format, error) 
 
 func (c *Helper) Frames() <-chan Chunk { return c.frames }
 func (c *Helper) Overruns() int64      { return c.overruns.Load() }
+
+// Volumes gives the player's volume in the Volume Mixer, from 0 to 1, each
+// time the running helper says it changed: the Windows helper reads it
+// while it records, which saves starting it once more to ask. A value not
+// taken yet gives way to the next one.
+func (c *Helper) Volumes() <-chan float64 { return c.volumes }
+
+// volume hands v to Volumes, in place of a value not taken yet.
+func (c *Helper) volume(v float64) {
+	select {
+	case <-c.volumes:
+	default:
+	}
+	select {
+	case c.volumes <- v:
+	default:
+	}
+}
 
 // Health says what the helper did; see Healther.
 func (c *Helper) Health() map[string]string {
@@ -161,6 +192,8 @@ func (c *Helper) run(ctx context.Context, t target.Target) {
 	defer close(c.done)
 	defer close(c.frames)
 	waiting := false
+	// retry is the wait before the next run; said, the one last logged.
+	retry, said := c.retryFirst, time.Duration(0)
 	for ctx.Err() == nil {
 		args, ok := c.args(t)
 		if !ok {
@@ -179,8 +212,22 @@ func (c *Helper) run(ctx context.Context, t target.Target) {
 			return
 		}
 		c.exited(code)
-		if code != helperExitChanged {
-			sleep(ctx, time.Second)
+		c.mu.Lock()
+		header := c.header
+		c.mu.Unlock()
+		if header {
+			retry, said = c.retryFirst, 0
+		}
+		if code == helperExitChanged {
+			continue
+		}
+		if retry > c.retryFirst && retry != said {
+			c.logf("capture: the helper keeps ending with no audio; trying again in %s", retry)
+			said = retry
+		}
+		sleep(ctx, retry)
+		if !header {
+			retry = min(retry*2, c.retryLast)
 		}
 	}
 }
@@ -214,6 +261,13 @@ func (c *Helper) stream(ctx context.Context, args []string, t target.Target) int
 		sc := bufio.NewScanner(stderr)
 		for sc.Scan() {
 			line := strings.TrimPrefix(sc.Text(), "spytify-tap: ")
+			// Not logged nor kept for the health: the slider is reported
+			// as a volume change, and it would push out the lines that
+			// say what the helper did.
+			if v, ok := volumeLine(line); ok {
+				c.volume(v)
+				continue
+			}
 			c.logf("capture: %s", line)
 			c.stderr.add(deviceless(line))
 		}
@@ -290,6 +344,19 @@ func (c *Helper) readFrames(ctx context.Context, r io.Reader, f pcm.Format, p *o
 			c.overruns.Add(1)
 		}
 	}
+}
+
+// volumeLine reads a helper's "volume 0.850" line.
+func volumeLine(line string) (float64, bool) {
+	s, ok := strings.CutPrefix(line, "volume ")
+	if !ok {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || v < 0 || v > 1 {
+		return 0, false
+	}
+	return v, true
 }
 
 // The helper names the output device in these lines: Windows' mix rate

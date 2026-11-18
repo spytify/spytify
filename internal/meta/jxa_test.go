@@ -82,6 +82,51 @@ func TestJXATrackerSeesARestart(t *testing.T) {
 	}
 }
 
+// #812: a track barely begun, started over, falls back less than the 3 s
+// a restart takes. Asked by Spytify while it plays, that fall is the
+// restart, once; not asked, or asked while paused, it is nothing.
+func TestJXATrackerSeesARestartSpytifyAsked(t *testing.T) {
+	t0 := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	run := func(state string, armed bool) [][]Event {
+		k := &pollTracker{ask: &restartAsk{}}
+		at := func(ms int, pos string) []Event {
+			p := poll(t, `{"running":true,"state":"`+state+`","position":`+pos+`,"track":{"id":"vendor:track:5","name":"Last Hours","artist":"A","duration":88000}}`)
+			p.at = t0.Add(time.Duration(ms) * time.Millisecond)
+			return k.next(p)
+		}
+		at(0, "0.73")
+		at(250, "0.98")
+		if armed {
+			k.ask.arm(t0.Add(300 * time.Millisecond))
+		}
+		// The player is 920 ms late: it goes on, then back.
+		late := at(500, "1.23")
+		back := at(1250, "0.004")
+		again := at(1500, "0.254")
+		return [][]Event{late, back, again}
+	}
+	got := run("playing", true)
+	if len(got[0]) != 0 {
+		t.Fatalf("still going on gave %+v", got[0])
+	}
+	if len(got[1]) != 1 || got[1][0].Kind != TrackChanged || !got[1][0].Restart || got[1][0].PositionMs != 4 {
+		t.Fatalf("restart = %+v", got[1])
+	}
+	if len(got[2]) != 0 {
+		t.Fatalf("restart reported twice: %+v", got[2])
+	}
+	for _, c := range []struct {
+		state string
+		armed bool
+	}{{"playing", false}, {"paused", true}} {
+		for i, evs := range run(c.state, c.armed) {
+			if len(evs) != 0 {
+				t.Errorf("%s, asked %v, poll %d: %+v", c.state, c.armed, i, evs)
+			}
+		}
+	}
+}
+
 func TestJXATrackerSeesASeek(t *testing.T) {
 	k := &pollTracker{}
 	t0 := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)

@@ -55,6 +55,9 @@ type finishJob struct {
 	// lowVolume is a take recorded while the player's own volume was
 	// under 100%: its title tag and file name end in " (low volume)".
 	lowVolume bool
+	// muted is a take the player went digitally silent in, mid-track: its
+	// title tag and file name end in " (muted)".
+	muted bool
 	// cover is a held take's file cover, read while the file was there.
 	cover     []byte
 	coverMIME string
@@ -105,9 +108,9 @@ func newFinisher(values func() settings.Values, ff *encode.FFmpeg, emit func(str
 	return f
 }
 
-// flawed is a take saved with a mark, a pause fade or a low volume: it does
-// not make its track recorded, which can still be recorded clean.
-func (j finishJob) flawed() bool { return j.pauseFade || j.lowVolume }
+// flawed is a take saved with a mark, a pause fade, a low volume or a mute:
+// it does not make its track recorded, which can still be recorded clean.
+func (j finishJob) flawed() bool { return j.pauseFade || j.lowVolume || j.muted }
 
 func (f *finisher) enqueue(j finishJob) {
 	// A partial take is discarded, so it does not make the track a
@@ -260,7 +263,9 @@ func (f *finisher) process(j finishJob) {
 	if !f.takeNumber(t) || !f.pickName(t) || !f.encode(ctx, t) {
 		return
 	}
-	f.writeTags(ctx, t)
+	if t.timings.Format == "wav" {
+		f.writeSidecar(ctx, t)
+	}
 	f.save(t)
 }
 
@@ -400,14 +405,18 @@ func (f *finisher) takeNumber(t *take) bool {
 // there takes a suffix, skips the take or is replaced, as
 // recorder.duplicates says.
 func (f *finisher) pickName(t *take) bool {
-	// A kept take's suffix, a pause fade's and a low volume's end its file
-	// name, wherever the template puts the title, and its title tag.
+	// A kept take's suffix, a pause fade's, a low volume's and a mute's end
+	// its file name, wherever the template puts the title, and its title
+	// tag.
 	suffix := t.suffix
 	if t.pauseFade {
 		suffix += " (pause fade)"
 	}
 	if t.lowVolume {
 		suffix += " (low volume)"
+	}
+	if t.muted {
+		suffix += " (muted)"
 	}
 	nt := namingTrack(t.tags, t.info)
 	nt.Suffix = suffix
@@ -440,10 +449,12 @@ func (f *finisher) pickName(t *take) bool {
 }
 
 // encode writes the take to the .part file in the output format, trimmed
-// and normalized as set.
+// and normalized as set, with its tags and cover in the same ffmpeg run. A
+// file whose tags could not be written is encoded again without them and
+// saved all the same.
 func (f *finisher) encode(ctx context.Context, t *take) bool {
 	step := time.Now()
-	short, err := f.ffmpeg.Encode(ctx, encode.Job{
+	job := encode.Job{
 		In:          t.tmp,
 		Out:         t.part,
 		Format:      t.timings.Format,
@@ -453,7 +464,20 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 		TrimEnd:     t.trimEnd,
 		Normalize:   t.v.Bool(settings.RecorderNormalize),
 		TargetLUFS:  t.v.Float(settings.RecorderTargetLufs),
-	})
+	}
+	if job.Format != "wav" {
+		pairs, cover, mime := tag.Embedded(t.tags, job.Format, t.topts)
+		job.Tags = &encode.Tags{Metadata: pairs, Cover: cover, CoverMIME: mime}
+	}
+	short, err := f.ffmpeg.Encode(ctx, job)
+	t.tagged = job.Tags != nil
+	if err != nil && job.Tags != nil && ctx.Err() == nil {
+		tagErr := err
+		job.Tags, t.tagged = nil, false
+		if short, err = f.ffmpeg.Encode(ctx, job); err == nil {
+			f.log.Errorf("%q: tags not written: %v", t.info.Title, tagErr)
+		}
+	}
 	t.timings.EncodeMs = msSince(step)
 	if err != nil {
 		os.Remove(t.part)
@@ -486,9 +510,10 @@ func encodeFacts(root, part string) map[string]string {
 	return facts
 }
 
-// writeTags tags the .part file. A file whose tags could not be written is
-// saved all the same.
-func (f *finisher) writeTags(ctx context.Context, t *take) {
+// writeSidecar writes a WAV's tags beside its .part file, as WAV has no
+// standard tag block. A file whose tags could not be written is saved all
+// the same.
+func (f *finisher) writeSidecar(ctx context.Context, t *take) {
 	t.tagged = true
 	step := time.Now()
 	err := (tag.Writer{FFmpeg: f.ffmpeg.Path, Logf: f.log.Infof}).Write(ctx, t.part, t.timings.Format, t.tags, t.topts)
@@ -546,6 +571,7 @@ func (f *finisher) save(t *take) {
 		Partial:    t.keep,
 		PauseFade:  t.pauseFade,
 		LowVolume:  t.lowVolume,
+		Muted:      t.muted,
 	})
 }
 

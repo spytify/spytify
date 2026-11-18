@@ -72,7 +72,7 @@ func TestTheAdMuteIsNotALowVolume(t *testing.T) {
 	s.setState(proto.StateRecording)
 	s.onMeta(ctx, meta.Event{Kind: meta.VolumeChanged, Volume: 0, PositionMs: -1})
 	s.onMeta(ctx, meta.Event{Kind: meta.VolumeChanged, Volume: 1, PositionMs: -1})
-	want := []string{"state waiting", "state ad", "state recording"}
+	want := []string{"state waiting", "state ad", "log info: mute ads: on, volume set in N ms", "state recording", "log info: mute ads: off, volume set in N ms"}
 	if got := r.lines(); !slices.Equal(got, want) {
 		t.Fatalf("trace:\n%q\nwant:\n%q", got, want)
 	}

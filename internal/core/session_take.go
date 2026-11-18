@@ -52,6 +52,11 @@ func (s *Session) onChunk(ch capture.Chunk) {
 		}
 	}
 	s.makeRoom(int64(len(data) / ch.Format.FrameBytes()))
+	if slices.Max(peaks) <= pcm.Silence {
+		s.zeroRun += int64(len(data) / ch.Format.FrameBytes())
+	} else {
+		s.zeroRun = 0
+	}
 	if lost := s.ring.Append(data); lost > 0 {
 		s.deps.fin.addOverruns(lost)
 		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorRingOverflow, Msg: fmt.Sprintf("%d frames lost", lost)})
@@ -149,7 +154,8 @@ func (s *Session) write(c *segment, from, to int64) {
 		}
 		return
 	}
-	data := s.ring.Bytes(from, to)
+	s.written = s.ring.AppendBytes(s.written[:0], from, to)
+	data := s.written
 	if c.soundAt < 0 {
 		if at, ok := firstAbove(s.ring.Format(), data, s.silenceDB, s.block); ok {
 			c.soundAt = from + at
@@ -193,7 +199,9 @@ func (s *Session) tryResolve(force bool) bool {
 		p.info.Title, f.MsFromFrames(cut), p.kind, f.MsFromFrames(p.at), f.MsFromFrames(p.lo), f.MsFromFrames(p.hi))
 	s.pend = nil
 	how := &proto.TrackCut{Kind: p.kind.String(), By: by, OffsetMs: f.MsFromFrames(cut) - f.MsFromFrames(p.at)}
+	s.resolving = p
 	s.cutAt(cut, p.info, p.kind == changeFirst, p.restart, how)
+	s.resolving = nil
 	return true
 }
 
@@ -396,6 +404,7 @@ func (s *Session) closeSegment(c *segment, end int64) {
 		rejected:  c.reason,
 		pauseFade: c.pauseFade,
 		lowVolume: c.lowVolume,
+		muted:     c.muted,
 	})
 	if s.opts.SingleTrack {
 		s.stop = stopGraceful

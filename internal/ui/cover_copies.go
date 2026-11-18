@@ -30,25 +30,74 @@ type coverCopies struct {
 	// paths holds each track tried: its copy, or "" when none was made.
 	paths   map[string]string
 	pending map[string]bool
-	loaded  func()
+	// looking holds the tracks look is looking for, among pending.
+	looking map[string]bool
+	// done counts the copies made or found, for the Record list to redraw:
+	// it draws its rows again only when they or covers.loads() change.
+	done   int
+	loaded func()
 }
 
 func newCoverCopies(loaded func()) *coverCopies {
-	return &coverCopies{paths: map[string]string{}, pending: map[string]bool{}, loaded: loaded}
+	return &coverCopies{paths: map[string]string{}, pending: map[string]bool{}, looking: map[string]bool{}, loaded: loaded}
 }
 
-// path is the copy of the cover of track id in dir, "" while there is none.
-// A copy made by an earlier window, for a list it replayed, is found on disk.
-func (c *coverCopies) path(dir, id string) string {
+// path is the copy of the cover of track id, "" while there is none, and
+// whether look is still looking for one. Rows call it at every draw, on the
+// toolkit's goroutine: it never reads the disk, which can be a slow drive
+// (#842). look finds the copies an earlier window made.
+func (c *coverCopies) path(id string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if p, ok := c.paths[id]; ok || dir == "" {
-		return p
+	return c.paths[id], c.looking[id]
+}
+
+// look finds in dir, once and off the toolkit's goroutine, the copies an
+// earlier window made for the tracks ids of a list it replayed. One
+// goroutine looks for them in turn.
+func (c *coverCopies) look(dir string, ids []string) {
+	if dir == "" {
+		return
 	}
+	c.mu.Lock()
+	var todo []string
+	for _, id := range ids {
+		if _, tried := c.paths[id]; !tried && !c.pending[id] {
+			c.pending[id], c.looking[id] = true, true
+			todo = append(todo, id)
+		}
+	}
+	c.mu.Unlock()
+	if len(todo) == 0 {
+		return
+	}
+	go func() {
+		for _, id := range todo {
+			c.found(id, onDisk(dir, id))
+		}
+	}()
+}
+
+// found ends the lookup or copy of track id with its copy p, "" for none.
+func (c *coverCopies) found(id, p string) {
+	c.mu.Lock()
+	delete(c.pending, id)
+	delete(c.looking, id)
+	c.paths[id] = p
+	if p != "" {
+		c.done++
+	}
+	c.mu.Unlock()
+	if p != "" && c.loaded != nil {
+		c.loaded()
+	}
+}
+
+// onDisk is the copy of the cover of track id in dir, "" when there is none.
+func onDisk(dir, id string) string {
 	for _, ext := range []string{".jpg", ".png"} {
 		p := filepath.Join(dir, coverFolder, copyName(id)+ext)
-		if _, err := os.Stat(p); err == nil {
-			c.paths[id] = p
+		if _, err := statCopy(p); err == nil {
 			return p
 		}
 	}
@@ -56,9 +105,9 @@ func (c *coverCopies) path(dir, id string) string {
 }
 
 // keep copies the cover at url of track id into dir once, off the toolkit's
-// goroutine.
+// goroutine, unless an earlier window made the copy.
 func (c *coverCopies) keep(dir, id, url string) {
-	if dir == "" || id == "" || url == "" || c.path(dir, id) != "" {
+	if dir == "" || id == "" || url == "" {
 		return
 	}
 	c.mu.Lock()
@@ -69,6 +118,10 @@ func (c *coverCopies) keep(dir, id, url string) {
 	c.pending[id] = true
 	c.mu.Unlock()
 	go func() {
+		if p := onDisk(dir, id); p != "" {
+			c.found(id, p)
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		data, mime, err := tag.FetchCover(ctx, nil, url)
 		cancel()
@@ -84,13 +137,7 @@ func (c *coverCopies) keep(dir, id, url string) {
 				p = ""
 			}
 		}
-		c.mu.Lock()
-		delete(c.pending, id)
-		c.paths[id] = p
-		c.mu.Unlock()
-		if p != "" && c.loaded != nil {
-			c.loaded()
-		}
+		c.found(id, p)
 	}()
 }
 
@@ -129,6 +176,9 @@ func (c *coverCopies) prune(dir string, held map[string]bool) {
 	}()
 }
 
+// statCopy is os.Stat; tests replace it.
+var statCopy = os.Stat
+
 // copyName is a track id fit for a file name.
 func copyName(id string) string {
 	return strings.Map(func(r rune) rune {
@@ -140,7 +190,8 @@ func copyName(id string) string {
 }
 
 // keepCovers copies the playing track's cover whatever the tab shown, as
-// only the shown tab draws, and deletes the copies of tracks the Record list
+// only the shown tab draws, looks for the copies of the rows a window
+// opening replayed, and deletes the copies of tracks the Record list
 // let go: a new session empties it, so does Clear list, and a window opening
 // holds only what it replayed. It waits for the replay, which comes before
 // the link says connected.
@@ -154,9 +205,16 @@ func (a *App) keepCovers(s model.State) {
 		held[c.ID] = true
 		a.covers.copies.keep(dir, c.ID, c.CoverURL)
 	}
+	rows := make([]string, 0, len(s.Rows))
 	for _, r := range s.Rows {
 		held[r.ID] = true
+		if c := s.Current; c == nil || r.ID != c.ID {
+			rows = append(rows, r.ID)
+		}
 	}
+	// The playing track's copy is keep's: a lookup finding none would
+	// stop it from making one.
+	a.covers.copies.look(dir, rows)
 	letGo := a.coverIDs == nil
 	for id := range a.coverIDs {
 		if !held[id] {
@@ -171,10 +229,15 @@ func (a *App) keepCovers(s model.State) {
 }
 
 // rowCover is the cover the player showed for row: its copy once made, the
-// player's own until then.
+// player's own until then. A replayed row waits for its copy to be looked
+// for, not to fetch the player's cover the copy stands for.
 func (a *App) rowCover(row model.Row) thumbs {
-	if p := a.covers.copies.path(coverDir(a.last), row.ID); p != "" {
+	p, looking := a.covers.copies.path(row.ID)
+	if p != "" {
 		return a.covers.load(p, func(context.Context) ([]byte, error) { return os.ReadFile(p) })
+	}
+	if looking {
+		return thumbs{}
 	}
 	return a.covers.get(row.CoverURL)
 }

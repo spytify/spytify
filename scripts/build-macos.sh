@@ -83,11 +83,13 @@ for size in 16 32 128 256; do
 done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 
+# Each program with its lasting identifier (scripts/macos-identifier.sh).
+sign() { codesign --force --sign - --identifier "$(scripts/macos-identifier.sh "$(basename "$1")")" "$1" >/dev/null 2>&1; }
 for f in spytifyd spytify-cli spytify-tap spytify-ui; do
-  codesign --force --sign - "$out/$f" >/dev/null 2>&1
+  sign "$out/$f"
 done
 for f in "$app"/Contents/MacOS/*; do
-  [ "$(basename "$f")" = spytify-ui ] || codesign --force --sign - "$f" >/dev/null 2>&1
+  [ "$(basename "$f")" = spytify-ui ] || sign "$f"
 done
 codesign --force --sign - "$app" >/dev/null 2>&1
 rm -rf "$out/Spytify.app"
