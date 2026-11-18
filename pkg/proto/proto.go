@@ -182,6 +182,11 @@ type CoreInfoResult struct {
 
 type SessionStartParams struct {
 	SingleTrack *bool `json:"single_track,omitempty"`
+	// PlayURL is a playlist or album link: the recorder opens the player if
+	// it is closed, starts the session, then asks the player to play the
+	// link from its first track until it does. The answer comes once it
+	// plays, or with CodePlayURL.
+	PlayURL string `json:"play_url,omitempty"`
 }
 
 type SessionStartResult struct {
