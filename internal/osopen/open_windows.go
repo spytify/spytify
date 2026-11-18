@@ -1,10 +1,18 @@
 package osopen
 
 import (
+	"fmt"
 	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+)
+
+var (
+	shell32                        = windows.NewLazySystemDLL("shell32.dll")
+	procILCreateFromPathW          = shell32.NewProc("ILCreateFromPathW")
+	procILFree                     = shell32.NewProc("ILFree")
+	procSHOpenFolderAndSelectItems = shell32.NewProc("SHOpenFolderAndSelectItems")
 )
 
 // Open hands a file, a folder or a web page to the Windows shell, as a
@@ -22,6 +30,29 @@ func Open(path string) error {
 	}
 	return onShellThread(func() error {
 		return windows.ShellExecute(0, verb, file, nil, nil, windows.SW_SHOWNORMAL)
+	})
+}
+
+// Reveal shows a file selected in its folder, in an Explorer window. The
+// shell does it in-process: no explorer.exe is started with the file on its
+// command line.
+func Reveal(path string) error {
+	file, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	return onShellThread(func() error {
+		pidl, _, _ := procILCreateFromPathW.Call(uintptr(unsafe.Pointer(file)))
+		if pidl == 0 {
+			return fmt.Errorf("no shell item for %s", path)
+		}
+		defer procILFree.Call(pidl)
+		// With no child items, the shell selects the item pidl names.
+		hr, _, _ := procSHOpenFolderAndSelectItems.Call(pidl, 0, 0, 0)
+		if int32(hr) < 0 {
+			return fmt.Errorf("show %s in its folder: %w", path, windows.Errno(uint32(hr)))
+		}
+		return nil
 	})
 }
 
@@ -71,7 +102,7 @@ func onShellThread(fn func() error) error {
 
 // x/sys/windows has ShellExecute but not ShellExecuteEx, the one that can
 // be told to show no error dialog.
-var procShellExecuteExW = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteExW")
+var procShellExecuteExW = shell32.NewProc("ShellExecuteExW")
 
 const (
 	seeMaskNoAsync  = 0x00000100 // the call's thread ends right after it

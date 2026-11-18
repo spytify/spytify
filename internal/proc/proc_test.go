@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	pathpkg "path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -70,6 +71,71 @@ func TestEveryChildProcessGoesThroughProc(t *testing.T) {
 					if n.Sel.Name == "SysProcAttr" {
 						t.Errorf("%s: sets SysProcAttr, which undoes what proc set", fset.Position(n.Pos()))
 					}
+				}
+				return true
+			})
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if files < 50 {
+		t.Fatalf("read only %d files under %s", files, root)
+	}
+}
+
+// No code starts explorer.exe: a new Explorer process, child of an unknown
+// program and with the user's file on its command line, is a pattern
+// security software watches. Show in folder asks the shell in-process
+// (osopen.Reveal).
+func TestNothingStartsExplorer(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	files := 0
+	for _, dir := range []string{"cmd", "internal", "pkg"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return err
+			}
+			f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+			if err != nil {
+				return err
+			}
+			files++
+			ast.Inspect(f, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				name := ""
+				switch fun := call.Fun.(type) {
+				case *ast.SelectorExpr:
+					name = fun.Sel.Name
+				case *ast.Ident:
+					name = fun.Name
+				}
+				arg := 0
+				switch name {
+				case "Command":
+				case "CommandContext":
+					arg = 1
+				default:
+					return true
+				}
+				if len(call.Args) <= arg {
+					return true
+				}
+				lit, ok := call.Args[arg].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				program, _ := strconv.Unquote(lit.Value)
+				if strings.TrimSuffix(strings.ToLower(pathpkg.Base(strings.ReplaceAll(program, `\`, "/"))), ".exe") == "explorer" {
+					t.Errorf("%s: starts %s; use osopen.Reveal or osopen.Open", fset.Position(call.Pos()), program)
 				}
 				return true
 			})
