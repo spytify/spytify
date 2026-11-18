@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/spytify/spytify/internal/encode"
 	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/internal/ui/model"
 )
@@ -102,24 +104,28 @@ func holdTags(t *testing.T, l *libraryScreen) func() {
 }
 
 // Keep anyway names a take "<title> (partial)" or "<title> (low quality)",
-// and a take with a pause fade or a low volume is "<title> (pause fade)" or
-// "<title> (low volume)", both with issues, with underscores for spaces
-// when the setting says so, and a number after it when the name was taken;
-// every other file is a complete take. A take with more than one mark is of
-// each of their kinds.
+// and a take with a pause fade, a low volume or a mute is "<title> (pause
+// fade)", "<title> (low volume)" or "<title> (muted)", with underscores for
+// spaces when the setting says so, and a number after it when the name was
+// taken. A partial take and one in low quality are of their own kind; the
+// other marks are volume issues, and a take with more than one is of each
+// of their kinds. Every other file is a complete take.
 func TestTakesAreToldApartByTheirName(t *testing.T) {
 	for name, want := range map[string][]string{
 		"M83 - Wait (partial).flac":                     {takePartial},
 		"M83 - Reunion (low quality).mp3":               {takeLowQuality},
 		"M83_-_Reunion_(low_quality).mp3":               {takeLowQuality},
-		"M83 - Lune (pause fade).mp3":                   {takeIssues},
-		"M83_-_Lune_(pause_fade)_2.mp3":                 {takeIssues},
-		"M83 - Hush (low volume).mp3":                   {takeIssues},
-		"M83_-_Hush_(low_volume).mp3":                   {takeIssues},
-		"M83 - Lune (pause fade) (low volume).mp3":      {takeIssues},
-		"M83 - Wait (partial) (low volume).flac":        {takePartial, takeIssues},
-		"M83 - Reunion (low quality) (pause fade).mp3":  {takeLowQuality, takeIssues},
+		"M83 - Lune (pause fade).mp3":                   {takeVolume},
+		"M83_-_Lune_(pause_fade)_2.mp3":                 {takeVolume},
+		"M83 - Hush (low volume).mp3":                   {takeVolume},
+		"M83_-_Hush_(low_volume).mp3":                   {takeVolume},
+		"M83 - Dusk (muted).mp3":                        {takeVolume},
+		"M83_-_Dusk_(muted)_2.mp3":                      {takeVolume},
+		"M83 - Lune (pause fade) (low volume).mp3":      {takeVolume},
+		"M83 - Wait (partial) (muted).flac":             {takePartial, takeVolume},
+		"M83 - Reunion (low quality) (pause fade).mp3":  {takeLowQuality, takeVolume},
 		"M83 - Low Volume Blues.flac":                   {takeComplete},
+		"M83 - Muted Colours.flac":                      {takeComplete},
 		"M83 - Wait (partial) 2.flac":                   {takePartial},
 		"004 M83 - Wait (Partial).m4a":                  {takePartial},
 		"Wait (partial) - M83.wav":                      {takePartial},
@@ -136,17 +142,44 @@ func TestTakesAreToldApartByTheirName(t *testing.T) {
 	}
 }
 
+// Complete, Partial and Low quality are the filter's own boxes, in that
+// order, and every other mark falls in the one box after them, Volume
+// issues: a new mark joins that box, never adds one.
+func TestTheFilterKeepsCompletePartialAndLowQualityApart(t *testing.T) {
+	want := []string{lang.Complete, lang.Partial, lang.LowQuality, lang.VolumeIssues}
+	if !slices.Equal(takeKinds, want) {
+		t.Fatalf("the filter's boxes are %q, want %q", takeKinds, want)
+	}
+	own := map[string]string{lang.Partial: takePartial, lang.LowQuality: takeLowQuality}
+	for _, m := range takeMark.FindAllStringSubmatch("(partial) (low quality) (pause fade) (low volume) (muted)", -1) {
+		name := "M83 - Wait " + m[0] + ".flac"
+		badges := takeBadges(name)
+		if len(badges) != 1 {
+			t.Fatalf("%q: badges %q", name, badges)
+		}
+		kind, ok := own[badges[0]]
+		if !ok {
+			kind = takeVolume
+		}
+		if got := kindsOf(name); !slices.Equal(got, []string{kind}) {
+			t.Errorf("%q is of %q, want %q", name, got, kind)
+		}
+	}
+}
+
 // A take shows a badge per mark in its name, in the order the recorder
 // adds them; a complete take shows none.
 func TestATakeShowsABadgePerMark(t *testing.T) {
 	for name, want := range map[string][]string{
-		"M83 - Lune (pause fade).mp3":                         {lang.PauseFade},
-		"M83_-_Hush_(low_volume).mp3":                         {lang.LowVolume},
-		"M83 - Lune (pause fade) (low volume).mp3":            {lang.PauseFade, lang.LowVolume},
-		"M83 - Wait (partial) (low volume).flac":              {lang.Partial, lang.LowVolume},
-		"M83 - Wait (partial) (pause fade) (low volume).flac": {lang.Partial, lang.PauseFade, lang.LowVolume},
-		"M83 - Reunion (low quality).mp3":                     {lang.LowQuality},
-		"M83 - Midnight City.flac":                            nil,
+		"M83 - Lune (pause fade).mp3":                                 {lang.PauseFade},
+		"M83_-_Hush_(low_volume).mp3":                                 {lang.LowVolume},
+		"M83 - Lune (pause fade) (low volume).mp3":                    {lang.PauseFade, lang.LowVolume},
+		"M83 - Wait (partial) (low volume).flac":                      {lang.Partial, lang.LowVolume},
+		"M83 - Wait (partial) (pause fade) (low volume).flac":         {lang.Partial, lang.PauseFade, lang.LowVolume},
+		"M83 - Wait (partial) (pause fade) (low volume) (muted).flac": {lang.Partial, lang.PauseFade, lang.LowVolume, lang.Muted},
+		"M83_-_Dusk_(muted).mp3":                                      {lang.Muted},
+		"M83 - Reunion (low quality).mp3":                             {lang.LowQuality},
+		"M83 - Midnight City.flac":                                    nil,
 	} {
 		if got := takeBadges(name); !slices.Equal(got, want) {
 			t.Errorf("takeBadges(%q) = %q, want %q", name, got, want)
@@ -154,9 +187,10 @@ func TestATakeShowsABadgePerMark(t *testing.T) {
 	}
 }
 
-// The filter hides the partial takes, or shows them alone to clean them up,
-// a box per kind of file; the count says how many files it leaves out. A
-// take's row says its kind in a chip, out of its title.
+// The filter hides the partial takes, those in low quality and those with
+// a volume issue, or shows them alone to clean them up, a box per kind; the
+// count says how many files it leaves out. A
+// take's row says each of its marks in a chip, out of its title.
 func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	order := []string{
 		"M83 - Midnight City.flac",
@@ -167,6 +201,7 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 		"M83 - Lune (pause fade).mp3",
 		"M83 - Hush (low volume).mp3",
 		"M83 - Hymn (partial) (low volume).flac",
+		"M83 - Dusk (muted).mp3",
 	}
 	files := map[string]string{}
 	for _, name := range order {
@@ -179,12 +214,12 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 		want   []string
 		count  string
 	}{
-		{takeKinds, lang.AllFiles, order, fmt.Sprintf(lang.FilesIn, 8, "")},
-		{[]string{takeComplete}, lang.Complete, []string{"M83 - Midnight City.flac", "M83 - Outro.flac"}, fmt.Sprintf(lang.SomeFilesIn, 2, 8, "")},
-		{[]string{takePartial, takeLowQuality}, lang.Partial + ", " + lang.LowQuality, []string{"M83 - Wait (partial).flac", "M83 - Reunion (low quality).mp3", "M83 - Wait (partial) 2.flac", "M83 - Hymn (partial) (low volume).flac"}, fmt.Sprintf(lang.SomeFilesIn, 4, 8, "")},
-		{[]string{takeLowQuality}, lang.LowQuality, []string{"M83 - Reunion (low quality).mp3"}, fmt.Sprintf(lang.SomeFilesIn, 1, 8, "")},
+		{takeKinds, lang.AllFiles, order, fmt.Sprintf(lang.FilesIn, 9, "")},
+		{[]string{takeComplete}, lang.Complete, []string{"M83 - Midnight City.flac", "M83 - Outro.flac"}, fmt.Sprintf(lang.SomeFilesIn, 2, 9, "")},
+		{[]string{takeLowQuality}, lang.LowQuality, []string{"M83 - Reunion (low quality).mp3"}, fmt.Sprintf(lang.SomeFilesIn, 1, 9, "")},
+		{[]string{takePartial}, lang.Partial, []string{"M83 - Wait (partial).flac", "M83 - Wait (partial) 2.flac", "M83 - Hymn (partial) (low volume).flac"}, fmt.Sprintf(lang.SomeFilesIn, 3, 9, "")},
 		// A take partial with a low volume is of both kinds.
-		{[]string{takeIssues}, lang.WithIssues, []string{"M83 - Lune (pause fade).mp3", "M83 - Hush (low volume).mp3", "M83 - Hymn (partial) (low volume).flac"}, fmt.Sprintf(lang.SomeFilesIn, 3, 8, "")},
+		{[]string{takeVolume}, lang.VolumeIssues, []string{"M83 - Lune (pause fade).mp3", "M83 - Hush (low volume).mp3", "M83 - Hymn (partial) (low volume).flac", "M83 - Dusk (muted).mp3"}, fmt.Sprintf(lang.SomeFilesIn, 4, 9, "")},
 	} {
 		tick(lib, c.ticked...)
 		if got := lib.kinds.Selected; got != c.label {
@@ -198,7 +233,7 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 		}
 	}
 	// The filter and the search go together.
-	tick(lib, takePartial, takeLowQuality, takeIssues)
+	tick(lib, takePartial, takeLowQuality, takeVolume)
 	lib.search.SetText("wait")
 	if got := rowNames(lib); !slices.Equal(got, []string{"M83 - Wait (partial).flac", "M83 - Wait (partial) 2.flac"}) {
 		t.Errorf("the partial takes matching wait: %q", got)
@@ -206,32 +241,32 @@ func TestTheFilterHidesOrShowsThePartialTakes(t *testing.T) {
 	lib.search.SetText("")
 	a.render()
 	shown := texts(lib.list)
-	for _, want := range []string{"Wait", "Wait 2", "Reunion", "Lune", "Hush", "Hymn", takePartial, takeLowQuality, lang.PauseFade, lang.LowVolume} {
+	for _, want := range []string{"Wait", "Wait 2", "Reunion", "Lune", "Hush", "Hymn", "Dusk", lang.Partial, lang.LowQuality, lang.PauseFade, lang.LowVolume, lang.Muted} {
 		if !slices.Contains(shown, want) {
 			t.Errorf("the rows show %q, without %q", shown, want)
 		}
 	}
-	if contains(shown, "(partial)") || contains(shown, "(low quality)") || contains(shown, "(pause fade)") || contains(shown, "(low volume)") {
+	if contains(shown, "(partial)") || contains(shown, "(low quality)") || contains(shown, "(pause fade)") || contains(shown, "(low volume)") || contains(shown, "(muted)") {
 		t.Errorf("a title keeps its marker: %q", shown)
 	}
-	setCaption(lib.count, pluralFiles(6, 8, "/Users/listener/Music/Spytify"))
+	setCaption(lib.count, pluralFiles(7, 9, "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-partial-takes")
 
 	// Its boxes, in a dropdown that stays open while they are ticked.
 	tick(lib, takeKinds...)
 	test.Tap(lib.kinds)
 	top := a.win.Canvas().Overlays().Top()
-	if top == nil || !contains(texts(top), takeIssues) {
+	if top == nil || !contains(texts(top), takeVolume) {
 		t.Fatal("the filter shows no boxes")
 	}
 	test.Tap(lib.takes[takeComplete])
 	if a.win.Canvas().Overlays().Top() != top {
 		t.Error("the dropdown closed on the first box")
 	}
-	if got := lib.kinds.Selected; got != lang.Partial+", "+lang.LowQuality+", "+lang.WithIssues || len(lib.rows) != 6 {
+	if got := lib.kinds.Selected; got != lang.Partial+", "+lang.LowQuality+", "+lang.VolumeIssues || len(lib.rows) != 7 {
 		t.Errorf("Complete unticked in the dropdown: the filter says %q, %d rows", got, len(lib.rows))
 	}
-	setCaption(lib.count, pluralFiles(6, 8, "/Users/listener/Music/Spytify"))
+	setCaption(lib.count, pluralFiles(7, 9, "/Users/listener/Music/Spytify"))
 	snapshot(t, a, "library-filter")
 	a.win.Canvas().Overlays().Remove(top)
 
@@ -300,8 +335,8 @@ func TestTheFilterWorksFromTheKeyboard(t *testing.T) {
 	}{
 		{fyne.KeyDown, takePartial},
 		{fyne.KeyDown, takeLowQuality},
-		{fyne.KeyDown, takeIssues},
-		{fyne.KeyDown, takeIssues},
+		{fyne.KeyDown, takeVolume},
+		{fyne.KeyDown, takeVolume},
 		{fyne.KeyUp, takeLowQuality},
 		{fyne.KeyUp, takePartial},
 	} {
@@ -311,7 +346,7 @@ func TestTheFilterWorksFromTheKeyboard(t *testing.T) {
 		}
 	}
 	space()
-	if lib.takes[takePartial].Checked || lib.kinds.Selected != takeComplete+", "+takeLowQuality+", "+takeIssues || len(lib.rows) != 1 {
+	if lib.takes[takePartial].Checked || lib.kinds.Selected != takeComplete+", "+takeLowQuality+", "+takeVolume || len(lib.rows) != 1 {
 		t.Errorf("Space on Partial: ticked %v, the filter says %q, %d rows", lib.takes[takePartial].Checked, lib.kinds.Selected, len(lib.rows))
 	}
 
@@ -822,5 +857,41 @@ func TestTheLibraryDrawsOnlyTheRowsInView(t *testing.T) {
 	lib.list.ScrollTo(200)
 	if len(drawn) == 0 || len(drawn) > 12 || !drawn[200] {
 		t.Errorf("scrolled to the 200th file, drew rows %v", slices.Sorted(maps.Keys(drawn)))
+	}
+}
+
+// The first rows are drawn without waiting for ffmpeg to be found: finding
+// it runs ffmpeg -version, which an antivirus can hold for seconds the
+// first time on Windows. The search here ends only when the test says so,
+// so the Library is drawn while it is still on.
+func TestTheLibraryDrawsBeforeFFmpegIsFound(t *testing.T) {
+	found := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(found) }) }
+	defer func(f func(string) (*encode.FFmpeg, error)) { findFFmpeg = f }(findFFmpeg)
+	findFFmpeg = func(string) (*encode.FFmpeg, error) {
+		<-found
+		return nil, errors.New("no ffmpeg")
+	}
+	// Should the toolkit's goroutine wait after all, it is let go in 10 s
+	// and the test fails instead of hanging.
+	defer time.AfterFunc(10*time.Second, release).Stop()
+	_, lib, _, releaseTags := libraryOf(t, map[string]string{"Artist - Song.mp3": ""}, "Artist - Song.mp3")
+	defer releaseTags()
+	// The search ends before findFFmpeg is put back.
+	defer func() {
+		release()
+		eventually(t, "ffmpeg was never looked for", lib.ffFound.Load)
+	}()
+	if lib.ffFound.Load() {
+		t.Fatal("the Library was drawn only once ffmpeg was found")
+	}
+	if len(lib.shown) != 1 || lib.cover(lib.shown[0]).row != nil {
+		t.Fatalf("%d files, or a cover with no ffmpeg", len(lib.shown))
+	}
+	release()
+	eventually(t, "ffmpeg was never looked for", lib.ffFound.Load)
+	if lib.cover(lib.shown[0]).row != nil {
+		t.Fatal("a cover with no ffmpeg")
 	}
 }

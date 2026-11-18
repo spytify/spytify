@@ -101,15 +101,9 @@ func New(opts Options) *Client {
 	if opts.Prefs == nil {
 		opts.Prefs = &memPrefs{m: map[string]string{}}
 	}
-	c := &Client{opts: opts, dsn: dsn, scrub: NewScrubber(), seen: map[string]bool{}}
-	if c.Available() {
-		// computerID may run a command: not on the UI's thread when it turns on.
-		go func() {
-			defer quietly()
-			computerID()
-		}()
-	}
-	return c
+	// The computer's ID is not read here: only once the bug tracker is on
+	// (newHub), which the app does once its choice was shown.
+	return &Client{opts: opts, dsn: dsn, scrub: NewScrubber(), seen: map[string]bool{}}
 }
 
 // Available says this build can send anything at all.

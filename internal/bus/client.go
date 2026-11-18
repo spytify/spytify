@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -26,6 +27,8 @@ type Client struct {
 	events  chan proto.Event
 	err     error
 	done    chan struct{}
+	// dropped counts the events a subscriber that fell behind lost.
+	dropped atomic.Int64
 }
 
 // ErrClosed is returned once the connection is gone.
@@ -73,7 +76,8 @@ func (c *Client) readLoop() {
 			case c.events <- proto.Event{Method: m.Method, Params: m.Params}:
 			default:
 				// A subscriber that does not read loses events, never the
-				// connection.
+				// connection; Dropped says how many.
+				c.dropped.Add(1)
 			}
 		case m.ID != nil:
 			c.mu.Lock()
@@ -95,6 +99,10 @@ func (c *Client) readLoop() {
 	close(c.events)
 	close(c.done)
 }
+
+// Dropped is how many events were lost because the subscriber did not read
+// them in time: 1024 wait for it, those that come after go.
+func (c *Client) Dropped() int64 { return c.dropped.Load() }
 
 // Do sends method with params and returns the raw result.
 func (c *Client) Do(ctx context.Context, method string, params any) (json.RawMessage, error) {

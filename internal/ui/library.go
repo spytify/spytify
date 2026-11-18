@@ -62,6 +62,13 @@ type libraryScreen struct {
 	tagged *tagCache
 	ffOnce sync.Once
 	ff     *encode.FFmpeg
+	// ffFound is set once ffmpeg was looked for, ff then holding it or nil.
+	ffFound atomic.Bool
+	// readCover reads the picture a file holds for the tests; nil, ffmpeg
+	// does.
+	readCover func(ctx context.Context, path string) ([]byte, error)
+	// disk keeps the covers' thumbnails between launches.
+	disk thumbCache
 	// redraw is set while a redraw for covers or tags that came in waits
 	// for the toolkit's goroutine: those that come in meanwhile join it.
 	redraw atomic.Bool
@@ -81,11 +88,16 @@ const (
 	takeComplete   = lang.Complete
 	takePartial    = lang.Partial
 	takeLowQuality = lang.LowQuality
-	takeIssues     = lang.WithIssues
+	takeVolume     = lang.VolumeIssues
 	noAlbum        = lang.NoAlbum
 )
 
-var takeKinds = []string{takeComplete, takePartial, takeLowQuality, takeIssues}
+// takeKinds are the boxes of the filter. Complete, Partial and Low quality
+// are kinds of take of their own: a take cut short, or one recorded from a
+// poor format, which can still be the whole track. Every other mark, a
+// pause fade, a low volume or a mute, is the player's volume going down
+// and falls in Volume issues; its row's badges say which.
+var takeKinds = []string{takeComplete, takePartial, takeLowQuality, takeVolume}
 
 func newLibraryScreen(a *App) *libraryScreen {
 	l := &libraryScreen{app: a}
@@ -98,14 +110,17 @@ func newLibraryScreen(a *App) *libraryScreen {
 			})
 		}
 	}
-	l.covers = newCovers(loaded)
+	l.covers = newRowCovers(loaded)
+	l.disk = thumbCache{dir: a.opts.CoverCache}
+	go l.disk.prune(time.Now())
 	l.tagged = &tagCache{read: map[string]trackTags{}, pending: map[string]bool{}, loaded: loaded, slots: make(chan struct{}, 2)}
 	l.search = newSearch(a, lang.SearchLibrary, func(string) { l.filter() })
 	l.sortBy = newSelectField([]string{lang.Newest, lang.Name, byAlbum}, func(string) { l.filter() })
 	// Keep anyway saves a take cut short or in low quality, and a take with
-	// a pause fade or a low volume is marked: the filter hides those files, or shows them
-	// alone to clean them up, a box per kind of file in its dropdown. They start ticked without their callback, which
-	// needs the list: the sort's, below, draws the list first.
+	// a pause fade, a low volume or a mute is marked: the filter hides those
+	// files, or shows them alone to clean them up, from its dropdown. The
+	// boxes start ticked without their callback, which needs the list: the
+	// sort's, below, draws the list first.
 	l.takes = map[string]*widget.Check{}
 	boxes := container.NewVBox()
 	for _, kind := range takeKinds {
@@ -118,7 +133,7 @@ func newLibraryScreen(a *App) *libraryScreen {
 	l.kinds.Selected = l.takesLabel()
 	// A select is as wide as its placeholder, which a choice made never
 	// shows: the longest label fits.
-	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality + ", " + takeIssues
+	l.kinds.PlaceHolder = takeComplete + ", " + takeLowQuality + ", " + takeVolume
 	rescan := newIconButton(lang.Rescan, theme.ViewRefreshIcon(), func() {
 		a.noteAction("rescan the library")
 		l.scan()
@@ -210,22 +225,59 @@ func (l *libraryScreen) cover(f libraryFile) thumbs {
 	if strings.EqualFold(filepath.Ext(f.path), ".wav") {
 		return thumbs{}
 	}
-	ff := l.ffmpeg()
-	if ff == nil {
+	// ffmpeg is looked for by the loader, off the toolkit's goroutine: the
+	// search runs ffmpeg -version, which an antivirus can hold for seconds
+	// the first time on Windows (#841). Without one, the thumbnails on disk
+	// still show.
+	read := l.readCover
+	if read == nil && l.ffFound.Load() && l.ff == nil && l.disk.dir == "" {
 		return thumbs{}
 	}
-	path := f.path
-	return l.covers.load(f.key(), func(ctx context.Context) ([]byte, error) { return ff.Cover(ctx, path) })
+	path, key, disk := f.path, f.key(), l.disk
+	return l.covers.load(key, func(ctx context.Context) ([]byte, error) {
+		if data, ok := disk.read(key); ok {
+			if len(data) == 0 {
+				return nil, encode.ErrNoCover
+			}
+			return data, nil
+		}
+		if read == nil {
+			ff := l.ffmpeg()
+			if ff == nil {
+				return nil, errNoFFmpeg
+			}
+			read = ff.Cover
+		}
+		data, err := read(ctx, path)
+		switch {
+		case errors.Is(err, encode.ErrNoCover):
+			disk.write(key, nil)
+		case err == nil:
+			// The thumbnail alone is kept: a cover can weigh megabytes.
+			if row, err := rowPNG(data); err == nil {
+				disk.write(key, row)
+				return row, nil
+			}
+		}
+		return data, err
+	})
 }
 
-// ffmpeg reads the files' covers and tags; nil without one.
+var errNoFFmpeg = errors.New("no ffmpeg")
+
+// findFFmpeg finds ffmpeg; tests replace it.
+var findFFmpeg = encode.Find
+
+// ffmpeg reads the files' covers and tags; nil without one. Finding it
+// runs ffmpeg: never call it on the toolkit's goroutine.
 func (l *libraryScreen) ffmpeg() *encode.FFmpeg {
 	l.ffOnce.Do(func() {
 		name := os.Getenv("SPYTIFY_FFMPEG")
 		if name == "" {
 			name = "ffmpeg"
 		}
-		l.ff, _ = encode.Find(name)
+		l.ff, _ = findFFmpeg(name)
+		l.ffFound.Store(true)
 	})
 	return l.ff
 }
@@ -361,12 +413,12 @@ func (l *libraryScreen) kept(f libraryFile) bool {
 
 // takeMark is each mark the recorder adds to a take's title, in the order
 // it adds them: Keep anyway's " (partial)" or " (low quality)", then
-// " (pause fade)", then " (low volume)". The name template puts the title
+// " (pause fade)", " (low volume)" and " (muted)". The name template puts the title
 // in the file's name, its spaces made underscores when the setting says
 // so, with a number after it when the name was taken. The tags say so
 // too, but are not read yet for most files, and the index of recorded
 // tracks leaves these files out.
-var takeMark = regexp.MustCompile(`(?i)\((partial|low[ _]quality|pause[ _]fade|low[ _]volume)\)`)
+var takeMark = regexp.MustCompile(`(?i)\((partial|low[ _]quality|pause[ _]fade|low[ _]volume|muted)\)`)
 
 // takeBadges are the badges of the file at path, one per mark in its name,
 // in the recorder's order; none for a complete take.
@@ -382,21 +434,26 @@ func takeBadges(path string) []string {
 			out = append(out, lang.PauseFade)
 		case "low volume":
 			out = append(out, lang.LowVolume)
+		case "muted":
+			out = append(out, lang.Muted)
 		}
 	}
 	return slices.Compact(out)
 }
 
 // kindsOf are the kinds of file the filter ticks for the file at path:
-// Partial or Low quality for a take Keep anyway saved, With issues for one
-// with a pause fade or a low volume, both for a take that is both, and
-// Complete for one with no mark.
+// Partial or Low quality for a take Keep anyway saved, Volume issues for
+// one with any other mark, more than one for a take that is more than one,
+// and Complete for one with none.
 func kindsOf(path string) []string {
 	var out []string
 	for _, b := range takeBadges(path) {
-		kind := b
-		if b == lang.PauseFade || b == lang.LowVolume {
-			kind = takeIssues
+		kind := takeVolume
+		switch b {
+		case lang.Partial:
+			kind = takePartial
+		case lang.LowQuality:
+			kind = takeLowQuality
 		}
 		if !slices.Contains(out, kind) {
 			out = append(out, kind)
@@ -410,7 +467,7 @@ func kindsOf(path string) []string {
 
 // takeMarker is a mark the recorder adds to a take's title, and the space
 // before it: the row shows it in a badge instead.
-var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality|pause[ _]fade|low[ _]volume)\)`)
+var takeMarker = regexp.MustCompile(`(?i)[ _]\((partial|low[ _]quality|pause[ _]fade|low[ _]volume|muted)\)`)
 
 // takesLabel says which kinds of file the filter shows.
 func (l *libraryScreen) takesLabel() string {

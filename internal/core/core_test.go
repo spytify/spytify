@@ -34,6 +34,7 @@ func TestTargetStateIsSentOnlyWhenItChanges(t *testing.T) {
 	c.find = func(target.Target) (target.Process, bool) {
 		return target.Process{PID: pid, Name: "fakeplayer"}, running
 	}
+	c.alive = nil
 	c.pollTarget()
 	running, pid = true, 7
 	c.pollTarget()
@@ -157,5 +158,30 @@ func TestFullVolumeRaisesThePlayer(t *testing.T) {
 	}
 	if v, _ := player.Volume(); v != 1 {
 		t.Fatalf("volume %.2f, want 1", v)
+	}
+}
+
+// Once the player's process is known, the watch asks about that pid alone,
+// and lists every process again only once it is gone.
+func TestTheWatchAsksOnlyAboutTheKnownPlayer(t *testing.T) {
+	c, rec := newTestCore(t, false)
+	lists, pid := 0, 7
+	c.find = func(target.Target) (target.Process, bool) {
+		lists++
+		return target.Process{PID: pid, Name: "fakeplayer"}, pid != 0
+	}
+	c.alive = func(_ target.Target, p int) bool { return p == pid }
+	for range 5 {
+		c.pollTarget()
+	}
+	if lists != 1 {
+		t.Fatalf("listed %d times while the player ran", lists)
+	}
+	pid = 0
+	c.pollTarget()
+	c.pollTarget()
+	want := []proto.TargetStateEvent{{Running: true, PID: 7}, {Running: false}}
+	if got := targetStates(rec); !slices.Equal(got, want) || lists != 3 {
+		t.Fatalf("target states %+v after %d lists, want %+v after 3", got, lists, want)
 	}
 }

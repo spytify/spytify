@@ -80,10 +80,26 @@ func (s *Server) ListenUnix(path string) error {
 }
 
 // ListenTCP listens on a TCP address, for a web UI on the same machine.
+// The bus has no authentication, so the address must be a loopback one
+// (127.0.0.1, [::1] or localhost): any other would hand the recorder,
+// which runs the player's launch command, to the network.
 func (s *Server) ListenTCP(addr string) error {
+	notLoopback := fmt.Errorf("%s is not a loopback address: the bus has no authentication, so it listens on this computer only, such as 127.0.0.1:7811", addr)
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return notLoopback
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
+	}
+	// localhost is whatever the hosts file says.
+	if a, ok := ln.Addr().(*net.TCPAddr); !ok || !a.IP.IsLoopback() {
+		ln.Close()
+		return notLoopback
 	}
 	s.add(ln)
 	return nil

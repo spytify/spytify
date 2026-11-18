@@ -141,11 +141,11 @@ func (l *hintsLayout) Layout(objs []fyne.CanvasObject, _ fyne.Size) {
 
 func (l *hintsLayout) MinSize([]fyne.CanvasObject) fyne.Size { return fyne.Size{} }
 
-// pollKeys has watchKeys read the keys held, for as long as the app runs.
+// pollKeys has watchKeys read the keys held while the window shows.
 func (a *App) pollKeys(d desktop.Driver) {
-	for range time.Tick(hintPoll) {
+	a.everyShown(hintPoll, func() {
 		fyne.Do(func() { a.watchKeys(d.CurrentKeyModifiers(), time.Now()) })
-	}
+	})
 }
 
 // watchKeys shows the hints once the shortcut key alone has been held for

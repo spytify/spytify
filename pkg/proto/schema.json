@@ -544,6 +544,9 @@
         "low_volume": {
           "type": "boolean"
         },
+        "muted": {
+          "type": "boolean"
+        },
         "partial": {
           "type": "boolean"
         },

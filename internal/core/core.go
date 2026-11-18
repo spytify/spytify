@@ -55,6 +55,9 @@ type Core struct {
 	log      *Logger
 	backends Backends
 	find     func(target.Target) (target.Process, bool)
+	// alive reports whether the known pid is still the target's, for the
+	// real lookup only (target.Running); nil, the watch lists every time.
+	alive func(target.Target, int) bool
 
 	ffmpeg *encode.FFmpeg
 	ffErr  error
@@ -98,7 +101,7 @@ func New(o Options) *Core {
 		crashed:  o.Crashed,
 	}
 	if c.find == nil {
-		c.find = target.FindProcess
+		c.find, c.alive = target.FindProcess, target.Running
 	}
 	c.keep = &keeper{emit: c.emit}
 	c.ffmpeg, c.ffErr = encode.Find(o.Env.FFmpeg)
@@ -210,6 +213,15 @@ func (c *Core) WatchTarget(ctx context.Context) {
 }
 
 func (c *Core) pollTarget() {
+	// Once the player's process is known, asking about it alone is enough:
+	// listing every process every 2 s forked ps on macOS and read every
+	// /proc entry on Linux, player running or not (#835).
+	c.mu.Lock()
+	pid := c.pid
+	c.mu.Unlock()
+	if pid != 0 && c.alive != nil && c.alive(c.env.Target, pid) {
+		return
+	}
 	p, ok := c.find(c.env.Target)
 	c.mu.Lock()
 	changed := ok != c.running || p.PID != c.pid
@@ -651,6 +663,14 @@ func (c *Core) Control(cmd proto.PlayerCmd) error {
 		}
 		return err
 	}
+	if cmd == proto.CmdRestart {
+		c.mu.Lock()
+		s := c.sess
+		c.mu.Unlock()
+		if s != nil {
+			s.RestartAsked()
+		}
+	}
 	return nil
 }
 
@@ -670,8 +690,9 @@ func (c *Core) Shutdown() {
 
 // ensureTarget launches the player with SPYTIFY_TARGET_LAUNCH when it is
 // not running, retrying 5 times 3 seconds apart as v1 did.
-// launch starts the player: SPYTIFY_TARGET_LAUNCH when it is set, else the
-// OS's own way to open an app by its bundle id or name.
+// launch starts the player: SPYTIFY_TARGET_LAUNCH when it is set (a shell
+// command, so cmd /C on Windows), else the OS's own way to open an app by
+// its bundle id or name, which on Windows is the shell with no cmd.exe.
 func (c *Core) launch() error {
 	t := c.env.Target
 	var cmd *exec.Cmd
@@ -683,11 +704,15 @@ func (c *Core) launch() error {
 	case len(t.ProcessNames) == 0:
 		return errors.New("no player chosen")
 	case runtime.GOOS == "darwin" && t.BundleID != "":
-		cmd = proc.Command("open", "-b", t.BundleID)
+		cmd = proc.Command("/usr/bin/open", "-b", t.BundleID)
 	case runtime.GOOS == "darwin":
-		cmd = proc.Command("open", "-a", t.ProcessNames[0])
+		cmd = proc.Command("/usr/bin/open", "-a", t.ProcessNames[0])
 	case runtime.GOOS == "windows":
-		cmd = proc.Command("cmd", "/C", "start", "", t.ProcessNames[0])
+		c.log.Infof("starting the player: ShellExecuteEx open %s", t.ProcessNames[0])
+		if err := openApp(t.ProcessNames[0]); err != nil {
+			return fmt.Errorf("start the player: %w", err)
+		}
+		return nil
 	default:
 		cmd = proc.Command(t.ProcessNames[0])
 	}

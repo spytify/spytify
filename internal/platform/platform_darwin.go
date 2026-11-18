@@ -34,7 +34,7 @@ func (b Backends) Probe() []proto.Check {
 	} else {
 		checks = append(checks, proto.Check{ID: proto.CheckTapHelper, Name: "capture helper", OK: true, Detail: p + "; macOS asks once for System Audio Recording permission", Args: []string{p}})
 	}
-	if _, err := exec.LookPath("osascript"); err != nil {
+	if _, err := exec.LookPath("/usr/bin/osascript"); err != nil {
 		checks = append(checks, proto.Check{ID: proto.CheckAppleScript, Name: "AppleScript", OK: false, Detail: err.Error()})
 	} else {
 		checks = append(checks, proto.Check{ID: proto.CheckAppleScript, Name: "AppleScript", OK: true, Detail: "macOS asks once to let spytify control the player"})

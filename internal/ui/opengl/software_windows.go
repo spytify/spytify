@@ -50,8 +50,9 @@ func UseSoftware() error {
 		//lint:ignore ST1005 the message box that says why there is no window shows it as written
 		return errors.New("Windows' opengl32.dll is loaded already: this Spytify.exe links it")
 	}
-	// With its path, Windows finds libgallium_wgl.dll beside it.
-	if _, err := windows.LoadLibraryEx(filepath.Join(dir, "opengl32.dll"), 0, windows.LOAD_WITH_ALTERED_SEARCH_PATH); err != nil {
+	// Windows finds libgallium_wgl.dll beside it, and what else it needs in
+	// System32, the one folder the app looks in (dllsearch).
+	if _, err := windows.LoadLibraryEx(filepath.Join(dir, "opengl32.dll"), 0, windows.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|windows.LOAD_LIBRARY_SEARCH_SYSTEM32); err != nil {
 		//lint:ignore ST1005 the message box that says why there is no window shows it as written
 		return fmt.Errorf("Mesa's opengl32.dll: %w", err)
 	}
