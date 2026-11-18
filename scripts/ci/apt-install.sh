@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# CI only: apt-get install on a GitHub Ubuntu runner. Its Azure mirror
-# sometimes stalls a download for over an hour (87 minutes once). apt drops
-# a connection silent for 30 s and retries it itself; the update and the
-# download get 5 minutes a try, three tries, the second and third from the
-# main archive instead of the runner's mirror. Then the install reads the
-# downloaded packages. The update and the download print each file they
+# CI only: apt-get install on a GitHub Ubuntu runner. Its mirror (Azure's,
+# or an EC2 one listed in /etc/apt/apt-mirrors.txt) sometimes stalls a
+# download for over an hour (87 minutes once), or serves it at ~470 kB/s,
+# too slow for MinGW in one try. apt drops a connection silent for 30 s and
+# retries it itself; the update and the download get 5 minutes a try, three
+# tries, the second and third from the main archive instead of the runner's
+# mirror; a try keeps what the one before it downloaded. Then the install
+# reads the downloaded packages. The update and the download print each file they
 # get (-q, not -qq), so a try that stalls says which source and which file.
 #   scripts/ci/apt-install.sh <package>...
 
@@ -17,9 +19,13 @@ for try in 1 2 3; do
     exit 1
   fi
   echo "apt failed or stalled (try $try), trying again from archive.ubuntu.com" >&2
-  # ubuntu-24.04 lists its sources in deb822 form, older images in sources.list.
+  # ubuntu-24.04 lists its sources in deb822 form, older images in
+  # sources.list; either can name the mirror, or a mirror list file.
   for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
-    if [ -f "$f" ]; then sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' "$f"; fi
+    if [ -f "$f" ]; then sudo sed -i -E 's|[a-z0-9.-]+\.archive\.ubuntu\.com|archive.ubuntu.com|g' "$f"; fi
   done
+  if [ -f /etc/apt/apt-mirrors.txt ]; then
+    echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+  fi
 done
 exec sudo apt-get "${opts[@]}" install -y -qq "$@"
