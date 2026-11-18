@@ -108,7 +108,7 @@ func (a *App) renderPrivacy(s model.State) {
 		// A recorder that went away may have crashed; one that came back
 		// moved its trace aside.
 		if a.shown {
-			a.checkCrashes()
+			a.checkCrashesLater()
 		}
 	}
 	on, _ := a.privacy(trackerKey).(bool)

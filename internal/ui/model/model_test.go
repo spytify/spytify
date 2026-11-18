@@ -179,7 +179,7 @@ func TestKeepableTakes(t *testing.T) {
 	m.Keeping("a", true)
 	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a"}))
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (partial).flac", Partial: true}))
-	if r := m.Snapshot().Rows[0]; r.Keepable || r.StatusText() != lang.SavedPartial {
+	if r := m.Snapshot().Rows[0]; r.Keepable || r.StatusText() != fmt.Sprintf(lang.SavedWith, "partial") {
 		t.Fatalf("kept %+v", r)
 	}
 
@@ -210,7 +210,7 @@ func TestALowQualityTakeSaysSo(t *testing.T) {
 	m.Keeping("a", true)
 	m.Apply(ev(t, proto.EventTrackKeepable, proto.TrackKeepableEvent{ID: "a"}))
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (low quality).flac", Partial: true}))
-	if r := m.Snapshot().Rows[0]; r.StatusText() != lang.SavedLowQuality {
+	if r := m.Snapshot().Rows[0]; r.StatusText() != fmt.Sprintf(lang.SavedWith, "low quality") {
 		t.Fatalf("kept %+v, %q", r, r.StatusText())
 	}
 }
@@ -223,7 +223,7 @@ func TestAPauseFadeSaysSo(t *testing.T) {
 	m.Apply(started(t, "a", "First"))
 	m.Apply(started(t, "b", "Second"))
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (pause fade).flac", PauseFade: true}))
-	if r := m.Snapshot().Rows[0]; r.Status != Saved || r.StatusText() != lang.SavedPauseFade {
+	if r := m.Snapshot().Rows[0]; r.Status != Saved || r.StatusText() != fmt.Sprintf(lang.SavedWith, "pause fade") {
 		t.Fatalf("saved %+v, %q", r, r.StatusText())
 	}
 }
@@ -239,11 +239,30 @@ func TestALowVolumeSaysSo(t *testing.T) {
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (low volume).flac", LowVolume: true}))
 	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "b", Path: "/m/Second (pause fade) (low volume).flac", PauseFade: true, LowVolume: true}))
 	rows := m.Snapshot().Rows
-	if r := rows[1]; r.Status != Saved || r.StatusText() != lang.SavedLowVolume {
+	if r := rows[1]; r.Status != Saved || r.StatusText() != fmt.Sprintf(lang.SavedWith, "low volume") {
 		t.Errorf("saved %+v, %q", r, r.StatusText())
 	}
-	if r := rows[0]; r.Status != Saved || r.StatusText() != lang.SavedBothIssues {
+	if r := rows[0]; r.Status != Saved || r.StatusText() != fmt.Sprintf(lang.SavedWith, "pause fade, low volume") {
 		t.Errorf("saved %+v, %q", r, r.StatusText())
+	}
+}
+
+// A take kept partial names its other marks too, where it said "Saved:
+// partial" alone, and a take the player went silent in reads muted.
+func TestASavedTakeNamesEveryMark(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(started(t, "a", "First"))
+	m.Apply(started(t, "b", "Second"))
+	m.Apply(started(t, "c", "Third"))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "a", Path: "/m/First (muted).flac", Muted: true}))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "b", Path: "/m/Second (partial) (muted).flac", Partial: true, Muted: true}))
+	m.Apply(ev(t, proto.EventTrackFinished, proto.TrackFinishedEvent{ID: "c", Path: "/m/Third (partial) (pause fade) (low volume) (muted).flac", Partial: true, PauseFade: true, LowVolume: true, Muted: true}))
+	rows := m.Snapshot().Rows
+	for i, want := range []string{"partial, pause fade, low volume, muted", "partial, muted", "muted"} {
+		if r := rows[i]; r.StatusText() != fmt.Sprintf(lang.SavedWith, want) {
+			t.Errorf("row %d: %q, want Saved: %s", i, r.StatusText(), want)
+		}
 	}
 }
 

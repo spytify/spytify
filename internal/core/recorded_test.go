@@ -598,25 +598,27 @@ func quoted(s string) string {
 	return string(b)
 }
 
-// A take with the player's fades around a pause in it, or recorded while
-// the player's own volume was under 100%, is saved marked, in its name and
-// its title tag, and leaves its track unrecorded, so it can still be
-// recorded clean. Both marks follow each other, in that order.
+// A take with the player's fades around a pause in it, recorded while the
+// player's own volume was under 100%, or with a gap where the player went
+// silent mid-track, is saved marked, in its name and its title tag, and
+// leaves its track unrecorded, so it can still be recorded clean. The
+// marks follow each other, in that order.
 func TestAFlawedTakeIsMarkedAndLeavesItsTrackUnrecorded(t *testing.T) {
 	ff := testkit.Need(t, "ffmpeg", encode.Find)
 	for _, c := range []struct {
-		pauseFade, lowVolume bool
-		suffix               string
+		pauseFade, lowVolume, muted bool
+		suffix                      string
 	}{
-		{true, false, " (pause fade)"},
-		{false, true, " (low volume)"},
-		{true, true, " (pause fade) (low volume)"},
+		{true, false, false, " (pause fade)"},
+		{false, true, false, " (low volume)"},
+		{false, false, true, " (muted)"},
+		{true, true, true, " (pause fade) (low volume) (muted)"},
 	} {
 		t.Run(strings.TrimSpace(c.suffix), func(t *testing.T) {
 			b := newBench(t, nil)
 			fin := b.open(ff)
 			j := b.wholeTake("s-1", ferry)
-			j.pauseFade, j.lowVolume = c.pauseFade, c.lowVolume
+			j.pauseFade, j.lowVolume, j.muted = c.pauseFade, c.lowVolume, c.muted
 			fin.enqueue(j)
 			fin.wait()
 			want := "Neon Harbor - Midnight Ferry" + c.suffix + ".wav"
@@ -625,8 +627,8 @@ func TestAFlawedTakeIsMarkedAndLeavesItsTrackUnrecorded(t *testing.T) {
 			}
 			for _, ev := range b.rec.all() {
 				var f proto.TrackFinishedEvent
-				if ev.Method == proto.EventTrackFinished && ev.Decode(&f) == nil && (f.PauseFade != c.pauseFade || f.LowVolume != c.lowVolume) {
-					t.Errorf("track.finished %+v: pause_fade %v, low_volume %v wanted", f, c.pauseFade, c.lowVolume)
+				if ev.Method == proto.EventTrackFinished && ev.Decode(&f) == nil && (f.PauseFade != c.pauseFade || f.LowVolume != c.lowVolume || f.Muted != c.muted) {
+					t.Errorf("track.finished %+v: pause_fade %v, low_volume %v, muted %v wanted", f, c.pauseFade, c.lowVolume, c.muted)
 				}
 			}
 			var side struct{ Title string }
