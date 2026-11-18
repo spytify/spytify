@@ -400,9 +400,9 @@ func joinNames(names []string) string {
 	return out
 }
 
-// denied says whether the system refused a write, access denied: on
-// Windows, ransomware protection refuses writes to the folders it holds
-// from programs it does not allow.
+// denied says whether the system refused a write, access denied, on any
+// OS: the window words it per OS (on Windows, ransomware protection
+// refuses writes to the folders it holds from programs it does not allow).
 func denied(err error) bool { return errors.Is(err, fs.ErrPermission) }
 
 func outputWritable(dir string) error {

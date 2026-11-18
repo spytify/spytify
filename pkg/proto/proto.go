@@ -442,7 +442,8 @@ type ErrorEvent struct {
 	// Volume is the player's own volume in percent, for player_volume_low.
 	Volume *int `json:"volume,omitempty"`
 	// Denied is a write to the output folder the system refused, access
-	// denied: on Windows, ransomware protection may hold the folder.
+	// denied, on any OS; on Windows, ransomware protection may hold the
+	// folder.
 	Denied bool `json:"denied,omitempty"`
 	// Facts say what the recorder knew when it happened, without a name or
 	// a path, for the bug tracker.

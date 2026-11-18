@@ -307,6 +307,9 @@ const (
 	// refused, access denied. Spytify never reads Defender's settings: the
 	// refusal alone says it.
 	OutputDeniedWindows = "Windows Security settings may be holding this folder. To let Spytify write there, open Windows Security > Virus & threat protection > Manage ransomware protection > Allow an app through Controlled folder access, and add spytifyd.exe and ffmpeg.exe from Spytify's folder."
+	// OutputDenied follows a write to the output folder that macOS or Linux
+	// refused, access denied.
+	OutputDenied = "The system refused to let Spytify write to this folder. Check that your account can write there, or choose another folder."
 )
 
 // About. Versions takes the app's version, the recorder's, then the

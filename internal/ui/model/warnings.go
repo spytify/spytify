@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/pkg/proto"
@@ -43,13 +44,18 @@ func WarningText(e proto.ErrorEvent, goos string) string {
 }
 
 // withDenied adds to why a write to the output folder failed, access
-// denied, what may refuse it on goos and how to allow Spytify. Only
-// Windows has such a cause to name.
+// denied, what may refuse it on goos and what to do: on Windows, its
+// security settings and how to allow Spytify; elsewhere, the folder's
+// permissions or another folder. Go's errors end with no period on macOS
+// and Linux; the advice starts a sentence of its own.
 func withDenied(text, goos string) string {
-	if goos != "windows" {
-		return text
+	if !strings.HasSuffix(text, ".") {
+		text += "."
 	}
-	return text + " " + lang.OutputDeniedWindows
+	if goos == "windows" {
+		return text + " " + lang.OutputDeniedWindows
+	}
+	return text + " " + lang.OutputDenied
 }
 
 func wording(e proto.ErrorEvent, goos string) string {
