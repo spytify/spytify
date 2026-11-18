@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,6 +75,9 @@ type segment struct {
 	// lowVolume is a take recorded while the player's own volume was
 	// under 100%: its file is marked " (low volume)".
 	lowVolume bool
+	// muted is a take the player went digitally silent in, mid-track
+	// (mutedMidTrack): its file is marked " (muted)".
+	muted bool
 	// cut is how the take's start was found, for track.started.
 	cut *proto.TrackCut
 }
@@ -111,7 +115,9 @@ type Session struct {
 	deps sessionDeps
 	opts SessionOptions
 
-	ring      *Ring
+	ring *Ring
+	// written holds what write takes from the ring, reused at each call.
+	written   []byte
 	cur       *segment
 	pend      *change
 	status    meta.Status
@@ -150,6 +156,9 @@ type Session struct {
 	// before it.
 	trackStarted time.Time
 	trackHeard   bool
+	// zeroRun is how many frames the ring took last in a row with every
+	// sample at zero, as a player muted in its own volume sends.
+	zeroRun int64
 	// lowFormat is set while the capture's format is too poor for music.
 	lowFormat bool
 	// peak and sum are each channel's since the last level reported, over
@@ -160,6 +169,10 @@ type Session struct {
 	diskFull  bool
 	warnedLen bool
 	adMuted   bool
+	// resolving is the change whose cut is being made, while cutAt runs:
+	// a mute or unmute it causes says how long after the player named the
+	// item it came.
+	resolving *change
 	// unmutedAt is when the session last gave the player its volume back
 	// after an ad.
 	unmutedAt time.Time
@@ -169,12 +182,14 @@ type Session struct {
 	volumePct int
 
 	stopCh chan stopMode
-	mu     sync.Mutex
-	snap   proto.SessionStatusResult
+	// restartCh says Spytify had the player start its track over.
+	restartCh chan struct{}
+	mu        sync.Mutex
+	snap      proto.SessionStatusResult
 }
 
 func newSession(id string, deps sessionDeps, opts SessionOptions) *Session {
-	s := &Session{id: id, deps: deps, opts: opts, status: meta.Stopped, stopCh: make(chan stopMode, 4), lastSound: time.Now()}
+	s := &Session{id: id, deps: deps, opts: opts, status: meta.Stopped, stopCh: make(chan stopMode, 4), restartCh: make(chan struct{}, 1), lastSound: time.Now()}
 	s.snap = proto.SessionStatusResult{State: proto.StateIdle, SessionID: id}
 	return s
 }
@@ -203,6 +218,16 @@ func (s *Session) Stop(now bool) {
 	case s.stopCh <- mode:
 	default:
 		// Enough stop requests are queued; the session is ending.
+	}
+}
+
+// RestartAsked tells the session that Spytify had the player start its
+// track over.
+func (s *Session) RestartAsked() {
+	select {
+	case s.restartCh <- struct{}{}:
+	default:
+		// One is queued already.
 	}
 }
 
@@ -240,9 +265,26 @@ func (s *Session) muteAds(st proto.SessionState) {
 	if !want {
 		s.unmutedAt = time.Now()
 	}
+	start := time.Now()
 	if err := s.deps.mute(want); err != nil {
 		s.deps.log.Infof("mute ads: %v", err)
+		return
 	}
+	// How late the user hears it: how far into the item's audio, from its
+	// cut, and how long after the player named it; then the time the volume
+	// took to set.
+	how := "off"
+	if want {
+		how = "on"
+	}
+	if p := s.resolving; p != nil && s.ring != nil {
+		after := s.ring.Format().MsFromFrames(s.ring.End() - p.at)
+		if c := s.cur; c != nil && c.cut != nil {
+			how += fmt.Sprintf(", %d ms into the item's audio", after-c.cut.OffsetMs)
+		}
+		how += fmt.Sprintf(", %d ms after the player named it", after)
+	}
+	s.deps.log.Infof("mute ads: %s, volume set in %d ms", how, time.Since(start).Milliseconds())
 }
 
 func (s *Session) state() proto.SessionState {
@@ -317,6 +359,8 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 			s.handleStop(stopNow)
 		case mode := <-s.stopCh:
 			s.handleStop(mode)
+		case <-s.restartCh:
+			s.onRestartAsked()
 		case ch, ok := <-frames:
 			if !ok {
 				s.deps.log.Infof("capture stream ended")

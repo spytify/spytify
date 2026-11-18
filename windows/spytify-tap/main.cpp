@@ -10,7 +10,9 @@
 // stream, as from PipeWire or Core Audio. So that a silent recording says
 // why, stderr tells what the packets bring when it changes (none, marked
 // silent, zeros, sound), whether the player's audio session is active, and
-// the kind and state of the output, never its name.
+// the kind and state of the output, never its name. It also says the
+// player's volume in the Volume Mixer, "volume 0.850", when first read and
+// each time it changes, so spytifyd starts nothing else to read it.
 //
 // Usage: spytify-tap.exe --pid <pid> [--rate <Hz>]
 // --rate asks for another rate than the device's.
@@ -36,6 +38,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <cwchar>
 #include <map>
 #include <set>
@@ -332,9 +335,19 @@ static HRESULT defaultOutput(IMMDeviceEnumerator *devices, Output &o) {
 }
 
 // treeDevices lists the devices the tree has audio sessions on, and the one
-// it plays to now, with an active session.
-static void treeDevices(IMMDeviceEnumerator *devices, DWORD pid, std::wstring &playing, std::vector<std::wstring> &sessions) {
+// it plays to now, with an active session. volume, when given, gets the
+// master volume of the first session, as --get-volume reads it, or -1 when
+// the tree has none.
+static void treeDevices(IMMDeviceEnumerator *devices, DWORD pid, std::wstring &playing, std::vector<std::wstring> &sessions,
+                        float *volume = nullptr) {
+  if (volume) *volume = -1;
   eachSession(devices, processTree(pid), [&](IMMDevice *device, IAudioSessionControl *control) {
+    ISimpleAudioVolume *simple = nullptr;
+    if (volume && *volume < 0 && SUCCEEDED(control->QueryInterface(kISimpleAudioVolume, reinterpret_cast<void **>(&simple)))) {
+      float v = 0;
+      if (SUCCEEDED(simple->GetMasterVolume(&v))) *volume = v;
+      simple->Release();
+    }
     LPWSTR id = nullptr;
     if (FAILED(device->GetId(&id))) return;
     AudioSessionState state = AudioSessionStateInactive;
@@ -395,12 +408,12 @@ static DWORD pickRate(Source &s, DWORD given) {
 // sourceChanged says whether the recording must start again at another
 // rate: the player left the device the rate comes from, or that device is
 // gone or mixes at another rate now. active says whether the player has an
-// active audio session.
-static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &active) {
+// active audio session, volume its volume (treeDevices).
+static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &active, float &volume) {
   std::wstring playing;
   std::vector<std::wstring> sessions;
   Output byDefault, now;
-  treeDevices(devices, s.pid, playing, sessions);
+  treeDevices(devices, s.pid, playing, sessions, &volume);
   active = !playing.empty();
   defaultOutput(devices, byDefault);
   if (moved(playing, s.device.id, byDefault.id, s.defaultAtStart)) {
@@ -421,7 +434,8 @@ static bool sourceChanged(IMMDeviceEnumerator *devices, const Source &s, bool &a
 
 // followSource checks the source about once a second, on a thread of its
 // own: reading the devices can take longer than the capture's 20 ms buffer.
-// It says when the player's audio session turns active or inactive.
+// It says when the player's audio session turns active or inactive, and
+// its volume when it changes.
 static DWORD WINAPI followSource(void *arg) {
   Source *s = static_cast<Source *>(arg);
   IMMDeviceEnumerator *devices = nullptr;
@@ -430,20 +444,32 @@ static DWORD WINAPI followSource(void *arg) {
     return 0;
   }
   int wasActive = -1;
+  char wasVolume[16] = "";
   while (!s->changed) {
     Sleep(1000);
     bool active = false;
-    s->changed = sourceChanged(devices, *s, active);
+    float volume = -1;
+    s->changed = sourceChanged(devices, *s, active, volume);
     if (int(active) != wasActive) {
       fprintf(stderr, "spytify-tap: process %lu %s\n", (unsigned long)s->pid,
               active ? "plays to its output" : "has no active audio session");
       wasActive = active;
+    }
+    // As --get-volume prints it: a change too small to show is none.
+    char now[16];
+    if (volume >= 0 && snprintf(now, sizeof now, "%.3f", volume) > 0 && strcmp(now, wasVolume) != 0) {
+      fprintf(stderr, "spytify-tap: volume %s\n", now);
+      memcpy(wasVolume, now, sizeof now);
     }
   }
   return 0;
 }
 
 int wmain(int argc, wchar_t **argv) {
+  // Windows looks for a DLL loaded by name in the program's folder first:
+  // one dropped beside the helper would load in place of Windows' own.
+  // System32 alone, for every DLL loaded from here on, the system's too.
+  SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
   // MSVCRT buffers stderr when it is a pipe: spytifyd would read nothing
   // until the helper exits, and nothing at all when it is killed.
   setvbuf(stderr, nullptr, _IONBF, 0);
@@ -483,7 +509,7 @@ int wmain(int argc, wchar_t **argv) {
   const DWORD rate = pickRate(*source, given);
   if (given == 0) CloseHandle(CreateThread(nullptr, 0, followSource, source, 0, nullptr));
 
-  HMODULE mmdevapi = LoadLibraryW(L"Mmdevapi.dll");
+  HMODULE mmdevapi = LoadLibraryExW(L"Mmdevapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
   auto activate = mmdevapi ? reinterpret_cast<ActivateFn>(reinterpret_cast<void *>(GetProcAddress(mmdevapi, "ActivateAudioInterfaceAsync"))) : nullptr;
   if (!activate) {
     fprintf(stderr, "spytify-tap: ActivateAudioInterfaceAsync is missing; Windows 10 version 2004 or later is needed\n");
@@ -516,7 +542,12 @@ int wmain(int argc, wchar_t **argv) {
   format.wBitsPerSample = 32;
   format.nBlockAlign = format.nChannels * format.wBitsPerSample / 8;
   format.nAvgBytesPerSec = format.nSamplesPerSec * format.nBlockAlign;
-  const REFERENCE_TIME buffer = 200000;  // 20 ms, in 100 ns units
+  // The engine holds this much while the loop waits on spytifyd, which
+  // stdout's writes block for: a reader that stalls longer (a garbage
+  // collection, the previous take's encode, a disk) made the engine drop
+  // audio at 20 ms (#839). Packets still come every period, so a larger
+  // buffer adds no latency.
+  const REFERENCE_TIME buffer = 10000000;  // 1 s, in 100 ns units
   hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED,
                           AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
                           buffer, 0, &format, nullptr);
@@ -554,13 +585,19 @@ int wmain(int argc, wchar_t **argv) {
   enum Heard { NoPackets, MarkedSilent, Zeros, Sound };
   static const char *const heardText[] = {"no packets", "packets marked silent", "only zeros", "sound"};
   const uint64_t window = 2 * (uint64_t)rate;
-  uint64_t windowEnd = window, packets = 0, marked = 0;
+  // gaps counts the packets the engine marked as following audio it
+  // dropped, the reader having fallen behind; said each 2 s there is one.
+  uint64_t windowEnd = window, packets = 0, marked = 0, gaps = 0;
   bool sound = false;
   int heard = -1;
 
+  // With no packet coming (the player paused or silent) the loop wakes
+  // this often to write silence lag behind the clock: half the lag is
+  // soon enough, where 20 ms woke it 50 times a second (#850).
+  const DWORD idleWake = 50;
   HANDLE waits[2] = {ready, target};
   for (;;) {
-    DWORD w = WaitForMultipleObjects(2, waits, FALSE, 20);
+    DWORD w = WaitForMultipleObjects(2, waits, FALSE, idleWake);
     if (w == WAIT_OBJECT_0 + 1) {
       out.flush();
       fprintf(stderr, "spytify-tap: process %lu ended\n", (unsigned long)pid);
@@ -581,6 +618,7 @@ int wmain(int argc, wchar_t **argv) {
       hr = capture->GetBuffer(&data, &frames, &flags, &devicePos, &qpcPos);
       if (FAILED(hr)) return fail("IAudioCaptureClient::GetBuffer", hr);
       packets++;
+      if (flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) gaps++;
       if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
         marked++;
       } else {
@@ -606,8 +644,9 @@ int wmain(int argc, wchar_t **argv) {
     if (clock >= windowEnd) {
       int now = sound ? Sound : packets == 0 ? NoPackets : marked == packets ? MarkedSilent : Zeros;
       if (now != heard) fprintf(stderr, "spytify-tap: %s from process %lu\n", heardText[now], (unsigned long)pid);
+      if (gaps > 0) fprintf(stderr, "spytify-tap: %llu packets followed audio the engine dropped: spytifyd read too late\n", (unsigned long long)gaps);
       heard = now;
-      packets = marked = 0;
+      packets = marked = gaps = 0;
       sound = false;
       windowEnd = clock + window;
     }

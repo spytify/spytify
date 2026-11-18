@@ -2,11 +2,15 @@ package ui
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 
 	"github.com/spytify/spytify/internal/ui/lang"
@@ -14,27 +18,18 @@ import (
 	"github.com/spytify/spytify/pkg/proto"
 )
 
-// noticeApp is a test app that keeps the notifications it is sent.
-type noticeApp struct {
-	fyne.App
-	sent []*fyne.Notification
+// noticeSink keeps the notifications an app shows.
+type noticeSink struct {
+	sent []string
 }
 
-func (n *noticeApp) SendNotification(x *fyne.Notification) { n.sent = append(n.sent, x) }
+// noticed is what was shown, as "title: text".
+func (n *noticeSink) noticed() []string { return n.sent }
 
-// noticed is what was sent, as "title: text".
-func (n *noticeApp) noticed() []string {
-	var out []string
-	for _, x := range n.sent {
-		out = append(out, x.Title+": "+x.Content)
-	}
-	return out
-}
-
-// listen sends a's notifications to a test app that keeps them.
-func listen(a *App) *noticeApp {
-	sink := &noticeApp{App: a.fa}
-	a.fa = sink
+// listen keeps a's notifications instead of showing them.
+func listen(a *App) *noticeSink {
+	sink := &noticeSink{}
+	a.toast = func(title, text string) { sink.sent = append(sink.sent, title+": "+text) }
 	return sink
 }
 
@@ -154,4 +149,49 @@ func TestTheNotificationsSettingStartsAtProblemsOnly(t *testing.T) {
 		t.Errorf("shows %q by default", sel.Selected)
 	}
 	snapshot(t, a, "settings-notifications")
+}
+
+// notifiers may call Fyne's notifications: not on Windows, where Fyne
+// shows them from a hidden PowerShell that security software flags.
+var notifiers = map[string]string{
+	"internal/ui/notify_other.go":   "systemToast on Linux and macOS",
+	"internal/ui/nowindow_linux.go": "tells, on Linux, that the window cannot open",
+}
+
+// Every notification goes through systemToast, for every OS: the parser
+// reads the files of all three, whatever this test runs on.
+func TestEveryNotificationGoesThroughSystemToast(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, dir := range []string{"cmd", "internal"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return err
+			}
+			rel, _ := filepath.Rel(root, path)
+			if notifiers[filepath.ToSlash(rel)] != "" {
+				return nil
+			}
+			f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+			if err != nil {
+				return err
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok {
+					switch sel.Sel.Name {
+					case "SendNotification", "ScheduleNotification":
+						t.Errorf("%s: %s; use App.toast", fset.Position(sel.Pos()), sel.Sel.Name)
+					}
+				}
+				return true
+			})
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }

@@ -18,7 +18,7 @@ func TestZombieIsNotListed(t *testing.T) {
 	defer cmd.Wait()
 	pid := strconv.Itoa(cmd.Process.Pid)
 	deadline := time.Now().Add(2 * time.Second)
-	for !zombie(pid) {
+	for _, _, live := procNames(pid); live; _, _, live = procNames(pid) {
 		if time.Now().After(deadline) {
 			t.Fatal("the exited child never showed as a zombie")
 		}

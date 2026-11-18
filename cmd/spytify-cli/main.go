@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +34,12 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+// connectTimeout bounds reaching spytifyd for the commands that then follow
+// it: over tcp:// to a host that drops packets, the system's own connect
+// timeout is one to two minutes, and a recorder that is stuck never answers
+// (#858). Tests shorten it.
+var connectTimeout = 10 * time.Second
 
 type app struct {
 	socket string
@@ -292,38 +300,35 @@ func (a *app) tailCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			c, err := a.dial(ctx)
+			start, cancel := context.WithTimeout(ctx, connectTimeout)
+			defer cancel()
+			c, err := a.dial(start)
 			if err != nil {
 				return err
 			}
 			defer c.Close()
 			var res proto.LogTailResult
-			if err := c.Call(ctx, proto.MethodLogTail, proto.LogTailParams{Lines: lines}, &res); err != nil {
+			if err := c.Call(start, proto.MethodLogTail, proto.LogTailParams{Lines: lines}, &res); err != nil {
+				if errors.Is(err, context.DeadlineExceeded) {
+					return fmt.Errorf("spytifyd did not answer in %s", connectTimeout)
+				}
 				return err
 			}
 			for _, l := range res.Lines {
-				a.printLog(l)
+				a.printLog(a.out, l)
 			}
 			if !follow {
 				return nil
 			}
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case ev, ok := <-c.Subscribe():
-					if !ok {
-						return errors.New("spytifyd closed the connection")
-					}
-					if ev.Method != proto.EventLog {
-						continue
-					}
-					var l proto.LogEvent
-					if ev.Decode(&l) == nil {
-						a.printLog(l)
-					}
+			var told int64
+			defer lost(c, cmd.ErrOrStderr(), &told)
+			return followEvents(ctx, c.Subscribe(), a.out, func(w *bufio.Writer, ev proto.Event) {
+				lost(c, cmd.ErrOrStderr(), &told)
+				var l proto.LogEvent
+				if ev.Method == proto.EventLog && ev.Decode(&l) == nil {
+					a.printLog(w, l)
 				}
-			}
+			})
 		},
 	}
 	cmd.Flags().IntVarP(&lines, "lines", "n", 50, "number of lines")
@@ -331,17 +336,55 @@ func (a *app) tailCmd() *cobra.Command {
 	return cmd
 }
 
-func (a *app) printLog(l proto.LogEvent) {
+func (a *app) printLog(w io.Writer, l proto.LogEvent) {
 	if a.asJSON {
 		b, _ := json.Marshal(l)
-		fmt.Fprintln(a.out, string(b))
+		fmt.Fprintln(w, string(b))
 		return
 	}
 	ts := l.TS
 	if t, err := time.Parse(time.RFC3339Nano, l.TS); err == nil {
 		ts = t.Format("15:04:05")
 	}
-	fmt.Fprintf(a.out, "%s %-5s %s\n", ts, l.Level, l.Msg)
+	fmt.Fprintf(w, "%s %-5s %s\n", ts, l.Level, l.Msg)
+}
+
+// burst bounds how many waiting events follow writes before it flushes and
+// looks at Ctrl-C again.
+const burst = 256
+
+// followEvents hands write each event of sub, with every one already waiting
+// behind it, then flushes out once: one write a burst, where printing
+// each event straight to stdout was a system call each (#857). It ends
+// when ctx does, or with an error once spytifyd closes the connection.
+func followEvents(ctx context.Context, sub <-chan proto.Event, out io.Writer, write func(*bufio.Writer, proto.Event)) error {
+	w := bufio.NewWriter(out)
+	defer w.Flush()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-sub:
+			for n := 0; ok; n++ {
+				write(w, ev)
+				if n == burst {
+					break
+				}
+				select {
+				case ev, ok = <-sub:
+					continue
+				default:
+				}
+				break
+			}
+			if err := w.Flush(); err != nil {
+				return err
+			}
+			if !ok {
+				return errors.New("spytifyd closed the connection")
+			}
+		}
+	}
 }
 
 func (a *app) eventsCmd() *cobra.Command {
@@ -352,23 +395,39 @@ func (a *app) eventsCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			c, err := a.dial(ctx)
+			start, cancel := context.WithTimeout(ctx, connectTimeout)
+			defer cancel()
+			c, err := a.dial(start)
 			if err != nil {
 				return err
 			}
 			defer c.Close()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case ev, ok := <-c.Subscribe():
-					if !ok {
-						return errors.New("spytifyd closed the connection")
-					}
-					fmt.Fprintf(a.out, "{\"method\":%q,\"params\":%s}\n", ev.Method, ev.Params)
-				}
-			}
+			var told int64
+			defer lost(c, cmd.ErrOrStderr(), &told)
+			return followEvents(ctx, c.Subscribe(), a.out, func(w *bufio.Writer, ev proto.Event) {
+				lost(c, cmd.ErrOrStderr(), &told)
+				writeEvent(w, ev)
+			})
 		},
+	}
+}
+
+// writeEvent writes ev as a JSON line, its params as they came.
+func writeEvent(w *bufio.Writer, ev proto.Event) {
+	w.WriteString(`{"method":`)
+	w.WriteString(strconv.Quote(ev.Method))
+	w.WriteString(`,"params":`)
+	w.Write(ev.Params)
+	w.WriteString("}\n")
+}
+
+// lost says on w how many events c lost since told, which it moves on:
+// the output did not keep up (a pager not scrolling, a slow pipe), and a
+// copy of the events with holes must not look whole.
+func lost(c *bus.Client, w io.Writer, told *int64) {
+	if n := c.Dropped(); n > *told {
+		fmt.Fprintf(w, "spytify-cli: %d events lost: the output did not keep up\n", n-*told)
+		*told = n
 	}
 }
 

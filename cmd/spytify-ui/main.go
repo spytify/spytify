@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/app"
 
 	"github.com/spytify/spytify/internal/crash"
+	"github.com/spytify/spytify/internal/dllsearch"
 	"github.com/spytify/spytify/internal/settings"
 	"github.com/spytify/spytify/internal/target"
 	"github.com/spytify/spytify/internal/telemetry"
@@ -25,6 +26,9 @@ import (
 )
 
 func main() {
+	// Before GLFW and Fyne load any DLL by name. Should Windows refuse,
+	// the app runs as it did.
+	_ = dllsearch.System32Only()
 	target.LoadDotEnv()
 	env := target.Load()
 
@@ -82,7 +86,7 @@ func main() {
 	// With a player to record, the app starts spytifyd itself; with none,
 	// it asks for one first.
 	auto := len(env.Target.ProcessNames) > 0
-	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, Socket: env.SocketPath, AutoStart: auto,
+	w := ui.New(fa, l, m, ui.Options{StateDir: env.StateDir, CoverCache: ui.DefaultCoverCache(), Socket: env.SocketPath, AutoStart: auto,
 		Telemetry: tel, Privacy: privacy, SoftwareOpenGL: software})
 	if inst != nil {
 		defer inst.Close()

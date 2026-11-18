@@ -16,7 +16,8 @@ import (
 type Process struct {
 	PID  int
 	Name string
-	// Parent is the parent's PID where the listing gives it (Windows), else 0.
+	// Parent is the parent's PID where the listing gives it (Windows,
+	// macOS), else 0.
 	Parent int
 }
 
@@ -34,10 +35,21 @@ func FindProcess(t Target) (Process, bool) {
 		procs = listProc()
 	case "windows":
 		procs = listToolhelp()
+	case "darwin":
+		procs = orElse(listSysctl(), listPS)
 	default:
 		procs = listPS()
 	}
 	return pickRoot(t, procs)
+}
+
+// orElse returns procs, or what fallback lists when procs is empty: a
+// listing that failed would take a running player for a stopped one.
+func orElse(procs []Process, fallback func() []Process) []Process {
+	if len(procs) > 0 {
+		return procs
+	}
+	return fallback()
 }
 
 // pickRoot returns the first matching process whose parent does not match.
@@ -71,8 +83,8 @@ func (t Target) Matches(name string) bool {
 	}
 	for _, want := range t.ProcessNames {
 		w := normalizeName(want)
-		// /proc/<pid>/comm is truncated to 15 bytes.
-		if name == w || (len(name) == 15 && strings.HasPrefix(w, name)) {
+		// /proc/<pid>/comm is cut to 15 bytes, macOS's p_comm to 16.
+		if name == w || ((len(name) == 15 || len(name) == 16) && strings.HasPrefix(w, name)) {
 			return true
 		}
 	}
@@ -116,41 +128,8 @@ func normalizeName(s string) string {
 	return strings.TrimSuffix(strings.TrimSuffix(s, ".exe"), ".app")
 }
 
-func listProc() []Process {
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return nil
-	}
-	var out []Process
-	for _, e := range entries {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil || zombie(e.Name()) {
-			continue
-		}
-		if b, err := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline")); err == nil && len(b) > 0 {
-			argv0 := string(bytes.SplitN(b, []byte{0}, 2)[0])
-			out = append(out, Process{PID: pid, Name: filepath.Base(argv0)})
-		}
-		if b, err := os.ReadFile(filepath.Join("/proc", e.Name(), "comm")); err == nil {
-			out = append(out, Process{PID: pid, Name: strings.TrimSpace(string(b))})
-		}
-	}
-	return out
-}
-
-// zombie reports a process that exited but was not reaped: it plays nothing.
-func zombie(pid string) bool {
-	b, err := os.ReadFile(filepath.Join("/proc", pid, "stat"))
-	if err != nil {
-		return false
-	}
-	// "pid (comm) state ...": comm may hold spaces and parentheses.
-	i := bytes.LastIndexByte(b, ')')
-	return i >= 0 && i+2 < len(b) && b[i+2] == 'Z'
-}
-
 func listPS() []Process {
-	out, err := proc.Command("ps", "-axo", "pid=,comm=").Output()
+	out, err := proc.Command("/bin/ps", "-axo", "pid=,comm=").Output()
 	if err != nil {
 		return nil
 	}
