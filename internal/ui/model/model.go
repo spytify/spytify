@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,6 +66,9 @@ type Row struct {
 	// LowVolume is a take saved while the player's own volume was under
 	// 100%, its name marked " (low volume)".
 	LowVolume bool
+	// Muted is a take saved with a gap where the player went silent
+	// mid-track, its name marked " (muted)".
+	Muted bool
 	// PausedFor is how long the track was paused before the pause going on,
 	// which began at PausedAt.
 	PausedFor time.Duration
@@ -76,23 +80,31 @@ func (r Row) StatusText() string {
 	if r.Status == Skipped && r.Reason != "" {
 		return fmt.Sprintf(lang.SkippedFor, ReasonText(r.Reason))
 	}
-	if r.Partial && r.Status == Saved {
-		if r.Reason == proto.SkipLowQuality {
-			return lang.SavedLowQuality
-		}
-		return lang.SavedPartial
+	if r.Status != Saved {
+		return string(r.Status)
 	}
-	if r.Status == Saved {
-		switch {
-		case r.PauseFade && r.LowVolume:
-			return lang.SavedBothIssues
-		case r.PauseFade:
-			return lang.SavedPauseFade
-		case r.LowVolume:
-			return lang.SavedLowVolume
-		}
+	// Every mark a saved take carries, in the order its file name has
+	// them: a take kept partial can have a pause fade or a mute too.
+	var marks []string
+	switch {
+	case r.Partial && r.Reason == proto.SkipLowQuality:
+		marks = append(marks, lang.LowQuality)
+	case r.Partial:
+		marks = append(marks, lang.Partial)
 	}
-	return string(r.Status)
+	if r.PauseFade {
+		marks = append(marks, lang.PauseFade)
+	}
+	if r.LowVolume {
+		marks = append(marks, lang.LowVolume)
+	}
+	if r.Muted {
+		marks = append(marks, lang.Muted)
+	}
+	if len(marks) == 0 {
+		return string(r.Status)
+	}
+	return fmt.Sprintf(lang.SavedWith, strings.ToLower(strings.Join(marks, ", ")))
 }
 
 // IsAd says the row is an ad the session skipped.
@@ -262,7 +274,11 @@ func (m *Model) Snapshot() State {
 		s.Current = &c
 	}
 	s.Rows = append([]Row(nil), s.Rows...)
-	s.Logs = append([]proto.LogEvent(nil), s.Logs...)
+	// The log lines are shared, not copied (#853): the model only ever adds
+	// lines after its last one and drops old ones from the front, so no
+	// line a snapshot holds changes. Capped, a line a reader appends goes to
+	// a copy of its own.
+	s.Logs = s.Logs[:len(s.Logs):len(s.Logs)]
 	s.Settings = make(map[string]any, len(m.s.Settings))
 	for k, v := range m.s.Settings {
 		s.Settings[k] = v
@@ -457,7 +473,7 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		}
 		m.edit(s, e.ID, func(r *Row) {
 			r.Status, r.Path, r.DurationMs, r.Bytes, r.TaggedBy = Saved, e.Path, e.DurationMs, e.Bytes, e.TaggedBy
-			r.Partial, r.PauseFade, r.LowVolume, r.Keepable = e.Partial, e.PauseFade, e.LowVolume, false
+			r.Partial, r.PauseFade, r.LowVolume, r.Muted, r.Keepable = e.Partial, e.PauseFade, e.LowVolume, e.Muted, false
 		})
 		// The tracks played again while this take was being saved have its
 		// file now.

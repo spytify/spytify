@@ -3,14 +3,12 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
-	"golang.org/x/sys/windows/registry"
 )
 
 // volumeOf is the kind of drive dir is on and its file system.
@@ -26,12 +24,6 @@ func volumeOf(dir string) (drive, fs string) {
 		fs = fileSystem(root)
 	}
 	return drive, fs
-}
-
-// systemFacts adds Controlled folder access, which keeps unknown apps out
-// of Music and Documents.
-func systemFacts(facts map[string]string) {
-	facts["output.cfa"] = cfaState()
 }
 
 func driveKind(root string) string {
@@ -142,31 +134,4 @@ func knownFolders() []namedFolder {
 		out = append(out, namedFolder{"home", home})
 	}
 	return out
-}
-
-// cfaState is Controlled folder access as Windows Security sets it, or as
-// a policy forces it.
-func cfaState() string {
-	for _, path := range []string{
-		`SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\Controlled Folder Access`,
-		`SOFTWARE\Microsoft\Windows Defender\Windows Defender Exploit Guard\Controlled Folder Access`,
-	} {
-		k, err := registry.OpenKey(registry.LOCAL_MACHINE, path, registry.QUERY_VALUE)
-		if errors.Is(err, registry.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return "unreadable"
-		}
-		v, _, err := k.GetIntegerValue("EnableControlledFolderAccess")
-		k.Close()
-		if errors.Is(err, registry.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return "unreadable"
-		}
-		return cfaMode(v)
-	}
-	return "off"
 }

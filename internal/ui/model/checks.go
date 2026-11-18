@@ -27,7 +27,7 @@ var checkNames = map[proto.CheckID][2]string{
 	proto.CheckHelper:         {lang.CheckHelper},
 	proto.CheckTapHelper:      {lang.CheckHelper},
 	proto.CheckAppleScript:    {lang.CheckAppleScript},
-	proto.CheckPowerShell:     {lang.CheckPowerShell},
+	proto.CheckMediaSessions:  {lang.CheckMediaSessions},
 	proto.CheckCapture:        {lang.CheckCapture},
 	proto.CheckNoCapture:      {lang.CheckCapture},
 	proto.CheckSessionBus:     {lang.CheckSessionBus},
@@ -85,9 +85,9 @@ func CheckDetail(c proto.Check, goos string) string {
 		if c.OK {
 			return lang.AppleScriptAsks
 		}
-	case proto.CheckPowerShell:
+	case proto.CheckMediaSessions:
 		if c.OK {
-			return fmt.Sprintf(lang.PowerShellReads, arg(c, 0))
+			return lang.MediaSessionsRead
 		}
 	case proto.CheckCapture:
 		switch {

@@ -1,11 +1,15 @@
-// The icon and version information of Spytify.exe, which
+// The icon, version information and manifest of Spytify.exe, which
 // scripts/build-windows.sh compiles with windres. The -D options give
 // VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH and VERSION; genico makes
-// spytify.ico.
+// spytify.ico. The helpers' are in helper.rc.
 #include <winver.h>
 
 // The first icon group is the one Explorer, shortcuts and the taskbar show.
 1 ICON "spytify.ico"
+
+// 1 is the manifest Windows reads when it starts the program; 24 is
+// RT_MANIFEST.
+1 24 "spytify.manifest"
 
 1 VERSIONINFO
 FILEVERSION VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, 0
@@ -21,6 +25,8 @@ BEGIN
     // US English, Unicode: the Translation below.
     BLOCK "040904B0"
     BEGIN
+      VALUE "CompanyName", "Spytify"
+      VALUE "LegalCopyright", "MIT License, https://spytify.github.io/spytify/"
       VALUE "ProductName", "Spytify"
       VALUE "ProductVersion", VERSION
       VALUE "FileDescription", "Spytify"

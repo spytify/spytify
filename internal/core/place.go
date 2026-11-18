@@ -48,7 +48,6 @@ func placeFacts(dir string, facts map[string]string) {
 	if where, cloud := musicFolder(folders); where != "" {
 		facts["output.music"], facts["output.music_cloud"] = where, cloud
 	}
-	systemFacts(facts)
 }
 
 // formatFacts writes facts as the log does: key=value, sorted.
@@ -191,23 +190,6 @@ func homes() []string {
 		out = append(out, real)
 	}
 	return out
-}
-
-// cfaMode reads Windows' EnableControlledFolderAccess value.
-func cfaMode(v uint64) string {
-	switch v {
-	case 0:
-		return "off"
-	case 1:
-		return "on"
-	case 2:
-		return "audit"
-	case 3:
-		return "disks"
-	case 4:
-		return "disks audit"
-	}
-	return strconv.FormatUint(v, 10)
 }
 
 // existingFolder is dir, or its closest parent that exists.

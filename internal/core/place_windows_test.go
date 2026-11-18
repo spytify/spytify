@@ -22,7 +22,9 @@ func TestPlaceOnWindows(t *testing.T) {
 	oneOf(t, f, "output.cloud", "none", "unknown 0x80070001")
 	oneOf(t, f, "output.known", "Music", "Documents", "Pictures", "Videos", "Desktop", "Downloads", "Favorites", "home", "elsewhere")
 	oneOf(t, f, "output.music", "home", "elsewhere")
-	oneOf(t, f, "output.cfa", "off", "on", "audit", "disks", "disks audit", "unreadable")
+	if _, ok := f["output.cfa"]; ok {
+		t.Errorf("output.cfa = %q: Spytify reads none of Windows Defender's settings", f["output.cfa"])
+	}
 }
 
 // A drive letter no drive has reads as missing: the drive was unplugged.

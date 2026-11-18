@@ -26,16 +26,21 @@ func (b Backends) New(t target.Target) (capture.Capture, meta.NowPlaying, error)
 	m.Logf = b.logf
 	m.Target(t)
 	if helper, err := capture.FindTapHelper(b.TapHelper); err == nil {
-		m.Mixer = mixer{helper: helper, t: t}
+		m.Mixer = mixer{helper: helper, t: t, capture: c}
 	}
 	return c, m, nil
 }
 
-// mixer reaches the player's audio sessions through spytify-tap.exe.
+// mixer reaches the player's audio sessions through spytify-tap.exe: the
+// capture's run reports the volume as it changes, and a run of its own
+// reads or sets it once.
 type mixer struct {
-	helper string
-	t      target.Target
+	helper  string
+	t       target.Target
+	capture *capture.Helper
 }
+
+func (x mixer) Volumes() <-chan float64 { return x.capture.Volumes() }
 
 func (x mixer) pid() (int, error) {
 	p, ok := target.FindProcess(x.t)
@@ -70,10 +75,10 @@ func (b Backends) Probe() []proto.Check {
 	} else {
 		checks = append(checks, proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: true, Detail: p, Args: []string{p}})
 	}
-	if p, err := meta.PowerShell(); err != nil {
-		checks = append(checks, proto.Check{ID: proto.CheckPowerShell, Name: "Windows PowerShell", OK: false, Detail: err.Error()})
+	if err := meta.SMTCAnswers(); err != nil {
+		checks = append(checks, proto.Check{ID: proto.CheckMediaSessions, Name: "Windows media sessions", OK: false, Detail: err.Error()})
 	} else {
-		checks = append(checks, proto.Check{ID: proto.CheckPowerShell, Name: "Windows PowerShell", OK: true, Detail: p + "; reads what plays through the media session API", Args: []string{p}})
+		checks = append(checks, proto.Check{ID: proto.CheckMediaSessions, Name: "Windows media sessions", OK: true, Detail: "reads what plays through the media session API"})
 	}
 	return checks
 }

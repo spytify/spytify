@@ -155,9 +155,9 @@ const (
 	CheckTapHelper CheckID = "tap_helper"
 	// CheckAppleScript is osascript found; Detail: why not.
 	CheckAppleScript CheckID = "applescript"
-	// CheckPowerShell is Windows PowerShell found: its path; Detail: why
-	// not.
-	CheckPowerShell CheckID = "powershell"
+	// CheckMediaSessions is Windows' media session API answering, which
+	// tells what plays; Detail: why not.
+	CheckMediaSessions CheckID = "media_sessions"
 	// CheckCapture is a Linux capture found: pipewire or pulseaudio.
 	CheckCapture CheckID = "capture"
 	// CheckNoCapture is a system with no capture: the system.
@@ -330,6 +330,10 @@ type TrackFinishedEvent struct {
 	// LowVolume is a take recorded while the player's own volume was under
 	// 100%: it is quieter than the track. Its name ends in " (low volume)".
 	LowVolume bool `json:"low_volume,omitempty"`
+	// Muted is a take the player went digitally silent in, mid-track, as
+	// when muted in its own volume: a gap is heard. Its name ends in
+	// " (muted)".
+	Muted bool `json:"muted,omitempty"`
 }
 
 // FinishTimings are the steps between the end of a track and its file.

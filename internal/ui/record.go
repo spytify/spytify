@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -94,13 +95,16 @@ type recordScreen struct {
 	// shape is which parts the screen last showed; it is laid out again
 	// only when that changes.
 	shape string
-	// shown is what the list last drew; it is not refreshed on every level
-	// event, ten times a second.
-	shown  string
-	noRows fyne.CanvasObject
-	clear  *button
-	totals *widget.RichText
-	folder string
+	// shownRows and shownLoads are what the list last drew, the rows and
+	// how many covers had loaded; listed is set once it drew. It is not
+	// refreshed on every level event, ten times a second.
+	shownRows  []model.Row
+	shownLoads int
+	listed     bool
+	noRows     fyne.CanvasObject
+	clear      *button
+	totals     *widget.RichText
+	folder     string
 }
 
 func newRecordScreen(a *App) *recordScreen {
@@ -533,8 +537,11 @@ func (r *recordScreen) render(s model.State) {
 	r.renderLive(s.Current, s.Session, s.Level)
 
 	r.rows = s.Rows
-	if shown := fmt.Sprint(r.rows, r.app.covers.loads()); shown != r.shown {
-		r.shown = shown
+	// Rows compare field by field, where printing 300 of them for the
+	// comparison cost a millisecond and 100 KB at each event (#852). The
+	// snapshot's rows are a copy of their own, so keeping them is safe.
+	if loads := r.app.covers.loads(); !r.listed || loads != r.shownLoads || !slices.Equal(r.rows, r.shownRows) {
+		r.shownRows, r.shownLoads, r.listed = r.rows, loads, true
 		r.items = sessionItems(r.rows, r.open)
 		r.list.Refresh()
 	}

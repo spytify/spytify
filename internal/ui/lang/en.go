@@ -118,11 +118,7 @@ const (
 	Saved            = "Saved"
 	Skipped          = "Skipped"
 	SkippedFor       = "Skipped: %s"
-	SavedLowQuality  = "Saved: low quality"
-	SavedPartial     = "Saved: partial"
-	SavedPauseFade   = "Saved: pause fade"
-	SavedLowVolume   = "Saved: low volume"
-	SavedBothIssues  = "Saved: pause fade, low volume"
+	SavedWith        = "Saved: %s"
 	ReasonDuplicate  = "already recorded"
 	ReasonTooShort   = "too short"
 	ReasonAd         = "advert"
@@ -155,15 +151,16 @@ const (
 	LowQuality      = "Low quality"
 	PauseFade       = "Pause fade"
 	LowVolume       = "Low volume"
-	WithIssues      = "With issues"
+	Muted           = "Muted"
+	VolumeIssues    = "Volume issues"
 	NoFiles         = "No files"
 	Rescan          = "Rescan"
 	AllFiles        = "All files"
 	NoRecordingsYet = "No recordings yet"
 	LibraryEmpty    = "Recorded tracks land in %s."
 	TickAKind       = "Tick a kind of file to show."
-	NoTakesYet      = "None yet: Keep anyway saves takes cut short or in low quality; takes with a pause fade or a low volume are marked."
-	OnlyTakes       = "Every file here is a take cut short, in low quality, or with a pause fade or a low volume."
+	NoTakesYet      = "None yet: Keep anyway saves takes cut short or in low quality; takes with a pause fade, a low volume or a mute are marked."
+	OnlyTakes       = "Every file here is a take cut short, in low quality, or with a volume issue: a pause fade, a low volume or a mute."
 	NothingMatches  = `Nothing matches "%s".`
 	OneFile         = "1 file"
 	Files           = "%d files"
@@ -235,7 +232,7 @@ const (
 // one when the check fails if it says so, then the details that word what
 // the recorder found. CheckEncoder takes the encoder; TargetProcess the
 // process names; ForFormat the format; MacOSVersion the version;
-// WindowsBuild the build; HelperMacOS and PowerShellReads a path;
+// WindowsBuild the build; HelperMacOS a path;
 // NoCaptureBackend the system; Rates and RatesOnly the allowed rates.
 const (
 	CheckTarget             = "target configured"
@@ -253,7 +250,7 @@ const (
 	CheckWindows            = "Windows 10 2004 or later"
 	CheckHelper             = "capture helper"
 	CheckAppleScript        = "AppleScript"
-	CheckPowerShell         = "Windows PowerShell"
+	CheckMediaSessions      = "Windows media sessions"
 	CheckCapture            = "capture"
 	CheckSessionBus         = "D-Bus session bus"
 	CheckSampleRates        = "PipeWire sample rates"
@@ -266,7 +263,7 @@ const (
 	WindowsBuild            = "build %s"
 	HelperMacOS             = "%s; macOS asks once for System Audio Recording permission"
 	AppleScriptAsks         = "macOS asks once to let spytify control the player"
-	PowerShellReads         = "%s; reads what plays through the media session API"
+	MediaSessionsRead       = "reads what plays through the media session API"
 	CapturePipeWire         = "PipeWire (pw-record)"
 	CapturePulseAudio       = "PulseAudio (parec)"
 	InstallCapture          = "install pipewire-bin (pw-record, pw-dump) or pulseaudio-utils"
@@ -291,7 +288,7 @@ const (
 	NoAudioMacOS       = "If macOS asks to let Spytify record system audio, allow it; it is in System Settings > Privacy & Security > Screen & System Audio Recording."
 	NoAudioWindows     = "Check that the Windows Audio service runs and that the player plays on an output device."
 	NoAudioLinux       = "Check that PipeWire runs: systemctl --user restart pipewire."
-	OnlySilence        = "Only silence from the player for 30 s while it plays."
+	OnlySilence        = "Only silence from the player for 10 s while it plays."
 	OnlySilenceMacOS   = "Check that the player is not muted in its own volume; if it is not, macOS gives Spytify silence when it may not record system audio: allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then quit and reopen Spytify."
 	OnlySilenceWindows = "Check that the player is not muted in its own volume, nor in the Volume mixer."
 	OnlySilenceLinux   = "Check that the player is not muted in its own volume, nor in the system's sound settings."

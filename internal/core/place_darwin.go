@@ -65,5 +65,3 @@ func knownFolders() []namedFolder {
 	}
 	return append(out, namedFolder{"home", home})
 }
-
-func systemFacts(map[string]string) {}

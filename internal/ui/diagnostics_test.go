@@ -228,3 +228,50 @@ func TestOnlySilenceLeadsToThePlayerHeardCheck(t *testing.T) {
 		t.Fatalf("alert still shows %q with sound again", r.alert.String())
 	}
 }
+
+// windowsInfo is a Windows recorder's info, ending with check.
+func windowsInfo(check proto.Check) proto.CoreInfoResult {
+	in := info()
+	in.Platform = "windows/amd64"
+	in.Checks = []proto.Check{
+		{ID: proto.CheckTarget, Name: "target configured", OK: true, Detail: "SPYTIFY_TARGET_PROCESS=Player", Args: []string{"Player"}},
+		{ID: proto.CheckPlayerRunning, Name: "player running", OK: true, Detail: "pid 4242", Args: []string{"4242"}},
+		{ID: proto.CheckFFmpeg, Name: "ffmpeg found", OK: true, Detail: "ffmpeg version 9.0.2"},
+		{ID: proto.CheckWindows, Name: "Windows 10 2004 or later", OK: true, Detail: "build 26100", Args: []string{"26100"}},
+		{ID: proto.CheckHelper, Name: "capture helper", OK: true, Detail: `C:\Users\listener\Spytify\spytify-tap.exe`, Args: []string{`C:\Users\listener\Spytify\spytify-tap.exe`}},
+		check,
+	}
+	return in
+}
+
+// On Windows, the media session API's check says what the API is for, and
+// Windows' error when it does not answer.
+func TestTheMediaSessionsCheck(t *testing.T) {
+	answers := proto.Check{ID: proto.CheckMediaSessions, Name: "Windows media sessions", OK: true, Detail: "reads what plays through the media session API"}
+	silent := proto.Check{ID: proto.CheckMediaSessions, Name: "Windows media sessions", Detail: "Class not registered"}
+	for _, c := range []struct {
+		snapshot     string
+		check        proto.Check
+		name, detail string
+	}{
+		{"logs-diagnostics-windows", answers, lang.CheckMediaSessions, lang.MediaSessionsRead},
+		{"logs-diagnostics-windows-fails", silent, lang.CheckMediaSessions, "Class not registered"},
+	} {
+		if got := model.CheckName(c.check); got != c.name {
+			t.Errorf("%s: name %q, want %q", c.snapshot, got, c.name)
+		}
+		if got := model.CheckDetail(c.check, "windows"); got != c.detail {
+			t.Errorf("%s: detail %q, want %q", c.snapshot, got, c.detail)
+		}
+		a, m := connectedTestApp(t, defaults())
+		m.SetInfo(windowsInfo(c.check))
+		a.showTab(tabLogs)
+		a.render()
+		tapButton(t, a.win.Content(), lang.Diagnostics)
+		if d := texts(overlay(t, a)); !contains(d, c.name) || !contains(d, c.detail) {
+			t.Errorf("%s: the diagnostics show %v", c.snapshot, d)
+		}
+		snapshot(t, a, c.snapshot)
+		tapButton(t, overlay(t, a), lang.Close)
+	}
+}
