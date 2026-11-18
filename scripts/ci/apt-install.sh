@@ -4,13 +4,14 @@
 # a connection silent for 30 s and retries it itself; the update and the
 # download get 5 minutes a try, three tries, the second and third from the
 # main archive instead of the runner's mirror. Then the install reads the
-# downloaded packages.
+# downloaded packages. The update and the download print each file they
+# get (-q, not -qq), so a try that stalls says which source and which file.
 #   scripts/ci/apt-install.sh <package>...
 
 opts=(-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3)
 for try in 1 2 3; do
-  sudo timeout 300 apt-get "${opts[@]}" update -qq &&
-    sudo timeout 300 apt-get "${opts[@]}" install -y -qq --download-only "$@" && break
+  sudo timeout 300 apt-get "${opts[@]}" update -q &&
+    sudo timeout 300 apt-get "${opts[@]}" install -y -q --download-only "$@" && break
   if [ "$try" = 3 ]; then
     echo "apt failed or stalled three times" >&2
     exit 1
