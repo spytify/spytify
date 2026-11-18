@@ -306,7 +306,7 @@ const (
 	// OutputDeniedWindows follows a write to the output folder that Windows
 	// refused, access denied. Spytify never reads Defender's settings: the
 	// refusal alone says it.
-	OutputDeniedWindows = "Windows' ransomware protection may be holding this folder. To let Spytify write there, open Windows Security > Virus & threat protection > Manage ransomware protection > Allow an app through Controlled folder access, and add spytifyd.exe and ffmpeg.exe from Spytify's folder."
+	OutputDeniedWindows = "Windows Security settings may be holding this folder. To let Spytify write there, open Windows Security > Virus & threat protection > Manage ransomware protection > Allow an app through Controlled folder access, and add spytifyd.exe and ffmpeg.exe from Spytify's folder."
 )
 
 // About. Versions takes the app's version, the recorder's, then the
