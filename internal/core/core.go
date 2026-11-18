@@ -690,8 +690,9 @@ func (c *Core) Shutdown() {
 
 // ensureTarget launches the player with SPYTIFY_TARGET_LAUNCH when it is
 // not running, retrying 5 times 3 seconds apart as v1 did.
-// launch starts the player: SPYTIFY_TARGET_LAUNCH when it is set, else the
-// OS's own way to open an app by its bundle id or name.
+// launch starts the player: SPYTIFY_TARGET_LAUNCH when it is set (a shell
+// command, so cmd /C on Windows), else the OS's own way to open an app by
+// its bundle id or name, which on Windows is the shell with no cmd.exe.
 func (c *Core) launch() error {
 	t := c.env.Target
 	var cmd *exec.Cmd
@@ -707,7 +708,11 @@ func (c *Core) launch() error {
 	case runtime.GOOS == "darwin":
 		cmd = proc.Command("/usr/bin/open", "-a", t.ProcessNames[0])
 	case runtime.GOOS == "windows":
-		cmd = proc.Command("cmd", "/C", "start", "", t.ProcessNames[0])
+		c.log.Infof("starting the player: ShellExecuteEx open %s", t.ProcessNames[0])
+		if err := openApp(t.ProcessNames[0]); err != nil {
+			return fmt.Errorf("start the player: %w", err)
+		}
+		return nil
 	default:
 		cmd = proc.Command(t.ProcessNames[0])
 	}

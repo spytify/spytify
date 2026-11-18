@@ -39,6 +39,25 @@ func TestOpenRunsNoCommandFromTheFileName(t *testing.T) {
 	}
 }
 
+// Reveal asks the shell to show a file in its folder. A runner may show no
+// window; the call must not fail. A missing file is an error, not a window
+// on the wrong folder. It opens an Explorer window, so it runs on CI only, or
+// with SPYTIFY_REAL_OPEN set.
+func TestRevealShowsAFileInItsFolder(t *testing.T) {
+	if os.Getenv("CI") == "" && os.Getenv("SPYTIFY_REAL_OPEN") == "" {
+		t.Skip("opens an Explorer window: set SPYTIFY_REAL_OPEN=1 to run it")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a track & more.mp3")
+	write(t, path, "Spytify reveal test\r\n")
+	if err := Reveal(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := Reveal(filepath.Join(dir, "missing.mp3")); err == nil {
+		t.Error("Reveal of a missing file returned no error")
+	}
+}
+
 func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

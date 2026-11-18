@@ -7,7 +7,9 @@
 // nothing: antivirus engines take a program with no version information
 // or manifest for commodity malware, and the rest for a hidden payload and
 // a loader's entry points. With -helper, for the binaries with no icon,
-// all but the icon and opengl32.dll.
+// all but the icon and opengl32.dll, and that one importing LoadLibraryA
+// or LoadLibraryW, which look for a DLL in the program's folder first,
+// imports SetDefaultDllDirectories too.
 // scripts/build-windows.sh runs it on every binary it builds:
 //
 //	go run ./internal/tools/checkexe bin/windows/Spytify.exe
@@ -72,6 +74,15 @@ func check(path string, helper bool) (string, error) {
 	if dir.VirtualAddress != 0 {
 		return "", fmt.Errorf("an export table of %d bytes, which antivirus engines read as a loader's entry points: clear it with noexports", dir.Size)
 	}
+	if helper {
+		loaders, err := bareLoaders(path)
+		if err != nil {
+			return "", err
+		}
+		if len(loaders) > 0 {
+			return "", fmt.Errorf("imports %s, which looks for a DLL in the program's folder first, and not SetDefaultDllDirectories: call it with LOAD_LIBRARY_SEARCH_SYSTEM32 first thing", strings.Join(loaders, ", "))
+		}
+	}
 	counts, err := resources(path)
 	if err != nil {
 		return "", err
@@ -80,7 +91,7 @@ func check(path string, helper bool) (string, error) {
 		return "", fmt.Errorf("%d version resources, %d manifests: unsigned, a program without them looks like commodity malware", counts[rtVersion], counts[rtManifest])
 	}
 	if helper {
-		return "version information, a manifest, nothing past the last section, no exports", nil
+		return "version information, a manifest, nothing past the last section, no exports, no DLL search in its folder", nil
 	}
 	if counts[rtGroupIcon] == 0 || counts[rtIcon] == 0 {
 		return "", fmt.Errorf("%d icon groups, %d icon images", counts[rtGroupIcon], counts[rtIcon])
@@ -234,6 +245,39 @@ func linked(path, dll string) ([]string, error) {
 		return nil, err
 	}
 	return importsFrom(syms, dll), nil
+}
+
+// bareLoaders lists the functions of kernel32.dll the PE file at path
+// imports that load a DLL by name from the program's folder first, when it
+// does not also import SetDefaultDllDirectories to keep that folder out.
+func bareLoaders(path string) ([]string, error) {
+	f, err := pe.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	syms, err := f.ImportedSymbols()
+	if err != nil {
+		return nil, err
+	}
+	return loadersByName(importsFrom(syms, "kernel32.dll")), nil
+}
+
+// loadersByName keeps LoadLibraryA and LoadLibraryW from functions, unless
+// SetDefaultDllDirectories is one of them. LoadLibraryEx takes the folders
+// to look in: Go's runtime passes LOAD_LIBRARY_SEARCH_SYSTEM32. MinGW's
+// CRT imports LoadLibraryW for advapi32.dll, a KnownDLL, before main.
+func loadersByName(functions []string) []string {
+	var out []string
+	for _, fn := range functions {
+		switch fn {
+		case "SetDefaultDllDirectories":
+			return nil
+		case "LoadLibraryA", "LoadLibraryW":
+			out = append(out, fn)
+		}
+	}
+	return out
 }
 
 // importsFrom keeps the imports, given as "function:DLL", from dll.
