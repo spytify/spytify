@@ -20,18 +20,52 @@ import (
 // With it off, or in a build without one, it shows them, for the user to
 // report on GitHub if they want.
 func (a *App) checkCrashes() {
-	prefs := a.fa.Preferences()
-	on := a.tel.Enabled()
-	var unsent []telemetry.Crash
-	for _, cr := range telemetry.FindCrashes(a.opts.StateDir, prefs, time.Now()) {
-		telemetry.MarkHandled(prefs, cr)
-		if on {
-			go func(cr telemetry.Crash) { _ = a.tel.SendCrash(cr) }(cr)
-		} else {
-			unsent = append(unsent, cr)
-		}
+	a.handleCrashes(a.takeCrashes())
+}
+
+// checkCrashesLater is checkCrashes with the crash logs read off the
+// toolkit's goroutine: at launch, before the first frame, and at every
+// connection to the recorder or loss of it (#855).
+func (a *App) checkCrashesLater() {
+	// Fyne's test driver runs fyne.Do on the calling goroutine, not the
+	// toolkit's: tests look on theirs, as the Library's scan does.
+	if a.opts.ManualRender {
+		a.checkCrashes()
+		return
 	}
-	a.showCrashes(unsent)
+	a.reports.Go(func() {
+		if crashes := a.takeCrashes(); len(crashes) > 0 {
+			fyne.Do(func() { a.handleCrashes(crashes) })
+		}
+	})
+}
+
+// findCrashes is telemetry.FindCrashes; tests replace it.
+var findCrashes = telemetry.FindCrashes
+
+// takeCrashes reads the crashes left behind and marks them handled, one
+// look at a time, so that two never take the same crash.
+func (a *App) takeCrashes() []telemetry.Crash {
+	a.crashMu.Lock()
+	defer a.crashMu.Unlock()
+	prefs := a.fa.Preferences()
+	crashes := findCrashes(a.opts.StateDir, prefs, time.Now())
+	for _, cr := range crashes {
+		telemetry.MarkHandled(prefs, cr)
+	}
+	return crashes
+}
+
+// handleCrashes sends crashes with the bug tracker on, and shows them
+// otherwise.
+func (a *App) handleCrashes(crashes []telemetry.Crash) {
+	if a.tel.Enabled() {
+		for _, cr := range crashes {
+			go func(cr telemetry.Crash) { _ = a.tel.SendCrash(cr) }(cr)
+		}
+		return
+	}
+	a.showCrashes(crashes)
 }
 
 // showCrashes shows the crashes one after the other.
