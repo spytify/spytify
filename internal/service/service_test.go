@@ -138,7 +138,8 @@ func TestBothUnitsAreHardened(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, unit := range map[string]string{"packaged": string(packaged), "written": string(p.Content)} {
+	// Windows CI checks the repository out with CRLF line ends.
+	for name, unit := range map[string]string{"packaged": strings.ReplaceAll(string(packaged), "\r\n", "\n"), "written": string(p.Content)} {
 		lines := strings.Split(unit, "\n")
 		for _, want := range []string{
 			"NoNewPrivileges=yes",
