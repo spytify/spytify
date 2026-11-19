@@ -296,7 +296,10 @@ func (r *rig) giveUp() {
 // queued itself meanwhile, at a track already recorded, can still wait in
 // stopCh: Run is done with it once it is taken and another chunk is.
 func (r *rig) settle() bool {
-	ok := deliver(r, r.frames, capture.Chunk{}) && deliver(r, r.frames, capture.Chunk{})
+	ok := deliver(r, r.frames, capture.Chunk{})
+	if ok {
+		ok = deliver(r, r.frames, capture.Chunk{})
+	}
 	for ok && len(r.s.stopCh) > 0 {
 		ok = r.takeStops() && deliver(r, r.frames, capture.Chunk{})
 	}
