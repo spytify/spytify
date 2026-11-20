@@ -57,6 +57,10 @@ func SMTCAnswers() error {
 
 var errRefused = errors.New("the player refused")
 
+// errNoTimeline is a session that answers its timeline with nothing: the
+// player is there, but says nothing of where it is for a moment.
+var errNoTimeline = errors.New("the session has no timeline")
+
 // openSMTC gives the media session API; tests replace it.
 var openSMTC = newSMTCAPI
 
@@ -133,7 +137,14 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 					m.Logf("now playing: %s", poll.Error)
 				}
 			}
-			for _, e := range tracker.next(poll) {
+			// A session with no timeline says nothing of the player: the
+			// tracker keeps what it knew until the next read, rather than
+			// see the player gone and back in the middle of a track.
+			var evs []Event
+			if !poll.skip {
+				evs = tracker.next(poll)
+			}
+			for _, e := range evs {
 				select {
 				case out <- e:
 				case <-ctx.Done():
@@ -164,6 +175,10 @@ func (p *smtcPoller) poll(api smtcAPI, names []string, now time.Time) playerPoll
 	s, err := api.session(names)
 	if err != nil {
 		out.Error = err.Error()
+	}
+	if errors.Is(err, errNoTimeline) {
+		out.skip = true
+		return out
 	}
 	if s == nil {
 		return out

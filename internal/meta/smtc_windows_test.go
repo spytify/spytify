@@ -67,8 +67,8 @@ func TestSMTCAnswersOnWindows(t *testing.T) {
 	}
 }
 
-// A session that answers its timeline with nothing and no error is a failed
-// read, not a crash of the recorder (#933).
+// A session that answers its timeline with nothing and no error is a read
+// with no timeline, not a crash of the recorder (#933).
 func TestSMTCSessionWithNoTimeline(t *testing.T) {
 	type vtbl struct {
 		ole.IInspectableVtbl
@@ -86,8 +86,8 @@ func TestSMTCSessionWithNoTimeline(t *testing.T) {
 	s := &control.GlobalSystemMediaTransportControlsSession{IUnknown: ole.IUnknown{RawVTable: (*any)(unsafe.Pointer(v))}}
 
 	r := &smtcSession{}
-	if err := readTimeline(s, r); err == nil {
-		t.Fatalf("readTimeline = nil, want an error; session %+v", r)
+	if err := readTimeline(s, r); !errors.Is(err, errNoTimeline) {
+		t.Fatalf("readTimeline = %v, want errNoTimeline; session %+v", err, r)
 	}
 }
 

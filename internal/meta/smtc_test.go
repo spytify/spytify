@@ -236,6 +236,52 @@ func TestSMTCWatchReadsTheSession(t *testing.T) {
 	}
 }
 
+// A session that answers with no timeline in the middle of a track is still
+// the player's: the track goes on, the player is neither gone nor back, and
+// the track is not named again (#933).
+func TestSMTCWatchGoesOnThroughASessionWithNoTimeline(t *testing.T) {
+	song := func(status string, pos time.Duration) fakeRead {
+		return fakeRead{s: &smtcSession{Status: status, Position: pos, Length: 3 * time.Minute, Title: "Song", Artist: "Artist", Album: "Album"}}
+	}
+	api := &fakeSMTC{reads: []fakeRead{
+		song("playing", time.Minute),
+		{err: errNoTimeline},
+		{err: errNoTimeline},
+		song("paused", time.Minute),
+		{},
+	}}
+	useSMTC(t, api)
+	m := NewSMTC()
+	m.Interval = time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events, err := m.Watch(ctx, target.Target{ProcessNames: []string{"Player.exe"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []Event
+	timeout := time.After(10 * time.Second)
+	for done := false; !done; {
+		select {
+		case e := <-events:
+			got = append(got, e)
+			done = e.Kind == PlayerGone
+		case <-timeout:
+			t.Fatalf("events so far: %+v", got)
+		}
+	}
+	tracks := 0
+	for _, e := range got {
+		if e.Kind == TrackChanged {
+			tracks++
+		}
+	}
+	paused := slices.ContainsFunc(got, func(e Event) bool { return e.Kind == StatusChanged && e.Status == Paused })
+	if tracks != 1 || !paused || slices.ContainsFunc(got, func(e Event) bool { return e.Kind == PlayerAppeared }) {
+		t.Fatalf("events %+v, want the track once, then paused, then the player gone at the end", got)
+	}
+}
+
 // Control says what went wrong: no session, or the player refused.
 func TestSMTCControlSaysTheAnswer(t *testing.T) {
 	api := &fakeSMTC{replies: []error{nil, ErrNoPlayer, errRefused, errors.New("no answer in 10s")}}
