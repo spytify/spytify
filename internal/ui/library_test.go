@@ -87,15 +87,29 @@ func tick(l *libraryScreen, kinds ...string) {
 // function it returns.
 func holdTags(t *testing.T, l *libraryScreen) func() {
 	t.Helper()
-	for range cap(l.tagged.slots) {
-		l.tagged.slots <- struct{}{}
+	return holdSlots(t, l.tagged.slots)
+}
+
+// holdCovers keeps the covers from being loaded until the test ends or
+// calls the function it returns.
+func holdCovers(t *testing.T, a *App) func() {
+	t.Helper()
+	return holdSlots(t, a.covers.slots)
+}
+
+// holdSlots takes every slot of a background reader, so none of its reads
+// runs until the test ends or calls the function it returns.
+func holdSlots(t *testing.T, slots chan struct{}) func() {
+	t.Helper()
+	for range cap(slots) {
+		slots <- struct{}{}
 	}
 	held := true
 	release := func() {
 		if held {
 			held = false
-			for range cap(l.tagged.slots) {
-				<-l.tagged.slots
+			for range cap(slots) {
+				<-slots
 			}
 		}
 	}
