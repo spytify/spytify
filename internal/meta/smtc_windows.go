@@ -230,7 +230,7 @@ func readTimeline(s *control.GlobalSystemMediaTransportControlsSession, r *smtcS
 	}
 	// The player can answer with no timeline and no error.
 	if tl == nil {
-		return errors.New("the session has no timeline")
+		return errNoTimeline
 	}
 	defer tl.Release()
 	pos, err := tl.GetPosition()
