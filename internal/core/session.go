@@ -345,7 +345,7 @@ func (s *Session) Run(ctx context.Context, frames <-chan capture.Chunk, events <
 	v := s.deps.values()
 	s.tmpDir = filepath.Join(v.Path(settings.OutputDir), ".spytify")
 	if err := os.MkdirAll(s.tmpDir, 0o755); err != nil {
-		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorOutputDir, Msg: err.Error(), Fatal: true})
+		s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorOutputDir, Msg: err.Error(), Fatal: true, Denied: denied(err)})
 		s.done = true
 	}
 	// Clients learn that a session runs from this first transition.

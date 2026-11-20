@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spytify/spytify/internal/ui/lang"
 	"github.com/spytify/spytify/pkg/proto"
 )
 
@@ -93,5 +94,58 @@ func TestTheSilenceWarningSaysThePlayersVolumeFirst(t *testing.T) {
 		if volume < 0 || !strings.Contains(w[volume:], then) {
 			t.Errorf("%s: %q, want the player's own volume, then %q", goos, w, then)
 		}
+	}
+}
+
+// A write to the output folder that Windows refused, access denied, says
+// after the recorder's reason that ransomware protection may hold the
+// folder and how to let Spytify write there; in the check's detail and in
+// the session's warnings alike (#887). On macOS and Linux it says the
+// system refused and what to do. A write that failed for another reason
+// keeps its reason alone.
+func TestADeniedOutputFolderNamesRansomwareProtectionOnWindows(t *testing.T) {
+	const reason = `mkdir C:\Users\u\Music\Spytify: Access is denied.`
+	check := proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: reason, Args: []string{"denied"}}
+	events := []proto.ErrorEvent{
+		{Code: proto.ErrorOutputDir, Msg: reason, Fatal: true, Denied: true},
+		{Code: proto.ErrorTempFile, Msg: `open C:\Users\u\Music\Spytify\.spytify\s-1.wav: Access is denied.`, Denied: true},
+		{Code: proto.ErrorRename, Msg: "Midnight Ferry: rename: Access is denied.", Denied: true},
+	}
+	want := reason + " " + lang.OutputDeniedWindows
+	if got := CheckDetail(check, "windows"); got != want {
+		t.Errorf("check on windows: %q, want %q", got, want)
+	}
+	for _, e := range events {
+		if got := WarningText(e, "windows"); got != e.Msg+" "+lang.OutputDeniedWindows {
+			t.Errorf("%s on windows: %q, want the reason then the ransomware protection", e.Code, got)
+		}
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		if got := CheckDetail(check, goos); got != reason+" "+lang.OutputDenied {
+			t.Errorf("check on %s: %q, want the reason then the generic advice", goos, got)
+		}
+		for _, e := range events {
+			if got := WarningText(e, goos); got != e.Msg+" "+lang.OutputDenied {
+				t.Errorf("%s on %s: %q, want the reason then the generic advice", e.Code, goos, got)
+			}
+		}
+	}
+	// A reason with no period, as Go words "permission denied" on macOS
+	// and Linux, gets one before the advice.
+	unix := check
+	unix.Detail = "mkdir /Users/u/Music/Spytify: permission denied"
+	if got := CheckDetail(unix, "darwin"); got != unix.Detail+". "+lang.OutputDenied {
+		t.Errorf("check on darwin: %q, want a period before the advice", got)
+	}
+	notDenied := check
+	notDenied.Args = nil
+	notDenied.Detail = `mkdir E:\Spytify: The system cannot find the path specified.`
+	for _, goos := range []string{"windows", "darwin", "linux"} {
+		if got := CheckDetail(notDenied, goos); got != notDenied.Detail {
+			t.Errorf("unreachable folder on %s: %q, want the reason alone", goos, got)
+		}
+	}
+	if !strings.Contains(lang.OutputDeniedWindows, "spytifyd.exe") || !strings.Contains(lang.OutputDeniedWindows, "ffmpeg.exe") {
+		t.Errorf("%q does not name both programs that write there", lang.OutputDeniedWindows)
 	}
 }

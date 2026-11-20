@@ -99,6 +99,10 @@ func CheckDetail(c proto.Check, goos string) string {
 		return lang.CapturePipeWire
 	case proto.CheckNoCapture:
 		return fmt.Sprintf(lang.NoCaptureBackend, arg(c, 0))
+	case proto.CheckOutputWritable:
+		if !c.OK && arg(c, 0) == "denied" {
+			return withDenied(c.Detail, goos)
+		}
 	case proto.CheckSampleRates:
 		rates := strings.Join(c.Args, ", ")
 		switch {
