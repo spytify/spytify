@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -279,6 +281,67 @@ func TestSMTCWatchGoesOnThroughASessionWithNoTimeline(t *testing.T) {
 	paused := slices.ContainsFunc(got, func(e Event) bool { return e.Kind == StatusChanged && e.Status == Paused })
 	if tracks != 1 || !paused || slices.ContainsFunc(got, func(e Event) bool { return e.Kind == PlayerAppeared }) {
 		t.Fatalf("events %+v, want the track once, then paused, then the player gone at the end", got)
+	}
+}
+
+// The first moment of a watch with no timeline is reported once the
+// timeline is back, with how long it lasted and what the session said of
+// itself; a later one is not. One that goes on is reported while it does
+// (#933).
+func TestSMTCWatchReportsASessionWithNoTimeline(t *testing.T) {
+	song := func(status string) fakeRead {
+		return fakeRead{s: &smtcSession{Status: status, Position: time.Minute, Length: 3 * time.Minute, Title: "Song", Artist: "Artist", Album: "Album"}}
+	}
+	none := fakeRead{s: &smtcSession{Status: "playing", App: "Player.App"}, err: errNoTimeline}
+	for _, c := range []struct {
+		name  string
+		reads []fakeRead
+		after time.Duration
+		want  map[string]string
+	}{
+		{"back", []fakeRead{song("playing"), none, none, song("playing"), none, song("paused"), {}}, time.Hour,
+			map[string]string{"smtc.reads": "2", "smtc.back": "yes", "smtc.state": "playing", "smtc.app": "Player.App"}},
+		{"going on", []fakeRead{song("playing"), none, song("paused"), {}}, 0,
+			map[string]string{"smtc.reads": "1", "smtc.back": "no", "smtc.state": "playing", "smtc.app": "Player.App"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			old := noTimelineFor
+			noTimelineFor = c.after
+			t.Cleanup(func() { noTimelineFor = old })
+			useSMTC(t, &fakeSMTC{reads: c.reads})
+			m := NewSMTC()
+			m.Interval = time.Millisecond
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			events, err := m.Watch(ctx, target.Target{ProcessNames: []string{"Player.exe"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var reports []Event
+			timeout := time.After(10 * time.Second)
+			for done := false; !done; {
+				select {
+				case e := <-events:
+					if e.Kind == NoTimeline {
+						reports = append(reports, e)
+					}
+					done = e.Kind == PlayerGone
+				case <-timeout:
+					t.Fatalf("reports so far: %+v", reports)
+				}
+			}
+			if len(reports) != 1 {
+				t.Fatalf("reports %+v, want one", reports)
+			}
+			got := maps.Clone(reports[0].Facts)
+			if _, err := strconv.Atoi(got["smtc.gap_ms"]); err != nil {
+				t.Errorf("smtc.gap_ms %q", got["smtc.gap_ms"])
+			}
+			delete(got, "smtc.gap_ms")
+			if !maps.Equal(got, c.want) {
+				t.Errorf("facts %v, want %v", got, c.want)
+			}
+		})
 	}
 }
 

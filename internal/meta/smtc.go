@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,8 @@ import (
 
 // smtcSession is one read of the target's media session.
 type smtcSession struct {
+	// App is the session's app id.
+	App string
 	// Status is playing, paused or stopped.
 	Status string
 	// Position is where the player was at Updated, its last report.
@@ -60,6 +63,10 @@ var errRefused = errors.New("the player refused")
 // errNoTimeline is a session that answers its timeline with nothing: the
 // player is there, but says nothing of where it is for a moment.
 var errNoTimeline = errors.New("the session has no timeline")
+
+// noTimelineFor is how long a session with no timeline lasts before it is
+// reported while still going on; tests shorten it.
+var noTimelineFor = 10 * time.Second
 
 // openSMTC gives the media session API; tests replace it.
 var openSMTC = newSMTCAPI
@@ -129,8 +136,10 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 		tick := time.NewTicker(interval)
 		defer tick.Stop()
 		lastErr := ""
+		var gap noTimeline
 		for {
-			poll := p.poll(api, names, time.Now())
+			now := time.Now()
+			poll := p.poll(api, names, now)
 			if poll.Error != lastErr {
 				lastErr = poll.Error
 				if poll.Error != "" && m.Logf != nil {
@@ -143,6 +152,9 @@ func (m *SMTC) Watch(ctx context.Context, t target.Target) (<-chan Event, error)
 			var evs []Event
 			if !poll.skip {
 				evs = tracker.next(poll)
+			}
+			if e, ok := gap.next(poll, now); ok {
+				evs = append(evs, e)
 			}
 			for _, e := range evs {
 				select {
@@ -178,6 +190,9 @@ func (p *smtcPoller) poll(api smtcAPI, names []string, now time.Time) playerPoll
 	}
 	if errors.Is(err, errNoTimeline) {
 		out.skip = true
+		if s != nil {
+			out.State, out.app = s.Status, s.App
+		}
 		return out
 	}
 	if s == nil {
@@ -336,3 +351,34 @@ const (
 
 // nextAwait is the wait after d.
 func nextAwait(d time.Duration) time.Duration { return min(d*2, awaitLast) }
+
+// noTimeline follows the reads of a session with no timeline, which nobody
+// has seen happen (#933): the first such moment of a watch is reported once
+// the timeline is back, or once it lasted noTimelineFor.
+type noTimeline struct {
+	reads      int
+	from       time.Time
+	state, app string
+	reported   bool
+}
+
+func (g *noTimeline) next(p playerPoll, now time.Time) (Event, bool) {
+	if p.skip {
+		if g.reads == 0 {
+			g.from, g.state, g.app = now, p.State, p.app
+		}
+		g.reads++
+	}
+	if g.reads == 0 || g.reported || (p.skip && now.Sub(g.from) < noTimelineFor) {
+		return Event{}, false
+	}
+	g.reported = true
+	e := Event{Kind: NoTimeline, PositionMs: -1, Facts: map[string]string{
+		"smtc.reads":  strconv.Itoa(g.reads),
+		"smtc.gap_ms": strconv.FormatInt(now.Sub(g.from).Milliseconds(), 10),
+		"smtc.back":   map[bool]string{true: "no", false: "yes"}[p.skip],
+		"smtc.state":  g.state,
+		"smtc.app":    g.app,
+	}}
+	return e, true
+}

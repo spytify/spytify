@@ -428,6 +428,10 @@ const (
 	ErrorEncode      ErrorCode = "encode"
 	ErrorRename      ErrorCode = "rename"
 	ErrorCounterFull ErrorCode = "counter_full"
+	// ErrorNoTimeline is the player's media session answering with no
+	// timeline, on Windows, in Facts: for the bug tracker only, the window
+	// shows nothing of it (#933).
+	ErrorNoTimeline ErrorCode = "no_timeline"
 )
 
 // ErrorEvent is a failure or a warning, by its code. Msg is what the

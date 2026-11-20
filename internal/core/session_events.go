@@ -3,9 +3,11 @@ package core
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +56,8 @@ func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 		s.onSeek(ev.PositionMs, at)
 	case meta.VolumeChanged:
 		s.onVolume(ev.Volume)
+	case meta.NoTimeline:
+		s.onNoTimeline(ev.Facts)
 	}
 	s.progress()
 }
@@ -279,4 +283,22 @@ func (s *Session) startFromInitial(st meta.Status, at int64) {
 	}
 	s.cur = ghost
 	s.deps.log.Infof("%q is already playing; recording starts with the next track", info.Title)
+}
+
+// onNoTimeline reports the player's media session answering with no
+// timeline, with what the session knew besides: whether a take was going
+// on, and how long ago the computer woke (#933).
+func (s *Session) onNoTimeline(facts map[string]string) {
+	facts = maps.Clone(facts)
+	facts["smtc.player_status"] = string(s.status)
+	facts["smtc.in_take"] = yesNo(s.cur != nil)
+	facts["smtc.since_wake_s"] = "none"
+	if s.deps.sinceWake != nil {
+		if d, ok := s.deps.sinceWake(); ok {
+			facts["smtc.since_wake_s"] = strconv.FormatInt(int64(d.Seconds()), 10)
+		}
+	}
+	msg := fmt.Sprintf("the player's media session had no timeline for %s reads", facts["smtc.reads"])
+	s.deps.log.Infof("%s", msg)
+	s.deps.emit(proto.EventError, proto.ErrorEvent{Code: proto.ErrorNoTimeline, Msg: msg, Facts: facts})
 }
