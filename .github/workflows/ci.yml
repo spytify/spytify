@@ -60,6 +60,10 @@ jobs:
       # failed it on a slow runner. 40m leaves room for it to grow.
       - name: Unit, scenario, UI and end-to-end tests
         run: go run gotest.tools/gotestsum@v1.12.3 --format testname --jsonfile test.jsonl -- -race -timeout 40m ./...
+      # The window's memory test plays 220 tracks: 5 minutes under -race on
+      # the macOS runner, 8 s without. It is built only without -race.
+      - name: The window's memory over 220 tracks
+        run: go test -count=1 -run '^TestTracksDoNotGrowTheWindowsMemory$' ./internal/ui
       - name: What macOS said about Apple events (on failure)
         if: failure() && runner.os == 'macOS'
         run: log show --last 10m --style compact --predicate 'subsystem == "com.apple.TCC" OR process == "appleeventsd" OR process == "tccd"' | grep -i -E "fakeplayer|osascript|AppleEvents" | tail -60 || true
