@@ -33,11 +33,16 @@ func mesaDir() (string, error) {
 // UseSoftware loads Mesa's OpenGL, which Fyne then draws with. Nothing may
 // have loaded Windows' opengl32.dll before: a Spytify.exe that links it
 // has it loaded before main, and scripts/build-windows.sh builds one that
-// does not.
+// does not; Check loads it too.
 func UseSoftware() error {
 	dir, err := mesaDir()
 	if err != nil {
 		return err
+	}
+	// Mesa tries its Direct3D 12 driver first; llvmpipe, which it falls
+	// back on, is the renderer shipped for and tested.
+	if os.Getenv("GALLIUM_DRIVER") == "" {
+		os.Setenv("GALLIUM_DRIVER", "llvmpipe")
 	}
 	name, _ := windows.UTF16PtrFromString("opengl32.dll")
 	var loaded windows.Handle
@@ -56,7 +61,9 @@ func UseSoftware() error {
 
 // StartSoftware starts the app again to draw with Mesa's OpenGL, which
 // this copy cannot load any more: Check loaded Windows' opengl32.dll, and
-// Windows hands that one to whatever asks for opengl32.dll by name.
+// Windows hands that one to whatever asks for opengl32.dll by name. The app
+// comes to it only when a driver is listed but Check finds no pixel format
+// GLFW takes: with none listed, it loads Mesa's in its own process.
 func StartSoftware() error {
 	if _, err := mesaDir(); err != nil {
 		return err
