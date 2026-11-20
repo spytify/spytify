@@ -238,6 +238,26 @@ func TestALowQualityDeviceLeavesNoReport(t *testing.T) {
 	}
 }
 
+// A session with no timeline is reported with the facts the recorder
+// gave, and shows no warning in the window (#933).
+func TestANoTimelineIsReportedWithItsFacts(t *testing.T) {
+	srv := fakesentry.New(t)
+	a, m := privacyApp(t, srv, true)
+	connect(t, a, m, true)
+	m.Apply(event(t, proto.EventSessionState, proto.SessionStateEvent{State: proto.StateRecording}))
+	m.Apply(event(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorNoTimeline, Msg: "the player's media session had no timeline for 2 reads",
+		Facts: map[string]string{"smtc.reads": "2", "smtc.since_wake_s": "90"}}))
+	ev := srv.Wait(t, "event", 1)[0].JSON()
+	contexts, _ := ev["contexts"].(map[string]any)
+	problem, _ := contexts["problem"].(map[string]any)
+	if ev["message"] != "blocked: no_timeline" || problem["smtc.reads"] != "2" || problem["smtc.since_wake_s"] != "90" {
+		t.Errorf("reported %v, problem %v", ev["message"], problem)
+	}
+	if e := m.Snapshot().LastError; e != nil {
+		t.Errorf("warning %+v", e)
+	}
+}
+
 // Every launch says where the output folder is, written to or not: what
 // share of them a fix would reach.
 func TestTheLaunchSaysWhereTheOutputFolderIs(t *testing.T) {

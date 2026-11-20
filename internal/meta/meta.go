@@ -87,6 +87,9 @@ const (
 	// is first known and each time it changes. A player with no item
 	// loaded reports none.
 	VolumeChanged
+	// NoTimeline says the player's media session answered with no
+	// timeline, in Facts: Windows only, once per watch (#933).
+	NoTimeline
 )
 
 // Event is one change reported by a backend. The core stamps it with the
@@ -102,6 +105,8 @@ type Event struct {
 	Restart bool
 	// Volume is the player's own volume, for VolumeChanged.
 	Volume float64
+	// Facts say what the backend knew, for NoTimeline.
+	Facts map[string]string
 }
 
 // NowPlaying is one OS metadata backend.

@@ -581,3 +581,18 @@ func TestSnapshotsShareLogLinesThatNeverChange(t *testing.T) {
 		t.Fatalf("the model holds %d lines, the last %q", len(s.Logs), s.Logs[len(s.Logs)-1].Msg)
 	}
 }
+
+// A session with no timeline is reported to the bug tracker only: it
+// shows no warning, and takes none away.
+func TestANoTimelineReportIsNoWarning(t *testing.T) {
+	m := New()
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorNoTimeline, Msg: "the player's media session had no timeline for 2 reads"}))
+	if e := m.Snapshot().LastError; e != nil {
+		t.Fatalf("warning %+v", e)
+	}
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorDiskFull, Msg: "only 10 MB free"}))
+	m.Apply(ev(t, proto.EventError, proto.ErrorEvent{Code: proto.ErrorNoTimeline, Msg: "the player's media session had no timeline for 2 reads"}))
+	if e := m.Snapshot().LastError; e == nil || e.Code != proto.ErrorDiskFull {
+		t.Fatalf("warning %+v, want the full disk's kept", e)
+	}
+}

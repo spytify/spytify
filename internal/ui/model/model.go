@@ -534,6 +534,10 @@ func (m *Model) apply(s *State, ev proto.Event) {
 		if ev.Decode(&e) != nil {
 			return
 		}
+		// A report for the bug tracker only is no warning.
+		if e.Code == proto.ErrorNoTimeline {
+			return
+		}
 		// No message withdraws the warning of that code, and no other.
 		if e.Msg == "" {
 			if s.LastError != nil && s.LastError.Code == e.Code {

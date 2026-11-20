@@ -200,6 +200,7 @@ func adviceNames(checks []proto.Check) []string {
 var problemCodes = map[proto.ErrorCode]bool{
 	proto.ErrorCaptureStalled: true, proto.ErrorRingOverflow: true, proto.ErrorWrite: true, proto.ErrorTempFile: true,
 	proto.ErrorOutputDir: true, proto.ErrorRead: true, proto.ErrorEncode: true, proto.ErrorRename: true,
+	proto.ErrorNoTimeline: true,
 }
 
 // feedTracker turns the recorder's events into breadcrumbs, steps and problem
