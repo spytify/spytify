@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,12 +76,16 @@ type Helper struct {
 	// What the helper did, for Health: how many times it ran, its last
 	// exit statuses, whether this run gave its header, whether it waits
 	// for the player, and its last stderr lines without a device's name.
-	mu      sync.Mutex
-	runs    int
-	exits   []int
-	header  bool
-	waiting bool
-	stderr  lineRing
+	// startErr is why this run could not start, without the helper's
+	// path: set when it fails to start, cleared when the next run begins,
+	// so it says the last run never started.
+	mu       sync.Mutex
+	runs     int
+	exits    []int
+	header   bool
+	waiting  bool
+	startErr string
+	stderr   lineRing
 }
 
 func newHelper(helper string, args func(target.Target) ([]string, bool), logf func(format string, args ...any)) *Helper {
@@ -155,6 +160,9 @@ func (c *Helper) Health() map[string]string {
 		"capture.header":             yesNo(c.header),
 		"capture.waiting_for_player": yesNo(c.waiting),
 	}
+	if c.startErr != "" {
+		h["capture.start_error"] = c.startErr
+	}
 	c.mu.Unlock()
 	if e := c.stderr.String(); e != "" {
 		h["capture.stderr"] = e
@@ -176,6 +184,34 @@ func (c *Helper) exited(code int) {
 		c.exits = c.exits[len(c.exits)-3:]
 	}
 	c.mu.Unlock()
+}
+
+// startFailed keeps why the helper could not start, for Health.
+func (c *Helper) startFailed(err error) {
+	c.mu.Lock()
+	c.startErr = startError(err, c.helper)
+	c.mu.Unlock()
+}
+
+// startError is err without the helper's path, which names the user's
+// folders: from an exec.Error or a fs.PathError, only the system's error
+// and the operation, as "fork/exec: Access is denied."; any other text has
+// the path taken out. It is cut like the helper's stderr lines.
+func startError(err error, helper string) string {
+	if ee, ok := errors.AsType[*exec.Error](err); ok {
+		err = ee.Err
+	}
+	s := err.Error()
+	if pe, ok := errors.AsType[*fs.PathError](err); ok {
+		s = pe.Op + ": " + pe.Err.Error()
+	}
+	if helper != "" {
+		s = strings.ReplaceAll(s, helper, "<helper>")
+	}
+	if len(s) > stderrBytes {
+		s = strings.ToValidUTF8(s[:stderrBytes], "")
+	}
+	return s
 }
 
 func (c *Helper) Close() error {
@@ -237,6 +273,7 @@ func (c *Helper) stream(ctx context.Context, args []string, t target.Target) int
 	c.mu.Lock()
 	c.runs++
 	c.header = false
+	c.startErr = ""
 	c.mu.Unlock()
 	cmd := proc.CommandContext(ctx, c.helper, args...)
 	cmd.Cancel = func() error { return stopHelper(cmd.Process) }
@@ -244,15 +281,18 @@ func (c *Helper) stream(ctx context.Context, args []string, t target.Target) int
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		c.logf("capture: %v", err)
+		c.startFailed(err)
 		return 1
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		c.logf("capture: %v", err)
+		c.startFailed(err)
 		return 1
 	}
 	if err := cmd.Start(); err != nil {
 		c.logf("capture: start %s: %v", c.helper, err)
+		c.startFailed(err)
 		return 1
 	}
 	logged := make(chan struct{})

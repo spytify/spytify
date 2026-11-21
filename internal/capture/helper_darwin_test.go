@@ -241,6 +241,59 @@ exit 1
 	}
 }
 
+// A helper that cannot start says why, without its path, and counts the
+// run as exit 1; once a run starts, the reason goes away. (A helper that
+// starts at once has none: TestTheHelperSaysWhatItDid wants its exact
+// health.)
+func TestAHelperThatCannotStartSaysWhy(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "helper")
+	h := newHelper(script, func(target.Target) ([]string, bool) { return nil, true }, t.Logf)
+	h.retryFirst, h.retryLast = 20*time.Millisecond, 20*time.Millisecond
+	if _, err := h.Open(context.Background(), target.Target{}); err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	go func() {
+		for range h.Frames() {
+		}
+	}()
+	// One look at the health: the next run clears the reason as it begins.
+	deadline := time.Now().Add(5 * time.Second)
+	var e string
+	for {
+		hl := h.Health()
+		if e = hl["capture.start_error"]; e != "" && strings.HasPrefix(hl["capture.last_exits"], "1") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no failed start counted: health %v", hl)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if want := "fork/exec: no such file or directory"; e != want {
+		t.Fatalf("capture.start_error = %q, want %q", e, want)
+	}
+	if strings.Contains(e, dir) {
+		t.Fatalf("capture.start_error %q holds the helper's folder", e)
+	}
+	body := "#!/bin/sh\nprintf 'SPYTIFY-TAP f32le 48000 2\\n'\nexec cat /dev/zero\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		hl := h.Health()
+		if _, ok := hl["capture.start_error"]; !ok && hl["capture.header"] == "yes" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a run started, but health is %v", hl)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 // The volume the helper says it read comes out of Volumes, the latest one
 // first, and stays out of the lines kept for its health.
 func TestTheHelpersVolumeComesOutOfVolumes(t *testing.T) {

@@ -2,7 +2,13 @@
 
 package capture
 
-import "testing"
+import (
+	"errors"
+	"io/fs"
+	"os/exec"
+	"strings"
+	"testing"
+)
 
 // The output device's name, which the user chose, leaves the helper's
 // stderr lines kept for its health; the rest of each line stays.
@@ -33,5 +39,27 @@ func TestTheHelpersVolumeLine(t *testing.T) {
 		if v, ok := volumeLine(line); ok {
 			t.Errorf("volumeLine(%q) = %v, want no volume", line, v)
 		}
+	}
+}
+
+// Why the helper could not start keeps the system's error and drops the
+// helper's path, which names the user's folders.
+func TestTheHelpersStartErrorLosesItsPath(t *testing.T) {
+	const helper = `C:\Users\Jo\AppData\Local\Spytify\spytify-tap.exe`
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{&fs.PathError{Op: "fork/exec", Path: helper, Err: errors.New("Access is denied.")}, "fork/exec: Access is denied."},
+		{&exec.Error{Name: helper, Err: &fs.PathError{Op: "stat", Path: helper, Err: fs.ErrNotExist}}, "stat: file does not exist"},
+		{&exec.Error{Name: helper, Err: exec.ErrNotFound}, "executable file not found in $PATH"},
+		{errors.New("could not run " + helper + ": blocked"), "could not run <helper>: blocked"},
+	} {
+		if got := startError(c.err, helper); got != c.want {
+			t.Errorf("startError(%v) = %q, want %q", c.err, got, c.want)
+		}
+	}
+	if got := startError(errors.New(strings.Repeat("x", 2*stderrBytes)), helper); len(got) != stderrBytes {
+		t.Errorf("a long start error kept %d bytes, want %d", len(got), stderrBytes)
 	}
 }
