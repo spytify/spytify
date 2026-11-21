@@ -1,10 +1,12 @@
 package encode
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -110,5 +112,24 @@ printf 'Encoders:\n ------\n A....D libmp3lame           MP3\n A....D aac       
 	}
 	if n := count(); n != 2 {
 		t.Fatalf("ffmpeg ran %d times, want 2: the failed run, then one", n)
+	}
+}
+
+// ffmpeg that Windows' application control refused to start, error 4551,
+// is blocked, and still missing: session.start is refused. Another failure
+// is only missing (#935).
+func TestFFmpegApplicationControlRefusedIsBlocked(t *testing.T) {
+	path := `C:\Spytify\ffmpeg.exe`
+	refused := &os.PathError{Op: "fork/exec", Path: path, Err: syscall.Errno(4551)}
+	err := probeFailed(path, refused)
+	if !errors.Is(err, ErrBlocked) || !errors.Is(err, ErrMissing) {
+		t.Errorf("%v: want blocked and missing", err)
+	}
+	if strings.Contains(err.Error(), "not found") {
+		t.Errorf("%q says not found", err)
+	}
+	other := probeFailed(path, &os.PathError{Op: "fork/exec", Path: path, Err: syscall.Errno(2)})
+	if errors.Is(other, ErrBlocked) || !errors.Is(other, ErrMissing) {
+		t.Errorf("%v: want only missing", other)
 	}
 }

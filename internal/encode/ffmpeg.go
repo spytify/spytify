@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/proc"
@@ -35,6 +36,32 @@ type FFmpeg struct {
 
 // ErrMissing means ffmpeg could not be run; session.start is refused.
 var ErrMissing = errors.New("ffmpeg not found; install it or set SPYTIFY_FFMPEG")
+
+// ErrBlocked means Windows' application control, Smart App Control or a
+// policy set by whoever manages the computer, refused to run ffmpeg: the
+// file is there. Find's error is then ErrMissing as well.
+var ErrBlocked = errors.New("ffmpeg blocked by Windows' application control")
+
+// errPolicyBlocked is Windows' ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION,
+// what starting a program that application control refuses returns (#935).
+// The number, not x/sys/windows' name, so that the check builds everywhere.
+const errPolicyBlocked = syscall.Errno(4551)
+
+// alsoMissing is an error that is ErrMissing too, with its own words.
+type alsoMissing struct{ error }
+
+func (e alsoMissing) Unwrap() error { return e.error }
+
+func (alsoMissing) Is(target error) bool { return target == ErrMissing }
+
+// probeFailed is Find's error when running path -version failed: ErrMissing,
+// and ErrBlocked when application control refused to start it.
+func probeFailed(path string, err error) error {
+	if errors.Is(err, errPolicyBlocked) {
+		return alsoMissing{fmt.Errorf("%w: %s -version: %w", ErrBlocked, path, err)}
+	}
+	return fmt.Errorf("%w: %s -version: %v", ErrMissing, path, err)
+}
 
 // besideProgram is the copy the macOS app and the Windows zip ship, in
 // the folder of spytifyd and the app.
@@ -90,7 +117,7 @@ func Find(name string) (*FFmpeg, error) {
 	probe := proc.Command(path, "-hide_banner", "-version")
 	out, err := probe.Output()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s -version: %v", ErrMissing, path, err)
+		return nil, probeFailed(path, err)
 	}
 	version := strings.SplitN(string(out), "\n", 2)[0]
 	return &FFmpeg{Path: path, Version: strings.TrimSpace(version)}, nil

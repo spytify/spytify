@@ -239,6 +239,7 @@ const (
 	CheckPlayerNotRunning   = "player not running"
 	CheckFFmpeg             = "ffmpeg found"
 	CheckNoFFmpeg           = "ffmpeg not found"
+	CheckFFmpegBlocked      = "ffmpeg blocked"
 	CheckEncoder            = "encoder %s"
 	CheckPlayerHeard        = "player heard"
 	CheckPlayerNotHeard     = "player not heard"
@@ -269,6 +270,10 @@ const (
 	RatesUnknown            = "allowed rates unknown"
 	Rates                   = "%s Hz"
 	RatesOnly               = "only %s Hz: 44.1 kHz tracks are resampled once. To record them unchanged, put context.properties = { default.clock.allowed-rates = [ 44100 48000 ] } in a .conf file under ~/.config/pipewire/pipewire.conf.d/, then log out and back in"
+
+	// FFmpegBlocked follows ffmpeg.exe that Windows' application control,
+	// error 4551, refused to start (#935).
+	FFmpegBlocked = "Windows would not let ffmpeg.exe run: Smart App Control, or a policy set by whoever manages this computer, blocked it. Smart App Control cannot allow a single app; it can only be turned off, in Windows Security > App & browser control > Smart App Control settings, and only a reinstall of Windows turns it back on."
 )
 
 // The recorder's warnings, by their code (model.WarningText), in the Record

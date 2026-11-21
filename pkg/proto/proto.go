@@ -131,7 +131,8 @@ const (
 	CheckTarget CheckID = "target"
 	// CheckPlayerRunning is the player running: its pid when it runs.
 	CheckPlayerRunning CheckID = "player_running"
-	// CheckFFmpeg is ffmpeg found; Detail: its version, or why not.
+	// CheckFFmpeg is ffmpeg found; Detail: its version, or why not. Args:
+	// "blocked" when Windows' application control refused to run it.
 	CheckFFmpeg CheckID = "ffmpeg"
 	// CheckEncoder is ffmpeg having encode.format's encoder: the encoder,
 	// then the format.

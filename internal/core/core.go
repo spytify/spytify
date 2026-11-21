@@ -365,7 +365,11 @@ func (c *Core) Info() proto.CoreInfoResult {
 		add(proto.CheckPlayerRunning, "player running", false, "not running")
 	}
 	if c.ffErr != nil {
-		add(proto.CheckFFmpeg, "ffmpeg found", false, c.ffErr.Error())
+		var args []string
+		if errors.Is(c.ffErr, encode.ErrBlocked) {
+			args = []string{"blocked"}
+		}
+		add(proto.CheckFFmpeg, "ffmpeg found", false, c.ffErr.Error(), args...)
 	} else {
 		add(proto.CheckFFmpeg, "ffmpeg found", true, c.ffmpeg.Version)
 		if preset, ok := encode.PresetFor(v.String(settings.EncodeFormat)); ok && preset.Encoder != "" && preset.Encoder != "flac" {
