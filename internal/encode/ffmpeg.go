@@ -364,7 +364,7 @@ func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudnes
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("encode: loudness pass: %v: %s", err, tail(stderr.String()))
+		return nil, runError("encode: loudness pass", err, stderr.String())
 	}
 	out := stderr.String()
 	start := strings.LastIndex(out, "{")
@@ -409,12 +409,46 @@ func (f *FFmpeg) run(ctx context.Context, args []string) error {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg: %v: %s", err, tail(stderr.String()))
+		return runError("ffmpeg", err, stderr.String())
 	}
 	return nil
 }
 
+// RunError is an ffmpeg run that failed. Its text keeps the end of what
+// ffmpeg wrote; Head keeps the start, where ffmpeg names the first thing
+// that went wrong, which a long output pushes out of the text (#936).
+type RunError struct {
+	msg string
+	// Head is ffmpeg's first lines, paths and all, as the text holds them.
+	Head string
+}
+
+func (e *RunError) Error() string { return e.msg }
+
+func runError(what string, err error, stderr string) *RunError {
+	return &RunError{msg: fmt.Sprintf("%s: %v: %s", what, err, tail(stderr)), Head: head(stderr)}
+}
+
 func num(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
+
+// Heads keep at most headLines lines and headBytes bytes.
+const (
+	headLines = 5
+	headBytes = 600
+)
+
+// head is the first lines of s, as tail is its end.
+func head(s string) string {
+	s = strings.TrimSpace(strings.ReplaceAll(s, "\r\n", "\n"))
+	lines := strings.SplitN(s, "\n", headLines+1)
+	if len(lines) > headLines {
+		s = strings.Join(lines[:headLines], "\n") + "\n..."
+	}
+	if len(s) > headBytes {
+		s = strings.ToValidUTF8(s[:headBytes], "") + "..."
+	}
+	return s
+}
 
 func tail(s string) string {
 	s = strings.TrimSpace(s)
