@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -287,5 +289,29 @@ func TestTempFilesLeftByAnEarlierRunAreRemoved(t *testing.T) {
 		if !gone && err != nil {
 			t.Errorf("%s went: %v", name, err)
 		}
+	}
+}
+
+// ffmpeg that Windows' application control refused to run fails its check
+// as blocked; ffmpeg that could not be found fails it with no args (#935).
+func TestABlockedFFmpegFailsItsCheckAsBlocked(t *testing.T) {
+	c, _ := newTestCore(t, true)
+	ffmpegCheck := func(err error) proto.Check {
+		t.Helper()
+		c.ffmpeg, c.ffErr = nil, err
+		for _, ch := range c.Info().Checks {
+			if ch.ID == proto.CheckFFmpeg {
+				return ch
+			}
+		}
+		t.Fatal("no ffmpeg check")
+		return proto.Check{}
+	}
+	blocked := fmt.Errorf("%w: %w", encode.ErrBlocked, encode.ErrMissing)
+	if ch := ffmpegCheck(blocked); ch.OK || !slices.Equal(ch.Args, []string{"blocked"}) {
+		t.Errorf("check %+v, want it failing as blocked", ch)
+	}
+	if ch := ffmpegCheck(encode.ErrMissing); ch.OK || len(ch.Args) != 0 {
+		t.Errorf("check %+v, want it failing, not blocked", ch)
 	}
 }
