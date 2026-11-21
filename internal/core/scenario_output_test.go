@@ -246,6 +246,108 @@ func TestATrackThatCouldNotBeEncodedSaysWhatMayHaveKeptIt(t *testing.T) {
 	}
 }
 
+// A track ffmpeg could not read also says what ffmpeg was given: the temp
+// WAV's size when it was scanned and once ffmpeg failed, its frames and
+// format, the frames trimmed to, how long after the scan ffmpeg started,
+// and ffmpeg's first lines, which the error's text cuts (#936).
+func TestATrackThatCouldNotBeEncodedSaysWhatFFmpegWasGiven(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the failing ffmpeg is a shell script")
+	}
+	for _, c := range []struct {
+		name, action string
+		trim         bool
+		now          func(scan int) string
+	}{
+		{"truncated", `printf x > "$in"`, true, func(int) string { return "1" }},
+		{"removed", `rm -f "$in"`, true, func(int) string { return "gone" }},
+		{"unchanged, not trimmed", `:`, false, strconv.Itoa},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			out := filepath.Join(dir, "out")
+			store := testStore(t, dir, map[string]any{"output.dir": out, "recorder.trim_silence": c.trim}, baseSettings)
+			if err := os.MkdirAll(out, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			// An ffmpeg that does something to its input, then fails on it
+			// with more lines than the error's text keeps.
+			script := "#!/bin/sh\nwhile [ $# -gt 0 ]; do if [ \"$1\" = -i ]; then in=$2; break; fi; shift; done\n" + c.action + "\n" +
+				"echo \"[in#0] Error opening input: Invalid data found when processing input\" >&2\n" +
+				"echo \"Error opening input file $in.\" >&2\n" +
+				"i=0; while [ $i -lt 40 ]; do echo \"what followed $i\" >&2; i=$((i+1)); done\nexit 1\n"
+			ff := filepath.Join(dir, "ffmpeg")
+			if err := os.WriteFile(ff, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			log, _ := NewLogger("", testWriter{t})
+			rec := &recorder{}
+			emit := func(method string, payload any) {
+				raw, _ := json.Marshal(payload)
+				rec.add(method, json.RawMessage(raw))
+			}
+			fin := newFinisher(store.Values, &encode.FFmpeg{Path: ff}, emit, log)
+
+			f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
+			frames := f.FramesFromMs(3000)
+			take := testkit.WriteWAV(t, filepath.Join(dir, "take.wav"), f, pcm.Synth{Seed: 1}.Render(f, frames))
+			st, err := os.Stat(take)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fin.enqueue(finishJob{id: "s-1", info: meta.TrackInfo{Title: "Midnight Ferry", Artists: []string{"Neon Harbor"}, Album: "Harbor Lights", LengthMs: 3000},
+				tmp: take, format: f, played: frames, length: frames})
+			fin.close()
+
+			var errs []proto.ErrorEvent
+			for _, ev := range rec.all() {
+				var e proto.ErrorEvent
+				if ev.Method == proto.EventError && ev.Decode(&e) == nil {
+					errs = append(errs, e)
+				}
+			}
+			if len(errs) != 1 || errs[0].Code != proto.ErrorEncode {
+				t.Fatalf("errors %+v, want one encode error", errs)
+			}
+			facts := errs[0].Facts
+			want := map[string]string{
+				"encode.wav_bytes_scan": strconv.FormatInt(st.Size(), 10),
+				"encode.wav_bytes_now":  c.now(int(st.Size())),
+				"encode.wav_frames":     strconv.FormatInt(frames, 10),
+				"encode.wav_format":     "44100/2/16",
+			}
+			if !c.trim {
+				want["encode.trim_start"], want["encode.trim_end"] = "none", "none"
+			}
+			for k, v := range want {
+				if facts[k] != v {
+					t.Errorf("%s %q, want %q", k, facts[k], v)
+				}
+			}
+			if c.trim {
+				s, err1 := strconv.ParseInt(facts["encode.trim_start"], 10, 64)
+				e, err2 := strconv.ParseInt(facts["encode.trim_end"], 10, 64)
+				if err1 != nil || err2 != nil || s < 0 || e <= s || e > frames {
+					t.Errorf("encode.trim_start %q, encode.trim_end %q: want frames of the take", facts["encode.trim_start"], facts["encode.trim_end"])
+				}
+			}
+			if ms, err := strconv.ParseInt(facts["encode.scan_to_encode_ms"], 10, 64); err != nil || ms < 0 || ms > 60_000 {
+				t.Errorf("encode.scan_to_encode_ms %q, want the time from the scan to ffmpeg", facts["encode.scan_to_encode_ms"])
+			}
+			head := facts["encode.ffmpeg_head"]
+			if !strings.HasPrefix(head, "[in#0] Error opening input: Invalid data found") || !strings.Contains(head, "Error opening input file "+take) {
+				t.Errorf("encode.ffmpeg_head %q, want ffmpeg's first lines", head)
+			}
+			if strings.Contains(head, "what followed 3") || len(head) > 610 {
+				t.Errorf("encode.ffmpeg_head %q, want 5 lines at most", head)
+			}
+			if strings.Contains(errs[0].Msg, "[in#0]") {
+				t.Errorf("the error's text %q holds ffmpeg's first line: the head shows nothing more", errs[0].Msg)
+			}
+		})
+	}
+}
+
 // canDeny skips a test that needs a folder its user cannot write to.
 func canDeny(t *testing.T) {
 	t.Helper()

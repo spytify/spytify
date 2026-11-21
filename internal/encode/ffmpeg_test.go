@@ -4,17 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
 	"math/cmplx"
 	"math/rand/v2"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/testkit"
@@ -494,5 +497,54 @@ func TestA96kHzSourceWrittenAt48kHzKeepsEverythingUpTo20kHz(t *testing.T) {
 				t.Errorf("difference only %.1f dB under the source, want 100 or more", -db)
 			}
 		})
+	}
+}
+
+// A failed run keeps ffmpeg's first lines beside its text, which keeps
+// only the end: a long output cut the line naming the first error (#936).
+func TestAFailedRunKeepsFFmpegsFirstLines(t *testing.T) {
+	var out strings.Builder
+	out.WriteString("[in#0] Error opening input: Invalid data found when processing input\r\n")
+	for i := range 40 {
+		fmt.Fprintf(&out, "line %d of what followed\r\n", i)
+	}
+	e := runError("ffmpeg", fmt.Errorf("exit status 1"), out.String())
+	if want := "ffmpeg: exit status 1: " + tail(out.String()); e.Error() != want {
+		t.Errorf("text %q, want %q", e.Error(), want)
+	}
+	if strings.Contains(e.Error(), "[in#0]") {
+		t.Fatalf("the text %q holds the first line: the test shows nothing", e.Error())
+	}
+	want := "[in#0] Error opening input: Invalid data found when processing input\nline 0 of what followed\nline 1 of what followed\nline 2 of what followed\nline 3 of what followed\n..."
+	if e.Head != want {
+		t.Errorf("head %q, want %q", e.Head, want)
+	}
+
+	long := strings.Repeat("é", 400)
+	if h := head(long); len(h) > headBytes+len("...") || !strings.HasSuffix(h, "...") || !utf8.ValidString(h) {
+		t.Errorf("head of a long line %q: over %d bytes, not marked cut or not UTF-8", h, headBytes)
+	}
+	if h := head(" one line \n"); h != "one line" {
+		t.Errorf("head %q, want the line whole", h)
+	}
+}
+
+// ffmpeg given a file that is not a WAV says so in its first lines, which
+// the error keeps.
+func TestEncodeOfABadInputKeepsFFmpegsFirstLines(t *testing.T) {
+	ff := testkit.Need(t, "ffmpeg", Find)
+	dir := t.TempDir()
+	in := filepath.Join(dir, "take.wav")
+	if err := os.WriteFile(in, bytes.Repeat([]byte("not a wav "), 100), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := pcm.Format{Rate: 44100, Channels: 2, Sample: pcm.S16LE}
+	_, err := ff.Encode(context.Background(), Job{In: in, Out: filepath.Join(dir, "out.flac"), Format: "flac", Source: f})
+	var re *RunError
+	if !errors.As(err, &re) {
+		t.Fatalf("error %v (%T), want a RunError", err, err)
+	}
+	if !strings.Contains(re.Head, in) {
+		t.Errorf("head %q does not name the input %s", re.Head, in)
 	}
 }

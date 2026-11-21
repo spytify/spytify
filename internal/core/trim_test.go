@@ -110,7 +110,7 @@ func TestScanTrimReadsWindowsAndFindsTheSameFrames(t *testing.T) {
 				t.Fatal(err)
 			}
 			ws, we, wok, werr := scanTrimWhole(path, -50)
-			s, e, ok, err := scanTrim(path, -50)
+			s, e, ok, _, err := scanTrim(path, -50)
 			if err != nil || werr != nil {
 				t.Fatal(err, werr)
 			}
