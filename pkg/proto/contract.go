@@ -27,7 +27,7 @@ var Methods = []MethodSpec{
 	{MethodPlayerControl, PlayerControlParams{}, Empty{}, "play, pause, next, previous, restart (from 0:00) or full_volume (the player's own volume to 100%) through the player's local interface"},
 	{MethodPlayerLaunch, nil, Empty{}, "opens the player if it is not running: SPYTIFY_TARGET_LAUNCH, else the OS's way"},
 	{MethodLogTail, LogTailParams{}, LogTailResult{}, "last N log lines"},
-	{MethodEventsRecent, nil, EventsRecentResult{}, "the last 200 events, for a client that connects mid-session"},
+	{MethodEventsRecent, nil, EventsRecentResult{}, "the last 200 events but level and log, for a client that connects mid-session (log lines come from log.tail)"},
 	{MethodTrackKeep, TrackKeepParams{}, Empty{}, "saves a keepable take after all, as \"<title> (partial)\", or \"<title> (low quality)\" for one skipped as low_quality; fails once it is no longer keepable"},
 	{MethodCoreShutdown, nil, Empty{}, "stops the session first"},
 }

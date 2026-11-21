@@ -216,8 +216,28 @@ func TestCoreInfoAndLogs(t *testing.T) {
 		t.Fatalf("first log line = %+v", tail.Lines)
 	}
 	var recent proto.EventsRecentResult
-	if err := call(t, c, proto.MethodEventsRecent, nil, &recent); err != nil || len(recent.Events) == 0 {
-		t.Fatalf("recent events: %d %v", len(recent.Events), err)
+	if err := call(t, c, proto.MethodEventsRecent, nil, &recent); err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range recent.Events {
+		if ev.Method == proto.EventLog {
+			t.Fatalf("a log line is in the recent events: %s", ev.Params)
+		}
+	}
+}
+
+func TestLogLinesDoNotPushTrackEventsOutOfTheBacklog(t *testing.T) {
+	c, _ := newTestCore(t, true)
+	c.emit(proto.EventTrackStarted, proto.TrackStartedEvent{Track: proto.Track{ID: "a"}})
+	for i := range 2 * recentEvents {
+		c.log.Debugf("line %d", i)
+	}
+	var recent proto.EventsRecentResult
+	if err := call(t, c, proto.MethodEventsRecent, nil, &recent); err != nil {
+		t.Fatal(err)
+	}
+	if len(recent.Events) != 1 || recent.Events[0].Method != proto.EventTrackStarted {
+		t.Fatalf("the backlog holds %d events, the track event should be the only one", len(recent.Events))
 	}
 }
 
