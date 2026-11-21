@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,9 @@ const (
 	logKeepFiles = 3
 	// logMaxAge is how long a log nobody writes to stays on the computer.
 	logMaxAge = 30 * 24 * time.Hour
+	// logFlushEvery is how long a line waits in memory before it reaches
+	// the file; an error line, a rotation and Close write at once.
+	logFlushEvery = time.Second
 )
 
 // Logger writes a rotating log file, keeps the last lines for log.tail and
@@ -32,6 +36,8 @@ type Logger struct {
 	mu      sync.Mutex
 	path    string
 	file    *os.File
+	w       *bufio.Writer
+	flush   *time.Timer
 	size    int64
 	console io.Writer
 	ring    []proto.LogEvent
@@ -64,7 +70,33 @@ func (l *Logger) open() error {
 		return err
 	}
 	l.file, l.size = f, info.Size()
+	if l.w == nil {
+		l.w = bufio.NewWriterSize(f, 32<<10)
+	} else {
+		l.w.Reset(f)
+	}
 	return nil
+}
+
+// flushLocked writes what waits in memory to the file. l.mu is held.
+func (l *Logger) flushLocked() {
+	if l.flush != nil {
+		l.flush.Stop()
+		l.flush = nil
+	}
+	if l.file != nil {
+		_ = l.w.Flush()
+	}
+}
+
+// Flush writes the lines waiting in memory to the file.
+func (l *Logger) Flush() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.flushLocked()
 }
 
 // removeStale deletes the log and its rotated copies when nothing was
@@ -83,6 +115,7 @@ func removeStale(path string, now time.Time) {
 }
 
 func (l *Logger) rotate() {
+	l.flushLocked()
 	l.file.Close()
 	for i := logKeepFiles - 1; i >= 1; i-- {
 		_ = os.Rename(fmt.Sprintf("%s.%d", l.path, i), fmt.Sprintf("%s.%d", l.path, i+1))
@@ -116,10 +149,15 @@ func (l *Logger) write(level int, format string, args ...any) {
 	}
 	line := fmt.Sprintf("%s %-5s %s\n", ev.TS, ev.Level, ev.Msg)
 	if l.file != nil {
-		n, _ := l.file.WriteString(line)
+		n, _ := l.w.WriteString(line)
 		l.size += int64(n)
-		if l.size > logMaxBytes {
+		switch {
+		case l.size > logMaxBytes:
 			l.rotate()
+		case level == levelError:
+			l.flushLocked()
+		case l.flush == nil:
+			l.flush = time.AfterFunc(logFlushEvery, l.Flush)
 		}
 	}
 	if l.console != nil {
@@ -146,12 +184,15 @@ func (l *Logger) Tail(n int) []proto.LogEvent {
 	return append([]proto.LogEvent(nil), l.ring[len(l.ring)-n:]...)
 }
 
-// Close closes the log file.
+// Close writes what waits in memory and closes the log file.
 func (l *Logger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.flushLocked()
 	if l.file != nil {
-		return l.file.Close()
+		err := l.file.Close()
+		l.file = nil
+		return err
 	}
 	return nil
 }
