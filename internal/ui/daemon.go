@@ -24,7 +24,11 @@ func (a *App) stopDaemon() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_ = a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil)
+	if a.link.Do(ctx, proto.MethodCoreShutdown, nil, nil) == nil {
+		// It answers at once and finishes saving after: let it outlive
+		// the app. One that did not answer ends with the app.
+		_ = a.link.Release()
+	}
 }
 
 // daemonIsService reports whether spytifyd is installed as a login service.

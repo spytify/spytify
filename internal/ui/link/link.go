@@ -356,10 +356,16 @@ func inTempDir(dir string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// Release lets the recorders this app started outlive it, once a Quit has
+// asked them to shut down: on Windows they otherwise end with the app, and
+// a recorder still saving its last takes would lose them.
+func (l *Link) Release() error { return release() }
+
 // StartDaemon launches spytifyd detached from the UI, so closing the window
-// does not stop a recording, then asks Run to connect. A daemon that exits
-// at once (no player configured, socket taken) returns its message. What
-// it found and saw waits for EndStart.
+// does not stop a recording, then asks Run to connect. On Windows the
+// recorder ends with the app when the app is killed or crashes. A daemon
+// that exits at once (no player configured, socket taken) returns its
+// message. What it found and saw waits for EndStart.
 func (l *Link) StartDaemon() error {
 	st := &starting{facts: Start{At: time.Now(), Found: "none"}}
 	l.mu.Lock()
@@ -389,6 +395,9 @@ func (l *Link) StartDaemon() error {
 		return err
 	}
 	st.note(func(f *Start) { f.Started = true })
+	// A recorder that cannot join the job runs all the same, and outlives
+	// the app as it did before.
+	_ = contain(cmd.Process)
 	exited := make(chan error, 1)
 	go func() {
 		err := cmd.Wait()

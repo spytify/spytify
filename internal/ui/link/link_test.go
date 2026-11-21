@@ -176,6 +176,10 @@ func TestFindDaemonTellsAnArchiveFromAMissingRecorder(t *testing.T) {
 // TestMain plays spytifyd when a test starts this binary as one: see
 // fakeDaemon.
 func TestMain(m *testing.M) {
+	if run := fakeParts[os.Getenv("SPYTIFY_FAKE_PART")]; run != nil {
+		run()
+		os.Exit(0)
+	}
 	switch os.Getenv("SPYTIFY_FAKE_DAEMON") {
 	case "exit":
 		fmt.Fprintln(os.Stderr, "spytifyd: reading settings")
@@ -190,6 +194,10 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// fakeParts are the other programs this test binary plays when
+// SPYTIFY_FAKE_PART names one.
+var fakeParts = map[string]func(){}
 
 // fakeDaemon puts this test binary on PATH as spytifyd, which plays the
 // given part, and nothing else.
