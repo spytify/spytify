@@ -142,6 +142,7 @@ const (
 	CheckPlayerHeard CheckID = "player_heard"
 	// CheckOutputWritable is the output folder written to; Detail: the
 	// folder, or why not. Without it, no recording starts (CodeOutputDir).
+	// Args: "denied" when the system refused the write, access denied.
 	CheckOutputWritable CheckID = "output_writable"
 	// CheckMacOS is macOS 14.2 or later: the version.
 	CheckMacOS CheckID = "macos"
@@ -428,6 +429,10 @@ const (
 	ErrorEncode      ErrorCode = "encode"
 	ErrorRename      ErrorCode = "rename"
 	ErrorCounterFull ErrorCode = "counter_full"
+	// ErrorNoTimeline is the player's media session answering with no
+	// timeline, on Windows, in Facts: for the bug tracker only, the window
+	// shows nothing of it (#933).
+	ErrorNoTimeline ErrorCode = "no_timeline"
 )
 
 // ErrorEvent is a failure or a warning, by its code. Msg is what the
@@ -444,6 +449,10 @@ type ErrorEvent struct {
 	FreeMB *int64 `json:"free_mb,omitempty"`
 	// Volume is the player's own volume in percent, for player_volume_low.
 	Volume *int `json:"volume,omitempty"`
+	// Denied is a write to the output folder the system refused, access
+	// denied, on any OS; on Windows, ransomware protection may hold the
+	// folder.
+	Denied bool `json:"denied,omitempty"`
 	// Facts say what the recorder knew when it happened, without a name or
 	// a path, for the bug tracker.
 	Facts map[string]string `json:"facts,omitempty"`

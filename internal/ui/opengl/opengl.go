@@ -16,8 +16,8 @@ var ErrNoDriver = errors.New("no graphics driver offers OpenGL")
 var ErrNoDisplay = errors.New("no display answers")
 
 // SoftwareEnv set to "software" makes the app draw with Mesa's OpenGL, in
-// software. The app sets it for the copy of itself it starts when no
-// graphics driver offers OpenGL.
+// software. The app sets it for the copy of itself it starts when a
+// graphics driver is listed but offers no pixel format GLFW takes.
 const SoftwareEnv = "SPYTIFY_OPENGL"
 
 // PIXELFORMATDESCRIPTOR flags and pixel types, from wingdi.h.

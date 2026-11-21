@@ -806,3 +806,30 @@ func TestPinnedTempFileCannotBeMade(t *testing.T) {
 	r.status(meta.Stopped)
 	r.check("health/temp-file-cannot-be-made")
 }
+
+// A session with no timeline, as the player watch reports it, goes to the
+// window with what the session knew: the player's status, whether a take
+// was going on, and how long ago the computer woke (#933).
+func TestANoTimelineSaysWhatWasKnown(t *testing.T) {
+	r := bareRig(t, nil, endOnStop)
+	s := r.s
+	var reports []proto.ErrorEvent
+	emit := s.deps.emit
+	s.deps.emit = func(method string, payload any) {
+		if e, ok := payload.(proto.ErrorEvent); ok && e.Code == proto.ErrorNoTimeline {
+			reports = append(reports, e)
+		}
+		emit(method, payload)
+	}
+	s.deps.sinceWake = func() (time.Duration, bool) { return 90 * time.Second, true }
+	s.onMeta(context.Background(), statusEvent(meta.Playing))
+	from := map[string]string{"smtc.reads": "2", "smtc.back": "yes"}
+	s.onMeta(context.Background(), meta.Event{Kind: meta.NoTimeline, PositionMs: -1, Facts: from})
+	want := map[string]string{"smtc.reads": "2", "smtc.back": "yes", "smtc.player_status": "Playing", "smtc.in_take": "no", "smtc.since_wake_s": "90"}
+	if len(reports) != 1 || !maps.Equal(reports[0].Facts, want) || reports[0].Msg == "" {
+		t.Fatalf("reports %+v, want one with facts %v", reports, want)
+	}
+	if len(from) != 2 {
+		t.Errorf("the watch's facts were changed: %v", from)
+	}
+}

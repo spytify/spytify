@@ -138,6 +138,9 @@
         "code": {
           "type": "string"
         },
+        "denied": {
+          "type": "boolean"
+        },
         "facts": {
           "additionalProperties": {
             "type": "string"

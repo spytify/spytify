@@ -7,6 +7,15 @@ After=pipewire.service pipewire-pulse.service
 ExecStart=/usr/bin/spytifyd
 Restart=on-failure
 RestartSec=5
+# The hardening spytify-cli service install writes too (internal/service).
+# No line needs a user namespace: the output folder can be anywhere, /tmp
+# stays the desktop's, PipeWire and D-Bus are Unix sockets, crash reports
+# go out over the network.
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
 
 [Install]
 WantedBy=default.target

@@ -67,6 +67,30 @@ func TestSMTCAnswersOnWindows(t *testing.T) {
 	}
 }
 
+// A session that answers its timeline with nothing and no error is a read
+// with no timeline, not a crash of the recorder (#933).
+func TestSMTCSessionWithNoTimeline(t *testing.T) {
+	type vtbl struct {
+		ole.IInspectableVtbl
+		GetSourceAppUserModelId    uintptr
+		TryGetMediaPropertiesAsync uintptr
+		GetTimelineProperties      uintptr
+	}
+	ok := syscall.NewCallback(func(unsafe.Pointer) uintptr { return 1 })
+	v := &vtbl{GetTimelineProperties: syscall.NewCallback(func(this, out unsafe.Pointer) uintptr { return 0 })}
+	v.QueryInterface = syscall.NewCallback(func(this, iid unsafe.Pointer, out *unsafe.Pointer) uintptr {
+		*out = this
+		return 0
+	})
+	v.AddRef, v.Release = ok, ok
+	s := &control.GlobalSystemMediaTransportControlsSession{IUnknown: ole.IUnknown{RawVTable: (*any)(unsafe.Pointer(v))}}
+
+	r := &smtcSession{}
+	if err := readTimeline(s, r); !errors.Is(err, errNoTimeline) {
+		t.Fatalf("readTimeline = %v, want errNoTimeline; session %+v", err, r)
+	}
+}
+
 // A command finds no session: no player, rather than an API that failed.
 func TestSMTCControlRunsOnWindows(t *testing.T) {
 	m := NewSMTC()

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -241,6 +242,84 @@ func TestATrackThatCouldNotBeEncodedSaysWhatMayHaveKeptIt(t *testing.T) {
 	for k, v := range facts {
 		if strings.Contains(v, dir) {
 			t.Errorf("%s %q holds a path", k, v)
+		}
+	}
+}
+
+// canDeny skips a test that needs a folder its user cannot write to.
+func canDeny(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a folder the test's user cannot write to")
+	}
+}
+
+// readOnly makes dir refuse writes, access denied, as Windows' ransomware
+// protection refuses them in a folder it holds.
+func readOnly(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.Chmod(dir, 0o500)
+}
+
+// An output folder that refuses writes, access denied, fails its check as
+// denied: the window says what may refuse it (#887). One that cannot be
+// reached is not denied.
+func TestADeniedOutputFolderFailsItsCheckAsDenied(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	canDeny(t)
+	s := newScenario(t, tl, nil)
+	denied := s.out
+	if err := readOnly(denied); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(denied, 0o755) })
+	check := func() proto.Check {
+		for _, c := range s.core.Info().Checks {
+			if c.ID == proto.CheckOutputWritable {
+				return c
+			}
+		}
+		t.Fatal("no output folder check")
+		return proto.Check{}
+	}
+	if c := check(); c.OK || !slices.Equal(c.Args, []string{"denied"}) {
+		t.Errorf("check %+v, want it failing as denied", c)
+	}
+
+	unreachable := newScenario(t, tl, nil)
+	if err := os.WriteFile(unreachable.out, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s = unreachable
+	if c := check(); c.OK || len(c.Args) != 0 {
+		t.Errorf("check %+v, want it failing, not denied", c)
+	}
+}
+
+// A take the output folder refuses to hold, access denied, is said to be
+// denied, and the session goes on: the folder is still there (#887).
+func TestATakeTheOutputFolderRefusesIsDenied(t *testing.T) {
+	tl := loadTimeline(t, "basic")
+	canDeny(t)
+	s := newScenario(t, tl, nil)
+	tmp := filepath.Join(s.out, ".spytify")
+	t.Cleanup(func() { os.Chmod(tmp, 0o755) })
+	onWaiting(s.events, func() {
+		if err := readOnly(tmp); err != nil {
+			t.Error(err)
+		}
+	})
+	runWith(t, s, SessionOptions{EndOnStop: true})
+	saved, _ := outcome(t, s)
+	errs := errorsOf(s)
+	if len(saved) != 0 || len(errs) == 0 {
+		t.Fatalf("saved %v errors %+v\n%s", saved, errs, s.logs)
+	}
+	for _, e := range errs {
+		if e.Code != proto.ErrorTempFile || !e.Denied || e.Msg == "" {
+			t.Errorf("error %+v, want a temp file denied", e)
 		}
 	}
 }

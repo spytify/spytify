@@ -55,10 +55,15 @@ jobs:
           scripts/build-fakeplayer-macos.sh "$RUNNER_TEMP"
           scripts/allow-fakeplayer-tcc.sh "$RUNNER_TEMP/FakePlayer.app"
           echo "SPYTIFY_FAKE_APP=$RUNNER_TEMP/FakePlayer.app" >> "$GITHUB_ENV"
-      # internal/ui runs serially and takes 7 to 10 minutes on the macOS
-      # runner under -race: go test's default 10m timeout cuts it short.
+      # internal/ui runs serially and takes 16 to 19 minutes on the macOS
+      # runner under -race (2026-11-18, main and PRs alike): a 20m timeout
+      # failed it on a slow runner. 40m leaves room for it to grow.
       - name: Unit, scenario, UI and end-to-end tests
-        run: go run gotest.tools/gotestsum@v1.12.3 --format testname --jsonfile test.jsonl -- -race -timeout 20m ./...
+        run: go run gotest.tools/gotestsum@v1.12.3 --format testname --jsonfile test.jsonl -- -race -timeout 40m ./...
+      # The window's memory test plays 220 tracks: 5 minutes under -race on
+      # the macOS runner, 8 s without. It is built only without -race.
+      - name: The window's memory over 220 tracks
+        run: go test -count=1 -run '^TestTracksDoNotGrowTheWindowsMemory$' ./internal/ui
       - name: What macOS said about Apple events (on failure)
         if: failure() && runner.os == 'macOS'
         run: log show --last 10m --style compact --predicate 'subsystem == "com.apple.TCC" OR process == "appleeventsd" OR process == "tccd"' | grep -i -E "fakeplayer|osascript|AppleEvents" | tail -60 || true
@@ -152,8 +157,10 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # The 64-bit compilers only: mingw-w64 adds the 32-bit ones, half its
+      # 278 MB, which a slow mirror cannot serve in one try.
       - name: Install MinGW-w64
-        run: scripts/ci/apt-install.sh mingw-w64
+        run: scripts/ci/apt-install.sh gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
       - name: staticcheck
         run: |
           # Built for Linux, where it runs, then pointed at Windows.
@@ -171,7 +178,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install MinGW-w64, nasm and 7-Zip
-        run: scripts/ci/apt-install.sh mingw-w64 nasm 7zip
+        run: scripts/ci/apt-install.sh gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 nasm 7zip
       # ffmpeg takes minutes to build: it is built again when its script
       # changes.
       - uses: actions/cache@v6
@@ -222,9 +229,10 @@ jobs:
         shell: pwsh
         run: |
           # The runner has no graphics card, so no driver offers OpenGL, as on
-          # a computer whose card is disabled. The app starts itself again
-          # with Mesa's, from opengl\.
-          Start-Process .\Spytify.exe -RedirectStandardError gl-err.txt -RedirectStandardOutput gl-out.txt
+          # a computer whose card is disabled. The app loads Mesa's, from
+          # opengl\, in its own process: a copy of itself it would start
+          # reads as a sacrificial process to behaviour engines.
+          $p = Start-Process .\Spytify.exe -PassThru -RedirectStandardError gl-err.txt -RedirectStandardOutput gl-out.txt
           $window = $null
           for ($i = 0; $i -lt 30 -and -not $window; $i++) {
             Start-Sleep -Seconds 1
@@ -232,14 +240,20 @@ jobs:
           }
           $gl = if ($window) { ($window.Modules | Where-Object ModuleName -eq 'opengl32.dll').FileName }
           $title = if ($window) { $window.MainWindowTitle }
+          # Mesa loads d3d12.dll when it tries its Direct3D 12 driver, which
+          # GALLIUM_DRIVER=llvmpipe skips.
+          $d3d12 = if ($window) { [bool]($window.Modules | Where-Object ModuleName -eq 'd3d12.dll') }
+          $others = @(Get-Process Spytify -ErrorAction SilentlyContinue | Where-Object Id -ne $p.Id)
           Get-Process Spytify, spytifyd -ErrorAction SilentlyContinue | Stop-Process -Force
           Start-Sleep -Seconds 1
           $said = Get-Content gl-err.txt -Raw
-          "window '$title', drawn with $gl"
+          "window '$title' of process $($window.Id) (started $($p.Id)), drawn with $gl"
+          "d3d12.dll loaded: $d3d12"
           "Spytify.exe said: $said"
           if (-not $window) { throw "no Spytify window within 30 s" }
           if ($said -match 'no graphics driver offers OpenGL') { throw "Spytify.exe said why it has no window instead of drawing it with Mesa" }
           if ($gl -ne (Join-Path (Resolve-Path opengl).Path 'opengl32.dll')) { throw "the window is drawn with $gl, not Mesa's" }
+          if ($window.Id -ne $p.Id -or $others.Count -gt 0) { throw "the window is drawn by Spytify.exe $($window.Id), not by the one started ($($p.Id)): it started a copy of itself" }
       - name: Without an OpenGL driver or Mesa, the app says why instead of closing without a word
         shell: pwsh
         run: |
@@ -342,6 +356,31 @@ jobs:
           cat muted.err
           grep -E "(no packets|packets marked silent|only zeros) from process $pid" muted.err
           if grep -q -F "sound from process $pid" muted.err; then echo "the helper heard the muted tone"; exit 1; fi
+      - name: The capture helper reads the player's audio sessions when Windows says they changed, not every second
+        run: |
+          # A tone, by its Windows PID, that plays only once its WAV is
+          # written: the helper starts while it has no audio session yet.
+          pid=$(powershell -NoProfile -Command '(Start-Process powershell -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","src/scripts/ci/tone.ps1","-Path",(Join-Path $env:RUNNER_TEMP "follow.wav") -WindowStyle Hidden -PassThru).Id' | tr -d '\r')
+          SPYTIFY_TAP_FOLLOW_TRACE=1 ./spytify-tap.exe --pid "$pid" > /dev/null 2> follow.err &
+          tap=$!
+          ready="$(cygpath -u "$RUNNER_TEMP")/follow.wav.playing"
+          for i in $(seq 60); do [ -f "$ready" ] && break; sleep 1; done
+          test -f "$ready" || { echo "the tone did not play within 60 s"; exit 1; }
+          for i in $(seq 10); do grep -q -F "process $pid plays to its output" follow.err && break; sleep 0.5; done
+          before=$(grep -c -F "follow: read after" follow.err || true)
+          sleep 6
+          after=$(grep -c -F "follow: read after" follow.err || true)
+          kill "$tap" || true
+          cat follow.err
+          # Read at once, then because the tone's session appeared or turned
+          # active, not by the 10 s recheck.
+          grep -F "follow: read after the start" follow.err
+          awk '/follow: read after/ { last = $0 } /plays to its output/ { print last; exit }' follow.err |
+            grep -E "follow: read after (a new or closed audio session|a session's state)"
+          # While the tone plays on, nothing changes: a read every second
+          # made 6.
+          echo "reads in 6 s of steady play: $((after - before))"
+          test $((after - before)) -le 2
       - name: With copies of its System32 DLLs beside it, the app loads none of them
         shell: pwsh
         run: src/scripts/ci/planted-dlls.ps1 -Exe .\Spytify.exe -Window -Also spytifyd
@@ -490,6 +529,19 @@ jobs:
           if ldd /usr/bin/spytify-ui | grep 'not found'; then exit 1; fi
           spytifyd -version
           spytify-cli --help > /dev/null
+      # Across these images the unhardened unit rated 9.2 to 9.8 and the
+      # hardened one 8.2 to 8.8. --offline and --threshold came with systemd
+      # 250: Ubuntu 22.04 (249) only verifies the unit.
+      - name: The packaged user unit is valid and keeps its hardening
+        run: |
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq systemd > /dev/null
+          export XDG_RUNTIME_DIR=/tmp/xdg-unit
+          mkdir -m 700 "$XDG_RUNTIME_DIR"
+          unit=/usr/lib/systemd/user/spytifyd.service
+          systemd-analyze --user verify "$unit"
+          if systemd-analyze security --help | grep -q -- --offline; then
+            systemd-analyze security --user --offline=yes --threshold=88 "$unit"
+          fi
       - name: The app opens its window with Mesa's software renderer
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb xdotool mesa-utils

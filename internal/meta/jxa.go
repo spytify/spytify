@@ -176,6 +176,11 @@ type playerPoll struct {
 	Error  string   `json:"error"`
 	// at is when the poll was read; zero leaves seeks undetected.
 	at time.Time
+	// skip is a read that says nothing of the player, which the tracker
+	// does not see.
+	skip bool
+	// app is the media session's app id, for a skipped read.
+	app string
 }
 
 // explain turns a scripting error into what the user can do about it.

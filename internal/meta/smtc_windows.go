@@ -197,6 +197,7 @@ func (w *winSMTC) session(names []string) (*smtcSession, error) {
 		}
 		defer s.Release()
 		r := &smtcSession{Status: "stopped"}
+		r.App, _ = s.GetSourceAppUserModelId()
 		info, err := s.GetPlaybackInfo()
 		if err != nil {
 			return err
@@ -213,6 +214,10 @@ func (w *winSMTC) session(names []string) (*smtcSession, error) {
 			r.Status = "paused"
 		}
 		if err := readTimeline(s, r); err != nil {
+			if errors.Is(err, errNoTimeline) {
+				// What it said of itself goes in the report.
+				out = r
+			}
 			return err
 		}
 		// The session is the player's from here, whatever its
@@ -227,6 +232,10 @@ func readTimeline(s *control.GlobalSystemMediaTransportControlsSession, r *smtcS
 	tl, err := s.GetTimelineProperties()
 	if err != nil {
 		return err
+	}
+	// The player can answer with no timeline and no error.
+	if tl == nil {
+		return errNoTimeline
 	}
 	defer tl.Release()
 	pos, err := tl.GetPosition()

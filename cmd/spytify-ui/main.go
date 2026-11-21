@@ -33,13 +33,17 @@ func main() {
 	env := target.Load()
 
 	// Fyne draws with OpenGL. Without a graphics driver offering it, the
-	// app on Windows draws with Mesa's, in software, in a copy of itself
-	// started to load it first; elsewhere, or without Mesa either, it says
-	// why it has no window.
+	// app on Windows draws with Mesa's, in software: in this process when
+	// no driver is listed, else in a copy of itself started to load it
+	// first, should the driver offer no pixel format GLFW takes. Elsewhere,
+	// or without Mesa either, it says why it has no window.
 	software := opengl.Software()
 	var noGL error
-	if software {
+	switch {
+	case software:
 		noGL = opengl.UseSoftware()
+	case opengl.NoDriverListed() && opengl.UseSoftware() == nil:
+		software = true
 	}
 	if noGL == nil {
 		noGL = opengl.Check()

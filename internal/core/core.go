@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -381,7 +382,11 @@ func (c *Core) Info() proto.CoreInfoResult {
 	err := outputWritable(dir)
 	facts := outputFacts(dir, err, v.String(settings.OutputDir) == settings.Defaults().String(settings.OutputDir))
 	if err != nil {
-		info.Checks = append(info.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: err.Error(), Facts: facts})
+		check := proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", Detail: err.Error(), Facts: facts}
+		if denied(err) {
+			check.Args = []string{"denied"}
+		}
+		info.Checks = append(info.Checks, check)
 		c.log.Infof("output folder not writable: %v (%s)", err, formatFacts(facts))
 	} else {
 		info.Checks = append(info.Checks, proto.Check{ID: proto.CheckOutputWritable, Name: "output folder writable", OK: true, Detail: dir, Facts: facts})
@@ -406,6 +411,11 @@ func joinNames(names []string) string {
 	}
 	return out
 }
+
+// denied says whether the system refused a write, access denied, on any
+// OS: the window words it per OS (on Windows, ransomware protection
+// refuses writes to the folders it holds from programs it does not allow).
+func denied(err error) bool { return errors.Is(err, fs.ErrPermission) }
 
 func outputWritable(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
