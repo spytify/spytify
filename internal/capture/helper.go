@@ -91,6 +91,10 @@ func newHelper(helper string, args func(target.Target) ([]string, bool), logf fu
 		retryFirst: retryFirst, retryLast: retryLast, frames: make(chan Chunk, queuedChunks), volumes: make(chan float64, 1), done: make(chan struct{})}
 }
 
+// ErrTapHelperNotFound is FindTapHelper's error when spytify-tap is neither
+// next to the running binary nor on PATH: the window words it for the user.
+var ErrTapHelperNotFound = errors.New("not found next to spytifyd or on PATH")
+
 // FindTapHelper locates spytify-tap: the given path, next to the running
 // binary, then on PATH.
 func FindTapHelper(path string) (string, error) {
@@ -110,7 +114,7 @@ func FindTapHelper(path string) (string, error) {
 	if p, err := exec.LookPath(name); err == nil {
 		return p, nil
 	}
-	return "", fmt.Errorf("%s not found next to spytifyd or on PATH; %s, or set SPYTIFY_TAP", name, buildHint)
+	return "", fmt.Errorf("%s %w; %s, or set SPYTIFY_TAP", name, ErrTapHelperNotFound, buildHint)
 }
 
 func (c *Helper) Open(ctx context.Context, t target.Target) (pcm.Format, error) {

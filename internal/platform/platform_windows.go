@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spytify/spytify/internal/capture"
@@ -71,7 +72,11 @@ func (b Backends) Probe() []proto.Check {
 	build := capture.WindowsBuild()
 	checks := []proto.Check{{ID: proto.CheckWindows, Name: "Windows 10 2004 or later", OK: capture.LoopbackSupported(build), Detail: fmt.Sprintf("build %d", build), Args: []string{fmt.Sprint(build)}}}
 	if p, err := capture.FindTapHelper(b.TapHelper); err != nil {
-		checks = append(checks, proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: false, Detail: err.Error()})
+		c := proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: false, Detail: err.Error()}
+		if errors.Is(err, capture.ErrTapHelperNotFound) {
+			c.Args = []string{"missing"}
+		}
+		checks = append(checks, c)
 	} else {
 		checks = append(checks, proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: true, Detail: p, Args: []string{p}})
 	}

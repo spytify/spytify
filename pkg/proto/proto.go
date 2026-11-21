@@ -149,7 +149,7 @@ const (
 	// CheckWindows is Windows 10 2004 or later: the build.
 	CheckWindows CheckID = "windows"
 	// CheckHelper is Windows' capture helper found: its path; Detail: why
-	// not.
+	// not. Args: "missing" when it is neither next to spytifyd nor on PATH.
 	CheckHelper CheckID = "capture_helper"
 	// CheckTapHelper is macOS' capture helper found: its path; Detail: why
 	// not.

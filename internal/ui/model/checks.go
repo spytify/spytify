@@ -77,6 +77,10 @@ func CheckDetail(c proto.Check, goos string) string {
 		return fmt.Sprintf(lang.MacOSVersion, arg(c, 0))
 	case proto.CheckWindows:
 		return fmt.Sprintf(lang.WindowsBuild, arg(c, 0))
+	case proto.CheckHelper:
+		if !c.OK && arg(c, 0) == "missing" {
+			return fmt.Sprintf(lang.HelperMissing, "spytify-tap.exe")
+		}
 	case proto.CheckTapHelper:
 		if c.OK {
 			return fmt.Sprintf(lang.HelperMacOS, arg(c, 0))
