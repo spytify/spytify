@@ -49,8 +49,10 @@ var (
 
 	// RecorderDuplicates is recorder.duplicates, "Already recorded tracks" in Settings.
 	RecorderDuplicates = Key{"recorder.duplicates"}
-	// RecorderSkipDuplicatesForward is recorder.skip_duplicates_forward, "Skip to the next track when already recorded" in Settings.
+	// RecorderSkipDuplicatesForward is recorder.skip_duplicates_forward, "Skip to the player's next track when already recorded" in Settings.
 	RecorderSkipDuplicatesForward = Key{"recorder.skip_duplicates_forward"}
+	// RecorderStopAtRecorded is recorder.stop_at_recorded, "Stop the session at the first track already recorded" in Settings.
+	RecorderStopAtRecorded = Key{"recorder.stop_at_recorded"}
 	// RecorderSingleTrack is recorder.single_track, "Record a single track then stop" in Settings.
 	RecorderSingleTrack = Key{"recorder.single_track"}
 	// RecorderStopWithPlayer is recorder.stop_with_player, "Stop the session when the player stops or quits" in Settings.
@@ -169,9 +171,9 @@ type Duplicates string
 
 // The values of recorder.duplicates, as Settings names them.
 const (
-	DuplicatesSkip      Duplicates = "skip"      // Skip
-	DuplicatesSuffix    Duplicates = "suffix"    // Suffix
-	DuplicatesOverwrite Duplicates = "overwrite" // Overwrite
+	DuplicatesSkip      Duplicates = "skip"      // Don't save again
+	DuplicatesSuffix    Duplicates = "suffix"    // Save a copy
+	DuplicatesOverwrite Duplicates = "overwrite" // Replace the file
 )
 
 // Duplicates is the value of recorder.duplicates.

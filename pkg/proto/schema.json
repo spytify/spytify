@@ -325,6 +325,9 @@
     },
     "SessionStateEvent": {
       "properties": {
+        "at_recorded": {
+          "type": "boolean"
+        },
         "playlist": {
           "type": "string"
         },

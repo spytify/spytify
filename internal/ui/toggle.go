@@ -17,6 +17,9 @@ type toggle struct {
 	on               bool
 	changed          func(bool)
 	focused, hovered bool
+	// off is the switch disabled: a setting that means nothing with the
+	// others as they are. It shows its value, dimmed, and cannot flip.
+	off bool
 }
 
 func newToggle(changed func(bool)) *toggle {
@@ -34,7 +37,24 @@ func (t *toggle) SetOn(on bool) {
 	t.Refresh()
 }
 
+// Disable, Enable and Disabled make it a fyne.Disableable: the focus
+// passes over it while disabled.
+func (t *toggle) Disable()       { t.setOff(true) }
+func (t *toggle) Enable()        { t.setOff(false) }
+func (t *toggle) Disabled() bool { return t.off }
+
+func (t *toggle) setOff(off bool) {
+	if off == t.off {
+		return
+	}
+	t.off = off
+	t.Refresh()
+}
+
 func (t *toggle) flip() {
+	if t.off {
+		return
+	}
 	t.on = !t.on
 	t.Refresh()
 	if t.changed != nil {
@@ -45,7 +65,7 @@ func (t *toggle) flip() {
 // Tapped flips the switch when the tap lands on it, not elsewhere in the
 // form row it stretches across.
 func (t *toggle) Tapped(e *fyne.PointEvent) {
-	if e.Position.X > toggleSize().Width {
+	if t.off || e.Position.X > toggleSize().Width {
 		return
 	}
 	if c := fyne.CurrentApp().Driver().CanvasForObject(t); c != nil && !t.focused && !fyne.CurrentDevice().IsMobile() {
@@ -127,11 +147,16 @@ func (r *toggleRenderer) Refresh() {
 	ts := toggleSize()
 	r.track.CornerRadius = ts.Height / 2
 	r.track.StrokeWidth = theme.InputBorderSize()
-	if r.t.on {
+	switch {
+	case r.t.off:
+		r.track.FillColor = theme.Color(theme.ColorNameDisabledButton)
+		r.track.StrokeColor = theme.Color(theme.ColorNameDisabledButton)
+		r.knob.FillColor = theme.Color(theme.ColorNameDisabled)
+	case r.t.on:
 		r.track.FillColor = theme.Color(theme.ColorNamePrimary)
 		r.track.StrokeColor = theme.Color(theme.ColorNamePrimary)
 		r.knob.FillColor = color.White
-	} else {
+	default:
 		r.track.FillColor = theme.Color(theme.ColorNameInputBackground)
 		r.track.StrokeColor = theme.Color(theme.ColorNameInputBorder)
 		r.knob.FillColor = theme.Color(theme.ColorNamePlaceHolder)
@@ -143,7 +168,7 @@ func (r *toggleRenderer) Refresh() {
 		r.ring.StrokeColor = theme.Color(theme.ColorNameFocus)
 	}
 	r.halo.FillColor = color.Transparent
-	if r.t.hovered {
+	if r.t.hovered && !r.t.off {
 		r.halo.FillColor = theme.Color(theme.ColorNameHover)
 	}
 	r.Layout(r.t.Size())

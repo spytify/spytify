@@ -158,6 +158,9 @@ func (r *rig) emit(method string, payload any) {
 		return
 	case proto.SessionStateEvent:
 		line = "state " + string(p.State)
+		if p.AtRecorded {
+			line += " at_recorded"
+		}
 	case proto.TrackStartedEvent:
 		line = fmt.Sprintf("started %s %q artist=%q album=%q length=%dms", p.ID, p.Title, p.Artist, p.Album, p.LengthMs)
 		if p.Cut != nil {
@@ -288,11 +291,40 @@ func (r *rig) giveUp() {
 }
 
 // settle waits until Run is done with the last input, and writes down the
-// take when it changed.
+// take when it changed. Run taking a chunk says it is done with the input
+// before; the second chunk says it is done with the first. A stop Run
+// queued itself meanwhile, at a track already recorded, can still wait in
+// stopCh: Run is done with it once it is taken and another chunk is.
 func (r *rig) settle() bool {
 	ok := deliver(r, r.frames, capture.Chunk{})
+	if ok {
+		ok = deliver(r, r.frames, capture.Chunk{})
+	}
+	for ok && len(r.s.stopCh) > 0 {
+		ok = r.takeStops() && deliver(r, r.frames, capture.Chunk{})
+	}
 	r.look()
 	return ok
+}
+
+// takeStops waits until Run has taken the stops queued, taking the jobs
+// meanwhile; false when the session ended or gave up.
+func (r *rig) takeStops() bool {
+	timeout := time.After(rigTimeout)
+	for len(r.s.stopCh) > 0 {
+		select {
+		case <-r.done:
+			r.ended = true
+			return false
+		case j := <-r.fin.jobs:
+			r.addJob(j)
+		case <-timeout:
+			r.giveUp()
+			return false
+		case <-time.After(time.Millisecond):
+		}
+	}
+	return true
 }
 
 // wait takes the jobs until Run returns.
@@ -522,21 +554,9 @@ func (r *rig) stop(now bool) {
 		r.note("session.stop")
 	}
 	r.s.Stop(now)
-	timeout := time.After(rigTimeout)
-	for len(r.s.stopCh) > 0 {
-		select {
-		case <-r.done:
-			r.ended = true
-			return
-		case j := <-r.fin.jobs:
-			r.addJob(j)
-		case <-timeout:
-			r.giveUp()
-			return
-		case <-time.After(time.Millisecond):
-		}
+	if r.takeStops() {
+		r.settle()
 	}
-	r.settle()
 }
 
 // endCapture closes the capture stream, which ends the session.

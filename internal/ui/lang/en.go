@@ -81,6 +81,8 @@ const (
 	NoFilesYetText            = "Each track becomes a file here when it ends."
 	SessionEnded              = "Session ended."
 	SessionEndedPlaylist      = "Session ended. Playlist: %s"
+	SessionEndedRecorded      = "Session ended at a track already recorded."
+	SessionEndedRecordedList  = "Session ended at a track already recorded. Playlist: %s"
 	ShowPlaylist              = "Show playlist"
 	SessionEndedBlocked       = "Session ended: Spytify cannot write to the output folder, so Record is off."
 	FinishingLastFiles        = "Finishing the last files…"
