@@ -31,8 +31,14 @@ func exe(name string) string {
 
 func TestMain(m *testing.M) {
 	if os.Getenv("SPYTIFY_E2E_APP") != "" {
-		// Stand in for the app: start the recorder its way, then quit.
-		if err := link.New(os.Getenv("SPYTIFY_SOCKET"), model.New()).StartDaemon(); err != nil {
+		// Stand in for the app: start the recorder its way, then quit,
+		// letting it outlive the app as a Quit does while it saves.
+		l := link.New(os.Getenv("SPYTIFY_SOCKET"), model.New())
+		if err := l.StartDaemon(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := l.Release(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -233,9 +239,11 @@ func TestDaemonRefusesWithoutTarget(t *testing.T) {
 	}
 }
 
-// The app starts the recorder detached, so quitting the window does not
-// stop a recording. The recorder's error output was a pipe to the app:
+// A recorder the app let outlive it (a Quit, while the last takes are
+// saved) keeps running. The recorder's error output was a pipe to the app:
 // once the app was gone, the recorder's next log line killed it (SIGPIPE).
+// An app killed or crashed takes its recorder with it on Windows: see
+// internal/ui/link's job tests.
 func TestTheRecorderOutlivesTheAppThatStartedIt(t *testing.T) {
 	e := newEnv(t)
 	launch := "true"
