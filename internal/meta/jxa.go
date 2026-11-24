@@ -116,6 +116,7 @@ function run(argv) {
       return String(at);
     }
     case "setvolume": app.soundVolume = parseInt(argv[2], 10); return "";
+    case "playurl": app.playTrack(argv[2]); return "";
     default: app[argv[1]](); return "";
   }
 }
@@ -445,6 +446,14 @@ func (j *JXA) Control(cmd proto.PlayerCmd) error {
 	if err != nil {
 		j.ask.disarm()
 	}
+	return err
+}
+
+// PlayURL plays a playlist or album link from its first track, through
+// the dictionary's play track command; it takes the link the player
+// copies as well as its URI.
+func (j *JXA) PlayURL(url string) error {
+	_, err := j.run("playurl", url)
 	return err
 }
 

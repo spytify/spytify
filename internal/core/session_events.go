@@ -26,6 +26,7 @@ func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 		s.formatChange(s.defaultFormat())
 	}
 	at := s.ring.End()
+	watched := s.gotStatus
 	switch ev.Kind {
 	case meta.TrackChanged:
 		s.claimCover(ctx, ev.Track.ArtURL)
@@ -59,6 +60,10 @@ func (s *Session) onMeta(ctx context.Context, ev meta.Event) {
 	case meta.NoTimeline:
 		s.onNoTimeline(ev.Facts)
 	}
+	if moved := ev.Kind == meta.TrackChanged || ev.Kind == meta.StatusChanged || ev.Kind == meta.Seeked; watched && moved && s.status == meta.Playing {
+		s.plays.Add(1)
+	}
+	s.watching.Store(s.gotStatus)
 	s.progress()
 }
 
