@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -228,10 +229,12 @@ type take struct {
 	soundStart, soundEnd int64
 	trimStart, trimEnd   int64
 	keptFrames           int64
-	tags                 tag.Track
-	counter              int64
-	final, part          string
-	tagged               bool
+	// scan is the temp WAV as sound read it, for an encode that fails.
+	scan        wavScan
+	tags        tag.Track
+	counter     int64
+	final, part string
+	tagged      bool
 }
 
 // process makes j's file, one step after the other. A step that reports
@@ -322,10 +325,22 @@ func (f *finisher) complete(t *take) bool {
 // muted in its own volume.
 func (f *finisher) sound(t *take) (bool, error) {
 	step := time.Now()
-	s, e, ok, err := scanTrim(t.tmp, t.v.Float(settings.RecorderSilenceDb))
+	s, e, ok, head, err := scanTrim(t.tmp, t.v.Float(settings.RecorderSilenceDb))
 	t.timings.TrimMs = msSince(step)
 	t.soundStart, t.soundEnd = s, e
+	t.scan = wavScan{wavHead: head, bytes: -1, at: time.Now()}
+	if fi, statErr := os.Stat(t.tmp); statErr == nil {
+		t.scan.bytes = fi.Size()
+	}
 	return ok, err
+}
+
+// wavScan is the temp WAV as the finisher read it: its header, its size
+// (-1 when it could not be had) and when.
+type wavScan struct {
+	wavHead
+	bytes int64
+	at    time.Time
 }
 
 // trim keeps the take from its first sound to its last, when
@@ -481,7 +496,9 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 	t.timings.EncodeMs = msSince(step)
 	if err != nil {
 		os.Remove(t.part)
-		f.failWith(t.finishJob, proto.ErrorEncode, err, encodeFacts(t.v.Path(settings.OutputDir), t.part))
+		facts := encodeFacts(t.v.Path(settings.OutputDir), t.part)
+		inputFacts(facts, t, job, step, err)
+		f.failWith(t.finishJob, proto.ErrorEncode, err, facts)
 		return false
 	}
 	if short != nil {
@@ -508,6 +525,51 @@ func encodeFacts(root, part string) map[string]string {
 	facts["encode.dir_exists"] = yesNo(err == nil && fi.IsDir())
 	placeFacts(root, facts)
 	return facts
+}
+
+// inputFacts say what ffmpeg was given, as it failed on temp WAVs whose
+// scan had just read them whole (#936): the WAV's size when it was
+// scanned and now ("gone" once removed), its frames and format as the
+// scan read them, the frames trimmed to, how long after the scan ffmpeg
+// started, and ffmpeg's first lines, which the error's text, keeping only
+// the end, cuts. Something else changing the file between the scan and
+// ffmpeg shows as two sizes; the first lines' paths are scrubbed as the
+// text's are.
+func inputFacts(facts map[string]string, t *take, j encode.Job, started time.Time, err error) {
+	size := func(n int64) string {
+		if n < 0 {
+			return "unknown"
+		}
+		return strconv.FormatInt(n, 10)
+	}
+	facts["encode.wav_bytes_scan"] = size(t.scan.bytes)
+	switch fi, statErr := os.Stat(j.In); {
+	case statErr == nil:
+		facts["encode.wav_bytes_now"] = size(fi.Size())
+	case os.IsNotExist(statErr):
+		facts["encode.wav_bytes_now"] = "gone"
+	default:
+		facts["encode.wav_bytes_now"] = "unknown"
+	}
+	facts["encode.wav_frames"] = strconv.FormatInt(t.scan.frames, 10)
+	sf := t.scan.format
+	facts["encode.wav_format"] = fmt.Sprintf("%d/%d/%d", sf.Rate, sf.Channels, sf.Sample.Bytes()*8)
+	if sf.Sample == pcm.F32LE {
+		facts["encode.wav_format"] += "f"
+	}
+	if j.TrimStart <= 0 && j.TrimEnd <= 0 {
+		facts["encode.trim_start"], facts["encode.trim_end"] = "none", "none"
+	} else {
+		facts["encode.trim_start"] = strconv.FormatInt(j.TrimStart, 10)
+		facts["encode.trim_end"] = strconv.FormatInt(j.TrimEnd, 10)
+	}
+	if !t.scan.at.IsZero() {
+		facts["encode.scan_to_encode_ms"] = strconv.FormatInt(started.Sub(t.scan.at).Milliseconds(), 10)
+	}
+	var re *encode.RunError
+	if errors.As(err, &re) && re.Head != "" {
+		facts["encode.ffmpeg_head"] = re.Head
+	}
 }
 
 // writeSidecar writes a WAV's tags beside its .part file, as WAV has no

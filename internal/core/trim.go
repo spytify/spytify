@@ -6,16 +6,24 @@ import (
 	"github.com/spytify/spytify/internal/pcm"
 )
 
+// wavHead is what a WAV file's header said when it was read.
+type wavHead struct {
+	format pcm.Format
+	frames int64
+}
+
 // scanTrim returns the frame range [start, end) of a WAV file between its
-// first and last sample above db. A sample only counts when the 10 ms
-// around it is above db too, so an isolated click does not stop the trim.
-func scanTrim(path string, db float64) (start, end int64, ok bool, err error) {
+// first and last sample above db, and its header. A sample only counts
+// when the 10 ms around it is above db too, so an isolated click does not
+// stop the trim.
+func scanTrim(path string, db float64) (start, end int64, ok bool, head wavHead, err error) {
 	w, err := pcm.OpenWAV(path)
 	if err != nil {
-		return 0, 0, false, err
+		return 0, 0, false, head, err
 	}
 	defer w.Close()
 	format := w.Format()
+	head = wavHead{format: format, frames: w.Frames()}
 	fw := &frameWindow{w: w, size: format.FramesFromMs(4000)}
 	block := format.FramesFromMs(10)
 	total := w.Frames()
@@ -41,7 +49,7 @@ func scanTrim(path string, db float64) (start, end int64, ok bool, err error) {
 		}
 	}
 	if start < 0 {
-		return 0, 0, false, fw.err
+		return 0, 0, false, head, fw.err
 	}
 	end = start + 1
 	for j := total - 1; j >= start; j-- {
@@ -78,7 +86,7 @@ func scanTrim(path string, db float64) (start, end int64, ok bool, err error) {
 			quiet++
 		}
 	}
-	return start, end, true, fw.err
+	return start, end, true, head, fw.err
 }
 
 // frameWindow keeps a few seconds of a WAV file around the frames asked
