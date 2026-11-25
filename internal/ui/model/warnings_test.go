@@ -149,3 +149,23 @@ func TestADeniedOutputFolderNamesRansomwareProtectionOnWindows(t *testing.T) {
 		t.Errorf("%q does not name both programs that write there", lang.OutputDeniedWindows)
 	}
 }
+
+// A capture helper missing next to the recorder says, in the user's words,
+// to extract the download again and that an antivirus may have removed it,
+// not how a developer builds it (#934). Another failure keeps the
+// recorder's reason.
+func TestAMissingCaptureHelperSaysToExtractAgain(t *testing.T) {
+	missing := proto.Check{ID: proto.CheckHelper, Name: "capture helper", Detail: "spytify-tap.exe not found next to spytifyd or on PATH; build it with scripts/build-windows.sh, or set SPYTIFY_TAP", Args: []string{"missing"}}
+	want := "spytify-tap.exe, the capture helper, is not next to Spytify. Extract the whole download again and start Spytify from there; if it is still missing, an antivirus may have removed it."
+	if got := CheckDetail(missing, "windows"); got != want {
+		t.Errorf("missing helper: %q, want %q", got, want)
+	}
+	other := proto.Check{ID: proto.CheckHelper, Name: "capture helper", Detail: `SPYTIFY_TAP: CreateFile C:\tap.exe: Access is denied.`}
+	if got := CheckDetail(other, "windows"); got != other.Detail {
+		t.Errorf("other failure: %q, want the reason alone", got)
+	}
+	found := proto.Check{ID: proto.CheckHelper, Name: "capture helper", OK: true, Detail: `C:\Spytify\spytify-tap.exe`, Args: []string{`C:\Spytify\spytify-tap.exe`}}
+	if got := CheckDetail(found, "windows"); got != found.Detail {
+		t.Errorf("found helper: %q, want its path", got)
+	}
+}

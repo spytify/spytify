@@ -2,7 +2,11 @@
 
 package capture
 
-import "testing"
+import (
+	"errors"
+	"path/filepath"
+	"testing"
+)
 
 // The output device's name, which the user chose, leaves the helper's
 // stderr lines kept for its health; the rest of each line stays.
@@ -33,5 +37,18 @@ func TestTheHelpersVolumeLine(t *testing.T) {
 		if v, ok := volumeLine(line); ok {
 			t.Errorf("volumeLine(%q) = %v, want no volume", line, v)
 		}
+	}
+}
+
+// spytify-tap neither next to the running binary nor on PATH is told apart
+// from other failures, so the window can word it for the user (#934); a
+// path given that does not exist is not that case.
+func TestATapHelperNowhereIsNotFound(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if _, err := FindTapHelper(""); !errors.Is(err, ErrTapHelperNotFound) {
+		t.Errorf("FindTapHelper with no helper anywhere: %v, want ErrTapHelperNotFound", err)
+	}
+	if _, err := FindTapHelper(filepath.Join(t.TempDir(), "no-such-helper")); err == nil || errors.Is(err, ErrTapHelperNotFound) {
+		t.Errorf("FindTapHelper with a missing path given: %v, want another error", err)
 	}
 }

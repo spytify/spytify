@@ -230,7 +230,8 @@ const (
 // one when the check fails if it says so, then the details that word what
 // the recorder found. CheckEncoder takes the encoder; TargetProcess the
 // process names; ForFormat the format; MacOSVersion the version;
-// WindowsBuild the build; HelperMacOS a path;
+// WindowsBuild the build; HelperMacOS a path; HelperMissing the Windows
+// capture helper's file name;
 // NoCaptureBackend the system; Rates and RatesOnly the allowed rates.
 const (
 	CheckTarget             = "target configured"
@@ -261,6 +262,7 @@ const (
 	MacOSVersion            = "macOS %s"
 	WindowsBuild            = "build %s"
 	HelperMacOS             = "%s; macOS asks once for System Audio Recording permission"
+	HelperMissing           = "%s, the capture helper, is not next to Spytify. Extract the whole download again and start Spytify from there; if it is still missing, an antivirus may have removed it."
 	AppleScriptAsks         = "macOS asks once to let spytify control the player"
 	MediaSessionsRead       = "reads what plays through the media session API"
 	CapturePipeWire         = "PipeWire (pw-record)"
