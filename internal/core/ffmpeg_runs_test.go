@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spytify/spytify/pkg/proto"
 )
@@ -92,5 +93,43 @@ func TestATrackWhoseTagsFailIsSavedUntagged(t *testing.T) {
 	}
 	if saved == 0 || !strings.Contains(s.logs.String(), "tags not written") {
 		t.Fatalf("%d saved; log:\n%s", saved, s.logs)
+	}
+}
+
+// An encode that outlasts the cover's deadline is saved all the same: the
+// deadline was shared with ffmpeg and killed a long track's encode, which
+// Windows reports as a bare "exit status 1" (#956).
+func TestAnEncodeLongerThanTheCoverDeadlineIsSaved(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the slow ffmpeg is a shell script")
+	}
+	real, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("no ffmpeg")
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\ncase \"$*\" in *-progress*) sleep 2;; esac\nexec '" + real + "' \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "ffmpeg"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	old := tagTimeout
+	tagTimeout = time.Second
+	t.Cleanup(func() { tagTimeout = old })
+
+	s := runSettings(t, map[string]any{"encode.format": "mp3"})
+	var tracks int
+	for _, ev := range s.events.all() {
+		switch ev.Method {
+		case proto.EventTrackFinished:
+			tracks++
+		case proto.EventError:
+			var e proto.ErrorEvent
+			_ = ev.Decode(&e)
+			t.Errorf("%s: %s", e.Code, e.Msg)
+		}
+	}
+	if tracks == 0 {
+		t.Fatal("no track saved")
 	}
 }

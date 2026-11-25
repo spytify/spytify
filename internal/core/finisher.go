@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -234,6 +235,9 @@ type take struct {
 	tagged               bool
 }
 
+// tagTimeout bounds the cover download and the WAV sidecar, each.
+var tagTimeout = 2 * time.Minute
+
 // process makes j's file, one step after the other. A step that reports
 // false ended the job: it skipped, held or failed the take.
 func (f *finisher) process(j finishJob) {
@@ -257,13 +261,17 @@ func (f *finisher) process(j finishJob) {
 	if !f.complete(t) || !f.trim(t) || !f.goodQuality(t) {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), tagTimeout)
 	f.fetchCover(ctx, t)
-	if !f.takeNumber(t) || !f.pickName(t) || !f.encode(ctx, t) {
+	cancel()
+	// No deadline on ffmpeg: a long track on a slow computer takes the time
+	// it takes; encode stops only a run that stopped moving (#956).
+	if !f.takeNumber(t) || !f.pickName(t) || !f.encode(context.Background(), t) {
 		return
 	}
 	if t.timings.Format == "wav" {
+		ctx, cancel := context.WithTimeout(context.Background(), tagTimeout)
+		defer cancel()
 		f.writeSidecar(ctx, t)
 	}
 	f.save(t)
@@ -471,7 +479,7 @@ func (f *finisher) encode(ctx context.Context, t *take) bool {
 	}
 	short, err := f.ffmpeg.Encode(ctx, job)
 	t.tagged = job.Tags != nil
-	if err != nil && job.Tags != nil && ctx.Err() == nil {
+	if err != nil && job.Tags != nil && ctx.Err() == nil && !errors.Is(err, encode.ErrStalled) {
 		tagErr := err
 		job.Tags, t.tagged = nil, false
 		if short, err = f.ffmpeg.Encode(ctx, job); err == nil {

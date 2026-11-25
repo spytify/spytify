@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/spytify/spytify/internal/pcm"
 	"github.com/spytify/spytify/internal/proc"
@@ -329,8 +331,8 @@ func (f *FFmpeg) Encode(ctx context.Context, j Job) (*Shortfall, error) {
 		}
 	}
 	args = append(args, "-f", p.Muxer, j.Out)
-	if err := f.run(ctx, args); err != nil {
-		return nil, err
+	if out, err := f.run(ctx, args); err != nil {
+		return nil, fmt.Errorf("ffmpeg: %w: %s", err, tail(out))
 	}
 	return short, nil
 }
@@ -360,13 +362,10 @@ func coverFile(dir string, data []byte, mime string) (string, error) {
 
 func (f *FFmpeg) measure(ctx context.Context, j Job, filters []string) (*loudness, error) {
 	af := append(append([]string{}, filters...), "loudnorm=I="+num(j.TargetLUFS)+":TP="+num(TruePeak)+":LRA=11:print_format=json")
-	cmd := proc.CommandContext(ctx, f.Path, "-nostdin", "-hide_banner", "-i", j.In, "-af", strings.Join(af, ","), "-f", "null", "-")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("encode: loudness pass: %v: %s", err, tail(stderr.String()))
+	out, err := f.run(ctx, []string{"-nostdin", "-hide_banner", "-i", j.In, "-af", strings.Join(af, ","), "-f", "null", "-"})
+	if err != nil {
+		return nil, fmt.Errorf("encode: loudness pass: %w: %s", err, tail(out))
 	}
-	out := stderr.String()
 	start := strings.LastIndex(out, "{")
 	end := strings.LastIndex(out, "}")
 	if start < 0 || end < start {
@@ -404,14 +403,85 @@ func (ln loudness) gain(target float64) float64 {
 	return max(0, min(g, TruePeak-ln.TP))
 }
 
-func (f *FFmpeg) run(ctx context.Context, args []string) error {
-	cmd := proc.CommandContext(ctx, f.Path, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg: %v: %s", err, tail(stderr.String()))
+// stallAfter is how long ffmpeg may go without moving through the audio
+// before it is taken for stuck and stopped. A run that moves has no limit:
+// a long track on a slow computer takes the time it takes (#956).
+var stallAfter = 60 * time.Second
+
+// ErrStalled means ffmpeg stopped moving through the audio and was stopped.
+var ErrStalled = errors.New("ffmpeg made no progress")
+
+// progress reads ffmpeg's -progress output and notes when its position in
+// the audio last moved.
+type progress struct {
+	mu   sync.Mutex
+	buf  []byte
+	at   string
+	last time.Time
+}
+
+func (p *progress) Write(b []byte) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.buf = append(p.buf, b...)
+	for {
+		i := bytes.IndexByte(p.buf, '\n')
+		if i < 0 {
+			break
+		}
+		line := strings.TrimSpace(string(p.buf[:i]))
+		p.buf = p.buf[i+1:]
+		if v, ok := strings.CutPrefix(line, "out_time_us="); ok && v != p.at {
+			p.at, p.last = v, time.Now()
+		}
 	}
-	return nil
+	return len(b), nil
+}
+
+func (p *progress) idle() time.Duration {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return time.Since(p.last)
+}
+
+// run runs ffmpeg and returns its error output. It is stopped once it
+// made no progress for stallAfter.
+func (f *FFmpeg) run(ctx context.Context, args []string) (string, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stall := stallAfter
+	p := &progress{last: time.Now()}
+	cmd := proc.CommandContext(ctx, f.Path, append([]string{"-progress", "pipe:1", "-nostats"}, args...)...)
+	var stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = p, &stderr
+	cmd.WaitDelay = 5 * time.Second
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+	done := make(chan struct{})
+	var stuck atomic.Bool
+	go func() {
+		tick := time.NewTicker(stall / 4)
+		defer tick.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-tick.C:
+				if p.idle() >= stall {
+					stuck.Store(true)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	err := cmd.Wait()
+	close(done)
+	if stuck.Load() {
+		return stderr.String(), fmt.Errorf("%w for %v, stopped", ErrStalled, stall)
+	}
+	return stderr.String(), err
 }
 
 func num(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
