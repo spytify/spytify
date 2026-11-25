@@ -36,7 +36,8 @@ var checkNames = map[proto.CheckID][2]string{
 }
 
 // CheckName is a check's name as the window words it, from its ID: a
-// failed ffmpeg found reads ffmpeg not found. A check the window does not
+// failed ffmpeg found reads ffmpeg not found, or ffmpeg blocked when
+// Windows refused to run it. A check the window does not
 // know, from a recorder newer or older than it, keeps the recorder's name.
 func CheckName(c proto.Check) string {
 	names, ok := checkNames[c.ID]
@@ -47,8 +48,11 @@ func CheckName(c proto.Check) string {
 	if !c.OK && names[1] != "" {
 		name = names[1]
 	}
-	if c.ID == proto.CheckEncoder {
+	switch {
+	case c.ID == proto.CheckEncoder:
 		name = fmt.Sprintf(name, arg(c, 0))
+	case c.ID == proto.CheckFFmpeg && blocked(c):
+		name = lang.CheckFFmpegBlocked
 	}
 	return name
 }
@@ -66,6 +70,10 @@ func CheckDetail(c proto.Check, goos string) string {
 			return fmt.Sprintf(lang.DetailPID, arg(c, 0))
 		}
 		return lang.DetailNotRunning
+	case proto.CheckFFmpeg:
+		if blocked(c) {
+			return lang.FFmpegBlocked
+		}
 	case proto.CheckEncoder:
 		return fmt.Sprintf(lang.ForFormat, arg(c, 1))
 	case proto.CheckPlayerHeard:
@@ -115,6 +123,10 @@ func CheckDetail(c proto.Check, goos string) string {
 	}
 	return c.Detail
 }
+
+// blocked says whether ffmpeg found failed because Windows' application
+// control refused to run ffmpeg.
+func blocked(c proto.Check) bool { return !c.OK && arg(c, 0) == "blocked" }
 
 // arg is the check's i-th fact, empty when it has fewer.
 func arg(c proto.Check, i int) string {

@@ -275,3 +275,21 @@ func TestTheMediaSessionsCheck(t *testing.T) {
 		tapButton(t, overlay(t, a), lang.Close)
 	}
 }
+
+// ffmpeg that Windows' application control refused to run shows in the
+// diagnostics as ffmpeg blocked, with how to turn Smart App Control off
+// (#935).
+func TestBlockedFFmpegInTheDiagnostics(t *testing.T) {
+	in := windowsInfo(proto.Check{ID: proto.CheckMediaSessions, Name: "Windows media sessions", OK: true, Detail: "reads what plays through the media session API"})
+	in.Checks[2] = proto.Check{ID: proto.CheckFFmpeg, Name: "ffmpeg found", Args: []string{"blocked"},
+		Detail: `ffmpeg blocked by Windows' application control: C:\Users\listener\Spytify\ffmpeg.exe -version: fork/exec C:\Users\listener\Spytify\ffmpeg.exe: An Application Control policy has blocked this file.`}
+	a, m := connectedTestApp(t, defaults())
+	m.SetInfo(in)
+	a.showTab(tabLogs)
+	a.render()
+	tapButton(t, a.win.Content(), lang.Diagnostics)
+	if d := texts(overlay(t, a)); !contains(d, lang.CheckFFmpegBlocked) || !contains(d, "Smart App Control cannot allow a single app") || contains(d, lang.CheckNoFFmpeg) {
+		t.Errorf("the diagnostics show %v", d)
+	}
+	snapshot(t, a, "logs-diagnostics-ffmpeg-blocked")
+}
