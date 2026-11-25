@@ -736,7 +736,7 @@
       }
     },
     "events.recent": {
-      "description": "the last 200 events, for a client that connects mid-session",
+      "description": "the last 200 events but level and log, for a client that connects mid-session (log lines come from log.tail)",
       "result": {
         "$ref": "#/$defs/EventsRecentResult"
       }

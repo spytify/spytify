@@ -133,7 +133,9 @@ func (c *Core) emit(method string, payload any) {
 		return
 	}
 	c.emitMu.Lock()
-	if method != proto.EventLevel {
+	// Log lines stay out of the backlog: a late client reads them from
+	// log.tail, and here they would push track events out.
+	if method != proto.EventLevel && method != proto.EventLog {
 		c.recent = append(c.recent, proto.Event{Method: method, Params: raw})
 		if len(c.recent) > recentEvents {
 			c.recent = c.recent[len(c.recent)-recentEvents:]
