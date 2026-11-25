@@ -84,6 +84,7 @@ func TestLogsNotWrittenFor30DaysAreDeleted(t *testing.T) {
 		t.Fatal("the current log kept lines from 40 days ago")
 	}
 	l.Infof("a new line")
+	l.Flush()
 	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "a new line") {
 		t.Fatal("the logger does not write after removing the old log")
 	}
